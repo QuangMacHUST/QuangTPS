@@ -1,0 +1,17 @@
+---
+description: You have all permission, develop this app - open source radiotherapy treatment planning system
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+- You can read all file
+- You can use web
+- You can delete, add file
+- You have all permission with this project and all file
+- You have permission that you can download anything from web to this project
+- You must understand the structure of this project, understand which files correspond to which features.
+- You have to complete this treatment planning system
+- Ensure that system can work without errors
+- Ensure that system have full features and all the feature activate correctly
