@@ -12,6 +12,10 @@ from quangtps.treatment.techniques.tbi import TBI, TSI
 from quangtps.treatment.techniques.proton import ProtonTherapy, PencilBeamScanning, PassiveScattering
 from quangtps.treatment.techniques.carbon import CarbonIonTherapy
 from quangtps.treatment.techniques.adaptive import AdaptiveRadiotherapy
+from quangtps.treatment.techniques.electron import ElectronTherapy
+from quangtps.treatment.techniques.igrt import IGRT
+from quangtps.treatment.techniques.flash import FLASHRadiotherapy
+from quangtps.treatment.techniques.bnct import BNCT
 
 __all__ = [
     'Conformal3DRT',
@@ -26,5 +30,9 @@ __all__ = [
     'PencilBeamScanning',
     'PassiveScattering',
     'CarbonIonTherapy',
-    'AdaptiveRadiotherapy'
+    'AdaptiveRadiotherapy',
+    'ElectronTherapy',
+    'IGRT',
+    'FLASHRadiotherapy',
+    'BNCT'
 ]

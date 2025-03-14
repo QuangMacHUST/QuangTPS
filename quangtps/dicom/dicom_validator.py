@@ -253,6 +253,111 @@ class DicomValidator:
         return True
     
     @staticmethod
+    def validate_mr_dataset(dataset: pydicom.dataset.FileDataset) -> bool:
+        """
+        Xác thực tính hợp lệ của dataset MR.
+        
+        Parameters
+        ----------
+        dataset : pydicom.dataset.FileDataset
+            Dataset DICOM MR cần xác thực
+            
+        Returns
+        -------
+        bool
+            True nếu dataset hợp lệ
+            
+        Raises
+        ------
+        ValidationError
+            Nếu dataset không hợp lệ
+        """
+        # Kiểm tra modality
+        if not hasattr(dataset, 'Modality') or dataset.Modality != 'MR':
+            raise ValidationError("Dataset is not an MR dataset")
+        
+        # Kiểm tra các thuộc tính bắt buộc
+        required_attributes = [
+            'PatientID',
+            'PatientName',
+            'StudyInstanceUID',
+            'SeriesInstanceUID',
+            'SOPInstanceUID',
+            'PixelSpacing',
+            'ImagePositionPatient',
+            'ImageOrientationPatient',
+            'SliceThickness',
+            'MagneticFieldStrength',
+            'RepetitionTime',
+            'EchoTime'
+        ]
+        
+        missing_attributes = []
+        for attr in required_attributes:
+            if not hasattr(dataset, attr):
+                missing_attributes.append(attr)
+        
+        if missing_attributes:
+            raise ValidationError(f"Missing required attributes: {', '.join(missing_attributes)}")
+        
+        # Kiểm tra dữ liệu hình ảnh
+        if not hasattr(dataset, 'pixel_array'):
+            raise ValidationError("MR dataset does not contain image data")
+        
+        return True
+    
+    @staticmethod
+    def validate_rt_image_dataset(dataset: pydicom.dataset.FileDataset) -> bool:
+        """
+        Xác thực tính hợp lệ của dataset RT Image.
+        
+        Parameters
+        ----------
+        dataset : pydicom.dataset.FileDataset
+            Dataset DICOM RT Image cần xác thực
+            
+        Returns
+        -------
+        bool
+            True nếu dataset hợp lệ
+            
+        Raises
+        ------
+        ValidationError
+            Nếu dataset không hợp lệ
+        """
+        # Kiểm tra modality
+        if not hasattr(dataset, 'Modality') or dataset.Modality != 'RTIMAGE':
+            raise ValidationError("Dataset is not an RT Image dataset")
+        
+        # Kiểm tra các thuộc tính bắt buộc
+        required_attributes = [
+            'PatientID',
+            'PatientName',
+            'StudyInstanceUID',
+            'SeriesInstanceUID',
+            'SOPInstanceUID',
+            'RTImageLabel',
+            'RTImagePlane',
+            'RTImagePosition',
+            'RadiationMachineName'
+        ]
+        
+        missing_attributes = []
+        for attr in required_attributes:
+            if not hasattr(dataset, attr):
+                missing_attributes.append(attr)
+        
+        if missing_attributes:
+            raise ValidationError(f"Missing required attributes: {', '.join(missing_attributes)}")
+        
+        # Kiểm tra dữ liệu hình ảnh
+        if not hasattr(dataset, 'pixel_array'):
+            raise ValidationError("RT Image dataset does not contain image data")
+        
+        return True
+    
+    @staticmethod
     def validate_dataset(dataset: pydicom.dataset.FileDataset) -> bool:
         """
         Xác thực tính hợp lệ của dataset DICOM dựa trên loại của nó.
@@ -288,13 +393,9 @@ class DicomValidator:
         elif modality == 'RTPLAN':
             return DicomValidator.validate_rt_plan_dataset(dataset)
         elif modality == 'MR':
-            # Thực hiện xác thực MR ở đây (chưa triển khai)
-            logger.warning("MR validation not fully implemented yet")
-            return True
+            return DicomValidator.validate_mr_dataset(dataset)
         elif modality == 'RTIMAGE':
-            # Thực hiện xác thực RTIMAGE ở đây (chưa triển khai)
-            logger.warning("RTIMAGE validation not fully implemented yet")
-            return True
+            return DicomValidator.validate_rt_image_dataset(dataset)
         else:
             raise DicomError(f"Unsupported modality: {modality}")
     
@@ -375,4 +476,4 @@ class DicomValidator:
             if hasattr(ct, 'FrameOfReferenceUID') and ct.FrameOfReferenceUID != frame_of_ref_uid:
                 raise ValidationError(f"FrameOfReferenceUID mismatch: RT Structure ({frame_of_ref_uid}) ≠ CT ({ct.FrameOfReferenceUID})")
         
-        return True 
+        return True
