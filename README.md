@@ -269,7 +269,7 @@ Dự án QuangTPS:
     +, rt_plan.py                      # Xử lý RT Plan
     +, rt_image.py                     # Xử lý RT Image
     +, dicom_converter.py              # Chuyển đổi giữa các định dạng DICOM
-    +, pacs.py                         # Tích hợp PACS
+    +, pacs_client.py                         # Tích hợp PACS
 
   -, imaging/                            # Hiển thị và xử lý hình ảnh
     +, __init__.py
