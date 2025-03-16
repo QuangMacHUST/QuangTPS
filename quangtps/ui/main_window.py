@@ -101,17 +101,6 @@ class MainWindow(QMainWindow):
         self.left_layout = QVBoxLayout(self.left_widget)
         self.left_layout.setContentsMargins(5, 5, 5, 5)
         
-        # Thêm trình duyệt bệnh nhân
-        self.patient_browser = PatientBrowser(self)
-        self.left_layout.addWidget(self.patient_browser)
-        
-        # Kết nối tín hiệu từ PatientBrowser đến PatientTab
-        self.patient_browser.patient_selected.connect(self.patient_tab.set_patient)
-        
-        # Kết nối tín hiệu từ PatientTab đến PatientBrowser
-        self.patient_tab.patient_updated.connect(self.patient_browser.refresh_patients)
-        self.patient_tab.patient_created.connect(self.patient_browser.select_patient)
-        
         # Khu vực chính (tabs)
         self.right_widget = QWidget()
         self.right_layout = QVBoxLayout(self.right_widget)
@@ -131,6 +120,17 @@ class MainWindow(QMainWindow):
         self.treatment_tab = TreatmentTab(self)
         self.qa_tab = QATab(self)
         self.reporting_tab = ReportingTab(self)
+        
+        # Thêm trình duyệt bệnh nhân sau khi tạo các tab
+        self.patient_browser = PatientBrowser(self)
+        self.left_layout.addWidget(self.patient_browser)
+        
+        # Kết nối tín hiệu từ PatientBrowser đến PatientTab - đặt sau khi cả hai đều đã được tạo
+        self.patient_browser.patient_selected.connect(self.patient_tab.set_patient)
+        
+        # Kết nối tín hiệu từ PatientTab đến PatientBrowser
+        self.patient_tab.patient_updated.connect(self.patient_browser.refresh_patients)
+        self.patient_tab.patient_created.connect(self.patient_browser.select_patient)
         
         self.tab_widget.addTab(self.workflow_manager, "Quy trình làm việc")
         self.tab_widget.addTab(self.patient_tab, "Bệnh nhân")
