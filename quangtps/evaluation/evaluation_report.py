@@ -13,7 +13,13 @@ import logging
 from typing import Dict, List, Tuple, Optional, Union, Any
 from datetime import datetime
 import jinja2
-import weasyprint
+# Import weasyprint có điều kiện
+try:
+    import weasyprint
+    WEASYPRINT_AVAILABLE = True
+except (ImportError, OSError):
+    WEASYPRINT_AVAILABLE = False
+    logging.warning("WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.")
 
 from quangtps.dose.dose_grid import DoseGrid
 from quangtps.evaluation.dose_analysis import DoseAnalysis
@@ -25,7 +31,7 @@ class EvaluationReport:
     Lớp tạo báo cáo đánh giá kế hoạch xạ trị.
     
     Lớp này cung cấp các phương thức để tạo báo cáo đánh giá kế hoạch xạ trị
-    dưới dạng HTML, PDF, hoặc Excel.
+    dước dạng HTML, PDF, hoặc Excel.
     """
     
     def __init__(self, 
@@ -371,25 +377,37 @@ class EvaluationReport:
             dvh_plot_path (str, optional): Đường dẫn để lưu biểu đồ DVH
         
         Returns:
-            str: Đường dẫn đến file báo cáo PDF
+            str: Đường dẫn đến file báo cáo PDF hoặc file HTML nếu WeasyPrint không khả dụng
+        
+        Note:
+            Nếu WeasyPrint không khả dụng, phương thức này sẽ tạo báo cáo HTML thay thế
+            và đổi tên file thành .pdf_report.html
         """
         # Tạo báo cáo HTML trước
         html_path = output_path.replace('.pdf', '.html')
-        self.generate_html_report(
-            output_path=html_path,
-            template_path=template_path,
-            include_dvh_plot=include_dvh_plot,
-            dvh_plot_path=dvh_plot_path
-        )
+        self.generate_html_report(html_path, template_path, include_dvh_plot, dvh_plot_path)
         
-        # Chuyển đổi HTML sang PDF
-        html = weasyprint.HTML(filename=html_path)
-        html.write_pdf(output_path)
-        
-        # Xóa file HTML tạm (tùy chọn)
-        # os.remove(html_path)
-        
-        return output_path
+        if WEASYPRINT_AVAILABLE:
+            # Tạo báo cáo PDF từ HTML
+            try:
+                html = weasyprint.HTML(filename=html_path)
+                html.write_pdf(output_path)
+                logger.info(f"Đã tạo báo cáo PDF tại {output_path}")
+                
+                # Xóa file HTML tạm thời
+                os.remove(html_path)
+                
+                return output_path
+            except Exception as e:
+                logger.error(f"Lỗi khi tạo báo cáo PDF: {e}")
+                logger.info(f"Sử dụng báo cáo HTML thay thế tại {html_path}")
+                return html_path
+        else:
+            # Nếu WeasyPrint không khả dụng, đổi tên file HTML
+            alternative_path = output_path + '_report.html'
+            os.rename(html_path, alternative_path)
+            logger.info(f"WeasyPrint không khả dụng. Đã tạo báo cáo HTML thay thế tại {alternative_path}")
+            return alternative_path
     
     def generate_excel_report(self, output_path: str):
         """

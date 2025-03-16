@@ -13,14 +13,208 @@ from quangtps.database.db_connector import DBConnector
 logger = logging.getLogger(__name__)
 
 
-class PatientDB:
+class Patient:
+    """
+    Lớp biểu diễn thông tin bệnh nhân.
+    """
+    
+    def __init__(self, patient_id=None, name=None, birth_date=None, gender=None, metadata=None):
+        """
+        Khởi tạo đối tượng Patient.
+        
+        Args:
+            patient_id (str): ID của bệnh nhân
+            name (str): Tên của bệnh nhân
+            birth_date (str): Ngày sinh của bệnh nhân
+            gender (str): Giới tính của bệnh nhân
+            metadata (dict): Metadata bổ sung của bệnh nhân
+        """
+        self.id = patient_id or str(uuid.uuid4())
+        self.name = name or ""
+        self.birth_date = birth_date
+        self.gender = gender
+        self.metadata = metadata or {}
+        self.studies = []
+        self.created_at = datetime.now().isoformat()
+        self.updated_at = self.created_at
+    
+    def add_study(self, study):
+        """
+        Thêm một nghiên cứu vào bệnh nhân.
+        
+        Args:
+            study (Study): Đối tượng nghiên cứu
+        """
+        self.studies.append(study)
+        study.patient_id = self.id
+    
+    def get_study_by_id(self, study_id):
+        """
+        Lấy nghiên cứu theo ID.
+        
+        Args:
+            study_id (str): ID của nghiên cứu cần tìm
+            
+        Returns:
+            Study: Đối tượng nghiên cứu hoặc None nếu không tìm thấy
+        """
+        for study in self.studies:
+            if study.id == study_id:
+                return study
+        return None
+
+    def to_dict(self):
+        """
+        Chuyển đổi đối tượng thành dictionary.
+        
+        Returns:
+            dict: Thông tin bệnh nhân dưới dạng dictionary
+        """
+        return {
+            "id": self.id,
+            "name": self.name,
+            "birth_date": self.birth_date,
+            "gender": self.gender,
+            "metadata": self.metadata,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "studies": [study.to_dict() for study in self.studies]
+        }
+
+
+class Study:
+    """
+    Lớp biểu diễn thông tin nghiên cứu y tế.
+    """
+    
+    def __init__(self, study_id=None, description=None, date=None, patient_id=None, metadata=None):
+        """
+        Khởi tạo đối tượng Study.
+        
+        Args:
+            study_id (str): ID của nghiên cứu
+            description (str): Mô tả về nghiên cứu
+            date (str): Ngày thực hiện nghiên cứu
+            patient_id (str): ID của bệnh nhân liên quan
+            metadata (dict): Metadata bổ sung của nghiên cứu
+        """
+        self.id = study_id or str(uuid.uuid4())
+        self.description = description or ""
+        self.date = date or datetime.now().isoformat()
+        self.patient_id = patient_id
+        self.metadata = metadata or {}
+        self.series_list = []
+        self.created_at = datetime.now().isoformat()
+        self.updated_at = self.created_at
+    
+    def add_series(self, series):
+        """
+        Thêm một chuỗi vào nghiên cứu.
+        
+        Args:
+            series (Series): Đối tượng chuỗi
+        """
+        self.series_list.append(series)
+        series.study_id = self.id
+    
+    def get_series_by_id(self, series_id):
+        """
+        Lấy chuỗi theo ID.
+        
+        Args:
+            series_id (str): ID của chuỗi cần tìm
+            
+        Returns:
+            Series: Đối tượng chuỗi hoặc None nếu không tìm thấy
+        """
+        for series in self.series_list:
+            if series.id == series_id:
+                return series
+        return None
+    
+    def to_dict(self):
+        """
+        Chuyển đổi đối tượng thành dictionary.
+        
+        Returns:
+            dict: Thông tin nghiên cứu dưới dạng dictionary
+        """
+        return {
+            "id": self.id,
+            "description": self.description,
+            "date": self.date,
+            "patient_id": self.patient_id,
+            "metadata": self.metadata,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "series": [series.to_dict() for series in self.series_list]
+        }
+
+
+class Series:
+    """
+    Lớp biểu diễn thông tin chuỗi dữ liệu y tế.
+    """
+    
+    def __init__(self, series_id=None, description=None, modality=None, study_id=None, metadata=None):
+        """
+        Khởi tạo đối tượng Series.
+        
+        Args:
+            series_id (str): ID của chuỗi
+            description (str): Mô tả về chuỗi
+            modality (str): Dạng hình ảnh (CT, MR, PT, v.v.)
+            study_id (str): ID của nghiên cứu liên quan
+            metadata (dict): Metadata bổ sung của chuỗi
+        """
+        self.id = series_id or str(uuid.uuid4())
+        self.description = description or ""
+        self.modality = modality or ""
+        self.study_id = study_id
+        self.metadata = metadata or {}
+        self.file_paths = []
+        self.created_at = datetime.now().isoformat()
+        self.updated_at = self.created_at
+        self.data_path = None  # Đường dẫn đến dữ liệu xử lý
+    
+    def add_file(self, file_path):
+        """
+        Thêm một file vào chuỗi.
+        
+        Args:
+            file_path (str): Đường dẫn đến file
+        """
+        if file_path not in self.file_paths:
+            self.file_paths.append(file_path)
+    
+    def to_dict(self):
+        """
+        Chuyển đổi đối tượng thành dictionary.
+        
+        Returns:
+            dict: Thông tin chuỗi dưới dạng dictionary
+        """
+        return {
+            "id": self.id,
+            "description": self.description,
+            "modality": self.modality,
+            "study_id": self.study_id,
+            "metadata": self.metadata,
+            "file_paths": self.file_paths,
+            "data_path": self.data_path,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+
+
+class PatientDatabase:
     """
     Class quản lý thông tin bệnh nhân trong cơ sở dữ liệu.
     """
 
     def __init__(self):
         """
-        Khởi tạo đối tượng PatientDB.
+        Khởi tạo đối tượng PatientDatabase.
         """
         self.db = DBConnector()
 

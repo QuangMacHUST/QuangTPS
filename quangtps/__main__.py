@@ -7,9 +7,11 @@ import sys
 import argparse
 from pathlib import Path
 
+from PyQt5.QtWidgets import QApplication
+
 from quangtps.core.logging import setup_logger, get_logger
 from quangtps.core.config import Config
-from quangtps.gui.main_window import MainWindow
+from quangtps.ui.main_window import MainWindow
 from quangtps.scripts.batch_processing import batch_process
 from quangtps.scripts.system_check import check_system
 
@@ -63,9 +65,10 @@ def main():
     # Khởi chạy giao diện người dùng
     logger.info("Khởi động QuangTPS...")
     try:
-        app = MainWindow(config)
-        app.run()
-        return 0
+        app = QApplication(sys.argv)
+        window = MainWindow(config)
+        window.show()
+        return app.exec_()
     except Exception as e:
         logger.critical("Lỗi khi khởi động ứng dụng: %s", e, exc_info=True)
         return 1

@@ -285,4 +285,30 @@ class BoronDistributionAnalyzer:
     def plot_tumor_normal_ratio(self, max_time: float = 24.0, 
                                time_points: int = 100) -> plt.Figure:
         """
-        Vẽ đồ thị t
+        Vẽ đồ thị tỷ lệ nồng độ boron u/mô lành theo thời gian.
+        
+        Parameters
+        ----------
+        max_time : float
+            Thời gian tối đa để vẽ (giờ)
+        time_points : int
+            Số điểm thời gian để vẽ
+            
+        Returns
+        -------
+        plt.Figure
+            Đối tượng hình vẽ matplotlib
+        """
+        times = np.linspace(0, max_time, time_points)
+        ratios = [self.model.tumor_to_normal_ratio(t) for t in times]
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(times, ratios, 'g-', label='Tỷ lệ nồng độ u/mô lành')
+        
+        ax.set_xlabel('Thời gian sau khi tiêm (giờ)')
+        ax.set_ylabel('Tỷ lệ nồng độ u/mô lành')
+        ax.set_title(f'Đồ thị tỷ lệ nồng độ u/mô lành theo thời gian - {self.model.properties.name}')
+        ax.grid(True)
+        ax.legend()
+        
+        return fig

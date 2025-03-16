@@ -31,6 +31,8 @@ from quangtps.ui.patient_browser import PatientBrowser
 from quangtps.ui.structure_view import StructureView
 from quangtps.ui.image_viewer import ImageViewer
 from quangtps.ui.imaging_tab import ImagingTab
+from quangtps.ui.workflow_panel import WorkflowManager
+from quangtps.ui.plan_evaluation import PlanEvaluationWidget
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +45,17 @@ class MainWindow(QMainWindow):
     và các thành phần giao diện khác của hệ thống lập kế hoạch xạ trị.
     """
     
-    def __init__(self):
-        """Khởi tạo cửa sổ chính."""
+    def __init__(self, config=None):
+        """
+        Khởi tạo cửa sổ chính.
+        
+        Args:
+            config (dict, optional): Cấu hình ứng dụng. Defaults to None.
+        """
         super().__init__()
+        
+        # Lưu trữ cấu hình
+        self.config = config or {}
         
         # Thiết lập cửa sổ chính
         self.setWindowTitle("QuangTPS - Hệ thống lập kế hoạch xạ trị mở")
@@ -92,8 +102,15 @@ class MainWindow(QMainWindow):
         self.left_layout.setContentsMargins(5, 5, 5, 5)
         
         # Thêm trình duyệt bệnh nhân
-        self.patient_browser = PatientBrowser()
+        self.patient_browser = PatientBrowser(self)
         self.left_layout.addWidget(self.patient_browser)
+        
+        # Kết nối tín hiệu từ PatientBrowser đến PatientTab
+        self.patient_browser.patient_selected.connect(self.patient_tab.set_patient)
+        
+        # Kết nối tín hiệu từ PatientTab đến PatientBrowser
+        self.patient_tab.patient_updated.connect(self.patient_browser.refresh_patients)
+        self.patient_tab.patient_created.connect(self.patient_browser.select_patient)
         
         # Khu vực chính (tabs)
         self.right_widget = QWidget()
@@ -105,21 +122,28 @@ class MainWindow(QMainWindow):
         self.right_layout.addWidget(self.tab_widget)
         
         # Thêm các tab
-        self.patient_tab = PatientTab()
-        self.imaging_tab = ImagingTab()
-        self.planning_tab = PlanningTab()
-        self.dose_tab = DoseTab()
-        self.treatment_tab = TreatmentTab()
-        self.qa_tab = QATab()
-        self.reporting_tab = ReportingTab()
+        self.workflow_manager = WorkflowManager(self)
+        self.patient_tab = PatientTab(self)
+        self.imaging_tab = ImagingTab(self)
+        self.planning_tab = PlanningTab(self)
+        self.dose_tab = DoseTab(self)
+        self.plan_evaluation_tab = PlanEvaluationWidget(self)
+        self.treatment_tab = TreatmentTab(self)
+        self.qa_tab = QATab(self)
+        self.reporting_tab = ReportingTab(self)
         
+        self.tab_widget.addTab(self.workflow_manager, "Quy trình làm việc")
         self.tab_widget.addTab(self.patient_tab, "Bệnh nhân")
         self.tab_widget.addTab(self.imaging_tab, "Hình ảnh")
         self.tab_widget.addTab(self.planning_tab, "Lập kế hoạch")
         self.tab_widget.addTab(self.dose_tab, "Liều lượng")
+        self.tab_widget.addTab(self.plan_evaluation_tab, "Đánh giá")
         self.tab_widget.addTab(self.treatment_tab, "Điều trị")
         self.tab_widget.addTab(self.qa_tab, "QA")
         self.tab_widget.addTab(self.reporting_tab, "Báo cáo")
+        
+        # Đặt tab quy trình làm việc làm tab mặc định
+        self.tab_widget.setCurrentIndex(0)
         
         # Thêm các widget vào splitter
         self.main_splitter.addWidget(self.left_widget)
@@ -175,6 +199,10 @@ class MainWindow(QMainWindow):
         optimize_plan_action = QAction("Tối ưu hóa kế hoạch", self)
         optimize_plan_action.triggered.connect(self._optimize_plan)
         self.plan_menu.addAction(optimize_plan_action)
+        
+        evaluate_plan_action = QAction("Đánh giá kế hoạch", self)
+        evaluate_plan_action.triggered.connect(self._evaluate_plan)
+        self.plan_menu.addAction(evaluate_plan_action)
         
         # Menu View
         self.view_menu = self.menuBar().addMenu("&Hiển thị")
@@ -272,6 +300,25 @@ class MainWindow(QMainWindow):
         logger.info("Tối ưu hóa kế hoạch")
         QMessageBox.information(self, "Thông báo", "Chức năng tối ưu hóa kế hoạch sẽ được triển khai sau.")
     
+    def _evaluate_plan(self):
+        """Chuyển đến tab đánh giá kế hoạch."""
+        if self.current_plan is None:
+            QMessageBox.warning(
+                self, 
+                "Cảnh báo", 
+                "Vui lòng mở hoặc tạo một kế hoạch trước khi đánh giá."
+            )
+            return
+        
+        # Chuyển đến tab đánh giá
+        evaluation_tab_index = self.tab_widget.indexOf(self.plan_evaluation_tab)
+        self.tab_widget.setCurrentIndex(evaluation_tab_index)
+        
+        # Cập nhật dữ liệu kế hoạch cho tab đánh giá
+        self.plan_evaluation_tab.set_plan_data(self.current_plan)
+        
+        self.status_bar.showMessage("Đánh giá kế hoạch: " + self.current_plan.get('name', 'Không có tên'))
+
     def _show_about(self):
         """Hiển thị thông tin giới thiệu."""
         about_text = (
@@ -281,6 +328,25 @@ class MainWindow(QMainWindow):
             "<p>Được phát triển bởi: Đại học Bách Khoa Hà Nội</p>"
         )
         QMessageBox.about(self, "Giới thiệu QuangTPS", about_text)
+    
+    def run(self):
+        """
+        Khởi chạy và hiển thị cửa sổ chính.
+        
+        Returns:
+            int: Mã kết quả khi thoát ứng dụng.
+        """
+        # Hiển thị cửa sổ
+        self.show()
+        
+        # Nếu chúng ta đang chạy độc lập (không từ __main__.py)
+        if QApplication.instance() is None:
+            app = QApplication(sys.argv)
+            self.show()
+            return app.exec_()
+            
+        # Nếu QApplication đã được tạo ở nơi khác (từ __main__.py)
+        return 0
 
 
 def main():
@@ -302,34 +368,27 @@ def main():
         
         QTabWidget::pane {
             border: 1px solid #cccccc;
-            background-color: #f8f8f8;
+            background-color: white;
         }
         
         QTabBar::tab {
-            background-color: #e0e0e0;
-            padding: 8px 16px;
-            margin-right: 2px;
+            background: #e0e0e0;
             border: 1px solid #cccccc;
-            border-bottom: none;
-            border-top-left-radius: 4px;
-            border-top-right-radius: 4px;
+            padding: 5px 10px;
+            margin-right: 2px;
         }
         
         QTabBar::tab:selected {
-            background-color: #f8f8f8;
-            border-bottom: 1px solid #f8f8f8;
-        }
-        
-        QTabBar::tab:hover {
-            background-color: #e8e8e8;
+            background: #f0f0f0;
+            border-bottom-color: #f0f0f0;
         }
         
         QPushButton {
             background-color: #4a86e8;
             color: white;
-            padding: 6px 12px;
             border: none;
-            border-radius: 4px;
+            padding: 6px 12px;
+            border-radius: 3px;
         }
         
         QPushButton:hover {
@@ -339,11 +398,6 @@ def main():
         QPushButton:pressed {
             background-color: #2a66c8;
         }
-        
-        QPushButton:disabled {
-            background-color: #cccccc;
-            color: #888888;
-        }
     """)
     
     # Tạo cửa sổ chính và hiển thị
@@ -351,8 +405,8 @@ def main():
     main_window.show()
     
     # Chạy ứng dụng
-    sys.exit(app.exec_())
+    return app.exec_()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

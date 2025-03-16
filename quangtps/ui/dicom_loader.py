@@ -540,3 +540,344 @@ def get_dicom_file_metadata(file_path: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Lỗi khi trích xuất metadata từ {file_path}: {str(e)}")
         return {"Error": str(e)}
+
+# Thêm imports cần thiết cho GUI
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
+    QFileDialog, QTreeWidget, QTreeWidgetItem, QProgressBar,
+    QSplitter, QGridLayout, QGroupBox, QComboBox, QMessageBox,
+    QTabWidget, QFrame, QLineEdit, QCheckBox, QRadioButton
+)
+from PyQt5.QtCore import Qt, pyqtSignal, QSize
+from PyQt5.QtGui import QIcon, QFont
+
+from quangtps.imaging.image import Image
+from quangtps.database.patient_db import Patient, Study, Series
+
+class DicomLoaderWidget(QWidget):
+    """
+    Widget cho phép tải và quản lý dữ liệu DICOM trong giao diện người dùng.
+    
+    Cung cấp các chức năng:
+    - Tải file DICOM từ thư mục
+    - Hiển thị và tổ chức các chuỗi DICOM theo bệnh nhân và nghiên cứu
+    - Xem thông tin chi tiết về chuỗi DICOM
+    - Nhập dữ liệu DICOM vào hệ thống QuangTPS
+    """
+    
+    # Tín hiệu
+    series_selected = pyqtSignal(DicomSeries)
+    series_imported = pyqtSignal(str, str, str)  # patient_id, study_id, series_id
+    
+    def __init__(self, parent=None):
+        """Khởi tạo DicomLoaderWidget."""
+        super().__init__(parent)
+        
+        # Dữ liệu
+        self.dicom_loader = DicomLoader()
+        self.current_directory = ""
+        self.current_series = None
+        
+        # UI
+        self._init_ui()
+    
+    def _init_ui(self):
+        """Khởi tạo giao diện người dùng."""
+        main_layout = QVBoxLayout(self)
+        
+        # Thanh công cụ
+        toolbar_layout = QHBoxLayout()
+        
+        # Nút mở thư mục
+        self.open_dir_btn = QPushButton("Mở thư mục DICOM")
+        self.open_dir_btn.clicked.connect(self._open_directory)
+        toolbar_layout.addWidget(self.open_dir_btn)
+        
+        # Nút làm mới
+        self.refresh_btn = QPushButton("Làm mới")
+        self.refresh_btn.clicked.connect(self._refresh_current_directory)
+        toolbar_layout.addWidget(self.refresh_btn)
+        
+        # Nút nhập dữ liệu
+        self.import_btn = QPushButton("Nhập vào hệ thống")
+        self.import_btn.clicked.connect(self._import_selected_series)
+        self.import_btn.setEnabled(False)
+        toolbar_layout.addWidget(self.import_btn)
+        
+        toolbar_layout.addStretch()
+        
+        main_layout.addLayout(toolbar_layout)
+        
+        # Splitter chính
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # Cây DICOM ở bên trái
+        self.dicom_tree = QTreeWidget()
+        self.dicom_tree.setHeaderLabels(["Thông tin DICOM"])
+        self.dicom_tree.setMinimumWidth(300)
+        self.dicom_tree.itemClicked.connect(self._on_tree_item_clicked)
+        splitter.addWidget(self.dicom_tree)
+        
+        # Thông tin chi tiết ở bên phải
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
+        
+        # Tiêu đề
+        self.info_title = QLabel("Thông tin chi tiết")
+        self.info_title.setAlignment(Qt.AlignCenter)
+        self.info_title.setFont(QFont("Arial", 12, QFont.Bold))
+        info_layout.addWidget(self.info_title)
+        
+        # Thông tin cơ bản
+        basic_info_group = QGroupBox("Thông tin cơ bản")
+        basic_info_layout = QGridLayout(basic_info_group)
+        
+        basic_info_layout.addWidget(QLabel("Bệnh nhân:"), 0, 0)
+        self.patient_label = QLabel("")
+        basic_info_layout.addWidget(self.patient_label, 0, 1)
+        
+        basic_info_layout.addWidget(QLabel("Nghiên cứu:"), 1, 0)
+        self.study_label = QLabel("")
+        basic_info_layout.addWidget(self.study_label, 1, 1)
+        
+        basic_info_layout.addWidget(QLabel("Chuỗi:"), 2, 0)
+        self.series_label = QLabel("")
+        basic_info_layout.addWidget(self.series_label, 2, 1)
+        
+        basic_info_layout.addWidget(QLabel("Dạng:"), 3, 0)
+        self.modality_label = QLabel("")
+        basic_info_layout.addWidget(self.modality_label, 3, 1)
+        
+        basic_info_layout.addWidget(QLabel("Số lượng file:"), 4, 0)
+        self.files_count_label = QLabel("")
+        basic_info_layout.addWidget(self.files_count_label, 4, 1)
+        
+        info_layout.addWidget(basic_info_group)
+        
+        # Metadata chi tiết
+        metadata_group = QGroupBox("Metadata")
+        metadata_layout = QVBoxLayout(metadata_group)
+        
+        self.metadata_tree = QTreeWidget()
+        self.metadata_tree.setHeaderLabels(["Thẻ", "Giá trị"])
+        self.metadata_tree.setAlternatingRowColors(True)
+        metadata_layout.addWidget(self.metadata_tree)
+        
+        info_layout.addWidget(metadata_group)
+        
+        # Thêm widget thông tin vào splitter
+        splitter.addWidget(info_widget)
+        
+        # Thiết lập kích thước ban đầu cho splitter
+        splitter.setSizes([400, 600])
+        
+        main_layout.addWidget(splitter, 1)
+        
+        # Thanh trạng thái
+        status_layout = QHBoxLayout()
+        self.status_label = QLabel("Sẵn sàng")
+        status_layout.addWidget(self.status_label)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        status_layout.addWidget(self.progress_bar)
+        
+        main_layout.addLayout(status_layout)
+        
+    def _open_directory(self):
+        """Mở hộp thoại chọn thư mục và tải dữ liệu DICOM."""
+        directory = QFileDialog.getExistingDirectory(
+            self, 
+            "Chọn thư mục chứa file DICOM",
+            ""
+        )
+        
+        if directory:
+            self._load_directory(directory)
+    
+    def _load_directory(self, directory):
+        """Tải dữ liệu DICOM từ thư mục được chỉ định."""
+        self.current_directory = directory
+        self.status_label.setText(f"Đang tải dữ liệu từ {directory}...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        
+        # Xóa dữ liệu cũ
+        self.dicom_loader.clear_series()
+        self.dicom_tree.clear()
+        self._clear_info_panel()
+        
+        # Tải dữ liệu mới
+        try:
+            series_list = self.dicom_loader.load_dicom_directory(directory)
+            self._populate_dicom_tree(series_list)
+            self.status_label.setText(f"Đã tải {len(series_list)} chuỗi DICOM từ {directory}")
+        except Exception as e:
+            self.status_label.setText(f"Lỗi khi tải: {str(e)}")
+            QMessageBox.warning(self, "Lỗi tải dữ liệu", f"Không thể tải dữ liệu DICOM: {str(e)}")
+        
+        self.progress_bar.setVisible(False)
+    
+    def _refresh_current_directory(self):
+        """Làm mới dữ liệu từ thư mục hiện tại."""
+        if self.current_directory:
+            self._load_directory(self.current_directory)
+        else:
+            self.status_label.setText("Không có thư mục nào được chọn")
+    
+    def _populate_dicom_tree(self, series_list):
+        """Cập nhật cây hiển thị với danh sách chuỗi DICOM."""
+        # Sắp xếp các chuỗi theo bệnh nhân và nghiên cứu
+        patients = {}
+        
+        for series in series_list:
+            metadata = series.metadata
+            patient_id = metadata.get('PatientID', 'Unknown')
+            patient_name = metadata.get('PatientName', 'Unknown')
+            
+            study_uid = metadata.get('StudyInstanceUID', 'Unknown')
+            study_desc = metadata.get('StudyDescription', 'Unknown Study')
+            study_date = metadata.get('StudyDate', '')
+            
+            # Tạo entry cho bệnh nhân nếu chưa tồn tại
+            if patient_id not in patients:
+                patients[patient_id] = {
+                    'name': patient_name,
+                    'studies': {}
+                }
+            
+            # Tạo entry cho nghiên cứu nếu chưa tồn tại
+            if study_uid not in patients[patient_id]['studies']:
+                patients[patient_id]['studies'][study_uid] = {
+                    'description': study_desc,
+                    'date': study_date,
+                    'series': []
+                }
+            
+            # Thêm chuỗi vào nghiên cứu
+            patients[patient_id]['studies'][study_uid]['series'].append(series)
+        
+        # Cập nhật cây hiển thị
+        for patient_id, patient_info in patients.items():
+            patient_item = QTreeWidgetItem(self.dicom_tree)
+            patient_item.setText(0, f"{patient_info['name']} ({patient_id})")
+            patient_item.setData(0, Qt.UserRole, {'type': 'patient', 'id': patient_id})
+            
+            for study_uid, study_info in patient_info['studies'].items():
+                study_item = QTreeWidgetItem(patient_item)
+                study_item.setText(0, f"{study_info['description']} - {study_info['date']}")
+                study_item.setData(0, Qt.UserRole, {'type': 'study', 'id': study_uid})
+                
+                for series in study_info['series']:
+                    series_item = QTreeWidgetItem(study_item)
+                    series_item.setText(0, f"{series.description} - {series.modality}")
+                    series_item.setData(0, Qt.UserRole, {'type': 'series', 'id': series.series_id, 'object': series})
+        
+        # Mở rộng cây
+        self.dicom_tree.expandAll()
+    
+    def _on_tree_item_clicked(self, item, column):
+        """Xử lý khi một mục trong cây được chọn."""
+        data = item.data(0, Qt.UserRole)
+        if not data:
+            return
+            
+        item_type = data.get('type')
+        
+        if item_type == 'series':
+            # Hiển thị thông tin chuỗi
+            series = data.get('object')
+            if series:
+                self.current_series = series
+                self._display_series_info(series)
+                self.import_btn.setEnabled(True)
+                self.series_selected.emit(series)
+        else:
+            # Xóa thông tin chi tiết cho các loại mục khác
+            self._clear_info_panel()
+            self.import_btn.setEnabled(False)
+            self.current_series = None
+    
+    def _display_series_info(self, series):
+        """Hiển thị thông tin chi tiết của chuỗi DICOM."""
+        # Cập nhật thông tin cơ bản
+        metadata = series.metadata
+        
+        self.patient_label.setText(f"{metadata.get('PatientName', 'Unknown')} ({metadata.get('PatientID', 'Unknown')})")
+        self.study_label.setText(metadata.get('StudyDescription', 'Unknown Study'))
+        self.series_label.setText(series.description)
+        self.modality_label.setText(series.modality)
+        self.files_count_label.setText(str(len(series.files)))
+        
+        # Cập nhật cây metadata
+        self.metadata_tree.clear()
+        
+        # Thêm các mục metadata
+        for key, value in sorted(metadata.items()):
+            item = QTreeWidgetItem(self.metadata_tree)
+            item.setText(0, str(key))
+            item.setText(1, str(value))
+    
+    def _clear_info_panel(self):
+        """Xóa thông tin chi tiết."""
+        self.patient_label.setText("")
+        self.study_label.setText("")
+        self.series_label.setText("")
+        self.modality_label.setText("")
+        self.files_count_label.setText("")
+        self.metadata_tree.clear()
+    
+    def _import_selected_series(self):
+        """Nhập chuỗi DICOM được chọn vào hệ thống QuangTPS."""
+        if not self.current_series:
+            QMessageBox.warning(self, "Lỗi", "Vui lòng chọn một chuỗi DICOM để nhập")
+            return
+            
+        try:
+            # Lấy thông tin metadata
+            metadata = self.current_series.metadata
+            patient_id = metadata.get('PatientID', 'Unknown')
+            patient_name = metadata.get('PatientName', 'Unknown')
+            study_uid = metadata.get('StudyInstanceUID', 'Unknown')
+            study_desc = metadata.get('StudyDescription', 'Unknown Study')
+            series_id = self.current_series.series_id
+            
+            # Đặt trạng thái
+            self.status_label.setText(f"Đang nhập chuỗi {self.current_series.description}...")
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(50)
+            
+            # Tạo đối tượng hình ảnh từ chuỗi DICOM
+            if SITK_AVAILABLE and self.current_series.modality in ['CT', 'MR', 'PT']:
+                # Tạo đường dẫn tạm thời cho hình ảnh
+                reader = sitk.ImageSeriesReader()
+                reader.SetFileNames(self.current_series.files)
+                sitk_image = reader.Execute()
+                
+                # Chuyển đổi sang đối tượng Image
+                image = Image.from_sitk(sitk_image)
+                
+                # Thêm metadata
+                for key, value in metadata.items():
+                    if key not in image.metadata:
+                        image.metadata[key] = value
+                
+                # TODO: Lưu hình ảnh vào cơ sở dữ liệu
+                
+                self.status_label.setText(f"Đã nhập thành công chuỗi {self.current_series.description}")
+                self.progress_bar.setValue(100)
+                
+                # Phát tín hiệu đã nhập
+                self.series_imported.emit(patient_id, study_uid, series_id)
+                
+                # Hiển thị thông báo thành công
+                QMessageBox.information(self, "Nhập thành công", 
+                                      f"Đã nhập thành công chuỗi DICOM: {self.current_series.description}")
+            else:
+                raise ValueError(f"Không hỗ trợ dạng hình ảnh: {self.current_series.modality}")
+                
+        except Exception as e:
+            self.status_label.setText(f"Lỗi khi nhập: {str(e)}")
+            QMessageBox.warning(self, "Lỗi nhập dữ liệu", f"Không thể nhập chuỗi DICOM: {str(e)}")
+        
+        self.progress_bar.setVisible(False)

@@ -26,6 +26,20 @@ class OptimizationType(str, Enum):
     MULTI_CRITERIA = "MultiCriteria"
 
 
+class OptimizationAlgorithm(str, Enum):
+    """Enum cho các thuật toán tối ưu hóa."""
+    GRADIENT_DESCENT = "GradientDescent"    # Thuật toán gradient descent
+    SIMULATED_ANNEALING = "SimulatedAnnealing"  # Thuật toán mô phỏng luyện kim
+    GENETIC = "Genetic"                  # Thuật toán di truyền
+    PARTICLE_SWARM = "ParticleSwarm"     # Thuật toán đàn bầy
+    NEWTON = "Newton"                    # Phương pháp Newton
+    QUASI_NEWTON = "QuasiNewton"         # Phương pháp Quasi-Newton
+    SEQUENTIAL = "Sequential"            # Quy hoạch tuần tự
+    BRANCH_AND_BOUND = "BranchAndBound"  # Nhánh và cận
+    MIXED_INTEGER = "MixedInteger"       # Số nguyên hỗn hợp
+    COLUMN_GENERATION = "ColumnGeneration"  # Tạo cột
+
+
 class OptimizationObjectiveType(str, Enum):
     """Enum cho các loại mục tiêu tối ưu hóa."""
     MIN_DOSE = "MinDose"            # Liều tối thiểu

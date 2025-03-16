@@ -34,6 +34,16 @@ class BeamArrangementType(str, Enum):
     MIXED = "Mixed"                      # Hỗn hợp các loại chùm tia
 
 
+class BeamModifierType(str, Enum):
+    """Enum cho các loại bộ điều chỉnh chùm tia."""
+    WEDGE = "Wedge"                      # Nêm
+    BLOCK = "Block"                      # Chặn
+    BOLUS = "Bolus"                      # Bolus
+    COMPENSATOR = "Compensator"          # Bộ bù
+    MLC = "MLC"                          # Collimator đa lá
+    JAW = "Jaw"                          # Hàm
+
+
 class BeamSetup:
     """
     Lớp thiết lập chùm tia.
@@ -660,3 +670,221 @@ class BeamArrangement:
     def __str__(self) -> str:
         """Biểu diễn chuỗi của bố trí chùm tia."""
         return f"{self.name} [{self.arrangement_id}] - {self.arrangement_type.value} with {len(self.beam_setups)} beams"
+
+
+class BeamPlanning:
+    """
+    Lớp quản lý chùm tia trong quá trình lập kế hoạch.
+    
+    Lớp này kết hợp các thông tin từ BeamSetup và BeamArrangement để hỗ trợ
+    quá trình lập kế hoạch điều trị, cung cấp các phương thức để tạo, sửa đổi
+    và quản lý các cấu hình chùm tia trong suốt quá trình lập kế hoạch.
+    """
+    
+    def __init__(
+        self,
+        planning_id: Optional[str] = None,
+        name: str = "",
+        description: str = ""
+    ):
+        """
+        Khởi tạo đối tượng BeamPlanning.
+        
+        Parameters
+        ----------
+        planning_id : str, optional
+            ID duy nhất cho quá trình lập kế hoạch chùm tia
+        name : str, optional
+            Tên hiển thị
+        description : str, optional
+            Mô tả về quá trình lập kế hoạch
+        """
+        self.planning_id = planning_id if planning_id else str(uuid.uuid4())
+        self.name = name
+        self.description = description
+        
+        self.beam_arrangements = {}  # Dict[str, BeamArrangement]
+        self.active_arrangement_id = None  # Arrangement ID đang được sử dụng
+        
+        self.parameters = {}  # Dict[str, Any]
+        self.metadata = {}    # Dict[str, Any]
+    
+    def add_beam_arrangement(self, arrangement: BeamArrangement) -> str:
+        """
+        Thêm một bố trí chùm tia.
+        
+        Parameters
+        ----------
+        arrangement : BeamArrangement
+            Đối tượng bố trí chùm tia cần thêm
+            
+        Returns
+        -------
+        str
+            ID của bố trí chùm tia
+        """
+        self.beam_arrangements[arrangement.arrangement_id] = arrangement
+        if self.active_arrangement_id is None:
+            self.active_arrangement_id = arrangement.arrangement_id
+        return arrangement.arrangement_id
+    
+    def get_beam_arrangement(self, arrangement_id: str) -> Optional[BeamArrangement]:
+        """
+        Lấy bố trí chùm tia theo ID.
+        
+        Parameters
+        ----------
+        arrangement_id : str
+            ID của bố trí chùm tia cần lấy
+            
+        Returns
+        -------
+        BeamArrangement, optional
+            Đối tượng bố trí chùm tia, hoặc None nếu không tìm thấy
+        """
+        return self.beam_arrangements.get(arrangement_id)
+    
+    def remove_beam_arrangement(self, arrangement_id: str) -> bool:
+        """
+        Xóa bố trí chùm tia theo ID.
+        
+        Parameters
+        ----------
+        arrangement_id : str
+            ID của bố trí chùm tia cần xóa
+            
+        Returns
+        -------
+        bool
+            True nếu xóa thành công, False nếu không tìm thấy
+        """
+        if arrangement_id in self.beam_arrangements:
+            del self.beam_arrangements[arrangement_id]
+            
+            # Cập nhật active arrangement nếu cần
+            if self.active_arrangement_id == arrangement_id:
+                if self.beam_arrangements:
+                    self.active_arrangement_id = next(iter(self.beam_arrangements.keys()))
+                else:
+                    self.active_arrangement_id = None
+            
+            return True
+        return False
+    
+    def set_active_arrangement(self, arrangement_id: str) -> bool:
+        """
+        Đặt bố trí chùm tia đang hoạt động.
+        
+        Parameters
+        ----------
+        arrangement_id : str
+            ID của bố trí chùm tia cần đặt làm active
+            
+        Returns
+        -------
+        bool
+            True nếu thành công, False nếu không tìm thấy bố trí
+        """
+        if arrangement_id in self.beam_arrangements:
+            self.active_arrangement_id = arrangement_id
+            return True
+        return False
+    
+    def get_active_arrangement(self) -> Optional[BeamArrangement]:
+        """
+        Lấy bố trí chùm tia đang hoạt động.
+        
+        Returns
+        -------
+        BeamArrangement, optional
+            Đối tượng bố trí chùm tia đang hoạt động, hoặc None nếu không có
+        """
+        if self.active_arrangement_id:
+            return self.beam_arrangements.get(self.active_arrangement_id)
+        return None
+    
+    def set_parameter(self, key: str, value: Any):
+        """
+        Đặt một tham số cho quá trình lập kế hoạch.
+        
+        Parameters
+        ----------
+        key : str
+            Tên tham số
+        value : Any
+            Giá trị tham số
+        """
+        self.parameters[key] = value
+    
+    def set_metadata(self, key: str, value: Any):
+        """
+        Đặt một metadata cho quá trình lập kế hoạch.
+        
+        Parameters
+        ----------
+        key : str
+            Tên trường metadata
+        value : Any
+            Giá trị metadata
+        """
+        self.metadata[key] = value
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi đối tượng BeamPlanning thành dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary chứa thông tin BeamPlanning
+        """
+        arrangements_dict = {}
+        for arr_id, arrangement in self.beam_arrangements.items():
+            arrangements_dict[arr_id] = arrangement.to_dict()
+            
+        return {
+            "planning_id": self.planning_id,
+            "name": self.name,
+            "description": self.description,
+            "beam_arrangements": arrangements_dict,
+            "active_arrangement_id": self.active_arrangement_id,
+            "parameters": self.parameters,
+            "metadata": self.metadata
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'BeamPlanning':
+        """
+        Tạo đối tượng BeamPlanning từ dictionary.
+        
+        Parameters
+        ----------
+        data : Dict[str, Any]
+            Dictionary chứa thông tin BeamPlanning
+            
+        Returns
+        -------
+        BeamPlanning
+            Đối tượng BeamPlanning được tạo từ dữ liệu
+        """
+        planning = cls(
+            planning_id=data.get("planning_id"),
+            name=data.get("name", ""),
+            description=data.get("description", "")
+        )
+        
+        # Khôi phục các bố trí chùm tia
+        arrangements_dict = data.get("beam_arrangements", {})
+        for arr_id, arr_data in arrangements_dict.items():
+            arrangement = BeamArrangement.from_dict(arr_data)
+            planning.beam_arrangements[arr_id] = arrangement
+        
+        planning.active_arrangement_id = data.get("active_arrangement_id")
+        planning.parameters = data.get("parameters", {})
+        planning.metadata = data.get("metadata", {})
+        
+        return planning
+    
+    def __str__(self) -> str:
+        """Biểu diễn chuỗi của đối tượng BeamPlanning."""
+        return f"BeamPlanning(id={self.planning_id}, name={self.name}, arrangements={len(self.beam_arrangements)})"

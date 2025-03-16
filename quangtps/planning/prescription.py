@@ -385,6 +385,265 @@ class DosePrescription:
         return copy.deepcopy(self)
 
 
+class StructurePrescription:
+    """
+    Lớp quản lý đơn liều và các ràng buộc liều cho một cấu trúc cụ thể.
+    
+    Lớp này mở rộng thông tin từ DosePrescription với các dữ liệu chi tiết hơn về cấu trúc,
+    bao gồm thông tin về mật độ mô, các ràng buộc sinh học, và các đặc tính đặc trưng khác.
+    """
+    
+    def __init__(
+        self,
+        structure_id: str,
+        structure_name: str,
+        prescribed_dose: float,
+        is_target: bool = True,
+        priority: int = 1,
+        structure_type: str = ""
+    ):
+        """
+        Khởi tạo một đối tượng đơn liều cấu trúc.
+        
+        Parameters
+        ----------
+        structure_id : str
+            ID của cấu trúc
+        structure_name : str
+            Tên hiển thị của cấu trúc
+        prescribed_dose : float
+            Liều kê đơn (Gy)
+        is_target : bool
+            Cấu trúc có phải là mục tiêu
+        priority : int
+            Mức độ ưu tiên của cấu trúc
+        structure_type : str
+            Loại cấu trúc (GTV, CTV, PTV, OAR, v.v.)
+        """
+        self.structure_id = structure_id
+        self.structure_name = structure_name
+        self.structure_type = structure_type
+        self.prescribed_dose = prescribed_dose
+        self.is_target = is_target
+        self.priority = priority
+        
+        # Đặc tính sinh học và vật lý của cấu trúc
+        self.alpha_beta_ratio = 10.0 if is_target else 3.0  # Hệ số alpha/beta
+        self.density_override = None  # Ghi đè mật độ mô (g/cm³)
+        self.cell_sensitivity = 0.0  # Độ nhạy của tế bào với bức xạ
+        
+        # Thông tin chi tiết về cấu trúc
+        self.volume = 0.0  # Thể tích (cm³)
+        self.organ_type = ""  # Loại cơ quan (serial, parallel, v.v.)
+        self.biological_effect = 0.0  # Hiệu ứng sinh học
+        
+        # Các ràng buộc liều
+        self.min_dose_constraint = None  # Optional[float]
+        self.max_dose_constraint = None  # Optional[float]
+        self.mean_dose_constraint = None  # Optional[float]
+        self.dvh_constraints = []  # List of (dose, volume) tuples
+        
+        # Thông tin bổ sung
+        self.metadata = {}  # Dict[str, Any]
+    
+    def set_biological_parameters(
+        self,
+        alpha_beta_ratio: float,
+        cell_sensitivity: Optional[float] = None
+    ):
+        """
+        Đặt các tham số sinh học cho cấu trúc.
+        
+        Parameters
+        ----------
+        alpha_beta_ratio : float
+            Tỷ lệ alpha/beta cho mô
+        cell_sensitivity : float, optional
+            Độ nhạy của tế bào với bức xạ
+        """
+        self.alpha_beta_ratio = alpha_beta_ratio
+        if cell_sensitivity is not None:
+            self.cell_sensitivity = cell_sensitivity
+    
+    def set_density_override(self, density: Optional[float] = None):
+        """
+        Đặt ghi đè mật độ mô.
+        
+        Parameters
+        ----------
+        density : float, optional
+            Mật độ mô (g/cm³), None để hủy ghi đè
+        """
+        self.density_override = density
+    
+    def set_structure_volume(self, volume: float):
+        """
+        Đặt thể tích của cấu trúc.
+        
+        Parameters
+        ----------
+        volume : float
+            Thể tích (cm³)
+        """
+        self.volume = volume
+    
+    def set_organ_type(self, organ_type: str):
+        """
+        Đặt loại cơ quan.
+        
+        Parameters
+        ----------
+        organ_type : str
+            Loại cơ quan (serial, parallel, v.v.)
+        """
+        self.organ_type = organ_type
+    
+    def set_dose_constraints(
+        self,
+        min_dose: Optional[float] = None,
+        max_dose: Optional[float] = None,
+        mean_dose: Optional[float] = None
+    ):
+        """
+        Đặt các ràng buộc liều cơ bản.
+        
+        Parameters
+        ----------
+        min_dose : float, optional
+            Liều tối thiểu (Gy)
+        max_dose : float, optional
+            Liều tối đa (Gy)
+        mean_dose : float, optional
+            Liều trung bình (Gy)
+        """
+        if min_dose is not None:
+            self.min_dose_constraint = min_dose
+        if max_dose is not None:
+            self.max_dose_constraint = max_dose
+        if mean_dose is not None:
+            self.mean_dose_constraint = mean_dose
+    
+    def add_dvh_constraint(self, dose: float, volume: float):
+        """
+        Thêm một ràng buộc DVH.
+        
+        Parameters
+        ----------
+        dose : float
+            Liều (Gy)
+        volume : float
+            Thể tích (%)
+        """
+        self.dvh_constraints.append((dose, volume))
+    
+    def clear_dvh_constraints(self):
+        """Xóa tất cả các ràng buộc DVH."""
+        self.dvh_constraints = []
+    
+    def set_metadata(self, key: str, value: Any):
+        """
+        Đặt một trường metadata.
+        
+        Parameters
+        ----------
+        key : str
+            Tên trường
+        value : Any
+            Giá trị trường
+        """
+        self.metadata[key] = value
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi đối tượng đơn liều cấu trúc thành dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary chứa thông tin đơn liều cấu trúc
+        """
+        return {
+            'structure_id': self.structure_id,
+            'structure_name': self.structure_name,
+            'structure_type': self.structure_type,
+            'prescribed_dose': self.prescribed_dose,
+            'is_target': self.is_target,
+            'priority': self.priority,
+            'alpha_beta_ratio': self.alpha_beta_ratio,
+            'density_override': self.density_override,
+            'cell_sensitivity': self.cell_sensitivity,
+            'volume': self.volume,
+            'organ_type': self.organ_type,
+            'biological_effect': self.biological_effect,
+            'min_dose_constraint': self.min_dose_constraint,
+            'max_dose_constraint': self.max_dose_constraint,
+            'mean_dose_constraint': self.mean_dose_constraint,
+            'dvh_constraints': self.dvh_constraints,
+            'metadata': self.metadata
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'StructurePrescription':
+        """
+        Tạo đối tượng StructurePrescription từ dictionary.
+        
+        Parameters
+        ----------
+        data : Dict[str, Any]
+            Dictionary chứa thông tin đơn liều cấu trúc
+            
+        Returns
+        -------
+        StructurePrescription
+            Đối tượng đơn liều cấu trúc
+        """
+        obj = cls(
+            structure_id=data['structure_id'],
+            structure_name=data['structure_name'],
+            prescribed_dose=data['prescribed_dose'],
+            is_target=data.get('is_target', True),
+            priority=data.get('priority', 1),
+            structure_type=data.get('structure_type', '')
+        )
+        
+        # Khôi phục các tham số sinh học và vật lý
+        obj.alpha_beta_ratio = data.get('alpha_beta_ratio', 10.0 if obj.is_target else 3.0)
+        obj.density_override = data.get('density_override')
+        obj.cell_sensitivity = data.get('cell_sensitivity', 0.0)
+        
+        # Khôi phục thông tin chi tiết
+        obj.volume = data.get('volume', 0.0)
+        obj.organ_type = data.get('organ_type', '')
+        obj.biological_effect = data.get('biological_effect', 0.0)
+        
+        # Khôi phục ràng buộc liều
+        obj.min_dose_constraint = data.get('min_dose_constraint')
+        obj.max_dose_constraint = data.get('max_dose_constraint')
+        obj.mean_dose_constraint = data.get('mean_dose_constraint')
+        obj.dvh_constraints = data.get('dvh_constraints', [])
+        
+        # Khôi phục metadata
+        obj.metadata = data.get('metadata', {})
+        
+        return obj
+    
+    def __str__(self) -> str:
+        """Biểu diễn chuỗi của đối tượng đơn liều cấu trúc."""
+        status = "Mục tiêu" if self.is_target else "Cơ quan nguy cấp"
+        return f"{self.structure_name} [{self.structure_id}] - {status}: {self.prescribed_dose} Gy"
+    
+    def copy(self) -> 'StructurePrescription':
+        """
+        Tạo một bản sao của đối tượng đơn liều cấu trúc.
+        
+        Returns
+        -------
+        StructurePrescription
+            Bản sao của đối tượng đơn liều cấu trúc
+        """
+        return copy.deepcopy(self)
+
+
 class Prescription:
     """
     Lớp quản lý đơn liều tổng thể cho một kế hoạch xạ trị.

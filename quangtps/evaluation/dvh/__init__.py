@@ -12,14 +12,21 @@ Các tính năng chính:
 - Xuất dữ liệu ra nhiều định dạng (CSV, PNG, PDF)
 """
 
+# Import từ dvh_calculator
+from quangtps.evaluation.dvh.dvh_calculator import (
+    DVHPoint,
+    DVHData,
+    DVHCalculator,
+    DVHMetrics
+)
+
+# Import từ dvh_calculation
 from quangtps.evaluation.dvh.dvh_calculation import (
     calculate_dvh,
-    calculate_dvh_metrics,
-    calculate_dvh_from_dose_grid,
-    merge_dvhs,
-    subtract_dvhs,
     _get_dose_at_volume,
-    _get_volume_at_dose
+    _get_volume_at_dose,
+    calculate_dvh_metrics,
+    calculate_dvh_from_dose_grid
 )
 
 from quangtps.evaluation.dvh.dvh_analysis import DVHAnalysis
@@ -33,20 +40,24 @@ from quangtps.evaluation.dvh.dvh_visualization import (
 )
 
 __all__ = [
-    # From dvh_calculation.py
+    # Từ dvh_calculator.py
+    'DVHPoint',
+    'DVHData',
+    'DVHCalculator',
+    'DVHMetrics',
+    
+    # Từ dvh_calculation.py
     'calculate_dvh',
     'calculate_dvh_metrics',
     'calculate_dvh_from_dose_grid',
-    'merge_dvhs',
-    'subtract_dvhs',
     
-    # From dvh_analysis.py
+    # Từ dvh_analysis.py
     'DVHAnalysis',
     
-    # From dvh_visualization.py
+    # Từ dvh_visualization.py
     'plot_dvh',
     'plot_multiple_dvh',
     'create_dvh_report',
     'plot_dvh_bands',
-    'export_dvh_to_csv'
+    'export_dvh_to_csv',
 ]

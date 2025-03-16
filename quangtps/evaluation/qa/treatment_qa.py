@@ -539,7 +539,7 @@ class TreatmentQAManager:
                 protocol=QAProtocol.AAPM_TG119,
                 plan_id=plan.plan_id,
                 patient_id=plan.patient_id,
-                machine_id=technique.linac.machine_id if technique.linac else None,
+                machine_id=technique.linac.machine_id if hasattr(technique, 'linac') and technique.linac else None,
                 description="Pre-treatment QA for IMRT plan"
             )
             test_ids.append(test_id)
@@ -573,7 +573,7 @@ class TreatmentQAManager:
                 protocol=QAProtocol.AAPM_TG119,
                 plan_id=plan.plan_id,
                 patient_id=plan.patient_id,
-                machine_id=technique.treatment_machine.machine_id if technique.treatment_machine else None,
+                machine_id=technique.treatment_machine.machine_id if hasattr(technique, 'treatment_machine') and technique.treatment_machine else None,
                 description="Pre-treatment QA for VMAT plan"
             )
             test_ids.append(test_id)
@@ -603,7 +603,7 @@ class TreatmentQAManager:
                 test_id=test_id,
                 metric_name="Delivery Time",
                 value=0.0,
-                reference=technique.arcs[0].get("expected_delivery_time", 0.0) if technique.arcs else 0.0,
+                reference=technique.arcs[0].get("expected_delivery_time", 0.0) if hasattr(technique, 'arcs') and technique.arcs else 0.0,
                 tolerance=30.0,
                 unit="s",
                 description="Thời gian thực hiện điều trị"
@@ -611,14 +611,15 @@ class TreatmentQAManager:
             
         elif isinstance(technique, (SRS, SBRT)):
             # Bài kiểm tra QA cho SRS/SBRT
+            technique_type = "SRS" if isinstance(technique, SRS) else "SBRT"
             test_id = self.create_test(
-                test_name=f"{technique.technique_type} QA - {plan.plan_name}",
+                test_name=f"{technique_type} QA - {plan.plan_name}",
                 test_type=QATestType.PRE_TREATMENT,
                 protocol=QAProtocol.AAPM_TG218,
                 plan_id=plan.plan_id,
                 patient_id=plan.patient_id,
-                machine_id=technique.treatment_machine.machine_id if technique.treatment_machine else None,
-                description=f"Pre-treatment QA for {technique.technique_type} plan"
+                machine_id=technique.treatment_machine.machine_id if hasattr(technique, 'treatment_machine') and technique.treatment_machine else None,
+                description=f"Pre-treatment QA for {technique_type} plan"
             )
             test_ids.append(test_id)
             
@@ -699,3 +700,274 @@ class TreatmentQAManager:
             )
         
         return test_ids
+
+
+# Cấu trúc dữ liệu cho báo cáo QA
+class TreatmentQAResult:
+    """
+    Lớp đại diện cho kết quả của một bài kiểm tra QA.
+    
+    Lớp này chứa thông tin về kết quả của một bài kiểm tra QA,
+    bao gồm các chỉ số đo được và đánh giá.
+    """
+    
+    def __init__(self, test_id: str, test_name: str, overall_result: bool, metrics: List[Dict[str, Any]]):
+        """
+        Khởi tạo kết quả QA.
+        
+        Parameters
+        ----------
+        test_id : str
+            ID của bài kiểm tra
+        test_name : str
+            Tên bài kiểm tra
+        overall_result : bool
+            Kết quả tổng thể (đạt/không đạt)
+        metrics : List[Dict[str, Any]]
+            Danh sách các chỉ số đánh giá
+        """
+        self.test_id = test_id
+        self.test_name = test_name
+        self.overall_result = overall_result
+        self.metrics = metrics
+        self.timestamp = datetime.datetime.now()
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi kết quả thành dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary chứa thông tin kết quả
+        """
+        return {
+            "test_id": self.test_id,
+            "test_name": self.test_name,
+            "overall_result": self.overall_result,
+            "metrics": self.metrics,
+            "timestamp": self.timestamp.isoformat()
+        }
+
+
+class TreatmentQAReport:
+    """
+    Lớp đại diện cho báo cáo QA của một kế hoạch điều trị.
+    
+    Lớp này chứa thông tin về các kết quả QA của một kế hoạch điều trị,
+    bao gồm các bài kiểm tra và đánh giá tổng thể.
+    """
+    
+    def __init__(self, plan_id: str, plan_name: str):
+        """
+        Khởi tạo báo cáo QA.
+        
+        Parameters
+        ----------
+        plan_id : str
+            ID của kế hoạch
+        plan_name : str
+            Tên kế hoạch
+        """
+        self.plan_id = plan_id
+        self.plan_name = plan_name
+        self.results: List[TreatmentQAResult] = []
+        self.created_date = datetime.datetime.now()
+        self.summary = ""
+        self.recommendations = []
+        
+    def add_result(self, result: TreatmentQAResult) -> None:
+        """
+        Thêm một kết quả vào báo cáo.
+        
+        Parameters
+        ----------
+        result : TreatmentQAResult
+            Kết quả QA
+        """
+        self.results.append(result)
+        
+    def generate_summary(self) -> str:
+        """
+        Tạo tóm tắt cho báo cáo.
+        
+        Returns
+        -------
+        str
+            Tóm tắt báo cáo
+        """
+        total_tests = len(self.results)
+        passed_tests = sum(1 for result in self.results if result.overall_result)
+        
+        summary = f"Summary for {self.plan_name}: {passed_tests}/{total_tests} tests passed.\n"
+        
+        if passed_tests == total_tests:
+            summary += "All QA tests have passed. The plan is ready for treatment."
+        elif passed_tests / total_tests >= 0.75:
+            summary += "Most QA tests have passed. Review the failed tests before proceeding with treatment."
+        else:
+            summary += "Several QA tests have failed. The plan may need to be modified before treatment."
+            
+        self.summary = summary
+        return summary
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi báo cáo thành dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary chứa thông tin báo cáo
+        """
+        return {
+            "plan_id": self.plan_id,
+            "plan_name": self.plan_name,
+            "results": [result.to_dict() for result in self.results],
+            "created_date": self.created_date.isoformat(),
+            "summary": self.summary,
+            "recommendations": self.recommendations
+        }
+
+
+class PlanQualityMetrics:
+    """
+    Lớp đại diện cho các chỉ số chất lượng của kế hoạch điều trị.
+    
+    Lớp này chứa các chỉ số như chỉ số phù hợp, độ đồng nhất, chỉ số gradient,
+    và các chỉ số DVH để đánh giá chất lượng kế hoạch.
+    """
+    
+    def __init__(self, plan_id: str):
+        """
+        Khởi tạo các chỉ số chất lượng.
+        
+        Parameters
+        ----------
+        plan_id : str
+            ID của kế hoạch
+        """
+        self.plan_id = plan_id
+        self.conformity_index = 0.0
+        self.homogeneity_index = 0.0
+        self.gradient_index = 0.0
+        self.dose_spillage = 0.0
+        self.target_coverage = 0.0
+        self.oar_constraints_met = 0.0  # Tỷ lệ các chỉ số giới hạn của cơ quan nguy cấp được đáp ứng
+        self.dvh_metrics = {}
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi các chỉ số thành dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary chứa thông tin các chỉ số
+        """
+        return {
+            "plan_id": self.plan_id,
+            "conformity_index": self.conformity_index,
+            "homogeneity_index": self.homogeneity_index,
+            "gradient_index": self.gradient_index,
+            "dose_spillage": self.dose_spillage,
+            "target_coverage": self.target_coverage,
+            "oar_constraints_met": self.oar_constraints_met,
+            "dvh_metrics": self.dvh_metrics
+        }
+
+
+# Hàm tiện ích
+def perform_treatment_qa(test: TreatmentQATest, measurements: Dict[str, float]) -> TreatmentQAResult:
+    """
+    Thực hiện kiểm tra QA và cập nhật kết quả.
+    
+    Parameters
+    ----------
+    test : TreatmentQATest
+        Bài kiểm tra QA
+    measurements : Dict[str, float]
+        Các giá trị đo được
+        
+    Returns
+    -------
+    TreatmentQAResult
+        Kết quả của bài kiểm tra
+    """
+    # Cập nhật các giá trị đo được cho các chỉ số
+    for metric in test.metrics:
+        if metric.name in measurements:
+            metric.value = measurements[metric.name]
+            
+    # Đánh giá kết quả
+    test.evaluate()
+    test.performed_date = datetime.datetime.now()
+    
+    # Tạo kết quả
+    result = TreatmentQAResult(
+        test_id=test.test_id,
+        test_name=test.test_name,
+        overall_result=test.overall_result,
+        metrics=[metric.to_dict() for metric in test.metrics]
+    )
+    
+    return result
+
+
+def evaluate_plan_quality(plan: TreatmentPlan, dose_distribution: np.ndarray, structures: Dict[str, np.ndarray]) -> PlanQualityMetrics:
+    """
+    Đánh giá chất lượng của kế hoạch điều trị.
+    
+    Parameters
+    ----------
+    plan : TreatmentPlan
+        Kế hoạch điều trị
+    dose_distribution : np.ndarray
+        Phân bố liều
+    structures : Dict[str, np.ndarray]
+        Các cấu trúc giải phẫu
+        
+    Returns
+    -------
+    PlanQualityMetrics
+        Các chỉ số chất lượng của kế hoạch
+    """
+    metrics = PlanQualityMetrics(plan.plan_id)
+    
+    # Tính toán các chỉ số chất lượng
+    if "PTV" in structures:
+        ptv = structures["PTV"]
+        
+        # Tính chỉ số phù hợp (CI)
+        prescribed_dose = plan.prescribed_dose
+        volume_receiving_prescribed_dose = np.sum(dose_distribution >= prescribed_dose)
+        ptv_volume = np.sum(ptv)
+        if ptv_volume > 0:
+            metrics.conformity_index = (volume_receiving_prescribed_dose / ptv_volume)
+        
+        # Tính chỉ số đồng nhất (HI)
+        if np.sum(ptv) > 0:
+            d2 = np.percentile(dose_distribution[ptv > 0], 2)
+            d98 = np.percentile(dose_distribution[ptv > 0], 98)
+            if d2 > 0:
+                metrics.homogeneity_index = (d2 - d98) / prescribed_dose
+        
+        # Tính độ phủ mục tiêu
+        metrics.target_coverage = np.sum((dose_distribution >= prescribed_dose) & (ptv > 0)) / np.sum(ptv)
+    
+    # Tính chỉ số gradient (GI) nếu có các cấu trúc liên quan
+    if "PTV" in structures and "BODY" in structures:
+        ptv = structures["PTV"]
+        body = structures["BODY"]
+        
+        half_prescribed_dose = plan.prescribed_dose / 2
+        volume_receiving_half_prescribed_dose = np.sum((dose_distribution >= half_prescribed_dose) & (body > 0))
+        volume_receiving_prescribed_dose = np.sum((dose_distribution >= plan.prescribed_dose) & (body > 0))
+        
+        if volume_receiving_prescribed_dose > 0:
+            metrics.gradient_index = volume_receiving_half_prescribed_dose / volume_receiving_prescribed_dose
+    
+    # Các chỉ số DVH có thể được tính toán từ phân bố liều và cấu trúc
+    # Đây là chỉ một ví dụ đơn giản
+    
+    return metrics

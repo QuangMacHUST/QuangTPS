@@ -4,7 +4,7 @@ Cung cấp các lớp và phương thức để tương tác với cơ sở dữ
 """
 
 from quangtps.database.db_connector import DBConnector
-from quangtps.database.patient_db import PatientDB
+from quangtps.database.patient_db import PatientDatabase
 from quangtps.database.study_db import StudyDB
 from quangtps.database.series_db import SeriesDB
 from quangtps.database.plan_db import PlanDB
@@ -16,7 +16,7 @@ from quangtps.database.query import QueryBuilder
 
 __all__ = [
     'DBConnector',
-    'PatientDB',
+    'PatientDatabase',
     'StudyDB',
     'SeriesDB',
     'PlanDB',

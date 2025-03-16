@@ -653,3 +653,143 @@ def calculate_ntcp_for_dvh(
         raise ValueError(f"Unknown NTCP model '{model}'")
     
     return ntcp
+
+class NTCPModels:
+    """
+    Lớp cung cấp các phương thức tính xác suất biến chứng mô lành (NTCP).
+    
+    Lớp này bao gồm các mô hình sinh học khác nhau như Lyman-Kutcher-Burman (LKB),
+    mô hình Relative Seriality, mô hình Logit, và mô hình Poisson.
+    """
+    
+    @staticmethod
+    def calculate_ntcp_lkb(
+        dose_array: np.ndarray,
+        structure_mask: np.ndarray,
+        num_fractions: int,
+        td50: float = None,
+        n: float = None,
+        m: float = None,
+        alpha_beta: float = 3.0,
+        dose_threshold: Optional[float] = None,
+        organ_parameters: Optional[Dict[str, Dict[str, float]]] = None,
+        organ_type: Optional[str] = None
+    ) -> float:
+        """
+        Tính toán NTCP dựa trên mô hình Lyman-Kutcher-Burman (LKB).
+        
+        Xem hàm calculate_ntcp_lkb của module để biết thêm chi tiết.
+        """
+        return calculate_ntcp_lkb(
+            dose_array, structure_mask, num_fractions, td50, n, m, 
+            alpha_beta, dose_threshold, organ_parameters, organ_type
+        )
+    
+    @staticmethod
+    def calculate_ntcp_relative_seriality(
+        dose_array: np.ndarray,
+        structure_mask: np.ndarray,
+        num_fractions: int,
+        d50: float,
+        gamma50: float,
+        seriality: float,
+        alpha_beta: float = 3.0,
+        dose_threshold: Optional[float] = None
+    ) -> float:
+        """
+        Tính toán NTCP dựa trên mô hình Relative Seriality.
+        
+        Xem hàm calculate_ntcp_relative_seriality của module để biết thêm chi tiết.
+        """
+        return calculate_ntcp_relative_seriality(
+            dose_array, structure_mask, num_fractions, d50, gamma50, 
+            seriality, alpha_beta, dose_threshold
+        )
+    
+    @staticmethod
+    def calculate_ntcp_logit(
+        dose_array: np.ndarray,
+        structure_mask: np.ndarray,
+        num_fractions: int,
+        d50: float,
+        k: float,
+        alpha_beta: float = 3.0,
+        dose_threshold: Optional[float] = None
+    ) -> float:
+        """
+        Tính toán NTCP dựa trên mô hình Logit.
+        
+        Xem hàm calculate_ntcp_logit của module để biết thêm chi tiết.
+        """
+        return calculate_ntcp_logit(
+            dose_array, structure_mask, num_fractions, d50, k, 
+            alpha_beta, dose_threshold
+        )
+    
+    @staticmethod
+    def calculate_ntcp_poisson(
+        dose_array: np.ndarray,
+        structure_mask: np.ndarray,
+        num_fractions: int,
+        d50: float,
+        gamma50: float,
+        alpha_beta: float = 3.0,
+        dose_threshold: Optional[float] = None
+    ) -> float:
+        """
+        Tính toán NTCP dựa trên mô hình Poisson.
+        
+        Xem hàm calculate_ntcp_poisson của module để biết thêm chi tiết.
+        """
+        return calculate_ntcp_poisson(
+            dose_array, structure_mask, num_fractions, d50, gamma50, 
+            alpha_beta, dose_threshold
+        )
+    
+    @staticmethod
+    def calculate_cutoff_ntcp(
+        dose_array: np.ndarray,
+        structure_mask: np.ndarray,
+        tolerance_dose: float,
+        critical_volume: float,
+        alpha_beta: float = 3.0,
+        num_fractions: int = 1
+    ) -> float:
+        """
+        Tính toán NTCP dựa trên mô hình ngưỡng đơn giản.
+        
+        Xem hàm calculate_cutoff_ntcp của module để biết thêm chi tiết.
+        """
+        return calculate_cutoff_ntcp(
+            dose_array, structure_mask, tolerance_dose, critical_volume, 
+            alpha_beta, num_fractions
+        )
+    
+    @staticmethod
+    def get_ntcp_constraints(
+        organ_type: str,
+        endpoint: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Lấy các ràng buộc NTCP cho một cơ quan cụ thể.
+        
+        Xem hàm get_ntcp_constraints của module để biết thêm chi tiết.
+        """
+        return get_ntcp_constraints(organ_type, endpoint)
+    
+    @staticmethod
+    def calculate_ntcp_for_dvh(
+        dvh_data: Dict[str, np.ndarray],
+        model: str = 'lkb',
+        parameters: Dict[str, float] = None,
+        organ_type: Optional[str] = None,
+        num_fractions: int = 30
+    ) -> float:
+        """
+        Tính toán NTCP từ dữ liệu DVH sử dụng các mô hình khác nhau.
+        
+        Xem hàm calculate_ntcp_for_dvh của module để biết thêm chi tiết.
+        """
+        return calculate_ntcp_for_dvh(
+            dvh_data, model, parameters, organ_type, num_fractions
+        )

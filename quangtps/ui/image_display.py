@@ -644,6 +644,192 @@ class ImageControlWidget(QWidget):
         # Không cần thiết lập giá trị khi index == 0 (Tùy chỉnh)
 
 
+class ImageDisplay(QWidget):
+    """
+    Widget hiển thị hình ảnh y tế với các công cụ tương tác.
+    
+    Cung cấp hiển thị cơ bản của hình ảnh y tế, điều khiển cửa sổ,
+    zoom, pan, và các chức năng tương tác khác.
+    """
+    
+    # Tín hiệu
+    window_changed = pyqtSignal(int, int)  # window width, window level
+    position_changed = pyqtSignal(int, int)  # x, y coordinates
+    
+    def __init__(self, parent=None):
+        """Khởi tạo ImageDisplay."""
+        super().__init__(parent)
+        
+        # Dữ liệu
+        self.image_data = None
+        self.window_width = 400
+        self.window_level = 50
+        self.zoom_factor = 1.0
+        self.pan_offset = (0, 0)
+        self.current_tool = "pan"  # pan, zoom, measure, window
+        
+        # UI setup
+        self._init_ui()
+        
+        # Kích thước tối thiểu
+        self.setMinimumSize(200, 200)
+        
+    def _init_ui(self):
+        """Khởi tạo giao diện người dùng."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Frame hiển thị hình ảnh
+        self.image_frame = QLabel(self)
+        self.image_frame.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_frame.setStyleSheet("background-color: black;")
+        layout.addWidget(self.image_frame)
+        
+        self.setLayout(layout)
+        
+    def set_image(self, image_data, window_center=None, window_width=None):
+        """
+        Thiết lập hình ảnh hiển thị.
+        
+        Args:
+            image_data: Mảng NumPy 2D chứa dữ liệu hình ảnh
+            window_center: Tâm cửa sổ (level)
+            window_width: Chiều rộng cửa sổ
+        """
+        self.image_data = image_data
+        
+        if window_center is not None:
+            self.window_level = window_center
+        
+        if window_width is not None:
+            self.window_width = window_width
+            
+        self._update_display()
+        
+    def set_window(self, width, level):
+        """
+        Thiết lập cửa sổ hiển thị.
+        
+        Args:
+            width: Chiều rộng cửa sổ
+            level: Tâm cửa sổ
+        """
+        self.window_width = width
+        self.window_level = level
+        self._update_display()
+        
+        # Phát tín hiệu
+        self.window_changed.emit(width, level)
+        
+    def set_zoom(self, factor):
+        """
+        Thiết lập mức độ zoom.
+        
+        Args:
+            factor: Hệ số zoom
+        """
+        self.zoom_factor = max(0.1, factor)
+        self._update_display()
+        
+    def set_pan(self, dx, dy):
+        """
+        Thiết lập độ dịch chuyển.
+        
+        Args:
+            dx: Độ dịch chuyển theo trục x
+            dy: Độ dịch chuyển theo trục y
+        """
+        self.pan_offset = (dx, dy)
+        self._update_display()
+        
+    def _update_display(self):
+        """Cập nhật hiển thị hình ảnh."""
+        if self.image_data is None:
+            return
+            
+        # Áp dụng cửa sổ
+        min_val = self.window_level - self.window_width // 2
+        max_val = self.window_level + self.window_width // 2
+        
+        # Clip giá trị trong khoảng [min_val, max_val]
+        clipped = np.clip(self.image_data, min_val, max_val)
+        
+        # Chuẩn hóa về khoảng [0, 255]
+        if max_val > min_val:
+            normalized = ((clipped - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+        else:
+            normalized = np.zeros_like(clipped, dtype=np.uint8)
+        
+        # Chuyển sang định dạng RGB
+        h, w = normalized.shape
+        qimage = QImage(normalized.data, w, h, w, QImage.Format_Grayscale8)
+        
+        # Tạo pixmap từ qimage
+        pixmap = QPixmap.fromImage(qimage)
+        
+        # Áp dụng zoom nếu cần
+        if self.zoom_factor != 1.0:
+            w_zoomed = int(w * self.zoom_factor)
+            h_zoomed = int(h * self.zoom_factor)
+            if w_zoomed > 0 and h_zoomed > 0:
+                pixmap = pixmap.scaled(w_zoomed, h_zoomed, Qt.KeepAspectRatio)
+        
+        # Hiển thị pixmap
+        self.image_frame.setPixmap(pixmap)
+        
+    def mousePressEvent(self, event):
+        """Xử lý sự kiện nhấn chuột."""
+        super().mousePressEvent(event)
+        
+        if event.button() == Qt.LeftButton:
+            # Lấy vị trí trong tọa độ ảnh
+            pos = event.pos()
+            x = pos.x()
+            y = pos.y()
+            
+            # TODO: Chuyển tọa độ screen sang tọa độ ảnh
+            
+            # Phát tín hiệu thay đổi vị trí
+            self.position_changed.emit(x, y)
+            
+    def mouseMoveEvent(self, event):
+        """Xử lý sự kiện di chuyển chuột."""
+        super().mouseMoveEvent(event)
+        
+        if event.buttons() & Qt.LeftButton:
+            # Xử lý theo công cụ hiện tại
+            if self.current_tool == "pan":
+                # TODO: Xử lý pan
+                pass
+            elif self.current_tool == "window":
+                # TODO: Xử lý thay đổi cửa sổ
+                pass
+            
+    def wheelEvent(self, event):
+        """Xử lý sự kiện lăn chuột."""
+        super().wheelEvent(event)
+        
+        # Xử lý zoom
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self.set_zoom(self.zoom_factor * 1.1)
+        elif delta < 0:
+            self.set_zoom(self.zoom_factor / 1.1)
+            
+    def resizeEvent(self, event):
+        """Xử lý sự kiện thay đổi kích thước."""
+        super().resizeEvent(event)
+        self._update_display()
+        
+    def set_tool(self, tool_name):
+        """
+        Thiết lập công cụ hiện tại.
+        
+        Args:
+            tool_name: Tên công cụ ('pan', 'zoom', 'window', 'measure')
+        """
+        self.current_tool = tool_name
+
 # Kiểm tra các module cần thiết
 try:
     import pydicom

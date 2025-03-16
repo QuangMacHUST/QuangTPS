@@ -10,9 +10,10 @@ giữa module planning và module treatment.
 """
 
 import logging
-from quangtps.planning.plan import Plan
+from quangtps.planning.plan import Plan, PlanType
 
 logger = logging.getLogger(__name__)
 
 # Alias for Plan class to be used in treatment modules
 TreatmentPlan = Plan
+TreatmentPlanType = PlanType
