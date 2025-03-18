@@ -11,6 +11,8 @@ import numpy as np
 import pydicom
 from typing import List, Dict, Any, Tuple, Optional, Union
 from datetime import datetime
+import uuid
+from pydicom.uid import generate_uid as pydicom_generate_uid
 
 from quangtps.core.exceptions import DicomError, IOError
 
@@ -91,7 +93,7 @@ def dicom_date_to_string(dicom_date: str, format: str = "%Y-%m-%d") -> str:
 
 def dicom_time_to_string(dicom_time: str, format: str = "%H:%M:%S") -> str:
     """
-    Chuyển đổi định dạng thời gian DICOM (HHMMSS.FFFFFF) thành string.
+    Chuyển đổi định dạng thởi gian DICOM (HHMMSS.FFFFFF) thành string.
     
     Parameters
     ----------
@@ -151,12 +153,12 @@ def string_to_dicom_date(date_str: str, input_format: str = "%Y-%m-%d") -> str:
 
 def string_to_dicom_time(time_str: str, input_format: str = "%H:%M:%S") -> str:
     """
-    Chuyển đổi string thành định dạng thời gian DICOM (HHMMSS).
+    Chuyển đổi string thành định dạng thởi gian DICOM (HHMMSS).
     
     Parameters
     ----------
     time_str : str
-        Chuỗi thời gian đầu vào
+        Chuỗi thởi gian đầu vào
     input_format : str, optional
         Định dạng của chuỗi đầu vào, mặc định là "%H:%M:%S"
         
@@ -436,6 +438,22 @@ def get_dicom_sop_class_name(sop_class_uid: str) -> str:
         return UID_dictionary[sop_class_uid][0]
     else:
         return "Unknown"
+
+def generate_uid(prefix: str = "1.2.826.0.1.3680043.10.540.") -> str:
+    """
+    Tạo một UID ngẫu nhiên cho DICOM.
+    
+    Parameters
+    ----------
+    prefix : str, optional
+        Tiền tố cho UID, mặc định là "1.2.826.0.1.3680043.10.540."
+        
+    Returns
+    -------
+    str
+        UID mới được tạo
+    """
+    return pydicom_generate_uid(prefix=prefix)
 
 def anonymize_dataset(dataset: pydicom.dataset.FileDataset, 
                       new_patient_id: str = None,

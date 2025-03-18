@@ -19,7 +19,7 @@ import SimpleITK as sitk
 
 from quangtps.core.exceptions import ValidationError
 from quangtps.segmentation.structures.structure_set import StructureSet
-from quangtps.segmentation.structures.structure_library import Structure
+from quangtps.segmentation.structures.structure import Structure
 
 logger = logging.getLogger(__name__)
 

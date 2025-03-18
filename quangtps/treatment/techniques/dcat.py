@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -15,12 +14,14 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from quangtps.treatment.beams.beam import Beam
 from quangtps.treatment.machine.linac import Linac
+from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.fractionation import Fractionation
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
 
 logger = logging.getLogger(__name__)
 
 
-class DCAT:
+class DCAT(BaseTreatmentTechnique):
     """
     Class representing a Dynamic Conformal Arc Therapy (DCAT) plan.
     
@@ -40,19 +41,18 @@ class DCAT:
         plan_id : str, optional
             Unique ID of the plan. If not provided, a new ID will be generated.
         """
-        self.plan_name = plan_name
-        self.plan_id = plan_id if plan_id else str(uuid.uuid4())
+        super().__init__(
+            name=plan_name,
+            technique_id=plan_id,
+            category=TechniqueCategory.ADVANCED
+        )
         
         # Basic plan attributes
         self.description = ""
         self.status = "DRAFT"  # DRAFT, APPROVED, DELIVERED, ARCHIVED
         
-        # Treatment machine
-        self.treatment_machine: Optional[Linac] = None
-        
         # DCAT-specific attributes
         self.arcs: List[Dict[str, Any]] = []
-        self.fractionation: Optional[Fractionation] = None
         
         # MLC config
         self.margin = 5.0  # mm
@@ -61,10 +61,67 @@ class DCAT:
         # Plan evaluation
         self.plan_quality_metrics: Dict[str, float] = {}
         
-        logger.info(f"Created new DCAT plan: {plan_name} (ID: {self.plan_id})")
+        logger.info(f"Created new DCAT plan: {plan_name} (ID: {self.technique_id})")
+    
+    def get_name(self) -> str:
+        """
+        Get the name of the technique.
+        
+        Returns
+        -------
+        str
+            The name of the technique
+        """
+        return self.name
+    
+    def get_id(self) -> str:
+        """
+        Get the unique identifier of the technique.
+        
+        Returns
+        -------
+        str
+            The technique ID
+        """
+        return self.technique_id
+    
+    def get_category(self) -> TechniqueCategory:
+        """
+        Get the category of the technique.
+        
+        Returns
+        -------
+        TechniqueCategory
+            The technique category
+        """
+        return self.category
+    
+    def add_beam(self, beam: Beam) -> None:
+        """
+        Add a beam to the DCAT plan.
+        
+        Parameters
+        ----------
+        beam : Beam
+            The beam to add
+        """
+        if beam not in self.beams:
+            self.beams.append(beam)
+            logger.info(f"Added beam {beam.beam_name} to DCAT plan {self.name}")
+    
+    def get_beams(self) -> List[Beam]:
+        """
+        Get the list of beams in the DCAT plan.
+        
+        Returns
+        -------
+        List[Beam]
+            List of beams in the plan
+        """
+        return self.beams
     
     def add_arc(self, start_angle: float, stop_angle: float, collimator_angle: float = 0.0,
-               couch_angle: float = 0.0, beam_energy: str = "6X") -> None:
+               couch_angle: float = 0.0, beam_energy: str = "6X") -> str:
         """
         Add an arc to the DCAT plan.
         
@@ -80,9 +137,16 @@ class DCAT:
             Couch angle in degrees
         beam_energy : str, optional
             Beam energy (e.g. "6X", "10X")
+            
+        Returns
+        -------
+        str
+            ID of the created arc
         """
+        arc_id = str(uuid.uuid4())
+        
         arc = {
-            "arc_id": str(uuid.uuid4()),
+            "arc_id": arc_id,
             "start_angle": start_angle,
             "stop_angle": stop_angle,
             "collimator_angle": collimator_angle,
@@ -93,9 +157,11 @@ class DCAT:
         
         self.arcs.append(arc)
         
-        logger.info(f"Added arc to DCAT plan {self.plan_name}: "
+        logger.info(f"Added arc to DCAT plan {self.name}: "
                    f"start={start_angle}°, stop={stop_angle}°, "
                    f"collimator={collimator_angle}°, couch={couch_angle}°")
+        
+        return arc_id
     
     def set_fractionation(self, fractionation: Fractionation) -> None:
         """
@@ -107,17 +173,17 @@ class DCAT:
             Fractionation scheme
         """
         self.fractionation = fractionation
-        logger.info(f"Set fractionation for DCAT plan {self.plan_name}: "
+        logger.info(f"Set fractionation for DCAT plan {self.name}: "
                    f"{fractionation.num_fractions} fractions, "
                    f"{fractionation.dose_per_fraction} Gy per fraction")
     
-    def set_treatment_machine(self, machine: Linac) -> None:
+    def set_machine(self, machine: TreatmentMachine) -> None:
         """
         Set the treatment machine for the DCAT plan.
         
         Parameters
         ----------
-        machine : Linac
+        machine : TreatmentMachine
             Treatment machine
             
         Raises
@@ -125,11 +191,14 @@ class DCAT:
         ValueError
             If the machine does not support DCAT
         """
+        if not isinstance(machine, Linac):
+            raise ValueError(f"DCAT requires a Linac treatment machine, got {type(machine).__name__}")
+            
         if not machine.supports_conformal_arc:
             raise ValueError(f"Machine {machine.name} does not support DCAT")
         
-        self.treatment_machine = machine
-        logger.info(f"Set treatment machine for DCAT plan {self.plan_name}: {machine.name}")
+        self.machine = machine
+        logger.info(f"Set treatment machine for DCAT plan {self.name}: {machine.name}")
     
     def set_margin(self, margin: float) -> None:
         """
@@ -141,7 +210,7 @@ class DCAT:
             Margin in mm
         """
         self.margin = margin
-        logger.info(f"Set margin for DCAT plan {self.plan_name}: {margin} mm")
+        logger.info(f"Set margin for DCAT plan {self.name}: {margin} mm")
     
     def set_leaf_adjustment_frequency(self, frequency: int) -> None:
         """
@@ -153,7 +222,7 @@ class DCAT:
             Frequency in degrees (e.g., adjust MLC every 10 degrees)
         """
         self.leaf_adjustment_frequency = frequency
-        logger.info(f"Set leaf adjustment frequency for DCAT plan {self.plan_name}: {frequency}°")
+        logger.info(f"Set leaf adjustment frequency for DCAT plan {self.name}: {frequency}°")
     
     def generate_control_points(self) -> None:
         """
@@ -198,88 +267,158 @@ class DCAT:
             
             self.arcs[i]["control_points"] = control_points
             
-            logger.info(f"Generated {len(control_points)} control points for arc {i+1} in DCAT plan {self.plan_name}")
+            logger.info(f"Generated {len(control_points)} control points for arc {i+1} in DCAT plan {self.name}")
     
-    def _create_dummy_mlc_positions(self) -> Dict[str, List[float]]:
+    def _create_dummy_mlc_positions(self) -> List[Tuple[float, float]]:
         """
-        Create dummy MLC positions for testing.
+        Create dummy MLC positions for demonstration purposes.
         
         Returns
         -------
-        Dict[str, List[float]]
-            Dictionary with leaf bank positions
+        List[Tuple[float, float]]
+            List of (left, right) positions for each MLC leaf pair
         """
-        # Assuming a standard MLC with 60 leaf pairs
-        num_leaves = 60
+        # Simulate a 60-leaf MLC (30 pairs)
+        num_leaf_pairs = 30
+        field_size = 10.0  # cm
         
-        # Create simple leaf positions that form a rectangular aperture
-        bank_a = [-20.0] * num_leaves
-        bank_b = [20.0] * num_leaves
+        # Create a leaf pattern that approximates a circle
+        mlc_positions = []
+        for i in range(num_leaf_pairs):
+            # Distance from central leaf pair (leaf pair 15)
+            distance = abs(i - num_leaf_pairs // 2) / (num_leaf_pairs // 2)
+            
+            # Field width decreases as we move away from central axis
+            width = field_size * np.sqrt(1 - distance ** 2)
+            
+            # Center the opening
+            left = -width / 2
+            right = width / 2
+            
+            mlc_positions.append((left, right))
         
-        return {
-            "bank_a": bank_a,
-            "bank_b": bank_b
-        }
+        return mlc_positions
     
-    def calculate_dose(self) -> np.ndarray:
+    def calculate_dose(self) -> Dict[str, np.ndarray]:
         """
         Calculate the dose distribution for the DCAT plan.
         
         Returns
         -------
-        np.ndarray
-            3D dose distribution array
+        Dict[str, np.ndarray]
+            Dictionary with dose array and metadata
         """
-        # This would implement a dose calculation algorithm
-        # For now, we'll return a placeholder
-        logger.info(f"Calculating dose for DCAT plan {self.plan_name}")
-        return np.zeros((100, 100, 100))  # Placeholder
+        # This would implement a dose calculation algorithm for DCAT
+        # For now, return a dummy result
+        logger.info(f"Calculating dose for DCAT plan {self.name}")
+        
+        # Create dummy 3D dose array (100x100x100)
+        dose_array = np.zeros((100, 100, 100))
+        
+        # Add some dummy dose values
+        for i, arc in enumerate(self.arcs):
+            center = 50
+            radius = 10
+            
+            # Create a sphere of dose
+            for x in range(center - radius, center + radius):
+                for y in range(center - radius, center + radius):
+                    for z in range(center - radius, center + radius):
+                        if (x - center) ** 2 + (y - center) ** 2 + (z - center) ** 2 <= radius ** 2:
+                            # Distance from center determines dose value
+                            dist = np.sqrt((x - center) ** 2 + (y - center) ** 2 + (z - center) ** 2)
+                            dose_array[x, y, z] += (1 - dist / radius) * 70.0  # Gy
+        
+        result = {
+            "dose_array": dose_array,
+            "dimensions": (100, 100, 100),
+            "spacing": (0.3, 0.3, 0.3),  # cm
+            "origin": (-15, -15, -15)    # cm
+        }
+        
+        return result
     
-    def evaluate_plan(self) -> Dict[str, float]:
+    def to_dict(self) -> Dict[str, Any]:
         """
-        Evaluate the quality of the DCAT plan.
+        Convert the DCAT plan to a dictionary.
         
         Returns
         -------
-        Dict[str, float]
-            Dictionary of plan quality metrics
+        Dict[str, Any]
+            Dictionary representation of the plan
         """
-        # Calculate plan quality metrics
-        metrics = {
-            "conformity_index": 0.9,         # Placeholder value
-            "gradient_index": 3.0,           # Placeholder value
-            "coverage": 0.98,                # Placeholder value (98%)
-            "maximum_dose": 105.0,           # % of prescription dose
-            "minimum_dose": 95.0             # % of prescription dose
-        }
+        # Start with the base technique dictionary
+        result = super().to_dict()
         
-        self.plan_quality_metrics = metrics
+        # Add DCAT-specific attributes
+        result.update({
+            "description": self.description,
+            "status": self.status,
+            "arcs": self.arcs,
+            "margin": self.margin,
+            "leaf_adjustment_frequency": self.leaf_adjustment_frequency,
+            "plan_quality_metrics": self.plan_quality_metrics
+        })
         
-        logger.info(f"Evaluated DCAT plan {self.plan_name}: "
-                   f"coverage={metrics['coverage']:.2f}, "
-                   f"CI={metrics['conformity_index']:.2f}")
-        
-        return metrics
+        return result
     
-    def export_to_dicom(self, output_dir: str) -> bool:
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'DCAT':
         """
-        Export the DCAT plan to DICOM RT Plan format.
+        Create a DCAT plan from a dictionary.
         
         Parameters
         ----------
-        output_dir : str
-            Directory to save the DICOM files
+        data : Dict[str, Any]
+            Dictionary with plan data
             
         Returns
         -------
-        bool
-            True if export was successful, False otherwise
+        DCAT
+            DCAT instance
         """
-        # This would implement DICOM RT Plan export
-        # For now, we'll just log the export
-        logger.info(f"Exporting DCAT plan {self.plan_name} to DICOM RT Plan in {output_dir}")
-        return True
-    
-    def __str__(self) -> str:
-        """Return string representation of the DCAT plan."""
-        return f"DCAT Plan: {self.plan_name} (ID: {self.plan_id})"
+        plan = cls(
+            plan_name=data["name"],
+            plan_id=data["technique_id"]
+        )
+        
+        # Restore basic attributes
+        plan.description = data.get("description", "")
+        plan.status = data.get("status", "DRAFT")
+        
+        # Restore DCAT-specific attributes
+        if "arcs" in data:
+            plan.arcs = data["arcs"]
+        
+        if "margin" in data:
+            plan.margin = data["margin"]
+        
+        if "leaf_adjustment_frequency" in data:
+            plan.leaf_adjustment_frequency = data["leaf_adjustment_frequency"]
+        
+        if "plan_quality_metrics" in data:
+            plan.plan_quality_metrics = data["plan_quality_metrics"]
+        
+        # Restore common components (machine, fractionation, beams) if present
+        if "machine" in data and data["machine"]:
+            from quangtps.treatment.machine.machine_factory import MachineFactory
+            machine_factory = MachineFactory()
+            machine = machine_factory.create_from_dict(data["machine"])
+            plan.set_machine(machine)
+        
+        if "fractionation" in data and data["fractionation"]:
+            fractionation = Fractionation.from_dict(data["fractionation"])
+            plan.set_fractionation(fractionation)
+        
+        if "beams" in data and data["beams"]:
+            from quangtps.treatment.beams.beam_factory import BeamFactory
+            beam_factory = BeamFactory()
+            for beam_data in data["beams"]:
+                beam = beam_factory.create_from_dict(beam_data)
+                plan.add_beam(beam)
+        
+        return plan
+
+
+# Ensure class is exported correctly
+__all__ = ['DCAT']

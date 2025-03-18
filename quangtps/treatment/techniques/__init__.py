@@ -9,13 +9,16 @@ from quangtps.treatment.techniques.vmat import VMAT
 from quangtps.treatment.techniques.dcat import DCAT
 from quangtps.treatment.techniques.stereotactic import SRS, SBRT
 from quangtps.treatment.techniques.tbi import TBI, TSI
-from quangtps.treatment.techniques.proton import ProtonTherapy, PencilBeamScanning, PassiveScattering
+from quangtps.treatment.techniques.proton import ProtonTherapy, PassiveScattering
+from quangtps.treatment.techniques.pencil_beam_scanning import PencilBeamScanning
 from quangtps.treatment.techniques.carbon import CarbonIonTherapy
 from quangtps.treatment.techniques.adaptive import AdaptiveRadiotherapy
 from quangtps.treatment.techniques.electron import ElectronTherapy
 from quangtps.treatment.techniques.igrt import IGRT
 from quangtps.treatment.techniques.flash import FLASHRadiotherapy
 from quangtps.treatment.techniques.bnct import BNCT
+from quangtps.treatment.techniques.brachytherapy import Brachytherapy
+from quangtps.treatment.techniques.tomotherapy import Tomotherapy
 
 __all__ = [
     'Conformal3DRT',
@@ -34,5 +37,7 @@ __all__ = [
     'ElectronTherapy',
     'IGRT',
     'FLASHRadiotherapy',
-    'BNCT'
+    'BNCT',
+    'Brachytherapy',
+    'Tomotherapy'
 ]

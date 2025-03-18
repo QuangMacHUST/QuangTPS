@@ -10,17 +10,16 @@ trong kế hoạch xạ trị, bao gồm các công cụ như DVH, phân tích l
 
 import logging
 import numpy as np
-from typing import Dict, List, Any, Optional
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QComboBox, QGroupBox, QFormLayout,
-    QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit,
-    QScrollArea, QSplitter, QCheckBox, QSpinBox, QDoubleSpinBox,
-    QSlider, QColorDialog, QGridLayout
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QComboBox, QGroupBox,
+    QTableWidget, QTableWidgetItem, QTabWidget,
+    QSlider, QScrollArea, QSpinBox, QDoubleSpinBox,
+    QTextEdit, QCheckBox, QGridLayout
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QColor, QPen
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 
 try:
     import matplotlib
@@ -32,8 +31,11 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+# Internal imports
+from quangtps.treatment.techniques.bnct import BNCT
+from quangtps.ui.bnct_widget import BNCTDoseAnalysisWidget
 
+logger = logging.getLogger(__name__)
 
 class DoseVisualizationWidget(QWidget):
     """Widget để hiển thị phân bố liều trong không gian 2D và 3D."""
@@ -560,6 +562,9 @@ class DoseTab(QWidget):
         # Tab so sánh liều
         self.comparison_widget = DoseComparisonWidget()
         self.tab_widget.addTab(self.comparison_widget, "So sánh liều")
+        
+        # Tab phân tích BNCT (sẽ được thêm khi cần)
+        self.bnct_widget = None
     
     def set_plan(self, plan):
         """
@@ -578,8 +583,79 @@ class DoseTab(QWidget):
     
     def _populate_dose_data(self):
         """Điền dữ liệu liều lượng vào giao diện."""
-        # Chưa có dữ liệu thực tế, sẽ được triển khai khi có dữ liệu
-        pass
+        if not self.current_plan:
+            return
+            
+        # Kiểm tra xem kế hoạch có phải là BNCT không
+        is_bnct_plan = isinstance(self.current_plan, BNCT)
+            
+        # Xử lý tab BNCT
+        if is_bnct_plan:
+            # Nếu tab BNCT chưa được thêm, thêm nó vào
+            if not self.bnct_widget:
+                self.bnct_widget = BNCTDoseAnalysisWidget()
+                self.tab_widget.addTab(self.bnct_widget, "Phân tích BNCT")
+            
+            # Cập nhật dữ liệu cho widget BNCT
+            self.bnct_widget.set_bnct_plan(self.current_plan)
+            
+            # Đảm bảo tab BNCT hiển thị
+            idx = self.tab_widget.indexOf(self.bnct_widget)
+            if idx != -1:
+                self.tab_widget.setTabVisible(idx, True)
+                # Chuyển đến tab BNCT để hiển thị ngay
+                self.tab_widget.setCurrentIndex(idx)
+        else:
+            # Nếu không phải kế hoạch BNCT và tab BNCT đã được thêm, ẩn nó đi
+            if self.bnct_widget:
+                idx = self.tab_widget.indexOf(self.bnct_widget)
+                if idx != -1:  # Nếu tab tồn tại trong tab_widget
+                    self.tab_widget.setTabVisible(idx, False)
+        
+        # Hiển thị dữ liệu liều 2D
+        if hasattr(self.current_plan, 'get_dose_slice'):
+            try:
+                # Lấy lát cắt dữ liệu liều hiện tại
+                slice_idx = self.slice_slider.value()
+                plane_idx = self.plane_combo.currentIndex()
+                planes = ["axial", "coronal", "sagittal"]
+                plane = planes[plane_idx] if plane_idx < len(planes) else "axial"
+                
+                dose_slice, x_coords, y_coords = self.current_plan.get_dose_slice(slice_idx, plane=plane)
+                
+                # Hiển thị dữ liệu liều
+                if dose_slice is not None and x_coords is not None and y_coords is not None:
+                    self.dose_visualization.display_dose_2d(dose_slice, x_coords, y_coords)
+                    logger.debug(f"Hiển thị lát cắt liều {plane} tại vị trí {slice_idx}")
+            except Exception as e:
+                logger.error(f"Lỗi khi lấy dữ liệu lát cắt liều: {str(e)}")
+        
+        # Cập nhật DVH
+        if hasattr(self.current_plan, 'get_dvh_data'):
+            try:
+                dvh_data = self.current_plan.get_dvh_data()
+                if dvh_data:
+                    structures = dvh_data.get('structures', [])
+                    dose_bins = dvh_data.get('dose_bins', np.linspace(0, 80, 100))
+                    cumulative = self.dvh_type_combo.currentIndex() == 0  # 0: Tích lũy, 1: Vi phân
+                    
+                    self.dvh_plot.plot_dvh(structures, dose_bins, cumulative)
+                    
+                    # Cập nhật thống kê liều
+                    self.stats_widget.set_structures(structures)
+                    logger.debug(f"Hiển thị DVH với {len(structures)} cấu trúc")
+            except Exception as e:
+                logger.error(f"Lỗi khi lấy dữ liệu DVH: {str(e)}")
+        
+        # Cập nhật tab so sánh liều
+        if hasattr(self.current_plan, 'get_comparison_plans'):
+            try:
+                comparison_plans = self.current_plan.get_comparison_plans()
+                if comparison_plans:
+                    self.comparison_widget.set_plans([self.current_plan] + comparison_plans)
+                    logger.debug(f"Thiết lập {len(comparison_plans)} kế hoạch so sánh")
+            except Exception as e:
+                logger.error(f"Lỗi khi lấy danh sách kế hoạch so sánh: {str(e)}")
     
     def _clear_dose_data(self):
         """Xóa dữ liệu liều lượng khỏi giao diện."""
@@ -594,6 +670,13 @@ class DoseTab(QWidget):
         
         # Xóa so sánh liều
         self.comparison_widget.clear()
+        
+        # Xóa dữ liệu BNCT (nếu có)
+        if self.bnct_widget:
+            self.bnct_widget.clear()
+            idx = self.tab_widget.indexOf(self.bnct_widget)
+            if idx != -1:  # Nếu tab tồn tại trong tab_widget
+                self.tab_widget.setTabVisible(idx, False)
     
     def _slice_changed(self, value):
         """

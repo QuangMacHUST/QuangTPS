@@ -10,13 +10,11 @@ Module này cung cấp các lớp và phương thức để định nghĩa và q
 
 import logging
 import numpy as np
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from enum import Enum
 
-from quangtps.treatment.beams.beam import Beam
-from quangtps.treatment.fractionation import Fractionation, FractionationScheme
-from quangtps.treatment.machine.linac import Linac
 from quangtps.treatment.mlc.mlc_controller import MLCController
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +32,7 @@ class IMRTDeliveryType(str, Enum):
     HYBRID = "HYBRID"  # Hybrid Delivery
 
 
-class IMRT:
+class IMRT(BaseTreatmentTechnique):
     """
     Lớp đại diện cho kỹ thuật xạ trị điều biến cường độ (IMRT).
     
@@ -44,337 +42,73 @@ class IMRT:
     
     def __init__(self, 
                  name: str = "IMRT Plan",
+                 technique_id: Optional[str] = None,
                  optimization_type: IMRTOptimizationType = IMRTOptimizationType.FLUENCE_MAP,
-                 delivery_type: IMRTDeliveryType = IMRTDeliveryType.STEP_AND_SHOOT,
-                 linac: Optional[Linac] = None):
+                 delivery_type: IMRTDeliveryType = IMRTDeliveryType.STEP_AND_SHOOT):
         """
-        Khởi tạo một kế hoạch IMRT.
+        Khởi tạo kế hoạch IMRT.
         
         Parameters
         ----------
         name : str, optional
-            Tên của kế hoạch
+            Tên kế hoạch, mặc định là "IMRT Plan"
+        technique_id : str, optional
+            ID kỹ thuật, nếu None, sẽ tự động tạo UUID
         optimization_type : IMRTOptimizationType, optional
-            Loại tối ưu hóa IMRT
+            Loại tối ưu hóa, mặc định là Fluence Map Optimization
         delivery_type : IMRTDeliveryType, optional
-            Phương pháp thực hiện IMRT
-        linac : Linac, optional
-            Máy gia tốc tuyến tính sử dụng cho kế hoạch
+            Phương pháp thực hiện, mặc định là Step and Shoot
         """
-        self.name = name
+        super().__init__(name=name, technique_id=technique_id, category=TechniqueCategory.ADVANCED)
+        
+        # Thông số kỹ thuật IMRT
         self.optimization_type = optimization_type
         self.delivery_type = delivery_type
-        self.linac = linac
         
-        # Danh sách các beam
-        self.beams: List[Beam] = []
+        # Thông số tối ưu hóa
+        self.optimization_iterations = 100
+        self.convergence_threshold = 0.001
+        self.smoothing_factor = 0.5
         
-        # Thông tin về liều và phân đoạn
-        self.fractionation: Optional[Fractionation] = None
-        self.prescription_dose_gy: float = 0.0
+        # Tham số kỹ thuật
+        self.mlc_controller = None
+        self.fluence_maps = {}  # {beam_id: fluence_map}
+        self.segment_info = {}  # {beam_id: [segment1, segment2, ...]}
+        self.dose_objectives = []
+        self.constraints = []
         
-        # Thông tin về cấu trúc mục tiêu và OARs (Organs At Risk)
-        self.target_structures: List[str] = []
-        self.oar_structures: List[str] = []
+        # Ghi log khởi tạo với định dạng lazy %
+        logger.info(
+            "Khởi tạo kế hoạch IMRT '%s' (ID: %s) với phương pháp tối ưu hóa %s và thực hiện %s",
+            self.name, self.technique_id, optimization_type.value, delivery_type.value
+        )
         
-        # Tham số tối ưu hóa
-        self.optimization_parameters: Dict[str, Any] = {
-            "max_iterations": 100,
-            "convergence_threshold": 0.001,
-            "objective_functions": [],
-            "dose_constraints": [],
-            "dvh_constraints": []
-        }
-        
-        # Fluence maps và thông tin MLC
-        self.fluence_maps: Dict[int, np.ndarray] = {}  # Fluence map cho mỗi beam (beam_index: map)
-        self.mlc_sequences: Dict[int, List[Dict[str, Any]]] = {}  # MLC sequence cho mỗi beam
-        self.mlc_controller: Optional[MLCController] = None
-        
-        # Thông tin bổ sung
-        self.metadata: Dict[str, Any] = {}
-    
-    def set_fractionation(self, fractionation: Fractionation) -> None:
+    def set_optimization_parameters(self, iterations: int, threshold: float, smoothing: float):
         """
-        Thiết lập thông tin phân đoạn xạ trị cho kế hoạch IMRT.
+        Thiết lập tham số tối ưu hóa.
         
         Parameters
         ----------
-        fractionation : Fractionation
-            Thông tin phân đoạn xạ trị
+        iterations : int
+            Số lần lặp tối đa
+        threshold : float
+            Ngưỡng hội tụ
+        smoothing : float
+            Hệ số làm mịn fluence map
         """
-        self.fractionation = fractionation
-        self.prescription_dose_gy = fractionation.total_dose
-    
-    def set_prescription(self, total_dose_gy: float, num_fractions: int) -> None:
-        """
-        Thiết lập thông tin toa thuốc xạ trị cho kế hoạch IMRT.
+        self.optimization_iterations = iterations
+        self.convergence_threshold = threshold
+        self.smoothing_factor = smoothing
         
-        Parameters
-        ----------
-        total_dose_gy : float
-            Tổng liều xạ trị (Gy)
-        num_fractions : int
-            Số phân đoạn
-        """
-        self.fractionation = Fractionation(total_dose_gy, num_fractions)
-        self.prescription_dose_gy = total_dose_gy
-    
-    def set_fractionation_scheme(self, scheme_name: str) -> bool:
-        """
-        Thiết lập thông tin phân đoạn xạ trị theo một phương án chuẩn.
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Thiết lập tham số tối ưu hóa cho kế hoạch '%s': iterations=%d, threshold=%f, smoothing=%f",
+            self.name, iterations, threshold, smoothing
+        )
         
-        Parameters
-        ----------
-        scheme_name : str
-            Tên của phương án phân đoạn xạ trị
-            
-        Returns
-        -------
-        bool
-            True nếu phương án được tìm thấy và áp dụng thành công, False nếu không
+    def set_mlc_controller(self, mlc_controller: MLCController):
         """
-        scheme = FractionationScheme.get_scheme(scheme_name)
-        if scheme:
-            self.fractionation = scheme
-            self.prescription_dose_gy = scheme.total_dose
-            return True
-        
-        logger.warning(f"Scheme '{scheme_name}' not found, fractionation not set")
-        return False
-    
-    def add_beam(self, beam: Beam) -> None:
-        """
-        Thêm một beam vào kế hoạch IMRT.
-        
-        Parameters
-        ----------
-        beam : Beam
-            Beam cần thêm vào kế hoạch
-        """
-        beam_index = len(self.beams)
-        self.beams.append(beam)
-        
-        # Khởi tạo fluence map trống cho beam mới
-        resolution = 0.5  # cm per pixel
-        field_size = beam.get_field_size()
-        width_pixels = int(field_size[0] / resolution)
-        height_pixels = int(field_size[1] / resolution)
-        
-        # Tạo fluence map mặc định (tất cả các pixel có giá trị 1.0)
-        self.fluence_maps[beam_index] = np.ones((height_pixels, width_pixels), dtype=np.float32)
-    
-    def remove_beam(self, beam_index: int) -> bool:
-        """
-        Xóa một beam khỏi kế hoạch IMRT.
-        
-        Parameters
-        ----------
-        beam_index : int
-            Chỉ số của beam cần xóa
-            
-        Returns
-        -------
-        bool
-            True nếu xóa thành công, False nếu chỉ số không hợp lệ
-        """
-        if 0 <= beam_index < len(self.beams):
-            self.beams.pop(beam_index)
-            
-            # Xóa fluence map và MLC sequence tương ứng
-            if beam_index in self.fluence_maps:
-                del self.fluence_maps[beam_index]
-            
-            if beam_index in self.mlc_sequences:
-                del self.mlc_sequences[beam_index]
-            
-            # Cập nhật lại indices cho các fluence maps và MLC sequences
-            new_fluence_maps = {}
-            new_mlc_sequences = {}
-            
-            for i, idx in enumerate([j for j in range(len(self.beams) + 1) if j != beam_index]):
-                if idx in self.fluence_maps:
-                    new_fluence_maps[i] = self.fluence_maps[idx]
-                if idx in self.mlc_sequences:
-                    new_mlc_sequences[i] = self.mlc_sequences[idx]
-            
-            self.fluence_maps = new_fluence_maps
-            self.mlc_sequences = new_mlc_sequences
-            
-            return True
-        
-        logger.warning(f"Invalid beam index: {beam_index}, no beam removed")
-        return False
-    
-    def set_target_structures(self, structure_names: List[str]) -> None:
-        """
-        Thiết lập danh sách cấu trúc mục tiêu.
-        
-        Parameters
-        ----------
-        structure_names : List[str]
-            Danh sách tên các cấu trúc mục tiêu
-        """
-        self.target_structures = structure_names
-    
-    def set_oar_structures(self, structure_names: List[str]) -> None:
-        """
-        Thiết lập danh sách các cơ quan nguy cấp (OARs).
-        
-        Parameters
-        ----------
-        structure_names : List[str]
-            Danh sách tên các cơ quan nguy cấp
-        """
-        self.oar_structures = structure_names
-    
-    def add_optimization_objective(self, objective: Dict[str, Any]) -> None:
-        """
-        Thêm một mục tiêu tối ưu hóa cho kế hoạch IMRT.
-        
-        Parameters
-        ----------
-        objective : Dict[str, Any]
-            Mục tiêu tối ưu hóa, bao gồm các thông tin cần thiết như
-            loại mục tiêu, cấu trúc áp dụng, và các tham số tối ưu hóa
-        """
-        self.optimization_parameters["objective_functions"].append(objective)
-    
-    def add_dose_constraint(self, constraint: Dict[str, Any]) -> None:
-        """
-        Thêm một ràng buộc liều cho kế hoạch IMRT.
-        
-        Parameters
-        ----------
-        constraint : Dict[str, Any]
-            Ràng buộc liều, bao gồm các thông tin cần thiết như
-            loại ràng buộc, cấu trúc áp dụng, và các tham số liều
-        """
-        self.optimization_parameters["dose_constraints"].append(constraint)
-    
-    def add_dvh_constraint(self, constraint: Dict[str, Any]) -> None:
-        """
-        Thêm một ràng buộc DVH (Dose-Volume Histogram) cho kế hoạch IMRT.
-        
-        Parameters
-        ----------
-        constraint : Dict[str, Any]
-            Ràng buộc DVH, bao gồm các thông tin cần thiết như
-            loại ràng buộc, cấu trúc áp dụng, và các tham số DVH
-        """
-        self.optimization_parameters["dvh_constraints"].append(constraint)
-    
-    def set_optimization_parameters(self, parameters: Dict[str, Any]) -> None:
-        """
-        Thiết lập các tham số tối ưu hóa cho kế hoạch IMRT.
-        
-        Parameters
-        ----------
-        parameters : Dict[str, Any]
-            Các tham số tối ưu hóa
-        """
-        self.optimization_parameters.update(parameters)
-    
-    def optimize_fluence_maps(self) -> bool:
-        """
-        Thực hiện tối ưu hóa fluence maps cho kế hoạch IMRT.
-        
-        Returns
-        -------
-        bool
-            True nếu tối ưu hóa thành công, False nếu có lỗi
-        """
-        # TODO: Implement actual optimization algorithm
-        # This is a placeholder that would be replaced with a real implementation
-        logger.info("Starting fluence map optimization...")
-        
-        try:
-            # Dummy optimization: just create simple gradient fluence maps
-            for beam_index, beam in enumerate(self.beams):
-                if beam_index in self.fluence_maps:
-                    shape = self.fluence_maps[beam_index].shape
-                    # Create a radial gradient pattern
-                    y, x = np.ogrid[:shape[0], :shape[1]]
-                    center_y, center_x = shape[0] / 2, shape[1] / 2
-                    # Calculate distance from center and normalize
-                    dist = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-                    max_dist = np.sqrt(center_x**2 + center_y**2)
-                    # Create a gradient that's highest in the center
-                    self.fluence_maps[beam_index] = 1.0 - 0.5 * (dist / max_dist)
-            
-            logger.info("Fluence map optimization completed successfully")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Fluence map optimization failed: {str(e)}")
-            return False
-    
-    def convert_fluence_to_mlc_segments(self) -> bool:
-        """
-        Chuyển đổi fluence maps thành các segment MLC.
-        
-        Returns
-        -------
-        bool
-            True nếu chuyển đổi thành công, False nếu có lỗi
-        """
-        if not self.mlc_controller:
-            logger.error("No MLC controller set, cannot convert fluence to MLC segments")
-            return False
-            
-        # TODO: Implement actual leaf sequencing algorithm
-        # This is a placeholder that would be replaced with a real implementation
-        logger.info("Starting conversion of fluence maps to MLC segments...")
-        
-        try:
-            for beam_index, fluence_map in self.fluence_maps.items():
-                # Generate dummy MLC sequence with just a few segments
-                mlc_sequence = []
-                
-                # Create 3 segments for demonstration
-                num_segments = 3
-                for i in range(num_segments):
-                    # Intensity proportion for this segment
-                    intensity = 1.0 / num_segments
-                    
-                    # Create simple MLC positions based on segment number
-                    segment = {
-                        "segment_index": i,
-                        "monitor_units": self.beams[beam_index].monitor_units * intensity,
-                        "mlc_positions": {
-                            "leaf_positions_a": [],  # Array of leaf positions for bank A
-                            "leaf_positions_b": []   # Array of leaf positions for bank B
-                        },
-                        "jaw_positions": {
-                            "x1": -10.0,
-                            "x2": 10.0,
-                            "y1": -10.0 + i * 5.0,  # Simplified example
-                            "y2": 10.0 - i * 5.0    # Simplified example
-                        }
-                    }
-                    
-                    # Add dummy MLC positions
-                    num_leaves = self.mlc_controller.mlc_model.num_leaf_pairs
-                    for j in range(num_leaves):
-                        # Adjust aperture size based on segment and leaf position
-                        aperture_width = 20.0 * (1.0 - i / num_segments) * (1.0 - abs(j - num_leaves/2) / (num_leaves/2))
-                        segment["mlc_positions"]["leaf_positions_a"].append(-aperture_width / 2)
-                        segment["mlc_positions"]["leaf_positions_b"].append(aperture_width / 2)
-                    
-                    mlc_sequence.append(segment)
-                
-                self.mlc_sequences[beam_index] = mlc_sequence
-            
-            logger.info("Conversion of fluence maps to MLC segments completed successfully")
-            return True
-            
-        except Exception as e:
-            logger.error(f"MLC segment conversion failed: {str(e)}")
-            return False
-    
-    def set_mlc_controller(self, mlc_controller: MLCController) -> None:
-        """
-        Thiết lập bộ điều khiển MLC cho kế hoạch IMRT.
+        Thiết lập bộ điều khiển MLC.
         
         Parameters
         ----------
@@ -382,124 +116,336 @@ class IMRT:
             Bộ điều khiển MLC
         """
         self.mlc_controller = mlc_controller
-    
-    def calculate_monitor_units(self) -> bool:
+        
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Thiết lập bộ điều khiển MLC cho kế hoạch IMRT '%s'",
+            self.name
+        )
+        
+    def add_objective(self, structure_name: str, objective_type: str, 
+                     dose: float, volume: Optional[float] = None, weight: float = 1.0):
         """
-        Tính toán Monitor Units cho mỗi beam trong kế hoạch IMRT.
+        Thêm mục tiêu tối ưu hóa.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        objective_type : str
+            Loại mục tiêu (min_dose, max_dose, min_dvh, max_dvh, uniform_dose)
+        dose : float
+            Giá trị liều (Gy hoặc %)
+        volume : float, optional
+            Giá trị thể tích (%) cho các ràng buộc DVH
+        weight : float, optional
+            Trọng số mục tiêu
+        """
+        objective = {
+            'structure': structure_name,
+            'type': objective_type,
+            'dose': dose,
+            'volume': volume,
+            'weight': weight
+        }
+        
+        self.dose_objectives.append(objective)
+        
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Thêm mục tiêu tối ưu hóa cho cấu trúc '%s' trong kế hoạch '%s': type=%s, dose=%f Gy, weight=%f",
+            structure_name, self.name, objective_type, dose, weight
+        )
+        
+    def add_constraint(self, structure_name: str, constraint_type: str, 
+                      dose: float, volume: Optional[float] = None):
+        """
+        Thêm ràng buộc tối ưu hóa.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        constraint_type : str
+            Loại ràng buộc (max_dose, mean_dose, max_dvh)
+        dose : float
+            Giá trị liều (Gy hoặc %)
+        volume : float, optional
+            Giá trị thể tích (%) cho các ràng buộc DVH
+        """
+        constraint = {
+            'structure': structure_name,
+            'type': constraint_type,
+            'dose': dose,
+            'volume': volume
+        }
+        
+        self.constraints.append(constraint)
+        
+        # Thông tin volume cho log
+        if volume is not None:
+            volume_info = f", volume={volume}%"
+        else:
+            volume_info = ""
+            
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Thêm ràng buộc cho cấu trúc '%s' trong kế hoạch '%s': type=%s, dose=%f Gy%s",
+            structure_name, self.name, constraint_type, dose, volume_info
+        )
+        
+    def set_delivery_type(self, delivery_type: IMRTDeliveryType):
+        """
+        Thiết lập phương pháp thực hiện IMRT.
+        
+        Parameters
+        ----------
+        delivery_type : IMRTDeliveryType
+            Phương pháp thực hiện (STEP_AND_SHOOT, SLIDING_WINDOW, HYBRID)
+        """
+        self.delivery_type = delivery_type
+        
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Thiết lập phương pháp thực hiện IMRT cho kế hoạch '%s': %s",
+            self.name, delivery_type.value
+        )
+        
+    def optimize_fluence_maps(self):
+        """
+        Tối ưu hóa fluence maps cho các chùm tia.
         
         Returns
         -------
         bool
-            True nếu tính toán thành công, False nếu có lỗi
+            True nếu tối ưu hóa thành công, False nếu không
         """
-        if not self.fractionation:
-            logger.error("No fractionation set, cannot calculate MUs")
+        if not self.beams or not self.dose_objectives:
+            logger.warning(
+                "Không thể tối ưu hóa fluence maps cho kế hoạch '%s': Chưa có chùm tia hoặc mục tiêu",
+                self.name
+            )
             return False
+        
+        # Tối ưu hóa fluence map cho mỗi chùm tia
+        for beam in self.beams:
+            beam_id = beam.beam_id
+            # Giả lập tối ưu hóa fluence map
+            fluence_size = (20, 20)  # kích thước của fluence map
+            self.fluence_maps[beam_id] = np.random.rand(*fluence_size)
             
-        try:
-            # TODO: Implement actual MU calculation algorithm
-            # For now, just distribute MUs evenly
-            num_beams = len(self.beams)
-            if num_beams == 0:
-                return True
+            # Làm mịn fluence map
+            self._smooth_fluence_map(beam_id)
+        
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Đã tối ưu hóa fluence maps cho %d chùm tia trong kế hoạch IMRT '%s'",
+            len(self.beams), self.name
+        )
+        
+        return True
+        
+    def _smooth_fluence_map(self, beam_id: str):
+        """
+        Làm mịn fluence map cho một chùm tia.
+        
+        Parameters
+        ----------
+        beam_id : str
+            ID của chùm tia
+        """
+        if beam_id not in self.fluence_maps:
+            return
+            
+        # Giả lập làm mịn bằng bộ lọc trung bình
+        fluence = self.fluence_maps[beam_id]
+        smoothed = np.zeros_like(fluence)
+        
+        for i in range(1, fluence.shape[0]-1):
+            for j in range(1, fluence.shape[1]-1):
+                smoothed[i, j] = (fluence[i-1:i+2, j-1:j+2].mean() + 
+                                fluence[i, j]) / 2
                 
-            # Simple estimate: total MUs = 100 MU/Gy * prescription dose
-            total_mus = 100.0 * self.prescription_dose_gy
-            mus_per_beam = total_mus / num_beams
-            
-            for beam in self.beams:
-                beam.monitor_units = mus_per_beam
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Monitor unit calculation failed: {str(e)}")
+        # Giữ nguyên các giá trị biên
+        smoothed[0, :] = fluence[0, :]
+        smoothed[-1, :] = fluence[-1, :]
+        smoothed[:, 0] = fluence[:, 0]
+        smoothed[:, -1] = fluence[:, -1]
+        
+        self.fluence_maps[beam_id] = (1 - self.smoothing_factor) * fluence + self.smoothing_factor * smoothed
+    
+    def segment_beams(self):
+        """
+        Phân đoạn chùm tia từ fluence maps.
+        
+        Returns
+        -------
+        bool
+            True nếu phân đoạn thành công, False nếu không
+        """
+        if not self.fluence_maps:
+            logger.warning(
+                "Không thể phân đoạn chùm tia cho kế hoạch '%s': Chưa có fluence maps",
+                self.name
+            )
             return False
+        
+        if not self.mlc_controller:
+            logger.warning(
+                "Không thể phân đoạn chùm tia cho kế hoạch '%s': Chưa thiết lập bộ điều khiển MLC",
+                self.name
+            )
+            return False
+            
+        # Phân đoạn cho mỗi chùm tia
+        for beam_id, fluence in self.fluence_maps.items():
+            # Giả lập phân đoạn dựa trên phương pháp thực hiện
+            if self.delivery_type == IMRTDeliveryType.STEP_AND_SHOOT:
+                # Giả lập tạo 5 phân đoạn cho Step-and-Shoot
+                self.segment_info[beam_id] = self._create_step_and_shoot_segments(fluence, 5)
+            else:
+                # Giả lập tạo 10 phân đoạn cho Sliding Window
+                self.segment_info[beam_id] = self._create_sliding_window_segments(fluence, 10)
+        
+        # Ghi log với định dạng lazy %
+        logger.info(
+            "Đã phân đoạn %d chùm tia trong kế hoạch IMRT '%s' với phương pháp %s",
+            len(self.fluence_maps), self.name, self.delivery_type.value
+        )
+        
+        return True
     
-    def get_fluence_map(self, beam_index: int) -> Optional[np.ndarray]:
+    def _create_step_and_shoot_segments(self, fluence: np.ndarray, num_segments: int):
         """
-        Lấy fluence map cho một beam cụ thể.
+        Tạo các phân đoạn cho phương pháp Step-and-Shoot.
         
         Parameters
         ----------
-        beam_index : int
-            Chỉ số của beam
+        fluence : np.ndarray
+            Fluence map
+        num_segments : int
+            Số phân đoạn cần tạo
             
         Returns
         -------
-        Optional[np.ndarray]
-            Fluence map nếu tồn tại, None nếu không tìm thấy
+        List[Dict]
+            Danh sách các phân đoạn
         """
-        return self.fluence_maps.get(beam_index)
+        segments = []
+        
+        # Phân đoạn đơn giản bằng cách chia fluence thành thưởng
+        max_value = fluence.max()
+        step = max_value / num_segments
+        
+        for i in range(num_segments):
+            threshold = step * (i + 1)
+            
+            # Tạo mặt nạ phân đoạn dựa trên ngưỡng
+            segment_mask = fluence >= threshold
+            
+            # Chuyển đổi mặt nạ thành vị trí lá MLC
+            mlc_positions = self._mask_to_mlc_positions(segment_mask)
+            
+            # Tạo thông tin phân đoạn
+            segment = {
+                'index': i,
+                'weight': 1.0 / num_segments,
+                'mlc_positions': mlc_positions,
+                'mu': max_value * (1.0 / num_segments)
+            }
+            
+            segments.append(segment)
+        
+        return segments
     
-    def get_mlc_sequence(self, beam_index: int) -> Optional[List[Dict[str, Any]]]:
+    def _create_sliding_window_segments(self, fluence: np.ndarray, num_segments: int):
         """
-        Lấy MLC sequence cho một beam cụ thể.
+        Tạo các phân đoạn cho phương pháp Sliding Window.
         
         Parameters
         ----------
-        beam_index : int
-            Chỉ số của beam
+        fluence : np.ndarray
+            Fluence map
+        num_segments : int
+            Số phân đoạn cần tạo
             
         Returns
         -------
-        Optional[List[Dict[str, Any]]]
-            MLC sequence nếu tồn tại, None nếu không tìm thấy
+        List[Dict]
+            Danh sách các phân đoạn
         """
-        return self.mlc_sequences.get(beam_index)
-    
-    def get_beam_indices(self) -> List[int]:
-        """
-        Lấy danh sách chỉ số của tất cả các beam trong kế hoạch.
+        segments = []
         
-        Returns
-        -------
-        List[int]
-            Danh sách chỉ số của các beam
-        """
-        return list(range(len(self.beams)))
+        # Số hàng MLC
+        num_mlc_pairs = fluence.shape[0]
+        
+        # Chiều rộng trường xạ
+        field_width = fluence.shape[1]
+        
+        # Khoảng cách di chuyển giữa các phân đoạn
+        step = field_width / (num_segments - 1) if num_segments > 1 else 0
+        
+        for i in range(num_segments):
+            # Vị trí hiện tại của cửa sổ
+            window_pos = i * step
+            
+            # Tạo vị trí lá MLC cho cửa sổ di chuyển
+            mlc_positions = []
+            for j in range(num_mlc_pairs):
+                # Tìm vị trí mở và đóng dựa trên cửa sổ di chuyển
+                # Đơn giản hóa: lấy vị trí cửa sổ cố định
+                leaf_a_pos = max(0, window_pos - 2)
+                leaf_b_pos = min(field_width, window_pos + 2)
+                
+                mlc_positions.append((leaf_a_pos, leaf_b_pos))
+            
+            # Tạo thông tin phân đoạn
+            segment = {
+                'index': i,
+                'weight': 1.0 / num_segments,
+                'mlc_positions': mlc_positions,
+                'mu': fluence.mean() * (1.0 / num_segments)
+            }
+            
+            segments.append(segment)
+        
+        return segments
     
-    def get_beam(self, beam_index: int) -> Optional[Beam]:
+    def _mask_to_mlc_positions(self, mask: np.ndarray):
         """
-        Lấy một beam cụ thể từ kế hoạch.
+        Chuyển đổi mặt nạ phân đoạn thành vị trí lá MLC.
         
         Parameters
         ----------
-        beam_index : int
-            Chỉ số của beam
+        mask : np.ndarray
+            Mặt nạ phân đoạn (boolean)
             
         Returns
         -------
-        Optional[Beam]
-            Beam nếu tồn tại, None nếu chỉ số không hợp lệ
+        List[Tuple[float, float]]
+            Danh sách vị trí cặp lá MLC (leaf_a, leaf_b) cho mỗi hàng
         """
-        if 0 <= beam_index < len(self.beams):
-            return self.beams[beam_index]
-        return None
-    
-    def get_num_beams(self) -> int:
-        """
-        Lấy số lượng beam trong kế hoạch.
+        mlc_positions = []
         
-        Returns
-        -------
-        int
-            Số lượng beam
-        """
-        return len(self.beams)
-    
-    def get_total_monitor_units(self) -> float:
-        """
-        Lấy tổng Monitor Units của tất cả các beam trong kế hoạch.
+        # Duyệt qua từng hàng của mặt nạ (mỗi hàng tương ứng với một cặp lá MLC)
+        for row in mask:
+            # Tìm các vị trí x nơi mask = True
+            x_positions = np.where(row)[0]
+            
+            if len(x_positions) > 0:
+                # Lấy vị trí đầu và cuối
+                leaf_a = x_positions[0]
+                leaf_b = x_positions[-1] + 1  # +1 vì vị trí cuối là không bao gồm
+            else:
+                # Nếu không có vị trí nào, đóng lá MLC
+                leaf_a = len(row) // 2
+                leaf_b = leaf_a
+            
+            mlc_positions.append((float(leaf_a), float(leaf_b)))
         
-        Returns
-        -------
-        float
-            Tổng Monitor Units
-        """
-        return sum(beam.monitor_units for beam in self.beams)
-    
-    def to_dict(self) -> Dict[str, Any]:
+        return mlc_positions
+        
+    def to_dict(self):
         """
         Chuyển đổi kế hoạch IMRT thành dictionary.
         
@@ -508,29 +454,36 @@ class IMRT:
         Dict[str, Any]
             Dictionary chứa thông tin kế hoạch IMRT
         """
-        # Convert numpy arrays to lists for JSON serialization
-        fluence_maps_serialized = {}
-        for beam_idx, fluence_map in self.fluence_maps.items():
-            fluence_maps_serialized[str(beam_idx)] = fluence_map.tolist()
+        result = super().to_dict()
         
-        return {
-            "name": self.name,
-            "optimization_type": self.optimization_type.value,
-            "delivery_type": self.delivery_type.value,
-            "linac": self.linac.name if self.linac else None,
-            "beams": [beam.to_dict() for beam in self.beams],
-            "fractionation": self.fractionation.to_dict() if self.fractionation else None,
-            "prescription_dose_gy": self.prescription_dose_gy,
-            "target_structures": self.target_structures,
-            "oar_structures": self.oar_structures,
-            "optimization_parameters": self.optimization_parameters,
-            "fluence_maps": fluence_maps_serialized,
-            "mlc_sequences": self.mlc_sequences,
-            "metadata": self.metadata
-        }
+        # Thêm các thông tin đặc trưng của IMRT
+        result.update({
+            'technique_type': 'IMRT',
+            'optimization_type': self.optimization_type.value,
+            'delivery_type': self.delivery_type.value,
+            'optimization_parameters': {
+                'iterations': self.optimization_iterations,
+                'convergence_threshold': self.convergence_threshold,
+                'smoothing_factor': self.smoothing_factor
+            },
+            'dose_objectives': self.dose_objectives,
+            'constraints': self.constraints
+        })
+        
+        # Không lưu fluence maps và segment info vì kích thước lớn
+        # Chỉ lưu thông tin cơ bản
+        if self.fluence_maps:
+            result['has_fluence_maps'] = True
+            result['fluence_map_sizes'] = {beam_id: fluence.shape for beam_id, fluence in self.fluence_maps.items()}
+        
+        if self.segment_info:
+            result['has_segments'] = True
+            result['segment_counts'] = {beam_id: len(segments) for beam_id, segments in self.segment_info.items()}
+        
+        return result
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'IMRT':
+    def from_dict(cls, data: Dict[str, Any]):
         """
         Tạo đối tượng IMRT từ dictionary.
         
@@ -544,40 +497,52 @@ class IMRT:
         IMRT
             Đối tượng IMRT
         """
-        # Create basic IMRT plan
-        imrt_plan = cls(
-            name=data["name"],
-            optimization_type=IMRTOptimizationType(data["optimization_type"]),
-            delivery_type=IMRTDeliveryType(data["delivery_type"])
+        # Kiểm tra loại kỹ thuật
+        if data.get('technique_type') != 'IMRT':
+            raise ValueError("Dictionary không chứa dữ liệu IMRT hợp lệ")
+        
+        # Tạo đối tượng cơ bản
+        imrt = cls(
+            name=data.get('name', 'IMRT Plan'),
+            technique_id=data.get('id'),
+            optimization_type=IMRTOptimizationType(data.get('optimization_type', 'FLUENCE_MAP')),
+            delivery_type=IMRTDeliveryType(data.get('delivery_type', 'STEP_AND_SHOOT'))
         )
         
-        # Set fractionation if present
-        if data.get("fractionation"):
-            imrt_plan.fractionation = Fractionation.from_dict(data["fractionation"])
-            imrt_plan.prescription_dose_gy = data["prescription_dose_gy"]
+        # Cập nhật các tham số tối ưu hóa
+        if 'optimization_parameters' in data:
+            params = data['optimization_parameters']
+            imrt.set_optimization_parameters(
+                params.get('iterations', 100),
+                params.get('convergence_threshold', 0.001),
+                params.get('smoothing_factor', 0.5)
+            )
         
-        # Add beams
-        for beam_data in data.get("beams", []):
-            beam = Beam.from_dict(beam_data)
-            imrt_plan.beams.append(beam)
-        
-        # Set structures
-        imrt_plan.target_structures = data.get("target_structures", [])
-        imrt_plan.oar_structures = data.get("oar_structures", [])
-        
-        # Set optimization parameters
-        imrt_plan.optimization_parameters = data.get("optimization_parameters", {})
-        
-        # Convert fluence maps from lists back to numpy arrays
-        if "fluence_maps" in data:
-            for beam_idx_str, fluence_list in data["fluence_maps"].items():
-                beam_idx = int(beam_idx_str)
-                imrt_plan.fluence_maps[beam_idx] = np.array(fluence_list)
-        
-        # Set MLC sequences
-        imrt_plan.mlc_sequences = data.get("mlc_sequences", {})
-        
-        # Set metadata
-        imrt_plan.metadata = data.get("metadata", {})
-        
-        return imrt_plan
+        # Cập nhật mục tiêu và ràng buộc
+        if 'dose_objectives' in data:
+            for obj in data['dose_objectives']:
+                imrt.add_objective(
+                    obj.get('structure', ''),
+                    obj.get('type', ''),
+                    obj.get('dose', 0.0),
+                    obj.get('volume'),
+                    obj.get('weight', 1.0)
+                )
+                
+        if 'constraints' in data:
+            for con in data['constraints']:
+                imrt.add_constraint(
+                    con.get('structure', ''),
+                    con.get('type', ''),
+                    con.get('dose', 0.0),
+                    con.get('volume')
+                )
+                
+        # Lưu ý: fluence maps và segment info không được khôi phục từ dữ liệu
+        # vì kích thước lớn, cần tính toán lại
+                
+        return imrt
+
+
+# Đảm bảo IMRT được xuất ra đúng cách
+__all__ = ['IMRT', 'IMRTOptimizationType', 'IMRTDeliveryType']

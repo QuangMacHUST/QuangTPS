@@ -24,7 +24,7 @@ from datetime import datetime
 from quangtps.core.exceptions import ValidationError
 from quangtps.core.config import Config
 from quangtps.dicom.rt_structure import RTStructure
-from quangtps.dicom.dicom_utils import get_dicom_patient_info
+from quangtps.dicom.dicom_utils import extract_patient_info
 
 logger = logging.getLogger(__name__)
 

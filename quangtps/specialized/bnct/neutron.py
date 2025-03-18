@@ -577,3 +577,238 @@ class CyclotronSource(NeutronSource):
         
         plt.tight_layout()
         return fig
+
+class BaseNeutronModel:
+    """Lớp cơ sở cho các mô hình nguồn neutron."""
+    
+    def __init__(self):
+        """Khởi tạo mô hình neutron cơ bản."""
+        self.source = None
+        self.gamma_dose_rate = 0.0  # Gy/s
+    
+    def set_source(self, source: NeutronSource) -> None:
+        """
+        Thiết lập nguồn neutron cho mô hình.
+        
+        Parameters
+        ----------
+        source : NeutronSource
+            Nguồn neutron
+        """
+        self.source = source
+    
+    def calculate_thermal_flux(self, depth: float) -> float:
+        """
+        Tính thông lượng neutron nhiệt tại một độ sâu.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Thông lượng neutron nhiệt (n/cm²/s)
+        """
+        if not self.source:
+            return 0.0
+        
+        base_flux = self.source.get_flux_by_group(NeutronEnergyGroup.THERMAL)
+        # Mô hình suy giảm mặc định theo hàm mũ
+        return base_flux * np.exp(-0.1 * depth)
+    
+    def calculate_epithermal_flux(self, depth: float) -> float:
+        """
+        Tính thông lượng neutron trên nhiệt tại một độ sâu.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Thông lượng neutron trên nhiệt (n/cm²/s)
+        """
+        if not self.source:
+            return 0.0
+        
+        base_flux = self.source.get_flux_by_group(NeutronEnergyGroup.EPITHERMAL)
+        # Mô hình suy giảm mặc định theo hàm mũ
+        return base_flux * np.exp(-0.07 * depth)
+    
+    def calculate_fast_flux(self, depth: float) -> float:
+        """
+        Tính thông lượng neutron nhanh tại một độ sâu.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Thông lượng neutron nhanh (n/cm²/s)
+        """
+        if not self.source:
+            return 0.0
+        
+        base_flux = self.source.get_flux_by_group(NeutronEnergyGroup.FAST)
+        # Mô hình suy giảm mặc định theo hàm mũ
+        return base_flux * np.exp(-0.15 * depth)
+    
+    def calculate_gamma_dose(self, depth: float) -> float:
+        """
+        Tính liều gamma tại một độ sâu.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Liều gamma (Gy)
+        """
+        # Mô hình suy giảm mặc định theo hàm mũ
+        return self.gamma_dose_rate * np.exp(-0.05 * depth)
+
+
+class AcceleratorNeutronModel(BaseNeutronModel):
+    """Lớp mô hình neutron cho nguồn từ máy gia tốc."""
+    
+    def __init__(self):
+        """Khởi tạo mô hình neutron máy gia tốc."""
+        super().__init__()
+        self.source = AcceleratorSource()
+        self.gamma_dose_rate = 0.05  # Gy/s
+    
+    def calculate_thermal_flux(self, depth: float) -> float:
+        """
+        Tính thông lượng neutron nhiệt tại một độ sâu cho nguồn máy gia tốc.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Thông lượng neutron nhiệt (n/cm²/s)
+        """
+        if not self.source:
+            return 0.0
+        
+        base_flux = self.source.get_flux_by_group(NeutronEnergyGroup.THERMAL)
+        # Mô hình suy giảm đặc thù cho máy gia tốc
+        return base_flux * np.exp(-0.12 * depth)
+
+
+class ReactorNeutronModel(BaseNeutronModel):
+    """Lớp mô hình neutron cho nguồn từ lò phản ứng."""
+    
+    def __init__(self):
+        """Khởi tạo mô hình neutron lò phản ứng."""
+        super().__init__()
+        self.source = ReactorSource()
+        self.gamma_dose_rate = 0.1  # Gy/s
+    
+    def calculate_epithermal_flux(self, depth: float) -> float:
+        """
+        Tính thông lượng neutron trên nhiệt tại một độ sâu cho nguồn lò phản ứng.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Thông lượng neutron trên nhiệt (n/cm²/s)
+        """
+        if not self.source:
+            return 0.0
+        
+        base_flux = self.source.get_flux_by_group(NeutronEnergyGroup.EPITHERMAL)
+        # Mô hình suy giảm đặc thù cho lò phản ứng
+        return base_flux * np.exp(-0.05 * depth)
+
+
+class DDGeneratorModel(BaseNeutronModel):
+    """Lớp mô hình neutron cho nguồn phát D-D."""
+    
+    def __init__(self):
+        """Khởi tạo mô hình neutron máy phát D-D."""
+        super().__init__()
+        # Tạo một nguồn neutron tùy chỉnh phù hợp với đặc tính của máy phát D-D
+        self.source = NeutronSource(
+            source_type=NeutronSourceType.CUSTOM,
+            name="D-D Generator",
+            thermal_flux=1.0e7,     # Thông lượng thấp hơn
+            epithermal_flux=5.0e8,
+            fast_flux=1.0e9         # Thông lượng neutron nhanh cao hơn
+        )
+        self.gamma_dose_rate = 0.02  # Gy/s
+
+
+class DTGeneratorModel(BaseNeutronModel):
+    """Lớp mô hình neutron cho nguồn phát D-T."""
+    
+    def __init__(self):
+        """Khởi tạo mô hình neutron máy phát D-T."""
+        super().__init__()
+        # Tạo một nguồn neutron tùy chỉnh phù hợp với đặc tính của máy phát D-T
+        self.source = NeutronSource(
+            source_type=NeutronSourceType.CUSTOM,
+            name="D-T Generator",
+            thermal_flux=5.0e6,     # Thông lượng thấp hơn
+            epithermal_flux=2.0e8,
+            fast_flux=2.0e9         # Thông lượng neutron nhanh cao hơn nhiều
+        )
+        self.gamma_dose_rate = 0.01  # Gy/s
+        
+    def calculate_fast_flux(self, depth: float) -> float:
+        """
+        Tính thông lượng neutron nhanh tại một độ sâu cho nguồn D-T.
+        
+        Parameters
+        ----------
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
+            
+        Returns
+        -------
+        float
+            Thông lượng neutron nhanh (n/cm²/s)
+        """
+        if not self.source:
+            return 0.0
+        
+        base_flux = self.source.get_flux_by_group(NeutronEnergyGroup.FAST)
+        # Mô hình suy giảm đặc thù cho máy phát D-T (neutron 14 MeV)
+        return base_flux * np.exp(-0.1 * depth) * (1 + 0.05 * depth)  # Buildup factor
+
+
+class GenericNeutronModel(BaseNeutronModel):
+    """Lớp mô hình neutron chung."""
+    
+    def __init__(self):
+        """Khởi tạo mô hình neutron chung."""
+        super().__init__()
+        self.source = NeutronSource()
+        self.gamma_dose_rate = 0.03  # Gy/s
+
+
+# Đảm bảo xuất các lớp mới
+__all__ = [
+    'NeutronSourceType', 'NeutronEnergyGroup', 'NeutronSource',
+    'ReactorSource', 'AcceleratorSource', 'CyclotronSource',
+    'NeutronInteraction', 'BaseNeutronModel', 'AcceleratorNeutronModel',
+    'ReactorNeutronModel', 'DDGeneratorModel', 'DTGeneratorModel', 'GenericNeutronModel'
+]

@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -16,12 +15,14 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from quangtps.treatment.beams.beam import Beam
 from quangtps.treatment.machine.proton import ProtonMachine
+from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.fractionation import Fractionation
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
 
 logger = logging.getLogger(__name__)
 
 
-class ProtonTherapy:
+class ProtonTherapy(BaseTreatmentTechnique):
     """Base class for proton therapy treatment planning."""
     
     def __init__(self, plan_name: str, plan_id: Optional[str] = None, technique_type: str = "Proton"):
@@ -37,20 +38,18 @@ class ProtonTherapy:
         technique_type : str, optional
             Specific type of proton therapy (e.g., "PBS", "Passive")
         """
-        self.plan_name = plan_name
-        self.plan_id = plan_id if plan_id else str(uuid.uuid4())
+        super().__init__(
+            name=plan_name,
+            technique_id=plan_id,
+            category=TechniqueCategory.PARTICLE
+        )
         
         # Basic plan attributes
         self.technique_type = technique_type
         self.description = ""
         self.status = "DRAFT"  # DRAFT, APPROVED, DELIVERED, ARCHIVED
         
-        # Treatment machine
-        self.treatment_machine: Optional[ProtonMachine] = None
-        
         # Proton-specific attributes
-        self.beams: List[Beam] = []
-        self.fractionation: Optional[Fractionation] = None
         self.robustness_settings: Dict[str, Any] = {
             "setup_uncertainty": 3.0,  # mm
             "range_uncertainty": 3.5,  # % of nominal range
@@ -66,7 +65,40 @@ class ProtonTherapy:
         self.plan_quality_metrics: Dict[str, float] = {}
         self.robustness_evaluation: Dict[str, Dict[str, float]] = {}
         
-        logger.info(f"Created new {technique_type} plan: {plan_name} (ID: {self.plan_id})")
+        logger.info(f"Created new {technique_type} plan: {plan_name} (ID: {self.technique_id})")
+    
+    def get_name(self) -> str:
+        """
+        Get the name of the technique.
+        
+        Returns
+        -------
+        str
+            The name of the technique
+        """
+        return self.name
+    
+    def get_id(self) -> str:
+        """
+        Get the unique identifier of the technique.
+        
+        Returns
+        -------
+        str
+            The technique ID
+        """
+        return self.technique_id
+    
+    def get_category(self) -> TechniqueCategory:
+        """
+        Get the category of the technique.
+        
+        Returns
+        -------
+        TechniqueCategory
+            The technique category
+        """
+        return self.category
     
     def add_beam(self, beam: Beam) -> None:
         """
@@ -79,7 +111,18 @@ class ProtonTherapy:
         """
         if beam not in self.beams:
             self.beams.append(beam)
-            logger.info(f"Added beam {beam.beam_name} to {self.technique_type} plan {self.plan_name}")
+            logger.info(f"Added beam {beam.beam_name} to {self.technique_type} plan {self.name}")
+    
+    def get_beams(self) -> List[Beam]:
+        """
+        Get the list of beams in the proton therapy plan.
+        
+        Returns
+        -------
+        List[Beam]
+            List of beams in the plan
+        """
+        return self.beams
     
     def set_fractionation(self, fractionation: Fractionation) -> None:
         """
@@ -91,42 +134,107 @@ class ProtonTherapy:
             Fractionation scheme
         """
         self.fractionation = fractionation
-        logger.info(f"Set fractionation for {self.technique_type} plan {self.plan_name}: "
+        logger.info(f"Set fractionation for {self.technique_type} plan {self.name}: "
                    f"{fractionation.num_fractions} fractions, "
                    f"{fractionation.dose_per_fraction} Gy(RBE) per fraction")
     
-    def set_treatment_machine(self, machine: ProtonMachine) -> None:
+    def set_machine(self, machine: TreatmentMachine) -> None:
         """
         Set the treatment machine for the proton therapy plan.
         
         Parameters
         ----------
-        machine : ProtonMachine
+        machine : TreatmentMachine
             Treatment machine
         """
-        self.treatment_machine = machine
-        logger.info(f"Set treatment machine for {self.technique_type} plan {self.plan_name}: {machine.name}")
+        if not isinstance(machine, ProtonMachine):
+            raise ValueError(f"Proton therapy requires a ProtonMachine, got {type(machine).__name__}")
+            
+        self.machine = machine
+        logger.info(f"Set treatment machine for {self.technique_type} plan {self.name}: {machine.name}")
     
-    def set_robustness_settings(self, setup_uncertainty: float = 3.0, range_uncertainty: float = 3.5) -> None:
+    def to_dict(self) -> Dict[str, Any]:
         """
-        Set robustness settings for plan optimization and evaluation.
+        Convert the proton therapy plan to a dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary representation of the plan
+        """
+        # Start with the base technique dictionary
+        result = super().to_dict()
+        
+        # Add proton-specific attributes
+        result.update({
+            "technique_type": self.technique_type,
+            "description": self.description,
+            "status": self.status,
+            "robustness_settings": self.robustness_settings,
+            "margin_recipe": self.margin_recipe,
+            "plan_quality_metrics": self.plan_quality_metrics,
+            "robustness_evaluation": self.robustness_evaluation
+        })
+        
+        return result
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ProtonTherapy':
+        """
+        Create a proton therapy plan from a dictionary.
         
         Parameters
         ----------
-        setup_uncertainty : float, optional
-            Setup uncertainty in mm
-        range_uncertainty : float, optional
-            Range uncertainty as percentage of nominal range
+        data : Dict[str, Any]
+            Dictionary with plan data
+            
+        Returns
+        -------
+        ProtonTherapy
+            ProtonTherapy instance
         """
-        self.robustness_settings = {
-            "setup_uncertainty": setup_uncertainty,
-            "range_uncertainty": range_uncertainty,
-            "scenarios": ["nominal", "setup_x+", "setup_x-", "setup_y+", "setup_y-", 
-                          "setup_z+", "setup_z-", "range+", "range-"]
-        }
+        plan = cls(
+            plan_name=data["name"],
+            plan_id=data["technique_id"],
+            technique_type=data.get("technique_type", "Proton")
+        )
         
-        logger.info(f"Set robustness settings for {self.technique_type} plan {self.plan_name}: "
-                   f"setup = {setup_uncertainty} mm, range = {range_uncertainty}%")
+        # Restore basic attributes
+        plan.description = data.get("description", "")
+        plan.status = data.get("status", "DRAFT")
+        
+        # Restore proton-specific attributes
+        if "robustness_settings" in data:
+            plan.robustness_settings = data["robustness_settings"]
+        
+        if "margin_recipe" in data:
+            plan.margin_recipe = data["margin_recipe"]
+        
+        if "plan_quality_metrics" in data:
+            plan.plan_quality_metrics = data["plan_quality_metrics"]
+        
+        if "robustness_evaluation" in data:
+            plan.robustness_evaluation = data["robustness_evaluation"]
+        
+        # Restore common components (machine, fractionation, beams) if present
+        if "machine" in data and data["machine"]:
+            from quangtps.treatment.machine.machine_factory import MachineFactory
+            machine_factory = MachineFactory()
+            machine = machine_factory.create_from_dict(data["machine"])
+            plan.set_machine(machine)
+        
+        if "fractionation" in data and data["fractionation"]:
+            fractionation = Fractionation.from_dict(data["fractionation"])
+            plan.set_fractionation(fractionation)
+        
+        if "beams" in data and data["beams"]:
+            from quangtps.treatment.beams.beam_factory import BeamFactory
+            beam_factory = BeamFactory()
+            for beam_data in data["beams"]:
+                beam = beam_factory.create_from_dict(beam_data)
+                plan.add_beam(beam)
+        
+        return plan
     
     def calculate_dose(self, robust: bool = True) -> Dict[str, np.ndarray]:
         """
@@ -144,7 +252,7 @@ class ProtonTherapy:
         """
         # This would implement a complex dose calculation algorithm
         # For now, we'll return a placeholder
-        logger.info(f"Calculating {'robust ' if robust else ''}dose for {self.technique_type} plan {self.plan_name}")
+        logger.info(f"Calculating {'robust ' if robust else ''}dose for {self.technique_type} plan {self.name}")
         
         result = {"nominal": np.zeros((100, 100, 100))}  # Placeholder
         
@@ -199,7 +307,7 @@ class ProtonTherapy:
             metrics["worst_case_max_dose"] = max(scenario["maximum_dose"] for scenario in robust_metrics.values())
             metrics["worst_case_min_dose"] = min(scenario["minimum_dose"] for scenario in robust_metrics.values())
         
-        logger.info(f"Evaluated {self.technique_type} plan {self.plan_name}: "
+        logger.info(f"Evaluated {self.technique_type} plan {self.name}: "
                    f"coverage={metrics['coverage']:.2f}, "
                    f"HI={metrics['homogeneity_index']:.2f}")
         
@@ -207,7 +315,7 @@ class ProtonTherapy:
     
     def __str__(self) -> str:
         """Return string representation of the proton therapy plan."""
-        return f"{self.technique_type} Plan: {self.plan_name} (ID: {self.plan_id})"
+        return f"{self.technique_type} Plan: {self.name} (ID: {self.technique_id})"
 
 
 class PencilBeamScanning(ProtonTherapy):
@@ -253,7 +361,7 @@ class PencilBeamScanning(ProtonTherapy):
             Spot spacing in mm at isocenter
         """
         self.spot_spacing = spot_spacing
-        logger.info(f"Set spot spacing for PBS plan {self.plan_name}: {spot_spacing} mm")
+        logger.info(f"Set spot spacing for PBS plan {self.name}: {spot_spacing} mm")
     
     def set_layer_spacing(self, layer_spacing: float) -> None:
         """
@@ -265,7 +373,7 @@ class PencilBeamScanning(ProtonTherapy):
             Layer spacing in mm water-equivalent pathlength
         """
         self.layer_spacing = layer_spacing
-        logger.info(f"Set layer spacing for PBS plan {self.plan_name}: {layer_spacing} mm WEL")
+        logger.info(f"Set layer spacing for PBS plan {self.name}: {layer_spacing} mm WEL")
     
     def set_scanning_pattern(self, pattern: str) -> None:
         """
@@ -286,7 +394,7 @@ class PencilBeamScanning(ProtonTherapy):
             raise ValueError(f"Scanning pattern must be one of {valid_patterns}, got {pattern}")
         
         self.scanning_pattern = pattern
-        logger.info(f"Set scanning pattern for PBS plan {self.plan_name}: {pattern}")
+        logger.info(f"Set scanning pattern for PBS plan {self.name}: {pattern}")
     
     def set_optimization_type(self, opt_type: str) -> None:
         """
@@ -307,7 +415,7 @@ class PencilBeamScanning(ProtonTherapy):
             raise ValueError(f"Optimization type must be one of {valid_types}, got {opt_type}")
         
         self.optimization_type = opt_type
-        logger.info(f"Set optimization type for PBS plan {self.plan_name}: {opt_type}")
+        logger.info(f"Set optimization type for PBS plan {self.name}: {opt_type}")
     
     def add_optimization_objective(self, structure: str, objective_type: str, dose: float, 
                                   volume: Optional[float] = None, weight: float = 1.0) -> None:
@@ -339,7 +447,7 @@ class PencilBeamScanning(ProtonTherapy):
         
         self.objectives.append(objective)
         
-        logger.info(f"Added optimization objective for PBS plan {self.plan_name}: "
+        logger.info(f"Added optimization objective for PBS plan {self.name}: "
                    f"{structure}, {objective_type}, {dose} Gy(RBE)")
     
     def generate_spot_map(self) -> Dict[str, List[Tuple[float, float, float, float]]]:
@@ -353,7 +461,7 @@ class PencilBeamScanning(ProtonTherapy):
         """
         # This would be a complex algorithm to generate spot positions, energies, and weights
         # For now, we'll generate a dummy spot map
-        logger.info(f"Generating spot map for PBS plan {self.plan_name}")
+        logger.info(f"Generating spot map for PBS plan {self.name}")
         
         for beam in self.beams:
             # Generate dummy spot map
@@ -385,7 +493,7 @@ class PencilBeamScanning(ProtonTherapy):
         This would implement an optimization algorithm to determine the optimal
         spot weights to meet the planning objectives.
         """
-        logger.info(f"Optimizing spot weights for PBS plan {self.plan_name}")
+        logger.info(f"Optimizing spot weights for PBS plan {self.name}")
         
         if not self.spot_map:
             self.generate_spot_map()
@@ -401,7 +509,7 @@ class PencilBeamScanning(ProtonTherapy):
             
             self.spot_map[beam_id] = updated_spots
         
-        logger.info(f"Completed spot weight optimization for PBS plan {self.plan_name}")
+        logger.info(f"Completed spot weight optimization for PBS plan {self.name}")
 
 
 class PassiveScattering(ProtonTherapy):
@@ -444,7 +552,7 @@ class PassiveScattering(ProtonTherapy):
             Aperture details including contour points, material, thickness, etc.
         """
         self.apertures[beam_id] = aperture_data
-        logger.info(f"Added aperture for beam {beam_id} in passive scattering plan {self.plan_name}")
+        logger.info(f"Added aperture for beam {beam_id} in passive scattering plan {self.name}")
     
     def add_range_compensator(self, beam_id: str, compensator_data: Dict[str, Any]) -> None:
         """
@@ -458,7 +566,7 @@ class PassiveScattering(ProtonTherapy):
             Compensator details including thickness map, material, etc.
         """
         self.range_compensators[beam_id] = compensator_data
-        logger.info(f"Added range compensator for beam {beam_id} in passive scattering plan {self.plan_name}")
+        logger.info(f"Added range compensator for beam {beam_id} in passive scattering plan {self.name}")
     
     def set_smear_margin(self, beam_id: str, margin: float) -> None:
         """
@@ -472,7 +580,7 @@ class PassiveScattering(ProtonTherapy):
             Smear margin in mm
         """
         self.smear_margins[beam_id] = margin
-        logger.info(f"Set smear margin for beam {beam_id} in passive scattering plan {self.plan_name}: {margin} mm")
+        logger.info(f"Set smear margin for beam {beam_id} in passive scattering plan {self.name}: {margin} mm")
     
     def set_range_modulation(self, beam_id: str, width: float, center: float) -> None:
         """
@@ -488,7 +596,7 @@ class PassiveScattering(ProtonTherapy):
             Modulation center in mm
         """
         self.range_modulation[beam_id] = (width, center)
-        logger.info(f"Set range modulation for beam {beam_id} in passive scattering plan {self.plan_name}: "
+        logger.info(f"Set range modulation for beam {beam_id} in passive scattering plan {self.name}: "
                    f"width = {width} mm, center = {center} mm")
     
     def design_range_compensator(self, beam_id: str) -> None:
@@ -500,7 +608,7 @@ class PassiveScattering(ProtonTherapy):
         beam_id : str
             ID of the beam
         """
-        logger.info(f"Designing range compensator for beam {beam_id} in passive scattering plan {self.plan_name}")
+        logger.info(f"Designing range compensator for beam {beam_id} in passive scattering plan {self.name}")
         
         # In a real implementation, this would design a range compensator
         # based on patient anatomy and beam properties
@@ -524,7 +632,7 @@ class PassiveScattering(ProtonTherapy):
         beam_id : str
             ID of the beam
         """
-        logger.info(f"Designing aperture for beam {beam_id} in passive scattering plan {self.plan_name}")
+        logger.info(f"Designing aperture for beam {beam_id} in passive scattering plan {self.name}")
         
         # In a real implementation, this would design an aperture
         # based on patient anatomy and beam properties

@@ -7,19 +7,19 @@ Module for 3D Conformal Radiation Therapy (3D-CRT) technique.
 This module provides classes and methods to define and manage 3D conformal radiation therapy plans.
 """
 
-import uuid
 import logging
-import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional
 
 from quangtps.treatment.beams.beam import Beam
 from quangtps.treatment.beams.beam_modifiers import Block, Wedge
 from quangtps.treatment.machine.linac import Linac
+from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.fractionation import Fractionation
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
 
 logger = logging.getLogger(__name__)
 
-class Conformal3DRT:
+class Conformal3DRT(BaseTreatmentTechnique):
     """
     Class representing a 3D Conformal Radiation Therapy plan.
     
@@ -28,49 +28,75 @@ class Conformal3DRT:
     healthy tissues.
     """
     
-    def __init__(self, plan_name: str, plan_id: Optional[str] = None):
+    def __init__(self, name: str, technique_id: Optional[str] = None):
         """
         Initialize a 3D-CRT plan.
         
         Parameters
         ----------
-        plan_name : str
+        name : str
             Name of the 3D-CRT plan
-        plan_id : str, optional
+        technique_id : str, optional
             Unique ID of the plan. If not provided, a new ID will be generated.
         """
-        self.plan_name = plan_name
-        self.plan_id = plan_id if plan_id else str(uuid.uuid4())
+        super().__init__(
+            name=name,
+            technique_id=technique_id,
+            category=TechniqueCategory.STANDARD
+        )
         
-        # Basic plan attributes
-        self.technique_type = "3D-CRT"
+        # 3D-CRT specific attributes
         self.description = ""
         self.status = "DRAFT"  # DRAFT, APPROVED, DELIVERED, ARCHIVED
         
-        # Treatment machine
-        self.treatment_machine: Optional[Linac] = None
-        
-        # Beams in the plan
-        self.beams: List[Beam] = []
-        
-        # Prescription
-        self.prescription_dose = 0.0  # Total dose in Gy
-        self.prescription_fractions = 0  # Number of fractions
-        self.fractionation: Optional[Fractionation] = None
-        
         # Target structures
-        self.target_structures = []  # List of ROI IDs
+        self.target_structures: List[str] = []  # List of ROI IDs
         
         # Critical structures
-        self.critical_structures = []  # List of ROI IDs
+        self.critical_structures: List[str] = []  # List of ROI IDs
         
         # Plan evaluation metrics
-        self.evaluation_metrics = {}
+        self.evaluation_metrics: Dict[str, Any] = {}
         
         # Additional information
-        self.metadata = {}
+        self.metadata: Dict[str, Any] = {}
+        
+        logger.info("Initialized 3D-CRT plan: %s (ID: %s)", name, self.technique_id)
     
-    def add_beam(self, beam: Beam):
+    def get_name(self) -> str:
+        """
+        Get the name of the technique.
+        
+        Returns
+        -------
+        str
+            The name of the technique
+        """
+        return self.name
+    
+    def get_id(self) -> str:
+        """
+        Get the unique identifier of the technique.
+        
+        Returns
+        -------
+        str
+            The technique ID
+        """
+        return self.technique_id
+    
+    def get_category(self) -> TechniqueCategory:
+        """
+        Get the category of the technique.
+        
+        Returns
+        -------
+        TechniqueCategory
+            The technique category
+        """
+        return self.category
+    
+    def add_beam(self, beam: Beam) -> None:
         """
         Add a beam to the 3D-CRT plan.
         
@@ -80,7 +106,18 @@ class Conformal3DRT:
             The beam to add to the plan
         """
         self.beams.append(beam)
-        logger.info(f"Added beam '{beam.beam_name}' to plan '{self.plan_name}'")
+        logger.info("Added beam '%s' to plan '%s'", beam.beam_name, self.name)
+    
+    def get_beams(self) -> List[Beam]:
+        """
+        Get all beams in the plan.
+        
+        Returns
+        -------
+        List[Beam]
+            List of beams in the plan
+        """
+        return self.beams
     
     def remove_beam(self, beam_id: str) -> bool:
         """
@@ -99,12 +136,25 @@ class Conformal3DRT:
         for i, beam in enumerate(self.beams):
             if beam.beam_id == beam_id:
                 self.beams.pop(i)
-                logger.info(f"Removed beam with ID '{beam_id}' from plan '{self.plan_name}'")
+                logger.info("Removed beam with ID '%s' from plan '%s'", beam_id, self.name)
                 return True
-        logger.warning(f"Beam with ID '{beam_id}' not found in plan '{self.plan_name}'")
+        logger.warning("Beam with ID '%s' not found in plan '%s'", beam_id, self.name)
         return False
     
-    def set_prescription(self, total_dose: float, num_fractions: int):
+    def set_fractionation(self, fractionation: Fractionation) -> None:
+        """
+        Set the fractionation for the 3D-CRT plan.
+        
+        Parameters
+        ----------
+        fractionation : Fractionation
+            The fractionation scheme
+        """
+        self.fractionation = fractionation
+        logger.info("Set fractionation to %s Gy in %s fractions for plan '%s'", 
+                   fractionation.total_dose, fractionation.num_fractions, self.name)
+    
+    def set_prescription(self, total_dose: float, num_fractions: int) -> None:
         """
         Set the prescription for the 3D-CRT plan.
         
@@ -115,24 +165,26 @@ class Conformal3DRT:
         num_fractions : int
             Number of fractions
         """
-        self.prescription_dose = total_dose
-        self.prescription_fractions = num_fractions
         self.fractionation = Fractionation(total_dose, num_fractions)
-        logger.info(f"Set prescription to {total_dose} Gy in {num_fractions} fractions for plan '{self.plan_name}'")
+        logger.info("Set prescription to %s Gy in %s fractions for plan '%s'", 
+                   total_dose, num_fractions, self.name)
     
-    def set_treatment_machine(self, machine: Linac):
+    def set_machine(self, machine: TreatmentMachine) -> None:
         """
         Set the treatment machine for the 3D-CRT plan.
         
         Parameters
         ----------
-        machine : Linac
+        machine : TreatmentMachine
             The treatment machine to use
         """
-        self.treatment_machine = machine
-        logger.info(f"Set treatment machine to '{machine.machine_name}' for plan '{self.plan_name}'")
+        if not isinstance(machine, Linac):
+            raise ValueError("3D-CRT requires a Linac treatment machine")
+        
+        self.machine = machine
+        logger.info("Set treatment machine to '%s' for plan '%s'", machine.name, self.name)
     
-    def add_target_structure(self, structure_id: str):
+    def add_target_structure(self, structure_id: str) -> None:
         """
         Add a target structure to the 3D-CRT plan.
         
@@ -143,9 +195,9 @@ class Conformal3DRT:
         """
         if structure_id not in self.target_structures:
             self.target_structures.append(structure_id)
-            logger.info(f"Added target structure '{structure_id}' to plan '{self.plan_name}'")
+            logger.info("Added target structure '%s' to plan '%s'", structure_id, self.name)
     
-    def add_critical_structure(self, structure_id: str):
+    def add_critical_structure(self, structure_id: str) -> None:
         """
         Add a critical structure to the 3D-CRT plan.
         
@@ -156,7 +208,7 @@ class Conformal3DRT:
         """
         if structure_id not in self.critical_structures:
             self.critical_structures.append(structure_id)
-            logger.info(f"Added critical structure '{structure_id}' to plan '{self.plan_name}'")
+            logger.info("Added critical structure '%s' to plan '%s'", structure_id, self.name)
     
     def create_conformal_block(self, beam: Beam, target_structure_id: str, margin: float = 0.5) -> Block:
         """
@@ -194,46 +246,127 @@ class Conformal3DRT:
         # Add the block to the beam
         beam.add_modifier(block)
         
-        logger.info(f"Created conformal block for beam '{beam.beam_name}' based on structure '{target_structure_id}'")
+        logger.info("Created conformal block for beam '%s' based on structure '%s'", 
+                   beam.beam_name, target_structure_id)
         return block
     
-    def calculate_beam_weights(self, method: str = "equal"):
+    def calculate_beam_weights(self, method: str = "equal") -> Dict[str, float]:
         """
         Calculate beam weights for the 3D-CRT plan.
         
         Parameters
         ----------
         method : str, optional
-            Method to use for weight calculation ("equal", "distance", or "custom")
+            Method to use for weight calculation, one of:
+            - 'equal': Equal weights to all beams
+            - 'inverse': Weights inversely proportional to path length
+            - 'custom': Custom weighting (requires additional parameters)
+            
+        Returns
+        -------
+        Dict[str, float]
+            Dictionary mapping beam IDs to weights
         """
-        if not self.beams:
-            logger.warning(f"No beams in plan '{self.plan_name}' to calculate weights for")
-            return
+        weights = {}
+        num_beams = len(self.beams)
+        
+        if num_beams == 0:
+            logger.warning("No beams in plan '%s', cannot calculate weights", self.name)
+            return weights
         
         if method == "equal":
-            # Equal weighting for all beams
-            weight = 1.0 / len(self.beams)
+            # Equal weights to all beams
+            weight = 1.0 / num_beams
             for beam in self.beams:
-                beam.weight = weight
-            logger.info(f"Applied equal weighting to all beams in plan '{self.plan_name}'")
+                weights[beam.beam_id] = weight
+                beam.set_weight(weight)
         
-        elif method == "distance":
-            # This would be a more complex algorithm based on distances in a real implementation
-            # Just use equal weighting for demonstration
-            weight = 1.0 / len(self.beams)
+        elif method == "inverse":
+            # Weights inversely proportional to path length (simplified example)
+            # In a real implementation, this would use actual path length through the patient
+            total_inverse = 0
+            beam_inverses = []
+            
+            # Calculate inverse values
             for beam in self.beams:
-                beam.weight = weight
-            logger.info(f"Applied distance-based weighting to all beams in plan '{self.plan_name}'")
-        
-        elif method == "custom":
-            # Custom weighting would be implemented here
-            logger.info(f"Custom weighting not implemented yet for plan '{self.plan_name}'")
+                # Dummy path length based on beam angle for demonstration
+                path_length = 20.0  # Default path length in cm
+                inverse = 1.0 / path_length
+                total_inverse += inverse
+                beam_inverses.append(inverse)
+            
+            # Normalize weights
+            for i, beam in enumerate(self.beams):
+                weight = beam_inverses[i] / total_inverse
+                weights[beam.beam_id] = weight
+                beam.set_weight(weight)
         
         else:
-            logger.warning(f"Unknown weighting method '{method}'. Using equal weighting.")
-            weight = 1.0 / len(self.beams)
+            logger.warning("Unsupported weight calculation method: %s", method)
+            # Default to equal weights
+            weight = 1.0 / num_beams
             for beam in self.beams:
-                beam.weight = weight
+                weights[beam.beam_id] = weight
+                beam.set_weight(weight)
+        
+        logger.info("Calculated beam weights for plan '%s' using method '%s'", self.name, method)
+        return weights
+    
+    def add_wedge(self, beam: Beam, wedge: Wedge) -> None:
+        """
+        Add a wedge to a beam in the 3D-CRT plan.
+        
+        Parameters
+        ----------
+        beam : Beam
+            The beam to add the wedge to
+        wedge : Wedge
+            The wedge to add
+        """
+        beam.add_modifier(wedge)
+        logger.info("Added wedge '%s' to beam '%s' in plan '%s'", 
+                   wedge.name, beam.beam_name, self.name)
+    
+    def optimize_beam_angles(self, num_beams: int = 3, method: str = "equiangular") -> List[float]:
+        """
+        Optimize beam angles for the 3D-CRT plan.
+        
+        Parameters
+        ----------
+        num_beams : int, optional
+            Number of beams to use
+        method : str, optional
+            Method to use for angle optimization:
+            - 'equiangular': Evenly spaced beams
+            - 'custom': Custom angle optimization (requires additional parameters)
+            
+        Returns
+        -------
+        List[float]
+            List of optimized beam angles
+        """
+        angles = []
+        
+        if method == "equiangular":
+            # Create evenly spaced beams
+            start_angle = 0
+            angle_step = 360 / num_beams
+            
+            for i in range(num_beams):
+                angle = (start_angle + i * angle_step) % 360
+                angles.append(angle)
+                
+                # Create a new beam with this angle if requested
+                beam_name = f"Beam_{i+1}"
+                beam = Beam(beam_name=beam_name)
+                beam.geometry.gantry_angle = angle
+                self.add_beam(beam)
+        
+        else:
+            logger.warning("Unsupported beam angle optimization method: %s", method)
+        
+        logger.info("Optimized beam angles for plan '%s' using method '%s'", self.name, method)
+        return angles
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -242,18 +375,18 @@ class Conformal3DRT:
         Returns
         -------
         Dict[str, Any]
-            Dictionary containing the plan information
+            Dictionary representation of the plan
         """
         return {
-            "plan_id": self.plan_id,
-            "plan_name": self.plan_name,
-            "technique_type": self.technique_type,
+            "id": self.technique_id,
+            "name": self.name,
+            "type": "3D-CRT",
+            "category": self.category.value,
             "description": self.description,
             "status": self.status,
-            "treatment_machine": self.treatment_machine.machine_id if self.treatment_machine else None,
-            "beams": [beam.beam_id for beam in self.beams],
-            "prescription_dose": self.prescription_dose,
-            "prescription_fractions": self.prescription_fractions,
+            "beams": [beam.to_dict() for beam in self.beams],
+            "fractionation": self.fractionation.to_dict() if self.fractionation else None,
+            "machine": self.machine.name if self.machine else None,
             "target_structures": self.target_structures,
             "critical_structures": self.critical_structures,
             "evaluation_metrics": self.evaluation_metrics,
@@ -261,54 +394,46 @@ class Conformal3DRT:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], beam_dict: Dict[str, Beam] = None, 
-                 machine_dict: Dict[str, Linac] = None) -> 'Conformal3DRT':
+    def from_dict(cls, data: Dict[str, Any]) -> 'Conformal3DRT':
         """
-        Create a Conformal3DRT object from a dictionary.
+        Create a 3D-CRT plan from a dictionary.
         
         Parameters
         ----------
         data : Dict[str, Any]
-            Dictionary containing the plan information
-        beam_dict : Dict[str, Beam], optional
-            Dictionary mapping beam IDs to Beam objects
-        machine_dict : Dict[str, Linac], optional
-            Dictionary mapping machine IDs to Linac objects
+            Dictionary containing plan data
             
         Returns
         -------
         Conformal3DRT
-            The created Conformal3DRT object
+            The created 3D-CRT plan
         """
-        plan = cls(
-            plan_name=data["plan_name"],
-            plan_id=data["plan_id"]
-        )
+        plan = cls(name=data["name"], technique_id=data["id"])
         
-        plan.technique_type = data["technique_type"]
-        plan.description = data["description"]
-        plan.status = data["status"]
+        plan.description = data.get("description", "")
+        plan.status = data.get("status", "DRAFT")
         
-        # Add treatment machine if available
-        if data["treatment_machine"] and machine_dict:
-            machine_id = data["treatment_machine"]
-            if machine_id in machine_dict:
-                plan.treatment_machine = machine_dict[machine_id]
+        # Load beams
+        from quangtps.treatment.beams.beam import Beam
+        for beam_data in data.get("beams", []):
+            beam = Beam.from_dict(beam_data)
+            plan.beams.append(beam)
         
-        # Add beams if available
-        if beam_dict:
-            for beam_id in data["beams"]:
-                if beam_id in beam_dict:
-                    plan.beams.append(beam_dict[beam_id])
+        # Load fractionation
+        if "fractionation" in data and data["fractionation"]:
+            from quangtps.treatment.fractionation import Fractionation
+            plan.fractionation = Fractionation.from_dict(data["fractionation"])
         
-        plan.prescription_dose = data["prescription_dose"]
-        plan.prescription_fractions = data["prescription_fractions"]
-        if plan.prescription_dose > 0 and plan.prescription_fractions > 0:
-            plan.fractionation = Fractionation(plan.prescription_dose, plan.prescription_fractions)
+        # Load structures
+        plan.target_structures = data.get("target_structures", [])
+        plan.critical_structures = data.get("critical_structures", [])
         
-        plan.target_structures = data["target_structures"]
-        plan.critical_structures = data["critical_structures"]
-        plan.evaluation_metrics = data["evaluation_metrics"]
-        plan.metadata = data["metadata"]
+        # Load other attributes
+        plan.evaluation_metrics = data.get("evaluation_metrics", {})
+        plan.metadata = data.get("metadata", {})
         
         return plan
+
+
+# Export the class
+__all__ = ['Conformal3DRT']

@@ -8,22 +8,17 @@ Module này cung cấp giao diện để xem và quản lý danh sách bệnh nh
 cùng với các kế hoạch điều trị liên quan.
 """
 
-import os
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Union
-from datetime import datetime
 
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QDate
+from PyQt5.QtCore import Qt, pyqtSignal, QDate
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTreeWidget,
     QTreeWidgetItem, QMenu, QAction, QMessageBox, QInputDialog, QLineEdit,
-    QComboBox, QHeaderView, QSizePolicy, QSplitter, QFrame, QToolButton,
-    QDialog, QDialogButtonBox, QFormLayout, QDateEdit, QTextEdit, QFileDialog
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QDateEdit, QTextEdit
 )
-from PyQt5.QtGui import QIcon, QFont, QColor, QPixmap
+from PyQt5.QtGui import QIcon, QColor
 
 from quangtps.database.patient_db import PatientDatabase
-from quangtps.planning.plan import Plan, PlanStatus
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +140,41 @@ class PatientBrowser(QWidget):
             self.patient_tree.expandAll()
             
         except Exception as e:
-            logger.error(f"Lỗi khi tải danh sách bệnh nhân: {e}")
-            QMessageBox.warning(self, "Lỗi", f"Không thể tải danh sách bệnh nhân: {e}")
+            logger.error("Lỗi khi tải danh sách bệnh nhân: %s", str(e))
+            QMessageBox.warning(self, "Lỗi", f"Không thể tải danh sách bệnh nhân: {str(e)}")
+    
+    def refresh_patients(self):
+        """
+        Làm mới danh sách bệnh nhân.
+        Phương thức này là bí danh công khai cho _load_patients.
+        """
+        self._load_patients()
+    
+    def select_patient(self, patient_id):
+        """
+        Chọn một bệnh nhân trong danh sách theo ID.
+        
+        Parameters
+        ----------
+        patient_id : str
+            ID của bệnh nhân cần chọn
+        """
+        if not patient_id:
+            return
+            
+        # Tìm bệnh nhân trong danh sách
+        for i in range(self.patient_tree.topLevelItemCount()):
+            item = self.patient_tree.topLevelItem(i)
+            item_data = item.data(0, Qt.UserRole)
+            
+            if item_data and item_data.get("type") == "patient" and item_data.get("id") == patient_id:
+                # Chọn item
+                self.patient_tree.setCurrentItem(item)
+                # Gọi phương thức xử lý sự kiện chọn
+                self._on_selection_changed()
+                return
+                
+        logger.warning("Không tìm thấy bệnh nhân có ID: %s", patient_id)
     
     def _apply_search(self):
         """Áp dụng bộ lọc tìm kiếm cho cây bệnh nhân."""
@@ -269,12 +297,15 @@ class PatientBrowser(QWidget):
                 # Làm mới danh sách
                 self._load_patients()
                 
+                # Chọn bệnh nhân mới tạo
+                self.select_patient(patient_id)
+                
             except Exception as e:
-                logger.error(f"Lỗi khi tạo bệnh nhân mới: {e}")
+                logger.error("Lỗi khi tạo bệnh nhân mới: %s", str(e))
                 QMessageBox.critical(
                     self,
                     "Lỗi",
-                    f"Không thể tạo bệnh nhân mới: {e}"
+                    f"Không thể tạo bệnh nhân mới: {str(e)}"
                 )
     
     def _edit_patient(self, patient_data):
@@ -304,11 +335,11 @@ class PatientBrowser(QWidget):
                 self._load_patients()
                 
             except Exception as e:
-                logger.error(f"Lỗi khi cập nhật bệnh nhân: {e}")
+                logger.error("Lỗi khi cập nhật bệnh nhân: %s", str(e))
                 QMessageBox.critical(
                     self,
                     "Lỗi",
-                    f"Không thể cập nhật bệnh nhân: {e}"
+                    f"Không thể cập nhật bệnh nhân: {str(e)}"
                 )
     
     def _delete_patient(self, patient_id):
@@ -336,11 +367,11 @@ class PatientBrowser(QWidget):
                 self._load_patients()
                 
             except Exception as e:
-                logger.error(f"Lỗi khi xóa bệnh nhân: {e}")
+                logger.error("Lỗi khi xóa bệnh nhân: %s", str(e))
                 QMessageBox.critical(
                     self,
                     "Lỗi",
-                    f"Không thể xóa bệnh nhân: {e}"
+                    f"Không thể xóa bệnh nhân: {str(e)}"
                 )
     
     def _create_new_plan(self, patient_id):
@@ -481,12 +512,10 @@ class PatientDialog(QDialog):
         
         if self.patient.get('birth_date'):
             try:
-                date_parts = self.patient['birth_date'].split('-')
-                if len(date_parts) == 3:
-                    year, month, day = map(int, date_parts)
-                    self.dob_field.setDate(QDate(year, month, day))
-            except:
-                pass
+                date = QDate.fromString(self.patient.get('birth_date'), "yyyy-MM-dd")
+                self.dob_field.setDate(date)
+            except (ValueError, TypeError) as e:
+                logger.warning("Không thể chuyển đổi ngày sinh: %s", str(e))
         
         gender = self.patient.get('gender', '')
         if gender:

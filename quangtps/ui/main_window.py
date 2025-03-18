@@ -16,10 +16,11 @@ from typing import Dict, List, Any, Optional
 from PyQt5.QtWidgets import (
     QMainWindow, QApplication, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QAction, QFileDialog,
-    QMessageBox, QDockWidget, QTreeView, QSplitter, QToolBar
+    QMessageBox, QDockWidget, QTreeView, QSplitter, QToolBar,
+    QStatusBar, QProgressBar
 )
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon, QFont, QPixmap
 
 from quangtps.ui.patient_tab import PatientTab
 from quangtps.ui.planning_tab import PlanningTab
@@ -132,15 +133,26 @@ class MainWindow(QMainWindow):
         self.patient_tab.patient_updated.connect(self.patient_browser.refresh_patients)
         self.patient_tab.patient_created.connect(self.patient_browser.select_patient)
         
-        self.tab_widget.addTab(self.workflow_manager, "Quy trình làm việc")
-        self.tab_widget.addTab(self.patient_tab, "Bệnh nhân")
-        self.tab_widget.addTab(self.imaging_tab, "Hình ảnh")
-        self.tab_widget.addTab(self.planning_tab, "Lập kế hoạch")
-        self.tab_widget.addTab(self.dose_tab, "Liều lượng")
-        self.tab_widget.addTab(self.plan_evaluation_tab, "Đánh giá")
-        self.tab_widget.addTab(self.treatment_tab, "Điều trị")
-        self.tab_widget.addTab(self.qa_tab, "QA")
-        self.tab_widget.addTab(self.reporting_tab, "Báo cáo")
+        # Thêm các icon cho các tab
+        workflow_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "workflow.png"))
+        patient_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "patient.png"))
+        imaging_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "imaging.png"))
+        planning_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "planning.png"))
+        dose_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "dose.png"))
+        evaluation_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "evaluation.png"))
+        treatment_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "treatment.png"))
+        qa_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "qa.png"))
+        report_icon = QIcon(os.path.join(os.path.dirname(__file__), "icons", "report.png"))
+        
+        self.tab_widget.addTab(self.workflow_manager, workflow_icon, "Quy trình làm việc")
+        self.tab_widget.addTab(self.patient_tab, patient_icon, "Bệnh nhân")
+        self.tab_widget.addTab(self.imaging_tab, imaging_icon, "Hình ảnh")
+        self.tab_widget.addTab(self.planning_tab, planning_icon, "Lập kế hoạch")
+        self.tab_widget.addTab(self.dose_tab, dose_icon, "Liều lượng")
+        self.tab_widget.addTab(self.plan_evaluation_tab, evaluation_icon, "Đánh giá")
+        self.tab_widget.addTab(self.treatment_tab, treatment_icon, "Điều trị")
+        self.tab_widget.addTab(self.qa_tab, qa_icon, "QA")
+        self.tab_widget.addTab(self.reporting_tab, report_icon, "Báo cáo")
         
         # Đặt tab quy trình làm việc làm tab mặc định
         self.tab_widget.setCurrentIndex(0)
@@ -155,52 +167,76 @@ class MainWindow(QMainWindow):
         # Khu vực trạng thái
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("Sẵn sàng")
+        
+        # Thêm thanh tiến trình vào thanh trạng thái
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedWidth(150)
+        self.progress_bar.setVisible(False)
+        self.status_bar.addPermanentWidget(self.progress_bar)
     
     def _create_menu(self):
         """Tạo menu chính."""
         # Menu File
         self.file_menu = self.menuBar().addMenu("&File")
         
-        new_patient_action = QAction("Bệnh nhân mới", self)
+        new_patient_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_patient.png")), "Bệnh nhân mới", self)
+        new_patient_action.setShortcut("Ctrl+N")
+        new_patient_action.setStatusTip("Tạo hồ sơ bệnh nhân mới")
         new_patient_action.triggered.connect(self._new_patient)
         self.file_menu.addAction(new_patient_action)
         
-        open_patient_action = QAction("Mở bệnh nhân", self)
+        open_patient_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "open_patient.png")), "Mở bệnh nhân", self)
+        open_patient_action.setShortcut("Ctrl+O")
+        open_patient_action.setStatusTip("Mở hồ sơ bệnh nhân đã có")
         open_patient_action.triggered.connect(self._open_patient)
         self.file_menu.addAction(open_patient_action)
         
         self.file_menu.addSeparator()
         
-        import_dicom_action = QAction("Nhập DICOM", self)
+        import_dicom_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "import_dicom.png")), "Nhập DICOM", self)
+        import_dicom_action.setShortcut("Ctrl+I")
+        import_dicom_action.setStatusTip("Nhập dữ liệu hình ảnh DICOM")
         import_dicom_action.triggered.connect(self._import_dicom)
         self.file_menu.addAction(import_dicom_action)
         
-        export_action = QAction("Xuất dữ liệu", self)
+        export_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "export.png")), "Xuất dữ liệu", self)
+        export_action.setShortcut("Ctrl+E")
+        export_action.setStatusTip("Xuất dữ liệu sang các định dạng khác")
         export_action.triggered.connect(self._export_data)
         self.file_menu.addAction(export_action)
         
         self.file_menu.addSeparator()
         
-        exit_action = QAction("Thoát", self)
+        exit_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "exit.png")), "Thoát", self)
+        exit_action.setShortcut("Ctrl+Q")
+        exit_action.setStatusTip("Thoát khỏi ứng dụng")
         exit_action.triggered.connect(self.close)
         self.file_menu.addAction(exit_action)
         
         # Menu Plan
         self.plan_menu = self.menuBar().addMenu("&Kế hoạch")
         
-        new_plan_action = QAction("Kế hoạch mới", self)
+        new_plan_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_plan.png")), "Kế hoạch mới", self)
+        new_plan_action.setShortcut("Ctrl+P")
+        new_plan_action.setStatusTip("Tạo kế hoạch điều trị mới")
         new_plan_action.triggered.connect(self._new_plan)
         self.plan_menu.addAction(new_plan_action)
         
-        calculate_dose_action = QAction("Tính toán liều", self)
+        calculate_dose_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "calculate_dose.png")), "Tính toán liều", self)
+        calculate_dose_action.setShortcut("Ctrl+D")
+        calculate_dose_action.setStatusTip("Tính toán phân bố liều cho kế hoạch hiện tại")
         calculate_dose_action.triggered.connect(self._calculate_dose)
         self.plan_menu.addAction(calculate_dose_action)
         
-        optimize_plan_action = QAction("Tối ưu hóa kế hoạch", self)
+        optimize_plan_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "optimize.png")), "Tối ưu hóa kế hoạch", self)
+        optimize_plan_action.setShortcut("Ctrl+T")
+        optimize_plan_action.setStatusTip("Tối ưu hóa kế hoạch đạt các ràng buộc")
         optimize_plan_action.triggered.connect(self._optimize_plan)
         self.plan_menu.addAction(optimize_plan_action)
         
-        evaluate_plan_action = QAction("Đánh giá kế hoạch", self)
+        evaluate_plan_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "evaluate.png")), "Đánh giá kế hoạch", self)
+        evaluate_plan_action.setShortcut("Ctrl+E")
+        evaluate_plan_action.setStatusTip("Đánh giá kế hoạch theo các tiêu chí lâm sàng")
         evaluate_plan_action.triggered.connect(self._evaluate_plan)
         self.plan_menu.addAction(evaluate_plan_action)
         
@@ -213,7 +249,14 @@ class MainWindow(QMainWindow):
         # Menu Help
         self.help_menu = self.menuBar().addMenu("&Trợ giúp")
         
-        about_action = QAction("Giới thiệu", self)
+        user_guide_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "help.png")), "Hướng dẫn sử dụng", self)
+        user_guide_action.setStatusTip("Xem hướng dẫn sử dụng hệ thống")
+        self.help_menu.addAction(user_guide_action)
+        
+        self.help_menu.addSeparator()
+        
+        about_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "about.png")), "Giới thiệu", self)
+        about_action.setStatusTip("Thông tin về QuangTPS")
         about_action.triggered.connect(self._show_about)
         self.help_menu.addAction(about_action)
     
@@ -224,28 +267,48 @@ class MainWindow(QMainWindow):
         self.main_toolbar.setIconSize(QSize(32, 32))
         self.addToolBar(self.main_toolbar)
         
-        # Thêm các nút
-        new_patient_action = QAction("Bệnh nhân mới", self)
+        # Thêm các nút với icon
+        new_patient_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_patient.png")), "Bệnh nhân mới", self)
         new_patient_action.triggered.connect(self._new_patient)
         self.main_toolbar.addAction(new_patient_action)
         
-        open_patient_action = QAction("Mở bệnh nhân", self)
+        open_patient_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "open_patient.png")), "Mở bệnh nhân", self)
         open_patient_action.triggered.connect(self._open_patient)
         self.main_toolbar.addAction(open_patient_action)
         
         self.main_toolbar.addSeparator()
         
-        new_plan_action = QAction("Kế hoạch mới", self)
+        new_plan_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_plan.png")), "Kế hoạch mới", self)
         new_plan_action.triggered.connect(self._new_plan)
         self.main_toolbar.addAction(new_plan_action)
         
-        calculate_dose_action = QAction("Tính toán liều", self)
+        calculate_dose_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "calculate_dose.png")), "Tính toán liều", self)
         calculate_dose_action.triggered.connect(self._calculate_dose)
         self.main_toolbar.addAction(calculate_dose_action)
         
-        optimize_plan_action = QAction("Tối ưu hóa", self)
+        optimize_plan_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "optimize.png")), "Tối ưu hóa", self)
         optimize_plan_action.triggered.connect(self._optimize_plan)
         self.main_toolbar.addAction(optimize_plan_action)
+        
+        self.main_toolbar.addSeparator()
+        
+        import_dicom_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "import_dicom.png")), "Nhập DICOM", self)
+        import_dicom_action.triggered.connect(self._import_dicom)
+        self.main_toolbar.addAction(import_dicom_action)
+        
+        # Thanh công cụ phụ - Tools
+        self.tools_toolbar = QToolBar("Công cụ phân tích")
+        self.tools_toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(Qt.TopToolBarArea, self.tools_toolbar)
+        
+        measure_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "measure.png")), "Đo khoảng cách", self)
+        self.tools_toolbar.addAction(measure_action)
+        
+        roi_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "roi.png")), "Vùng quan tâm", self)
+        self.tools_toolbar.addAction(roi_action)
+        
+        view_3d_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "3d_view.png")), "Hiển thị 3D", self)
+        self.tools_toolbar.addAction(view_3d_action)
     
     def _update_ui_state(self):
         """Cập nhật trạng thái giao diện dựa trên dữ liệu hiện tại."""
@@ -262,6 +325,14 @@ class MainWindow(QMainWindow):
         # Cập nhật trạng thái các hành động trong menu
         for action in self.plan_menu.actions():
             action.setEnabled(has_patient)
+            
+        # Hiển thị thông tin bệnh nhân hiện tại trên thanh trạng thái nếu có
+        if has_patient:
+            patient_name = self.current_patient.get('name', 'Không xác định')
+            patient_id = self.current_patient.get('id', 'Không xác định')
+            self.status_bar.showMessage(f"Bệnh nhân: {patient_name} | ID: {patient_id}")
+        else:
+            self.status_bar.showMessage("Sẵn sàng")
     
     def _new_patient(self):
         """Tạo bệnh nhân mới."""
@@ -322,10 +393,14 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         """Hiển thị thông tin giới thiệu."""
         about_text = (
+            "<div style='text-align: center;'>"
             "<h1>QuangTPS</h1>"
             "<p>Hệ thống lập kế hoạch xạ trị mã nguồn mở</p>"
             "<p>Phiên bản: 1.0.0</p>"
             "<p>Được phát triển bởi: Đại học Bách Khoa Hà Nội</p>"
+            "<p>&copy; 2025 - Tất cả các quyền được bảo lưu</p>"
+            "<p>Hệ thống này hỗ trợ các kỹ thuật xạ trị hiện đại như: IMRT, VMAT, SRS và BNCT</p>"
+            "</div>"
         )
         QMessageBox.about(self, "Giới thiệu QuangTPS", about_text)
     
@@ -342,6 +417,13 @@ class MainWindow(QMainWindow):
         # Nếu chúng ta đang chạy độc lập (không từ __main__.py)
         if QApplication.instance() is None:
             app = QApplication(sys.argv)
+            
+            # Nạp stylesheet từ file
+            style_file = os.path.join(os.path.dirname(__file__), "styles", "main_style.qss")
+            if os.path.exists(style_file):
+                with open(style_file, "r") as f:
+                    app.setStyleSheet(f.read())
+            
             self.show()
             return app.exec_()
             
@@ -360,51 +442,57 @@ def main():
     # Tạo ứng dụng
     app = QApplication(sys.argv)
     
-    # Thiết lập stylesheet (có thể thay thế bằng QSS từ file)
-    app.setStyleSheet("""
-        QMainWindow {
-            background-color: #f0f0f0;
-        }
-        
-        QTabWidget::pane {
-            border: 1px solid #cccccc;
-            background-color: white;
-        }
-        
-        QTabBar::tab {
-            background: #e0e0e0;
-            border: 1px solid #cccccc;
-            padding: 5px 10px;
-            margin-right: 2px;
-        }
-        
-        QTabBar::tab:selected {
-            background: #f0f0f0;
-            border-bottom-color: #f0f0f0;
-        }
-        
-        QPushButton {
-            background-color: #4a86e8;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 3px;
-        }
-        
-        QPushButton:hover {
-            background-color: #3a76d8;
-        }
-        
-        QPushButton:pressed {
-            background-color: #2a66c8;
-        }
-    """)
+    # Nạp stylesheet từ file
+    style_file = os.path.join(os.path.dirname(__file__), "styles", "main_style.qss")
+    if os.path.exists(style_file):
+        with open(style_file, "r") as f:
+            app.setStyleSheet(f.read())
+    else:
+        # Fallback stylesheet nếu không tìm thấy file
+        app.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f7;
+            }
+            
+            QTabWidget::pane {
+                border: 1px solid #cccccc;
+                background-color: white;
+            }
+            
+            QTabBar::tab {
+                background: #e0e0e0;
+                border: 1px solid #cccccc;
+                padding: 5px 10px;
+                margin-right: 2px;
+            }
+            
+            QTabBar::tab:selected {
+                background: #f0f0f0;
+                border-bottom-color: #f0f0f0;
+            }
+            
+            QPushButton {
+                background-color: #4a86e8;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 3px;
+            }
+            
+            QPushButton:hover {
+                background-color: #3a76d8;
+            }
+            
+            QPushButton:pressed {
+                background-color: #2a66c8;
+            }
+        """)
     
-    # Tạo cửa sổ chính và hiển thị
-    main_window = MainWindow()
-    main_window.show()
+    # Tạo và hiển thị cửa sổ chính
+    window = MainWindow()
+    window.show()
     
-    # Chạy ứng dụng
+    # Bắt đầu vòng lặp sự kiện
     return app.exec_()
 
 

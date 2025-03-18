@@ -475,8 +475,7 @@ class ImagingTab(QWidget):
         self.image_control.slice_changed.connect(self.image_widget.set_slice_index)
     
     def _on_load_dicom(self):
-        """Xử lý khi tải DICOM."""
-        # Hiển thị hộp thoại chọn thư mục
+        """Xử lý sự kiện khi người dùng muốn tải DICOM từ thư mục."""
         dicom_dir = QFileDialog.getExistingDirectory(
             self, "Chọn thư mục DICOM", QDir.homePath(),
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
@@ -487,7 +486,7 @@ class ImagingTab(QWidget):
         
         try:
             # Tải các series DICOM
-            series_list = self.dicom_loader.load_directory(dicom_dir)
+            series_list = self.dicom_loader.load_dicom_directory(dicom_dir)
             
             if not series_list:
                 QMessageBox.warning(self, "Lỗi", "Không tìm thấy dữ liệu DICOM trong thư mục đã chọn.")

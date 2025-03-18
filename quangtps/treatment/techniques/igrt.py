@@ -57,6 +57,8 @@ class IGRT:
         self.setup_tolerances = (3.0, 3.0, 3.0)  # Dung sai thiết lập (mm) cho x, y, z
         self.correction_strategy = "Online"  # Chiến lược hiệu chỉnh: Online, Offline
         self.metadata = {}
+        
+        logger.info("Initialized IGRT technique: %s (ID: %s, Type: %s)", name, self.igrt_id, image_type.value)
     
     def set_frequency(self, frequency: str):
         """
@@ -68,6 +70,7 @@ class IGRT:
             Tần suất thực hiện (ví dụ: "Daily", "Weekly", "First 3 fractions", etc.)
         """
         self.frequency = frequency
+        logger.info("Set IGRT frequency to %s for technique %s", frequency, self.name)
     
     def set_registration_method(self, method: str):
         """
@@ -79,6 +82,7 @@ class IGRT:
             Phương pháp đăng ký hình ảnh (ví dụ: "Automatic", "Manual", "Hybrid")
         """
         self.registration_method = method
+        logger.info("Set registration method to %s for IGRT technique %s", method, self.name)
     
     def set_setup_tolerances(self, x_tolerance: float, y_tolerance: float, z_tolerance: float):
         """
@@ -94,6 +98,8 @@ class IGRT:
             Dung sai theo trục z (mm)
         """
         self.setup_tolerances = (x_tolerance, y_tolerance, z_tolerance)
+        logger.info("Set setup tolerances to (%s, %s, %s) mm for IGRT technique %s", 
+                   x_tolerance, y_tolerance, z_tolerance, self.name)
     
     def set_correction_strategy(self, strategy: str):
         """
@@ -105,6 +111,7 @@ class IGRT:
             Chiến lược hiệu chỉnh (ví dụ: "Online", "Offline", "Adaptive")
         """
         self.correction_strategy = strategy
+        logger.info("Set correction strategy to %s for IGRT technique %s", strategy, self.name)
     
     def add_metadata(self, key: str, value: Any):
         """
@@ -118,6 +125,7 @@ class IGRT:
             Giá trị metadata
         """
         self.metadata[key] = value
+        logger.info("Added metadata '%s' to IGRT technique %s", key, self.name)
     
     def to_dict(self) -> Dict[str, Any]:
         """

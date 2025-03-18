@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Tuple, Optional, Union, Callable
 
 from quangtps.core.exceptions import DicomError
 from quangtps.dicom.dicom_reader import DicomReader
-from quangtps.dicom.dicom_utils import get_patient_info, get_study_info, get_series_info
+from quangtps.dicom.dicom_utils import extract_patient_info, extract_study_info, extract_series_info
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ class DicomSequenceManager:
         for patient_id, datasets in self.patient_dict.items():
             if datasets:
                 # Lấy thông tin bệnh nhân từ dataset đầu tiên
-                patient_info = get_patient_info(datasets[0])
+                patient_info = extract_patient_info(datasets[0])
                 patient_info['NumDatasets'] = len(datasets)
                 patients.append(patient_info)
         
@@ -180,14 +180,14 @@ class DicomSequenceManager:
                 # Lấy thông tin từng nghiên cứu
                 for study_uid, study_datasets in study_groups.items():
                     if study_datasets:
-                        study_info = get_study_info(study_datasets[0])
+                        study_info = extract_study_info(study_datasets[0])
                         study_info['NumDatasets'] = len(study_datasets)
                         studies.append(study_info)
         else:
             # Lấy tất cả nghiên cứu
             for study_uid, study_datasets in self.study_dict.items():
                 if study_datasets:
-                    study_info = get_study_info(study_datasets[0])
+                    study_info = extract_study_info(study_datasets[0])
                     study_info['NumDatasets'] = len(study_datasets)
                     studies.append(study_info)
         
@@ -226,14 +226,14 @@ class DicomSequenceManager:
                 # Lấy thông tin từng series
                 for series_uid, series_datasets in series_groups.items():
                     if series_datasets:
-                        series_info = get_series_info(series_datasets[0])
+                        series_info = extract_series_info(series_datasets[0])
                         series_info['NumDatasets'] = len(series_datasets)
                         series_list.append(series_info)
         else:
             # Lấy tất cả series
             for series_uid, series_datasets in self.series_dict.items():
                 if series_datasets:
-                    series_info = get_series_info(series_datasets[0])
+                    series_info = extract_series_info(series_datasets[0])
                     series_info['NumDatasets'] = len(series_datasets)
                     series_list.append(series_info)
         

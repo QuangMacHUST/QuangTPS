@@ -19,7 +19,7 @@ from quangtps.segmentation.contour.contour_editor import ContourEditor
 from quangtps.segmentation.structures.structure_set import StructureSet
 from quangtps.segmentation.structures.structure_library import StructureLibrary
 from quangtps.segmentation.structures.structure_templates import StructureTemplate
-from quangtps.segmentation.structures.structure_analysis import StructureAnalysis
+from quangtps.segmentation.structures.structure_analysis import StructureAnalyzer
 
 # Import auto-segmentation components
 from quangtps.segmentation.auto_segmentation.atlas import AtlasSegmentor
@@ -55,12 +55,12 @@ from quangtps.segmentation.auto_segmentation.level_set import (
 
 # Import manual segmentation components
 from quangtps.segmentation.manual_segmentation.drawing_tools import DrawingTool
-from quangtps.segmentation.manual_segmentation.manual_editor import ManualEditor
+from quangtps.segmentation.manual_segmentation.manual_editor import ManualSegmentationEditor
 
 # Import validation components
 from quangtps.segmentation.validation.metrics import SegmentationMetrics, calculate_comprehensive_metrics
 from quangtps.segmentation.validation.validator import SegmentationValidator
-from quangtps.segmentation.validation.refinement import ContourRefinement
+from quangtps.segmentation.validation.refinement import SegmentationRefinement
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ __all__ = [
     'StructureSet',
     'StructureLibrary',
     'StructureTemplate',
-    'StructureAnalysis',
+    'StructureAnalyzer',
     
     # Auto-segmentation components
     'AtlasSegmentor',
@@ -113,11 +113,11 @@ __all__ = [
     
     # Manual segmentation components
     'DrawingTool',
-    'ManualEditor',
+    'ManualSegmentationEditor',
     
     # Validation components
     'SegmentationMetrics',
     'calculate_comprehensive_metrics',
     'SegmentationValidator',
-    'ContourRefinement'
+    'SegmentationRefinement'
 ]

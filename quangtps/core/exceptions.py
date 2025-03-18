@@ -92,3 +92,7 @@ class AuthenticationError(QuangTPSError):
     def __init__(self, message="Authentication error"):
         super().__init__(message)
 
+class FusionError(QuangTPSError):
+    """Lỗi khi thực hiện fusion hình ảnh"""
+    def __init__(self, message="Image fusion error"):
+        super().__init__(message)

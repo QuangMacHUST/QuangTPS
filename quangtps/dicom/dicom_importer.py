@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Union, Optional, Tuple
 
 from quangtps.dicom.dicom_reader import DicomReader
-from quangtps.dicom.pacs import PACSClient
+from quangtps.dicom.pacs_client import PACSClient
 from quangtps.core.exceptions import DicomError, IOError, NetworkError, AuthenticationError
 
 logger = logging.getLogger(__name__)

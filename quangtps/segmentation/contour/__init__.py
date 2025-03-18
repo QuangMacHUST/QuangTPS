@@ -14,7 +14,7 @@ import logging
 from quangtps.segmentation.contour.contour_tools import (
     ContourType, ContourTool, BrushTool, ThresholdTool, RegionGrowingTool, WatershedTool
 )
-from quangtps.segmentation.contour.boolean_operations import BooleanOperator
+from quangtps.segmentation.contour.boolean_operations import BooleanOperation, BooleanOperations
 from quangtps.segmentation.contour.margin import MarginGenerator
 from quangtps.segmentation.contour.contour_editor import ContourEditor
 from quangtps.segmentation.contour.contour_format_converter import ContourFormatConverter
@@ -28,7 +28,8 @@ __all__ = [
     'ThresholdTool',
     'RegionGrowingTool',
     'WatershedTool',
-    'BooleanOperator',
+    'BooleanOperation',
+    'BooleanOperations',
     'MarginGenerator',
     'ContourEditor',
     'ContourFormatConverter'

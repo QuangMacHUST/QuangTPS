@@ -2,45 +2,44 @@
 # -*- coding: utf-8 -*-
 
 """
-Module cho kỹ thuật xạ trị bắt neutron boron (Boron Neutron Capture Therapy - BNCT).
+Module quản lý kỹ thuật xạ trị bắt neutron boron (BNCT - Boron Neutron Capture Therapy).
 
-Module này cung cấp các lớp và phương thức để mô phỏng và thực hiện
-kỹ thuật xạ trị BNCT, một phương pháp điều trị sử dụng phản ứng hạt nhân
-giữa boron-10 và neutron nhiệt để tạo ra các hạt alpha có khả năng phá hủy
-tế bào ung thư một cách chọn lọc.
+Module này cung cấp các lớp và phương thức để định nghĩa và quản lý các kế hoạch
+điều trị BNCT, bao gồm việc thiết lập nguồn neutron, mô hình boron, và tính toán liều sinh học.
 """
 
 import logging
 from enum import Enum
-from typing import Dict, Optional, Any, List, Union, Tuple
-import uuid
-import matplotlib.pyplot as plt
-import numpy as np
+from typing import Dict, List, Optional, Any
 
-# Import từ các module chuyên biệt
-from quangtps.specialized.bnct.neutron import (
-    NeutronSourceType, NeutronSource as SpecializedNeutronSource,
-    ReactorSource, AcceleratorSource, CyclotronSource, NeutronInteraction
-)
-from quangtps.specialized.bnct.boron import (
-    BoronCompoundType, BoronCompoundProperties, BoronDistributionModel, TwoCompartmentModel
-)
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
+from quangtps.treatment.beams.beam import Beam
+from quangtps.treatment.machine.treatment_machine import TreatmentMachine
+from quangtps.treatment.fractionation import Fractionation
+from quangtps.specialized.bnct.neutron import NeutronSourceType, BaseNeutronModel, AcceleratorNeutronModel
+from quangtps.specialized.bnct.neutron import ReactorNeutronModel, DDGeneratorModel, DTGeneratorModel, GenericNeutronModel
+from quangtps.physics.boron import BoronDistributionModel, BoronCompoundType, BPAModel, BSHModel
+from quangtps.physics.boron import BoronophenylalanineModel, GenericBoronModel
 
 logger = logging.getLogger(__name__)
 
-class BoronCompound(str, Enum):
-    """Enum đại diện cho các hợp chất boron sử dụng trong BNCT."""
-    BPA = "BPA"          # Boronophenylalanine
-    BSH = "BSH"          # Sodium borocaptate
-    CUSTOM = "CUSTOM"    # Hợp chất tùy chỉnh
 
 class NeutronSource(str, Enum):
-    """Enum đại diện cho các nguồn neutron sử dụng trong BNCT."""
-    REACTOR = "REACTOR"              # Lò phản ứng hạt nhân
-    ACCELERATOR = "ACCELERATOR"      # Máy gia tốc
-    CYCLOTRON = "CYCLOTRON"          # Cyclotron
+    """Enum đại diện cho các loại nguồn neutron."""
+    ACCELERATOR = "ACCELERATOR"  # Máy gia tốc
+    REACTOR = "REACTOR"  # Lò phản ứng
+    DD_GENERATOR = "DD_GENERATOR"  # Máy phát neutron D-D
+    DT_GENERATOR = "DT_GENERATOR"  # Máy phát neutron D-T
 
-class BNCT:
+
+class BoronCompound(str, Enum):
+    """Enum đại diện cho các loại hợp chất boron."""
+    BPA = "BPA"  # Boronophenylalanine
+    BSH = "BSH"  # Sodium borocaptate
+    BORONOPHENYLALANINE = "BORONOPHENYLALANINE"  # Boronophenylalanine (tên đầy đủ)
+
+
+class BNCT(BaseTreatmentTechnique):
     """
     Lớp đại diện cho kỹ thuật xạ trị bắt neutron boron (BNCT).
     
@@ -50,367 +49,324 @@ class BNCT:
     """
     
     def __init__(self, 
-                 bnct_id: Optional[str] = None,
                  name: str = "Default BNCT",
-                 boron_compound: BoronCompound = BoronCompound.BPA,
-                 neutron_source: NeutronSource = NeutronSource.ACCELERATOR,
+                 technique_id: Optional[str] = None,
+                 neutron_source_type: str = NeutronSource.ACCELERATOR,
+                 boron_compound_type: str = BoronCompound.BPA,
                  boron_concentration: float = 20.0):
         """
         Khởi tạo một đối tượng BNCT.
         
         Parameters
         ----------
-        bnct_id : str, optional
-            ID duy nhất cho kỹ thuật BNCT
-        name : str, optional
-            Tên mô tả cho kỹ thuật BNCT
-        boron_compound : BoronCompound, optional
+        name : str
+            Tên của lượt điều trị BNCT
+        technique_id : str, optional
+            Định danh cho lượt điều trị BNCT
+        neutron_source_type : str, optional
+            Loại nguồn neutron sử dụng
+        boron_compound_type : str, optional
             Hợp chất boron sử dụng
-        neutron_source : NeutronSource, optional
-            Nguồn neutron sử dụng
         boron_concentration : float, optional
             Nồng độ boron trong mô (ppm)
         """
-        self.bnct_id = bnct_id if bnct_id else str(uuid.uuid4())
-        self.name = name
-        self.boron_compound = boron_compound
-        self.neutron_source = neutron_source
+        super().__init__(name=name, technique_id=technique_id, category=TechniqueCategory.SPECIAL)
+        
+        # Thiết lập các tham số BNCT
+        self.neutron_source = NeutronSource(neutron_source_type)
+        self.boron_compound = BoronCompound(boron_compound_type)
         self.boron_concentration = boron_concentration
-        self.beam_parameters = {}
-        self.dose_components = {
-            "boron_dose": 0.0,
-            "gamma_dose": 0.0,
-            "fast_neutron_dose": 0.0,
-            "thermal_neutron_dose": 0.0
+        self.irradiation_time = 60.0  # Thời gian chiếu xạ mặc định (phút)
+        self.tumor_to_normal_ratio = 3.5  # Tỷ lệ nồng độ boron trong u/mô lành
+        
+        # Các thành phần liều vật lý (Gy)
+        self.physical_dose_components = {
+            "neutron_thermal": 0.0,
+            "neutron_epithermal": 0.0,
+            "neutron_fast": 0.0,
+            "gamma": 0.0,
+            "alpha": 0.0,
+            "lithium": 0.0
         }
-        self.cbr = 3.8  # Compound Biological Effectiveness (mặc định cho BPA)
         
-        # Khởi tạo các đối tượng từ module chuyên biệt
-        self._initialize_specialized_objects()
+        # Biến lưu trữ mô hình tính toán
+        self._neutron_model = None
+        self._boron_model = None
         
-    def _initialize_specialized_objects(self):
-        """Khởi tạo các đối tượng từ module chuyên biệt BNCT."""
-        # Khởi tạo mô hình phân bố boron
-        boron_type = BoronCompoundType.BPA if self.boron_compound == BoronCompound.BPA else \
-                    BoronCompoundType.BSH if self.boron_compound == BoronCompound.BSH else \
-                    BoronCompoundType.CUSTOM
-        self.boron_model = TwoCompartmentModel(compound_type=boron_type)
+        # Khởi tạo mô hình
+        self.setup_neutron_source()
+        self.setup_boron_model()
         
-        # Khởi tạo nguồn neutron dựa trên loại nguồn
-        source_type = NeutronSourceType.REACTOR if self.neutron_source == NeutronSource.REACTOR else \
-                     NeutronSourceType.ACCELERATOR if self.neutron_source == NeutronSource.ACCELERATOR else \
-                     NeutronSourceType.CYCLOTRON
-        
-        if source_type == NeutronSourceType.REACTOR:
-            self.specialized_neutron_source = ReactorSource(name=f"{self.name} - Reactor Source")
-        elif source_type == NeutronSourceType.ACCELERATOR:
-            self.specialized_neutron_source = AcceleratorSource(name=f"{self.name} - Accelerator Source")
-        else:  # CYCLOTRON
-            self.specialized_neutron_source = CyclotronSource(name=f"{self.name} - Cyclotron Source")
-        
-        # Khởi tạo mô hình tương tác neutron
-        self.neutron_interaction = NeutronInteraction()
-        
-    def set_boron_compound(self, compound: BoronCompound, concentration: float = None):
-        """
-        Thiết lập hợp chất boron sử dụng trong điều trị.
-        
-        Parameters
-        ----------
-        compound : BoronCompound
-            Hợp chất boron sử dụng
-        concentration : float, optional
-            Nồng độ boron trong mô (ppm)
-        
-        Returns
-        -------
-        self : BNCT
-            Đối tượng BNCT hiện tại
-        """
-        self.boron_compound = compound
-        
-        # Cập nhật CBR dựa trên hợp chất
-        if compound == BoronCompound.BPA:
-            self.cbr = 3.8
-        elif compound == BoronCompound.BSH:
-            self.cbr = 2.5
-        
-        if concentration is not None:
-            self.boron_concentration = concentration
-        
-        # Cập nhật mô hình boron
-        boron_type = BoronCompoundType.BPA if compound == BoronCompound.BPA else \
-                    BoronCompoundType.BSH if compound == BoronCompound.BSH else \
-                    BoronCompoundType.CUSTOM
-        self.boron_model = TwoCompartmentModel(compound_type=boron_type)
-            
-        return self
+        # Ghi log khởi tạo với định dạng lazy %
+        logger.info(
+            "Khởi tạo kế hoạch BNCT '%s' (ID: %s) với nguồn neutron %s, hợp chất boron %s, nồng độ %.2f ppm",
+            self.name, self.technique_id, neutron_source_type, boron_compound_type, boron_concentration
+        )
     
-    def set_neutron_source(self, source: NeutronSource):
+    def calculate_dose_components(self, depth: float) -> Dict[str, float]:
         """
-        Thiết lập nguồn neutron sử dụng trong điều trị.
+        Tính toán các thành phần liều tại một độ sâu cụ thể.
         
         Parameters
         ----------
-        source : NeutronSource
-            Nguồn neutron sử dụng
-        
-        Returns
-        -------
-        self : BNCT
-            Đối tượng BNCT hiện tại
-        """
-        self.neutron_source = source
-        
-        # Cập nhật nguồn neutron chuyên biệt
-        source_type = NeutronSourceType.REACTOR if source == NeutronSource.REACTOR else \
-                     NeutronSourceType.ACCELERATOR if source == NeutronSource.ACCELERATOR else \
-                     NeutronSourceType.CYCLOTRON
-        
-        if source_type == NeutronSourceType.REACTOR:
-            self.specialized_neutron_source = ReactorSource(name=f"{self.name} - Reactor Source")
-        elif source_type == NeutronSourceType.ACCELERATOR:
-            self.specialized_neutron_source = AcceleratorSource(name=f"{self.name} - Accelerator Source")
-        else:  # CYCLOTRON
-            self.specialized_neutron_source = CyclotronSource(name=f"{self.name} - Cyclotron Source")
-        
-        return self
-    
-    def set_beam_parameters(self, parameters: Dict[str, Any]):
-        """
-        Thiết lập các tham số chùm tia neutron.
-        
-        Parameters
-        ----------
-        parameters : Dict[str, Any]
-            Từ điển chứa các tham số chùm tia
-        
-        Returns
-        -------
-        self : BNCT
-            Đối tượng BNCT hiện tại
-        """
-        self.beam_parameters.update(parameters)
-        
-        # Cập nhật thông lượng neutron trong nguồn chuyên biệt nếu có
-        if "thermal_flux" in parameters and hasattr(self, "specialized_neutron_source"):
-            from quangtps.specialized.bnct.neutron import NeutronEnergyGroup
-            self.specialized_neutron_source.set_flux(NeutronEnergyGroup.THERMAL, parameters["thermal_flux"])
-        
-        if "epithermal_flux" in parameters and hasattr(self, "specialized_neutron_source"):
-            from quangtps.specialized.bnct.neutron import NeutronEnergyGroup
-            self.specialized_neutron_source.set_flux(NeutronEnergyGroup.EPITHERMAL, parameters["epithermal_flux"])
-            
-        if "fast_flux" in parameters and hasattr(self, "specialized_neutron_source"):
-            from quangtps.specialized.bnct.neutron import NeutronEnergyGroup
-            self.specialized_neutron_source.set_flux(NeutronEnergyGroup.FAST, parameters["fast_flux"])
-        
-        return self
-    
-    def calculate_dose_components(self, tumor_boron_concentration: float = None,
-                                normal_boron_concentration: float = None,
-                                time_after_injection: float = 2.0) -> Dict[str, Dict[str, float]]:
-        """
-        Tính toán các thành phần liều cho mô u và mô lành.
-        
-        Parameters
-        ----------
-        tumor_boron_concentration : float, optional
-            Nồng độ boron trong mô u (ppm)
-        normal_boron_concentration : float, optional
-            Nồng độ boron trong mô lành (ppm)
-        time_after_injection : float, optional
-            Thời gian sau khi tiêm (giờ)
-            
-        Returns
-        -------
-        Dict[str, Dict[str, float]]
-            Từ điển chứa các thành phần liều cho mô u và mô lành
-        """
-        # Sử dụng nồng độ mặc định nếu không được cung cấp
-        if tumor_boron_concentration is None:
-            if self.boron_compound == BoronCompound.BPA:
-                tumor_boron_concentration = 65.0  # ppm, giá trị điển hình cho BPA
-            elif self.boron_compound == BoronCompound.BSH:
-                tumor_boron_concentration = 50.0  # ppm, giá trị điển hình cho BSH
-            else:
-                tumor_boron_concentration = 40.0  # ppm, giá trị mặc định
-        
-        if normal_boron_concentration is None:
-            if self.boron_compound == BoronCompound.BPA:
-                normal_boron_concentration = 18.0  # ppm, giá trị điển hình cho BPA
-            elif self.boron_compound == BoronCompound.BSH:
-                normal_boron_concentration = 12.0  # ppm, giá trị điển hình cho BSH
-            else:
-                normal_boron_concentration = 10.0  # ppm, giá trị mặc định
-        
-        # Lấy thông lượng neutron từ tham số chùm tia
-        thermal_flux = self.beam_parameters.get("thermal_flux", 1.0e9)  # n/cm²/s
-        epithermal_flux = self.beam_parameters.get("epithermal_flux", 5.0e9)  # n/cm²/s
-        fast_flux = self.beam_parameters.get("fast_flux", 1.0e8)  # n/cm²/s
-        irradiation_time = self.beam_parameters.get("irradiation_time", 3600)  # seconds
-        
-        # Hệ số chuyển đổi từ thông lượng neutron sang liều
-        # Các giá trị này phụ thuộc vào nhiều yếu tố và có thể được điều chỉnh
-        boron_dose_factor = 3.8e-11  # Gy/(ppm * n/cm²)
-        gamma_dose_factor = 2.0e-13  # Gy/(n/cm²)
-        fast_neutron_dose_factor = 1.0e-12  # Gy/(n/cm²)
-        thermal_neutron_dose_factor = 5.0e-13  # Gy/(n/cm²)
-        
-        # Tính toán các thành phần liều cho mô u
-        tumor_doses = {}
-        tumor_doses["boron_dose"] = boron_dose_factor * tumor_boron_concentration * thermal_flux * irradiation_time
-        tumor_doses["gamma_dose"] = gamma_dose_factor * (thermal_flux + 0.5 * epithermal_flux) * irradiation_time
-        tumor_doses["fast_neutron_dose"] = fast_neutron_dose_factor * fast_flux * irradiation_time
-        tumor_doses["thermal_neutron_dose"] = thermal_neutron_dose_factor * thermal_flux * irradiation_time
-        
-        # Tính toán các thành phần liều cho mô lành
-        normal_doses = {}
-        normal_doses["boron_dose"] = boron_dose_factor * normal_boron_concentration * thermal_flux * irradiation_time
-        normal_doses["gamma_dose"] = gamma_dose_factor * (thermal_flux + 0.5 * epithermal_flux) * irradiation_time
-        normal_doses["fast_neutron_dose"] = fast_neutron_dose_factor * fast_flux * irradiation_time
-        normal_doses["thermal_neutron_dose"] = thermal_neutron_dose_factor * thermal_flux * irradiation_time
-        
-        return {"tumor": tumor_doses, "normal": normal_doses}
-    
-    def calculate_biologically_weighted_dose(self, dose_components: Dict[str, float]) -> Dict[str, float]:
-        """
-        Tính toán liều sinh học có trọng số từ các thành phần liều vật lý.
-        
-        Parameters
-        ----------
-        dose_components : Dict[str, float]
-            Từ điển chứa các thành phần liều vật lý (Gy)
+        depth : float
+            Độ sâu tính từ bề mặt (cm)
             
         Returns
         -------
         Dict[str, float]
-            Từ điển chứa các thành phần liều sinh học có trọng số (Gy-Eq)
+            Từ điển chứa các thành phần liều
         """
-        # Import RBEModel từ module rbe_analysis
-        from quangtps.specialized.bnct.rbe_analysis import RBEModel, RBEFactors
+        if not self._neutron_model or not self._boron_model:
+            logger.warning(
+                "Không thể tính toán liều: Chưa khởi tạo mô hình neutron hoặc boron cho kế hoạch %s",
+                self.name
+            )
+            return {k: 0.0 for k in self.physical_dose_components}
         
-        # Tạo mô hình RBE dựa trên hợp chất boron
-        compound_name = "BPA" if self.boron_compound == BoronCompound.BPA else \
-                       "BSH" if self.boron_compound == BoronCompound.BSH else \
-                       "CUSTOM"
+        # Tính toán thành phần liều neutron
+        thermal_flux = self._neutron_model.calculate_thermal_flux(depth)
+        epithermal_flux = self._neutron_model.calculate_epithermal_flux(depth)
+        fast_flux = self._neutron_model.calculate_fast_flux(depth)
         
-        # Tạo đối tượng RBEModel
-        rbe_model = RBEModel(compound_name=compound_name)
+        # Tính toán liều neutron (Gy)
+        neutron_thermal_dose = thermal_flux * 3.8e-13  # Hệ số chuyển đổi
+        neutron_epithermal_dose = epithermal_flux * 1.6e-13
+        neutron_fast_dose = fast_flux * 4.5e-13
         
-        # Tính toán liều sinh học có trọng số
-        weighted_doses = rbe_model.calculate_weighted_dose(dose_components)
+        # Tính toán liều gamma (Gy)
+        gamma_dose = self._neutron_model.calculate_gamma_dose(depth)
         
-        return weighted_doses
+        # Tính toán liều boron (Gy)
+        alpha_dose, lithium_dose = self._boron_model.calculate_boron_dose(
+            thermal_flux, self.boron_concentration, depth
+        )
+        
+        # Cập nhật thành phần liều
+        self.physical_dose_components = {
+            "neutron_thermal": neutron_thermal_dose,
+            "neutron_epithermal": neutron_epithermal_dose,
+            "neutron_fast": neutron_fast_dose,
+            "gamma": gamma_dose,
+            "alpha": alpha_dose,
+            "lithium": lithium_dose
+        }
+        
+        return self.physical_dose_components
     
-    def calculate_therapeutic_ratio(self, tumor_dose_components: Dict[str, float],
-                                  normal_dose_components: Dict[str, float]) -> float:
+    def setup_neutron_source(self) -> None:
         """
-        Tính toán tỷ lệ điều trị (liều u / liều mô lành).
+        Thiết lập mô hình tính toán cho nguồn neutron.
+        """
+        source_type = self.neutron_source
+        
+        if source_type == NeutronSource.ACCELERATOR:
+            self._neutron_model = AcceleratorNeutronModel()
+        elif source_type == NeutronSource.REACTOR:
+            self._neutron_model = ReactorNeutronModel()
+        elif source_type == NeutronSource.DD_GENERATOR:
+            self._neutron_model = DDGeneratorModel()
+        elif source_type == NeutronSource.DT_GENERATOR:
+            self._neutron_model = DTGeneratorModel()
+        else:
+            logger.error(
+                "Loại nguồn neutron không hợp lệ cho kế hoạch %s: %s",
+                self.name, source_type
+            )
+            self._neutron_model = GenericNeutronModel()  # Sử dụng mô hình mặc định
+            
+        logger.info(
+            "Đã thiết lập mô hình nguồn neutron %s cho kế hoạch BNCT '%s'",
+            source_type, self.name
+        )
+    
+    def setup_boron_model(self) -> None:
+        """
+        Thiết lập mô hình tính toán cho hợp chất boron.
+        """
+        compound_type = self.boron_compound
+        
+        if compound_type == BoronCompound.BPA:
+            self._boron_model = BPAModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)
+        elif compound_type == BoronCompound.BSH:
+            self._boron_model = BSHModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)
+        elif compound_type == BoronCompound.BORONOPHENYLALANINE:
+            self._boron_model = BoronophenylalanineModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)
+        else:
+            logger.error(
+                "Loại hợp chất boron không hợp lệ cho kế hoạch %s: %s",
+                self.name, compound_type
+            )
+            self._boron_model = GenericBoronModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)  # Sử dụng mô hình mặc định
+            
+        logger.info(
+            "Đã thiết lập mô hình hợp chất boron %s cho kế hoạch BNCT '%s' với tỷ lệ u/lành %.2f",
+            compound_type, self.name, self.tumor_to_normal_ratio
+        )
+    
+    def set_boron_concentration(self, concentration: float, tumor_to_normal_ratio: Optional[float] = None) -> None:
+        """
+        Thiết lập nồng độ boron và tỷ lệ nồng độ u/lành.
         
         Parameters
         ----------
-        tumor_dose_components : Dict[str, float]
-            Từ điển chứa các thành phần liều vật lý cho mô u (Gy)
-        normal_dose_components : Dict[str, float]
-            Từ điển chứa các thành phần liều vật lý cho mô lành (Gy)
+        concentration : float
+            Nồng độ boron trong mô u (ppm)
+        tumor_to_normal_ratio : float, optional
+            Tỷ lệ nồng độ boron trong u / mô lành
+        """
+        if concentration <= 0:
+            logger.warning(
+                "Nồng độ boron không hợp lệ (%.2f ppm), sử dụng giá trị mặc định 20.0 ppm cho kế hoạch %s",
+                concentration, self.name
+            )
+            concentration = 20.0
             
-        Returns
-        -------
-        float
-            Tỷ lệ điều trị (liều sinh học có trọng số cho u / liều sinh học có trọng số cho mô lành)
-        """
-        # Import RBEModel từ module rbe_analysis
-        from quangtps.specialized.bnct.rbe_analysis import RBEModel
+        self.boron_concentration = concentration
         
-        # Tạo mô hình RBE dựa trên hợp chất boron
-        compound_name = "BPA" if self.boron_compound == BoronCompound.BPA else \
-                       "BSH" if self.boron_compound == BoronCompound.BSH else \
-                       "CUSTOM"
-        
-        # Tạo đối tượng RBEModel
-        rbe_model = RBEModel(compound_name=compound_name)
-        
-        # Tính toán tỷ lệ điều trị
-        therapeutic_ratio = rbe_model.calculate_therapeutic_ratio(
-            tumor_dose_components, normal_dose_components)
-        
-        return therapeutic_ratio
+        if tumor_to_normal_ratio is not None:
+            if tumor_to_normal_ratio <= 1:
+                logger.warning(
+                    "Tỷ lệ nồng độ u/lành không hợp lệ (%.2f), sử dụng giá trị mặc định 3.5 cho kế hoạch %s",
+                    tumor_to_normal_ratio, self.name
+                )
+                tumor_to_normal_ratio = 3.5
+            
+            self.tumor_to_normal_ratio = tumor_to_normal_ratio
+            
+            # Cập nhật mô hình boron nếu đã khởi tạo
+            if self._boron_model:
+                self._boron_model.tumor_to_blood_ratio = tumor_to_normal_ratio
+                
+        logger.info(
+            "Đã thiết lập nồng độ boron %.2f ppm và tỷ lệ u/lành %.2f cho kế hoạch BNCT '%s'",
+            self.boron_concentration, self.tumor_to_normal_ratio, self.name
+        )
     
-    def plot_dose_components(self, tumor_dose_components: Dict[str, float],
-                           normal_dose_components: Dict[str, float],
-                           tumor_weighted_doses: Dict[str, float],
-                           normal_weighted_doses: Dict[str, float]) -> plt.Figure:
+    def set_irradiation_time(self, irradiation_time: float) -> None:
         """
-        Vẽ đồ thị các thành phần liều cho mô u và mô lành.
+        Thiết lập thời gian chiếu xạ.
         
         Parameters
         ----------
-        tumor_dose_components : Dict[str, float]
-            Từ điển chứa các thành phần liều vật lý cho mô u (Gy)
-        normal_dose_components : Dict[str, float]
-            Từ điển chứa các thành phần liều vật lý cho mô lành (Gy)
-        tumor_weighted_doses : Dict[str, float]
-            Từ điển chứa các thành phần liều sinh học có trọng số cho mô u (Gy-Eq)
-        normal_weighted_doses : Dict[str, float]
-            Từ điển chứa các thành phần liều sinh học có trọng số cho mô lành (Gy-Eq)
+        irradiation_time : float
+            Thời gian chiếu xạ (phút)
+        """
+        if irradiation_time <= 0:
+            logger.warning(
+                "Thời gian chiếu xạ không hợp lệ (%.2f phút), sử dụng giá trị mặc định 60.0 phút cho kế hoạch %s",
+                irradiation_time, self.name
+            )
+            irradiation_time = 60.0
             
+        self.irradiation_time = irradiation_time
+        
+        logger.info(
+            "Đã thiết lập thời gian chiếu xạ %.2f phút cho kế hoạch BNCT '%s'",
+            self.irradiation_time, self.name
+        )
+    
+    def generate_standard_beams(self) -> List[Beam]:
+        """
+        Tạo các chùm tia tiêu chuẩn cho BNCT.
+        
         Returns
         -------
-        plt.Figure
-            Đối tượng Figure chứa đồ thị các thành phần liều
+        List[Beam]
+            Danh sách các chùm tia
         """
-        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        beams = []
         
-        # Danh sách các thành phần liều
-        components = ["boron_dose", "gamma_dose", "fast_neutron_dose", "thermal_neutron_dose"]
-        component_labels = ["Boron", "Gamma", "Fast Neutron", "Thermal Neutron"]
-        colors = ["blue", "green", "red", "cyan"]
+        if not self.machine:
+            logger.warning(
+                "Chưa thiết lập máy điều trị, không thể tạo chùm tia cho kế hoạch BNCT '%s'",
+                self.name
+            )
+            return beams
         
-        # Vẽ biểu đồ cột cho liều vật lý
-        tumor_physical = [tumor_dose_components.get(comp, 0.0) for comp in components]
-        normal_physical = [normal_dose_components.get(comp, 0.0) for comp in components]
+        # Tạo chùm tia neutron chính
+        main_beam = Beam(beam_name=f"{self.name}_Main")
+        main_beam.set_energy(0)  # Neutron không có "năng lượng" theo cách thông thường
+        main_beam.geometry.gantry_angle = 0  # Thẳng góc với bệnh nhân
+        main_beam.geometry.field_size = (10, 10)  # Trường chiếu 10x10 cm
+        main_beam.metadata = {
+            "neutron_source": self.neutron_source,
+            "boron_compound": self.boron_compound,
+            "boron_concentration": self.boron_concentration,
+            "irradiation_time": self.irradiation_time
+        }
+        beams.append(main_beam)
         
-        x = np.arange(len(components))
-        width = 0.35
+        # Tùy thuộc vào vị trí khối u, có thể cần các chùm tia bổ sung
+        if self.machine.has_capability("multi_field"):
+            # Thêm chùm tia bổ sung nếu cần
+            additional_beam = Beam(beam_name=f"{self.name}_Additional")
+            additional_beam.set_energy(0)
+            additional_beam.geometry.gantry_angle = 90  # Chùm tia bên
+            additional_beam.geometry.field_size = (8, 8)
+            additional_beam.metadata = main_beam.metadata.copy()
+            beams.append(additional_beam)
         
-        axes[0, 0].bar(x - width/2, tumor_physical, width, label="Tumor", color=colors)
-        axes[0, 0].bar(x + width/2, normal_physical, width, label="Normal Tissue", color=colors, alpha=0.5)
-        axes[0, 0].set_title("Physical Dose Components")
-        axes[0, 0].set_ylabel("Dose (Gy)")
-        axes[0, 0].set_xticks(x)
-        axes[0, 0].set_xticklabels(component_labels)
-        axes[0, 0].legend()
+        # Thêm chùm tia vào kế hoạch
+        for beam in beams:
+            self.add_beam(beam)
+            
+        logger.info(
+            "Đã tạo %d chùm tia tiêu chuẩn cho kế hoạch BNCT '%s'",
+            len(beams), self.name
+        )
+            
+        return beams
+    
+    def set_machine(self, machine: TreatmentMachine) -> None:
+        """
+        Thiết lập máy điều trị cho BNCT.
         
-        # Vẽ biểu đồ cột cho liều sinh học có trọng số
-        weighted_components = ["weighted_boron_dose", "weighted_gamma_dose", 
-                             "weighted_fast_neutron_dose", "weighted_thermal_neutron_dose"]
-        
-        tumor_weighted = [tumor_weighted_doses.get(comp, 0.0) for comp in weighted_components]
-        normal_weighted = [normal_weighted_doses.get(comp, 0.0) for comp in weighted_components]
-        
-        axes[0, 1].bar(x - width/2, tumor_weighted, width, label="Tumor", color=colors)
-        axes[0, 1].bar(x + width/2, normal_weighted, width, label="Normal Tissue", color=colors, alpha=0.5)
-        axes[0, 1].set_title("Biologically Weighted Dose Components")
-        axes[0, 1].set_ylabel("Dose (Gy-Eq)")
-        axes[0, 1].set_xticks(x)
-        axes[0, 1].set_xticklabels(component_labels)
-        axes[0, 1].legend()
-        
-        # Vẽ biểu đồ tròn cho tỷ lệ các thành phần liều vật lý
-        axes[1, 0].pie(tumor_physical, labels=component_labels, colors=colors, autopct="%1.1f%%",
-                      startangle=90)
-        axes[1, 0].set_title("Tumor Physical Dose Distribution")
-        
-        # Vẽ biểu đồ tròn cho tỷ lệ các thành phần liều sinh học có trọng số
-        axes[1, 1].pie(tumor_weighted, labels=component_labels, colors=colors, autopct="%1.1f%%",
-                      startangle=90)
-        axes[1, 1].set_title("Tumor Biologically Weighted Dose Distribution")
-        
-        plt.tight_layout()
-        
-        return fig
+        Parameters
+        ----------
+        machine : TreatmentMachine
+            Máy điều trị
+        """
+        self.machine = machine
+        logger.info("Đã thiết lập máy điều trị %s cho kế hoạch BNCT %s", machine.name, self.name)
 
+    def set_fractionation(self, fractionation: Fractionation) -> None:
+        """
+        Thiết lập phân liều cho kế hoạch BNCT.
+        
+        Parameters
+        ----------
+        fractionation : Fractionation
+            Phương thức phân liều
+        """
+        self.fractionation = fractionation
+        logger.info("Đã thiết lập phân liều cho kế hoạch BNCT %s: %d phân liều, %.2f Gy mỗi phân liều", 
+                   self.name, fractionation.num_fractions, fractionation.dose_per_fraction)
+
+    def add_beam(self, beam: Beam) -> None:
+        """
+        Thêm một chùm tia vào kế hoạch BNCT.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Chùm tia cần thêm
+        """
+        if beam not in self.beams:
+            self.beams.append(beam)
+            logger.info("Đã thêm chùm tia %s vào kế hoạch BNCT %s", beam.beam_id, self.name)
+
+    def get_beams(self) -> List[Beam]:
+        """
+        Lấy danh sách tất cả các chùm tia trong kế hoạch BNCT.
+        
+        Returns
+        -------
+        List[Beam]
+            Danh sách các chùm tia
+        """
+        return self.beams
+    
     def to_dict(self) -> Dict[str, Any]:
         """
         Chuyển đổi đối tượng BNCT thành từ điển.
@@ -418,18 +374,22 @@ class BNCT:
         Returns
         -------
         Dict[str, Any]
-            Từ điển chứa thông tin của đối tượng BNCT
+            Từ điển chứa thông tin BNCT
         """
-        return {
-            "bnct_id": self.bnct_id,
-            "name": self.name,
+        data = super().to_dict()
+        
+        # Thêm các thuộc tính đặc thù của BNCT
+        bnct_specific = {
             "boron_compound": self.boron_compound,
             "neutron_source": self.neutron_source,
             "boron_concentration": self.boron_concentration,
-            "beam_parameters": self.beam_parameters,
-            "dose_components": self.dose_components,
-            "cbr": self.cbr
+            "irradiation_time": self.irradiation_time,
+            "tumor_to_normal_ratio": self.tumor_to_normal_ratio,
+            "physical_dose_components": self.physical_dose_components
         }
+        
+        data.update(bnct_specific)
+        return data
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'BNCT':
@@ -439,28 +399,37 @@ class BNCT:
         Parameters
         ----------
         data : Dict[str, Any]
-            Từ điển chứa thông tin của đối tượng BNCT
-        
+            Từ điển chứa thông tin BNCT
+            
         Returns
         -------
         BNCT
-            Đối tượng BNCT mới
+            Đối tượng BNCT
         """
-        bnct = cls(
-            bnct_id=data.get("bnct_id"),
-            name=data.get("name", "Default BNCT"),
-            boron_compound=data.get("boron_compound", BoronCompound.BPA),
-            neutron_source=data.get("neutron_source", NeutronSource.ACCELERATOR),
-            boron_concentration=data.get("boron_concentration", 20.0)
-        )
+        # Tạo đối tượng cơ sở
+        bnct = super(BNCT, cls).from_dict(data)
         
-        if "beam_parameters" in data:
-            bnct.beam_parameters = data["beam_parameters"]
-            
-        if "dose_components" in data:
-            bnct.dose_components = data["dose_components"]
-            
-        if "cbr" in data:
-            bnct.cbr = data["cbr"]
-            
+        # Thiết lập các thuộc tính đặc thù của BNCT
+        bnct.boron_compound = BoronCompound(data.get("boron_compound", BoronCompound.BPA))
+        bnct.neutron_source = NeutronSource(data.get("neutron_source", NeutronSource.ACCELERATOR))
+        bnct.boron_concentration = data.get("boron_concentration", 20.0)
+        bnct.irradiation_time = data.get("irradiation_time", 60.0)
+        bnct.tumor_to_normal_ratio = data.get("tumor_to_normal_ratio", 3.5)
+        bnct.physical_dose_components = data.get("physical_dose_components", {
+            "neutron_thermal": 0.0,
+            "neutron_epithermal": 0.0,
+            "neutron_fast": 0.0,
+            "gamma": 0.0,
+            "alpha": 0.0,
+            "lithium": 0.0
+        })
+        
+        # Khởi tạo lại các mô hình
+        bnct.setup_neutron_source()
+        bnct.setup_boron_model()
+        
         return bnct
+
+
+# Đảm bảo BNCT được xuất ra đúng cách
+__all__ = ['BNCT', 'BoronCompound', 'NeutronSource']

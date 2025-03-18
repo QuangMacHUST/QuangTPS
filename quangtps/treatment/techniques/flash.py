@@ -2,170 +2,217 @@
 # -*- coding: utf-8 -*-
 
 """
-Module cho kỹ thuật xạ trị FLASH (FLASH Radiotherapy).
+Module for FLASH Radiotherapy techniques.
 
-Module này cung cấp các lớp và phương thức để mô phỏng và thực hiện
-kỹ thuật xạ trị FLASH, một phương pháp điều trị mới sử dụng tốc độ 
-liều cực cao để giảm thiểu tác dụng phụ trên mô lành.
+This module provides classes for configuring and managing FLASH Radiotherapy,
+a novel treatment approach that uses ultra-high dose rates to reduce side effects
+on normal tissues while maintaining tumor control.
 """
 
 import logging
 from enum import Enum
 from typing import Dict, Optional, Any
-import uuid
+
+from quangtps.treatment.beams.beam import Beam
+from quangtps.treatment.fractionation import Fractionation
+from quangtps.treatment.machine.treatment_machine import TreatmentMachine
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
 
 logger = logging.getLogger(__name__)
 
 class FLASHMode(str, Enum):
-    """Enum đại diện cho các chế độ điều trị FLASH."""
-    ELECTRON = "ELECTRON"  # Điều trị FLASH với electron
-    PHOTON = "PHOTON"      # Điều trị FLASH với photon
-    PROTON = "PROTON"      # Điều trị FLASH với proton
+    """Enum representing different FLASH treatment modes."""
+    ELECTRON = "ELECTRON"  # FLASH treatment with electrons
+    PHOTON = "PHOTON"      # FLASH treatment with photons
+    PROTON = "PROTON"      # FLASH treatment with protons
 
-class FLASHRadiotherapy:
+class FLASHRadiotherapy(BaseTreatmentTechnique):
     """
-    Lớp đại diện cho kỹ thuật xạ trị FLASH.
+    Class for FLASH Radiotherapy technique.
     
-    Lớp này cung cấp các phương thức để thiết lập và mô phỏng
-    kỹ thuật xạ trị FLASH, đặc trưng bởi tốc độ liều cực cao.
+    FLASH Radiotherapy is characterized by ultra-high dose rates (>40 Gy/s),
+    which have been shown to spare normal tissues while maintaining tumor control,
+    potentially revolutionizing radiation therapy.
     """
     
     def __init__(self, 
-                 flash_id: Optional[str] = None,
                  name: str = "Default FLASH",
+                 technique_id: Optional[str] = None,
                  mode: FLASHMode = FLASHMode.ELECTRON):
         """
-        Khởi tạo một đối tượng FLASH Radiotherapy.
+        Initialize a FLASH Radiotherapy treatment.
         
         Parameters
         ----------
-        flash_id : str, optional
-            ID duy nhất cho kỹ thuật FLASH
         name : str, optional
-            Tên mô tả cho kỹ thuật FLASH
+            Name of the FLASH treatment
+        technique_id : str, optional
+            Unique ID for the FLASH treatment
         mode : FLASHMode, optional
-            Chế độ điều trị FLASH
+            Treatment mode for FLASH delivery
         """
-        self.flash_id = flash_id if flash_id else str(uuid.uuid4())
-        self.name = name
+        super().__init__(
+            name=name,
+            technique_id=technique_id,
+            category=TechniqueCategory.ADVANCED
+        )
+        
         self.mode = mode
-        self.dose_rate = 40.0  # Gy/s, tối thiểu > 40 Gy/s để đạt hiệu ứng FLASH
+        self.dose_rate = 40.0  # Gy/s, minimum >40 Gy/s to achieve FLASH effect
         self.pulse_duration = 0.1  # s
         self.time_between_pulses = 0.001  # s
-        self.total_dose = 0.0  # Tổng liều (Gy)
+        self.total_dose = 0.0  # Total dose (Gy)
         self.metadata = {}
+        
+        logger.info("Created new FLASH Radiotherapy plan: %s (ID: %s, Mode: %s)", 
+                   name, self.technique_id, mode.value)
     
-    def set_dose_rate(self, dose_rate: float):
+    def get_name(self) -> str:
         """
-        Thiết lập tốc độ liều cho FLASH.
+        Get the name of the treatment technique.
+        
+        Returns
+        -------
+        str
+            Treatment technique name
+        """
+        return self.name
+    
+    def get_id(self) -> str:
+        """
+        Get the ID of the treatment technique.
+        
+        Returns
+        -------
+        str
+            Treatment technique ID
+        """
+        return self.technique_id
+    
+    def get_category(self) -> TechniqueCategory:
+        """
+        Get the category of the treatment technique.
+        
+        Returns
+        -------
+        TechniqueCategory
+            Treatment technique category
+        """
+        return self.category
+    
+    def add_beam(self, beam: Beam) -> None:
+        """
+        Add a beam to the FLASH treatment plan.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Beam to add to the plan
+        """
+        if beam not in self.beams:
+            self.beams.append(beam)
+            logger.info("Added beam to FLASH plan: %s", beam.name)
+        else:
+            logger.warning("Beam %s already exists in FLASH plan", beam.name)
+    
+    def configure_fractionation(self, fractionation: Fractionation) -> None:
+        """
+        Configure the fractionation scheme for the FLASH treatment.
+        
+        Parameters
+        ----------
+        fractionation : Fractionation
+            Fractionation scheme to use
+        """
+        self.fractionation = fractionation
+        self.total_dose = fractionation.total_dose
+        logger.info("Configured fractionation for FLASH plan: %s", 
+                   fractionation.name)
+    
+    def set_machine(self, machine: TreatmentMachine) -> None:
+        """
+        Set the treatment machine for FLASH delivery.
+        
+        Parameters
+        ----------
+        machine : TreatmentMachine
+            Treatment machine to use for FLASH delivery
+        """
+        # Check if machine supports FLASH
+        if not hasattr(machine, 'supports_flash') or not machine.supports_flash:
+            logger.warning("Machine %s may not support FLASH dose rates", 
+                          machine.name)
+            
+        self.machine = machine
+        logger.info("Set treatment machine for FLASH plan: %s", 
+                   machine.name)
+    
+    def set_dose_rate(self, dose_rate: float) -> None:
+        """
+        Set the dose rate for FLASH delivery.
         
         Parameters
         ----------
         dose_rate : float
-            Tốc độ liều (Gy/s)
+            Dose rate in Gy/s
         """
+        if dose_rate < 40.0:
+            logger.warning("Dose rate %.2f Gy/s may be too low for FLASH effect", 
+                          dose_rate)
+        
         self.dose_rate = dose_rate
-    
-    def set_pulse_parameters(self, duration: float, time_between: float):
-        """
-        Thiết lập thông số xung.
-        
-        Parameters
-        ----------
-        duration : float
-            Thời gian xung (s)
-        time_between : float
-            Thời gian giữa các xung (s)
-        """
-        self.pulse_duration = duration
-        self.time_between_pulses = time_between
-    
-    def set_total_dose(self, dose: float):
-        """
-        Thiết lập tổng liều.
-        
-        Parameters
-        ----------
-        dose : float
-            Tổng liều (Gy)
-        """
-        self.total_dose = dose
-    
-    def add_metadata(self, key: str, value: Any):
-        """
-        Thêm metadata cho kỹ thuật FLASH.
-        
-        Parameters
-        ----------
-        key : str
-            Khóa metadata
-        value : Any
-            Giá trị metadata
-        """
-        self.metadata[key] = value
-    
-    def calculate_delivery_time(self) -> float:
-        """
-        Tính toán thởi gian điều trị.
-        
-        Returns
-        -------
-        float
-            Thời gian điều trị ước tính (s)
-        """
-        # Số lượng xung cần thiết
-        num_pulses = self.total_dose / (self.dose_rate * self.pulse_duration)
-        
-        # Thời gian điều trị = (thời gian xung + thời gian giữa các xung) * số xung
-        delivery_time = (self.pulse_duration + self.time_between_pulses) * num_pulses
-        
-        return delivery_time
+        logger.info("Set FLASH dose rate to %.2f Gy/s", dose_rate)
     
     def to_dict(self) -> Dict[str, Any]:
         """
-        Chuyển đổi đối tượng FLASH Radiotherapy thành dictionary.
+        Convert the FLASH treatment to a dictionary.
         
         Returns
         -------
         Dict[str, Any]
-            Dictionary chứa thông tin của đối tượng FLASH
+            Dictionary representation of the FLASH treatment
         """
         return {
-            "flash_id": self.flash_id,
-            "name": self.name,
-            "mode": self.mode.value,
-            "dose_rate": self.dose_rate,
-            "pulse_duration": self.pulse_duration,
-            "time_between_pulses": self.time_between_pulses,
-            "total_dose": self.total_dose,
-            "metadata": self.metadata
+            'name': self.name,
+            'id': self.technique_id,
+            'type': 'FLASH',
+            'category': self.category.value,
+            'mode': self.mode.value,
+            'dose_rate': self.dose_rate,
+            'pulse_duration': self.pulse_duration,
+            'time_between_pulses': self.time_between_pulses,
+            'total_dose': self.total_dose,
+            'metadata': self.metadata
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'FLASHRadiotherapy':
         """
-        Tạo đối tượng FLASH Radiotherapy từ dictionary.
+        Create a FLASH treatment from a dictionary.
         
         Parameters
         ----------
         data : Dict[str, Any]
-            Dictionary chứa thông tin của đối tượng FLASH
+            Dictionary containing FLASH treatment data
             
         Returns
         -------
         FLASHRadiotherapy
-            Đối tượng FLASH Radiotherapy mới
+            New FLASH treatment instance
         """
         flash = cls(
-            flash_id=data["flash_id"],
-            name=data["name"],
-            mode=FLASHMode(data["mode"])
+            name=data.get('name', 'Default FLASH'),
+            technique_id=data.get('id'),
+            mode=FLASHMode(data.get('mode', FLASHMode.ELECTRON.value))
         )
         
-        flash.dose_rate = data["dose_rate"]
-        flash.pulse_duration = data["pulse_duration"]
-        flash.time_between_pulses = data["time_between_pulses"]
-        flash.total_dose = data["total_dose"]
-        flash.metadata = data["metadata"]
+        flash.dose_rate = data.get('dose_rate', 40.0)
+        flash.pulse_duration = data.get('pulse_duration', 0.1)
+        flash.time_between_pulses = data.get('time_between_pulses', 0.001)
+        flash.total_dose = data.get('total_dose', 0.0)
+        flash.metadata = data.get('metadata', {})
         
         return flash
+
+# Ensure class is exported correctly
+__all__ = ['FLASHMode', 'FLASHRadiotherapy']

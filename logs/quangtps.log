@@ -1,0 +1,719 @@
+2025-03-17 04:39:12 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:39:12 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:39:12 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:39:13 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:39:13 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:39:13 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:39:13 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:39:13 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'mouse_moved'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 460, in _connect_signals
+    self.image_widget.mouse_moved.connect(self.contour_tool_manager.mouse_move)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'mouse_moved'
+2025-03-17 04:40:11 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:40:11 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:40:11 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:40:12 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:40:12 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:40:12 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:40:12 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:40:12 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'mouse_released'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 461, in _connect_signals
+    self.image_widget.mouse_released.connect(self.contour_tool_manager.mouse_release)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'mouse_released'. Did you mean: 'mouse_pressed'?
+2025-03-17 04:40:49 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:40:49 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:40:49 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:40:49 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:40:49 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:40:49 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:40:49 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:40:49 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'key_pressed'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 462, in _connect_signals
+    self.image_widget.key_pressed.connect(self.contour_tool_manager.key_press)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'key_pressed'
+2025-03-17 04:41:32 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:41:32 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:41:32 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:41:33 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:41:33 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:41:33 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:41:33 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:41:33 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'key_released'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 463, in _connect_signals
+    self.image_widget.key_released.connect(self.contour_tool_manager.key_release)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'key_released'. Did you mean: 'key_pressed'?
+2025-03-17 04:42:23 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:42:23 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:42:23 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:42:24 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:42:24 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:42:24 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:42:24 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:42:24 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageControlWidget' object has no attribute 'brightness_changed'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 473, in _connect_signals
+    self.image_control.brightness_changed.connect(self.image_widget.set_brightness)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageControlWidget' object has no attribute 'brightness_changed'
+2025-03-17 04:43:39 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:43:39 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:43:39 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:43:40 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:43:40 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:43:40 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:43:40 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:43:40 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'set_brightness'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 473, in _connect_signals
+    self.image_control.brightness_changed.connect(self.image_widget.set_brightness)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'set_brightness'
+2025-03-17 04:44:56 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:44:56 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:44:56 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:44:57 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:44:57 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:44:57 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:44:57 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:44:57 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageControlWidget' object has no attribute 'contrast_changed'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 474, in _connect_signals
+    self.image_control.contrast_changed.connect(self.image_widget.set_contrast)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageControlWidget' object has no attribute 'contrast_changed'
+2025-03-17 04:45:55 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:45:55 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:45:55 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:45:55 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:45:55 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:45:55 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:45:55 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:45:56 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 04:45:56 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 04:45:56 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'set_background_data'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 119, in _init_ui
+    self.plan_evaluation_tab = PlanEvaluationWidget(self)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 414, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 468, in _init_ui
+    self.dose_display = DoseDisplayWidget()
+                        ^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 240, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 252, in _init_ui
+    self._add_sample_data()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 273, in _add_sample_data
+    self.set_slice_data(10)  # Hiển thị lát cắt ở giữa
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 291, in set_slice_data
+    self.image_widget.set_background_data(anatomy_slice)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'set_background_data'. Did you mean: 'setBackgroundRole'?
+2025-03-17 04:46:38 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:46:38 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:46:38 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:46:39 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:46:39 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:46:39 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:46:39 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:46:39 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 04:46:39 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 04:46:39 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'set_dose_data'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 119, in _init_ui
+    self.plan_evaluation_tab = PlanEvaluationWidget(self)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 414, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 468, in _init_ui
+    self.dose_display = DoseDisplayWidget()
+                        ^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 240, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 252, in _init_ui
+    self._add_sample_data()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 273, in _add_sample_data
+    self.set_slice_data(10)  # Hiển thị lát cắt ở giữa
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 292, in set_slice_data
+    self.image_widget.set_dose_data(dose_slice)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'set_dose_data'. Did you mean: 'set_image_data'?
+2025-03-17 04:47:29 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:47:29 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:47:29 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:47:30 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:47:30 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:47:30 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:47:30 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:47:30 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 04:47:30 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 04:47:30 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: arguments did not match any overloaded call:
+  QColor(color: Qt.GlobalColor): argument 1 has unexpected type 'numpy.float64'
+  QColor(rgb: int): argument 1 has unexpected type 'numpy.float64'
+  QColor(rgba64: QRgba64): argument 1 has unexpected type 'numpy.float64'
+  QColor(variant: Any): too many arguments
+  QColor(): too many arguments
+  QColor(r: int, g: int, b: int, alpha: int = 255): argument 1 has unexpected type 'numpy.float64'
+  QColor(aname: Optional[str]): argument 1 has unexpected type 'numpy.float64'
+  QColor(acolor: Union[QColor, Qt.GlobalColor]): argument 1 has unexpected type 'numpy.float64'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 119, in _init_ui
+    self.plan_evaluation_tab = PlanEvaluationWidget(self)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 414, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 468, in _init_ui
+    self.dose_display = DoseDisplayWidget()
+                        ^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 240, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 252, in _init_ui
+    self._add_sample_data()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 273, in _add_sample_data
+    self.set_slice_data(10)  # Hiển thị lát cắt ở giữa
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 292, in set_slice_data
+    self.image_widget.set_dose_data(dose_slice)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_display.py", line 362, in set_dose_data
+    self._update_display()
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_display.py", line 486, in _update_display
+    color = QColor(255 * dose_value, 0, 0)  # Màu đỏ cho liều lượng
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: arguments did not match any overloaded call:
+  QColor(color: Qt.GlobalColor): argument 1 has unexpected type 'numpy.float64'
+  QColor(rgb: int): argument 1 has unexpected type 'numpy.float64'
+  QColor(rgba64: QRgba64): argument 1 has unexpected type 'numpy.float64'
+  QColor(variant: Any): too many arguments
+  QColor(): too many arguments
+  QColor(r: int, g: int, b: int, alpha: int = 255): argument 1 has unexpected type 'numpy.float64'
+  QColor(aname: Optional[str]): argument 1 has unexpected type 'numpy.float64'
+  QColor(acolor: Union[QColor, Qt.GlobalColor]): argument 1 has unexpected type 'numpy.float64'
+2025-03-17 04:48:33 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:48:33 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:48:33 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:48:33 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:48:33 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:48:33 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:48:33 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:48:33 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'set_slice_index'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 116, in _init_ui
+    self.imaging_tab = ImagingTab(self)
+                       ^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 383, in __init__
+    self._connect_signals()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 475, in _connect_signals
+    self.image_control.slice_changed.connect(self.image_widget.set_slice_index)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'set_slice_index'. Did you mean: 'set_slice_idx'?
+2025-03-17 04:49:13 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 04:49:13 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:49:13 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 04:49:14 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 04:49:14 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 04:49:14 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 04:49:14 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 04:49:14 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 04:49:14 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 04:49:14 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: arguments did not match any overloaded call:
+  drawPoint(self, p: Union[QPointF, QPoint]): argument 1 has unexpected type 'float'
+  drawPoint(self, x: int, y: int): argument 1 has unexpected type 'float'
+  drawPoint(self, p: QPoint): argument 1 has unexpected type 'float'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 119, in _init_ui
+    self.plan_evaluation_tab = PlanEvaluationWidget(self)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 414, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 468, in _init_ui
+    self.dose_display = DoseDisplayWidget()
+                        ^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 240, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 252, in _init_ui
+    self._add_sample_data()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 273, in _add_sample_data
+    self.set_slice_data(10)  # Hiển thị lát cắt ở giữa
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 292, in set_slice_data
+    self.image_widget.set_dose_data(dose_slice)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_display.py", line 373, in set_dose_data
+    self._update_display()
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_display.py", line 502, in _update_display
+    painter.drawPoint(x * self.zoom_factor + self.pan_offset[0], y * self.zoom_factor + self.pan_offset[1])
+TypeError: arguments did not match any overloaded call:
+  drawPoint(self, p: Union[QPointF, QPoint]): argument 1 has unexpected type 'float'
+  drawPoint(self, x: int, y: int): argument 1 has unexpected type 'float'
+  drawPoint(self, p: QPoint): argument 1 has unexpected type 'float'
+2025-03-17 16:58:34 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 16:58:34 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 16:58:34 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 16:58:34 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 16:58:34 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 16:58:34 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 16:58:34 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 16:58:34 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 16:58:34 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 16:58:35 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'ImageSliceWidget' object has no attribute 'update_display'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 119, in _init_ui
+    self.plan_evaluation_tab = PlanEvaluationWidget(self)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 414, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 468, in _init_ui
+    self.dose_display = DoseDisplayWidget()
+                        ^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 240, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 252, in _init_ui
+    self._add_sample_data()
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 273, in _add_sample_data
+    self.set_slice_data(10)  # Hiển thị lát cắt ở giữa
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\plan_evaluation.py", line 293, in set_slice_data
+    self.image_widget.update_display()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageSliceWidget' object has no attribute 'update_display'. Did you mean: '_update_display'?
+2025-03-17 16:59:49 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 16:59:49 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 16:59:49 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 16:59:50 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 16:59:50 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 16:59:50 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 16:59:50 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 16:59:50 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 16:59:50 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 16:59:50 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-17 16:59:50 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-17 16:59:50 [ERROR] quangtps.database.patient_db (patient_db.py:451): Lỗi khi tìm kiếm bệnh nhân: DBConnector.execute_query() got an unexpected keyword argument 'fetchall'
+2025-03-17 16:59:50 [ERROR] quangtps.ui.patient_browser (patient_browser.py:148): Lỗi khi tải danh sách bệnh nhân: Không thể tìm kiếm bệnh nhân: DBConnector.execute_query() got an unexpected keyword argument 'fetchall'
+2025-03-17 16:59:52 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'PatientBrowser' object has no attribute 'refresh_patients'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 132, in _init_ui
+    self.patient_tab.patient_updated.connect(self.patient_browser.refresh_patients)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PatientBrowser' object has no attribute 'refresh_patients'
+2025-03-17 18:39:52 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 18:39:52 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:39:52 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:39:52 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 18:39:52 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 18:39:52 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 18:39:52 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 18:39:52 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 18:39:52 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 18:39:53 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-17 18:39:53 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-17 18:39:53 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'PatientBrowser' object has no attribute 'select_patient'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 74, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 133, in _init_ui
+    self.patient_tab.patient_created.connect(self.patient_browser.select_patient)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PatientBrowser' object has no attribute 'select_patient'. Did you mean: '_delete_patient'?
+2025-03-17 18:40:33 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-17 18:40:33 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:40:33 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:40:34 [INFO] quangtps.database.db_connector (db_connector.py:52): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-17 18:40:34 [INFO] quangtps.database.db_connector (db_connector.py:175): Đã tạo cấu trúc cơ sở dữ liệu thành công
+2025-03-17 18:40:34 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-17 18:40:34 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-17 18:40:34 [INFO] quangtps.ui.planning_tab (planning_tab.py:62): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-17 18:40:34 [INFO] quangtps.ui.dose_tab (dose_tab.py:485): Khởi tạo tab liều lượng hoàn tất
+2025-03-17 18:40:34 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-17 18:40:34 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-17 18:40:34 [INFO] quangtps.ui.main_window (main_window.py:83): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-17 18:41:38 [INFO] quangtps.ui.main_window (main_window.py:300): Tối ưu hóa kế hoạch
+2025-03-17 18:41:41 [INFO] quangtps.ui.main_window (main_window.py:295): Tính toán liều
+2025-03-17 18:41:43 [INFO] quangtps.ui.main_window (main_window.py:268): Tạo bệnh nhân mới
+2025-03-17 18:41:47 [INFO] quangtps.ui.main_window (main_window.py:273): Mở bệnh nhân
+2025-03-17 18:41:59 [INFO] quangtps.ui.main_window (main_window.py:273): Mở bệnh nhân
+2025-03-17 18:42:03 [INFO] quangtps.ui.main_window (main_window.py:278): Nhập DICOM
+2025-03-17 18:42:33 [INFO] quangtps.ui.main_window (main_window.py:268): Tạo bệnh nhân mới
+2025-03-17 18:43:17 [INFO] quangtps.database.patient_db (patient_db.py:249): Đã tạo bệnh nhân mới với ID: 59450f07-bd22-4e0d-a7cb-c621cc368009
+2025-03-17 18:43:17 [ERROR] quangtps.database.patient_db (patient_db.py:289): Lỗi khi lấy thông tin bệnh nhân: DBConnector.execute_query() got an unexpected keyword argument 'fetchone'
+2025-03-17 18:43:17 [ERROR] quangtps.ui.patient_tab (patient_tab.py:264): Lỗi khi tải bệnh nhân 59450f07-bd22-4e0d-a7cb-c621cc368009: Không thể lấy thông tin bệnh nhân: DBConnector.execute_query() got an unexpected keyword argument 'fetchone'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 271, in get_patient
+    result = self.db.execute_query(query, (patient_id,), fetchone=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DBConnector.execute_query() got an unexpected keyword argument 'fetchone'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 252, in set_patient
+    patient = self.patient_db.get_patient(patient_id)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 290, in get_patient
+    raise DatabaseError(f"Không thể lấy thông tin bệnh nhân: {str(e)}")
+quangtps.core.exceptions.DatabaseError: Không thể lấy thông tin bệnh nhân: DBConnector.execute_query() got an unexpected keyword argument 'fetchone'
+2025-03-17 18:43:18 [WARNING] quangtps.ui.patient_browser (patient_browser.py:182): Không tìm thấy bệnh nhân có ID: 59450f07-bd22-4e0d-a7cb-c621cc368009
+2025-03-17 18:43:18 [INFO] quangtps.ui.patient_tab (patient_tab.py:580): Đã tạo bệnh nhân mới với ID: 59450f07-bd22-4e0d-a7cb-c621cc368009
+2025-03-17 18:43:54 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-17 18:43:54 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-17 18:44:08 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:44:08 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:44:10 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-17 18:44:10 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-17 18:44:11 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:44:11 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-17 18:44:16 [INFO] quangtps.ui.main_window (main_window.py:273): Mở bệnh nhân
+2025-03-17 18:44:21 [INFO] quangtps.ui.main_window (main_window.py:278): Nhập DICOM
+2025-03-17 18:44:33 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-17 18:44:33 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-17 18:44:39 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 3. Thiết lập kế hoạch
+2025-03-17 18:44:39 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 3. Thiết lập kế hoạch
+2025-03-17 18:44:39 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 4. Tính toán liều
+2025-03-17 18:44:39 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 4. Tính toán liều
+2025-03-17 18:44:40 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 5. Tối ưu hóa kế hoạch
+2025-03-17 18:44:40 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 5. Tối ưu hóa kế hoạch
+2025-03-17 18:44:40 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 6. Đánh giá kế hoạch
+2025-03-17 18:44:40 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 6. Đánh giá kế hoạch
+2025-03-17 18:44:40 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 7. Phê duyệt kế hoạch
+2025-03-17 18:44:40 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 7. Phê duyệt kế hoạch
+2025-03-17 18:44:41 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 8. Báo cáo
+2025-03-17 18:44:41 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 8. Báo cáo
+2025-03-17 18:44:46 [ERROR] quangtps.database.patient_db (patient_db.py:451): Lỗi khi tìm kiếm bệnh nhân: 0
+2025-03-17 18:44:46 [ERROR] quangtps.ui.patient_browser (patient_browser.py:148): Lỗi khi tải danh sách bệnh nhân: Không thể tìm kiếm bệnh nhân: 0
+2025-03-17 18:44:50 [INFO] quangtps.ui.main_window (main_window.py:300): Tối ưu hóa kế hoạch
+2025-03-18 06:05:12 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-18 06:05:12 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:05:12 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:05:13 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-18 06:05:13 [INFO] quangtps.database.db_connector (db_connector.py:191): Đã tạo các bảng cơ sở dữ liệu nếu chưa tồn tại
+2025-03-18 06:05:13 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-18 06:05:13 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-18 06:05:13 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'PlanningTab' object has no attribute '_add_arc'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 75, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 118, in _init_ui
+    self.planning_tab = PlanningTab(self)
+                        ^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 72, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 257, in _init_ui
+    self.add_arc_button.clicked.connect(self._add_arc)
+                                        ^^^^^^^^^^^^^
+AttributeError: 'PlanningTab' object has no attribute '_add_arc'
+2025-03-18 06:07:42 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-18 06:07:42 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:07:42 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:07:42 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-18 06:07:42 [INFO] quangtps.database.db_connector (db_connector.py:191): Đã tạo các bảng cơ sở dữ liệu nếu chưa tồn tại
+2025-03-18 06:07:42 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-18 06:07:42 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-18 06:07:42 [CRITICAL] __main__ (__main__.py:73): Lỗi khi khởi động ứng dụng: 'PlanningTab' object has no attribute '_run_optimization'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 69, in main
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 75, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 118, in _init_ui
+    self.planning_tab = PlanningTab(self)
+                        ^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 72, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 295, in _init_ui
+    self.run_optimization_button.clicked.connect(self._run_optimization)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PlanningTab' object has no attribute '_run_optimization'
+2025-03-18 06:15:34 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-18 06:15:34 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:15:34 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:15:35 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-18 06:15:35 [INFO] quangtps.database.db_connector (db_connector.py:191): Đã tạo các bảng cơ sở dữ liệu nếu chưa tồn tại
+2025-03-18 06:15:35 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-18 06:15:35 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-18 06:15:35 [INFO] quangtps.ui.planning_tab (planning_tab.py:75): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-18 06:15:35 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-18 06:15:35 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-18 06:15:35 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-18 06:15:35 [ERROR] quangtps.database.patient_db (patient_db.py:430): Lỗi khi lấy danh sách bệnh nhân: DBConnector.execute_query() got an unexpected keyword argument 'fetch_all'
+2025-03-18 06:15:35 [ERROR] quangtps.ui.patient_browser (patient_browser.py:143): Lỗi khi tải danh sách bệnh nhân: Không thể lấy danh sách bệnh nhân
+2025-03-18 06:15:38 [INFO] quangtps.ui.main_window (main_window.py:84): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-18 06:15:53 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-18 06:15:53 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-18 06:15:54 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 06:15:54 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:05:16 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-18 08:05:16 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:05:16 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:05:17 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-18 08:05:17 [INFO] quangtps.database.db_connector (db_connector.py:191): Đã tạo các bảng cơ sở dữ liệu nếu chưa tồn tại
+2025-03-18 08:05:17 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-18 08:05:17 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-18 08:05:17 [INFO] quangtps.ui.planning_tab (planning_tab.py:75): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-18 08:05:18 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-18 08:05:18 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-18 08:05:18 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-18 08:05:18 [INFO] quangtps.database.patient_db (patient_db.py:427): Đã lấy danh sách 0 bệnh nhân
+2025-03-18 08:05:18 [INFO] quangtps.ui.main_window (main_window.py:84): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-18 08:05:55 [ERROR] quangtps.database.db_connector (db_connector.py:255): Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+2025-03-18 08:05:55 [ERROR] quangtps.database.patient_db (patient_db.py:260): Lỗi khi tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 255, in create_patient
+    self.db.execute_insert(query, params)
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 256, in execute_insert
+    raise DatabaseError("Lỗi chèn dữ liệu: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi chèn dữ liệu: table patients has no column named created_date
+2025-03-18 08:05:55 [ERROR] quangtps.ui.patient_browser (patient_browser.py:304): Lỗi khi tạo bệnh nhân mới: Không thể tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+2025-03-18 08:06:02 [INFO] quangtps.ui.main_window (main_window.py:344): Mở bệnh nhân
+2025-03-18 08:07:00 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-18 08:07:00 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 2. Phân đoạn cấu trúc
+2025-03-18 08:07:28 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:504): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 490, in _on_load_dicom
+    series_list = self.dicom_loader.load_directory(dicom_dir)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DicomLoader' object has no attribute 'load_directory'. Did you mean: 'load_dicom_directory'?
+2025-03-18 08:07:33 [ERROR] quangtps.database.db_connector (db_connector.py:255): Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+2025-03-18 08:07:33 [ERROR] quangtps.database.patient_db (patient_db.py:260): Lỗi khi tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 255, in create_patient
+    self.db.execute_insert(query, params)
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 256, in execute_insert
+    raise DatabaseError("Lỗi chèn dữ liệu: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi chèn dữ liệu: table patients has no column named created_date
+2025-03-18 08:07:33 [ERROR] quangtps.ui.patient_tab (patient_tab.py:582): Lỗi khi tạo bệnh nhân mới: Không thể tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 255, in create_patient
+    self.db.execute_insert(query, params)
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 256, in execute_insert
+    raise DatabaseError("Lỗi chèn dữ liệu: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi chèn dữ liệu: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 561, in _create_new_patient
+    patient_id = self.patient_db.create_patient(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 261, in create_patient
+    raise DatabaseError("Không thể tạo bệnh nhân: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Không thể tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+2025-03-18 08:07:42 [ERROR] quangtps.database.db_connector (db_connector.py:255): Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+2025-03-18 08:07:42 [ERROR] quangtps.database.patient_db (patient_db.py:260): Lỗi khi tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 255, in create_patient
+    self.db.execute_insert(query, params)
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 256, in execute_insert
+    raise DatabaseError("Lỗi chèn dữ liệu: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi chèn dữ liệu: table patients has no column named created_date
+2025-03-18 08:07:42 [ERROR] quangtps.ui.patient_tab (patient_tab.py:582): Lỗi khi tạo bệnh nhân mới: Không thể tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 247, in execute_insert
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 255, in create_patient
+    self.db.execute_insert(query, params)
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 256, in execute_insert
+    raise DatabaseError("Lỗi chèn dữ liệu: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi chèn dữ liệu: table patients has no column named created_date
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 561, in _create_new_patient
+    patient_id = self.patient_db.create_patient(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 261, in create_patient
+    raise DatabaseError("Không thể tạo bệnh nhân: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Không thể tạo bệnh nhân: Lỗi chèn dữ liệu: table patients has no column named created_date
+2025-03-18 08:07:46 [INFO] quangtps.ui.main_window (main_window.py:344): Mở bệnh nhân
+2025-03-18 08:07:53 [INFO] quangtps.ui.main_window (main_window.py:339): Tạo bệnh nhân mới
+2025-03-18 08:08:02 [INFO] quangtps.ui.main_window (main_window.py:349): Nhập DICOM
+2025-03-18 08:08:09 [INFO] quangtps.database.patient_db (patient_db.py:427): Đã lấy danh sách 0 bệnh nhân
+2025-03-18 08:08:16 [INFO] quangtps.ui.main_window (main_window.py:344): Mở bệnh nhân
+2025-03-18 08:08:19 [INFO] quangtps.ui.main_window (main_window.py:339): Tạo bệnh nhân mới
+2025-03-18 08:08:21 [INFO] quangtps.ui.main_window (main_window.py:361): Tạo kế hoạch mới
+2025-03-18 08:08:30 [INFO] quangtps.ui.main_window (main_window.py:366): Tính toán liều
+2025-03-18 08:08:36 [INFO] quangtps.ui.main_window (main_window.py:371): Tối ưu hóa kế hoạch
+2025-03-18 08:08:43 [INFO] quangtps.ui.main_window (main_window.py:349): Nhập DICOM
+2025-03-18 08:09:01 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:09:01 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:09:29 [INFO] quangtps.ui.plan_evaluation (plan_evaluation.py:536): Đang tạo báo cáo đánh giá kế hoạch...
+2025-03-18 08:09:29 [INFO] quangtps.ui.plan_evaluation (plan_evaluation.py:536): Đang tạo báo cáo đánh giá kế hoạch...
+2025-03-18 08:11:28 [INFO] __main__ (__main__.py:66): Khởi động QuangTPS...
+2025-03-18 08:11:28 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:11:28 [INFO] quangtps.ui.workflow_panel (workflow_panel.py:275): Đã chuyển sang bước: 1. Nhập dữ liệu
+2025-03-18 08:11:28 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-18 08:11:28 [INFO] quangtps.database.db_connector (db_connector.py:191): Đã tạo các bảng cơ sở dữ liệu nếu chưa tồn tại
+2025-03-18 08:11:28 [INFO] quangtps.ui.patient_tab (patient_tab.py:206): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-18 08:11:28 [INFO] quangtps.ui.patient_tab (patient_tab.py:62): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-18 08:11:28 [INFO] quangtps.ui.planning_tab (planning_tab.py:75): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-18 08:11:29 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-18 08:11:29 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-18 08:11:29 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-18 08:11:29 [INFO] quangtps.database.patient_db (patient_db.py:427): Đã lấy danh sách 0 bệnh nhân
+2025-03-18 08:11:29 [INFO] quangtps.ui.main_window (main_window.py:84): Khởi tạo cửa sổ chính QuangTPS hoàn tất

@@ -17,6 +17,7 @@ from enum import Enum
 import datetime
 
 from quangtps.segmentation.structures.structure_templates import StructureTemplate
+from quangtps.segmentation.structures.structure import Structure
 
 logger = logging.getLogger(__name__)
 

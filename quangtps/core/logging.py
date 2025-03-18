@@ -3,8 +3,8 @@ Hệ thống logging cho QuangTPS.
 """
 
 import os
+import sys
 import logging
-import datetime
 from logging.handlers import RotatingFileHandler
 
 from .config import Config
@@ -43,8 +43,18 @@ def setup_logger(name="quangtps", log_file=None, level=None):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # Handler console
-    console_handler = logging.StreamHandler()
+    # Handler console với xử lý UTF-8
+    try:
+        # Trên Windows, cố gắng thiết lập console để có thể hiển thị UTF-8
+        if sys.platform == 'win32':
+            import codecs
+            sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
+            sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
+    except Exception:
+        pass  # Bỏ qua nếu không thực hiện được
+
+    # Thêm StreamHandler với xử lý Unicode tốt hơn
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
@@ -55,7 +65,8 @@ def setup_logger(name="quangtps", log_file=None, level=None):
         
         # Tạo rotating file handler để tránh file log quá lớn
         file_handler = RotatingFileHandler(
-            log_file, maxBytes=10*1024*1024, backupCount=5
+            log_file, maxBytes=10*1024*1024, backupCount=5, 
+            encoding='utf-8'  # Chỉ định encoding utf-8 cho file
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

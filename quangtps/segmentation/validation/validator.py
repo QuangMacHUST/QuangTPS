@@ -17,7 +17,7 @@ from scipy import ndimage
 import matplotlib.pyplot as plt
 
 from quangtps.core.exceptions import ValidationError
-from quangtps.segmentation.structures.structure_library import Structure
+from quangtps.segmentation.structures.structure import Structure
 from quangtps.segmentation.structures.structure_set import StructureSet
 from quangtps.segmentation.validation.metrics import (
     SegmentationMetrics, VolumeMetrics, SurfaceMetrics, calculate_comprehensive_metrics

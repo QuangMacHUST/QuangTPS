@@ -22,9 +22,9 @@ import SimpleITK as sitk
 
 from quangtps.core.exceptions import ValidationError
 from quangtps.segmentation.auto_segmentation.model_loader import ModelLoader
-from quangtps.segmentation.auto_segmentation.unet import UNet
+from quangtps.segmentation.auto_segmentation.unet import UNetModel
 from quangtps.segmentation.structures.structure_set import StructureSet
-from quangtps.segmentation.structures.structure_library import Structure
+from quangtps.segmentation.structures.structure import Structure
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,7 @@ class OARSegmentor:
             result_masks = {}
             
             with torch.no_grad():
-                if isinstance(model, UNet) or isinstance(model, nn.Module):
+                if isinstance(model, UNetModel) or isinstance(model, nn.Module):
                     # For PyTorch models
                     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                     model.to(device)

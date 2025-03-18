@@ -578,19 +578,19 @@ class TreatmentScheduler:
             True nếu lên lịch thành công, False nếu không
         """
         if not course.fractions:
-            logger.warning(f"Đợt điều trị {course.course_id} không có phân đoạn nào.")
+            logger.warning("Đợt điều trị %s không có phân đoạn nào.", course.course_id)
             return False
             
         # Kiểm tra xem đã lên lịch cho đợt điều trị này chưa
         if course.course_id in self.scheduled_courses:
-            logger.warning(f"Đợt điều trị {course.course_id} đã được lên lịch trước đó.")
+            logger.warning("Đợt điều trị %s đã được lên lịch trước đó.", course.course_id)
             return False
         
         # Lên lịch cho từng phân đoạn
         success = True
         for fraction in course.fractions:
             if not fraction.scheduled_date:
-                logger.warning(f"Phân đoạn {fraction.fraction_id} không có ngày lên lịch.")
+                logger.warning("Phân đoạn %s không có ngày lên lịch.", fraction.fraction_id)
                 success = False
                 continue
                 
@@ -601,7 +601,7 @@ class TreatmentScheduler:
             )
             
             if not available_slots:
-                logger.warning(f"Không tìm thấy khoảng thời gian trống cho phân đoạn {fraction.fraction_id} vào ngày {fraction.scheduled_date}.")
+                logger.warning("Không tìm thấy khoảng thời gian trống cho phân đoạn %s vào ngày %s.", fraction.fraction_id, fraction.scheduled_date)
                 success = False
                 continue
                 
@@ -646,7 +646,7 @@ class TreatmentScheduler:
             True nếu hủy lịch thành công, False nếu không
         """
         if course_id not in self.scheduled_courses:
-            logger.warning(f"Đợt điều trị {course_id} không tồn tại trong lịch.")
+            logger.warning("Đợt điều trị %s không tồn tại trong lịch.", course_id)
             return False
             
         course = self.scheduled_courses[course_id]
@@ -659,6 +659,8 @@ class TreatmentScheduler:
         
         # Xóa đợt điều trị khỏi danh sách đã lên lịch
         del self.scheduled_courses[course_id]
+        
+        logger.info("Đã hủy lịch cho đợt điều trị %s.", course_id)
         
         return True
     
@@ -677,6 +679,7 @@ class TreatmentScheduler:
             Danh sách các khoảng thời gian
         """
         if date not in self.time_slots:
+            logger.warning("Không có lịch cho ngày %s.", date)
             return []
             
         return self.time_slots[date]
@@ -701,6 +704,9 @@ class TreatmentScheduler:
             patient_slots = [slot for slot in slots if slot.patient_id == patient_id]
             if patient_slots:
                 result[date] = patient_slots
+        
+        if not result:
+            logger.warning("Không tìm thấy lịch điều trị cho bệnh nhân %s.", patient_id)
         
         return result
     

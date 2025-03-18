@@ -16,7 +16,7 @@ from scipy import ndimage
 import cv2
 
 from quangtps.core.exceptions import ValidationError
-from quangtps.segmentation.structures.structure_library import Structure
+from quangtps.segmentation.structures.structure import Structure
 
 logger = logging.getLogger(__name__)
 

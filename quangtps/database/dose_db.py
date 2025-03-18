@@ -64,13 +64,13 @@ class DoseDB:
             params = (dose_id, plan_id, beam_id, dimension_json, origin_json, spacing_json, 
                      dose_values, dose_grid, now, now, metadata_json)
             
-            self.db.execute_query(query, params)
-            logger.info(f"Đã tạo phân bố liều mới với ID: {dose_id}")
+            self.db.execute_insert(query, params)
+            logger.info("Đã tạo phân bố liều mới với ID: %s", dose_id)
             
             return dose_id
         except Exception as e:
-            logger.error(f"Lỗi khi tạo phân bố liều: {str(e)}")
-            raise DatabaseError(f"Không thể tạo phân bố liều: {str(e)}")
+            logger.error("Lỗi khi tạo phân bố liều: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể tạo phân bố liều: %s" % str(e)) from e
 
     def get_dose_distribution(self, dose_id):
         """
@@ -90,7 +90,7 @@ class DoseDB:
             result = self.db.execute_query(query, (dose_id,), fetchone=True)
             
             if not result:
-                logger.warning(f"Không tìm thấy phân bố liều với ID: {dose_id}")
+                logger.warning("Không tìm thấy phân bố liều với ID: %s", dose_id)
                 return None
             
             dose = {
@@ -109,8 +109,8 @@ class DoseDB:
             
             return dose
         except Exception as e:
-            logger.error(f"Lỗi khi lấy thông tin phân bố liều: {str(e)}")
-            raise DatabaseError(f"Không thể lấy thông tin phân bố liều: {str(e)}")
+            logger.error("Lỗi khi lấy thông tin phân bố liều: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể lấy thông tin phân bố liều: %s" % str(e)) from e
 
     def update_dose_distribution(self, dose_id, dimension=None, origin=None, spacing=None, 
                                dose_values=None, dose_grid=None, metadata=None):
@@ -136,7 +136,7 @@ class DoseDB:
             # Lấy thông tin hiện tại của phân bố liều
             current_dose = self.get_dose_distribution(dose_id)
             if not current_dose:
-                logger.warning(f"Không thể cập nhật phân bố liều không tồn tại: {dose_id}")
+                logger.warning("Không thể cập nhật phân bố liều không tồn tại: %s", dose_id)
                 return False
             
             # Chuẩn bị dữ liệu cập nhật
@@ -163,7 +163,7 @@ class DoseDB:
                     update_data['metadata'] = json.dumps(metadata)
             
             if not update_data:
-                logger.info(f"Không có dữ liệu cập nhật cho phân bố liều: {dose_id}")
+                logger.info("Không có dữ liệu cập nhật cho phân bố liều: %s", dose_id)
                 return True
             
             # Thêm thời gian cập nhật
@@ -179,12 +179,12 @@ class DoseDB:
             
             # Thực thi truy vấn
             self.db.execute_query(query, params)
-            logger.info(f"Đã cập nhật phân bố liều: {dose_id}")
+            logger.info("Đã cập nhật phân bố liều: %s", dose_id)
             
             return True
         except Exception as e:
-            logger.error(f"Lỗi khi cập nhật phân bố liều: {str(e)}")
-            raise DatabaseError(f"Không thể cập nhật phân bố liều: {str(e)}")
+            logger.error("Lỗi khi cập nhật phân bố liều: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể cập nhật phân bố liều: %s" % str(e)) from e
 
     def delete_dose_distribution(self, dose_id):
         """
@@ -203,7 +203,7 @@ class DoseDB:
             # Kiểm tra phân bố liều có tồn tại không
             dose = self.get_dose_distribution(dose_id)
             if not dose:
-                logger.warning(f"Không thể xóa phân bố liều không tồn tại: {dose_id}")
+                logger.warning("Không thể xóa phân bố liều không tồn tại: %s", dose_id)
                 return False
             
             # Thực hiện xóa phân bố liều và dữ liệu liên quan
@@ -212,11 +212,11 @@ class DoseDB:
                 ("DELETE FROM doses WHERE id = ?", (dose_id,))
             ])
             
-            logger.info(f"Đã xóa phân bố liều: {dose_id}")
+            logger.info("Đã xóa phân bố liều: %s", dose_id)
             return True
         except Exception as e:
-            logger.error(f"Lỗi khi xóa phân bố liều: {str(e)}")
-            raise DatabaseError(f"Không thể xóa phân bố liều: {str(e)}")
+            logger.error("Lỗi khi xóa phân bố liều: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể xóa phân bố liều: %s" % str(e)) from e
 
     def get_plan_doses(self, plan_id):
         """
@@ -254,8 +254,8 @@ class DoseDB:
             
             return doses
         except Exception as e:
-            logger.error(f"Lỗi khi lấy danh sách phân bố liều của kế hoạch: {str(e)}")
-            raise DatabaseError(f"Không thể lấy danh sách phân bố liều của kế hoạch: {str(e)}")
+            logger.error("Lỗi khi lấy danh sách phân bố liều của kế hoạch: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể lấy danh sách phân bố liều của kế hoạch: %s" % str(e)) from e
 
     def create_dvh(self, dose_id, structure_id, dvh_data, dvh_type='cumulative', binsize=0.1, metadata=None):
         """
@@ -289,13 +289,13 @@ class DoseDB:
             params = (dvh_id, dose_id, structure_id, dvh_data, dvh_type, binsize, 
                      now, now, metadata_json)
             
-            self.db.execute_query(query, params)
-            logger.info(f"Đã tạo DVH mới với ID: {dvh_id}")
+            self.db.execute_insert(query, params)
+            logger.info("Đã tạo DVH mới với ID: %s", dvh_id)
             
             return dvh_id
         except Exception as e:
-            logger.error(f"Lỗi khi tạo DVH: {str(e)}")
-            raise DatabaseError(f"Không thể tạo DVH: {str(e)}")
+            logger.error("Lỗi khi tạo DVH: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể tạo DVH: %s" % str(e)) from e
 
     def get_dvh(self, dvh_id):
         """
@@ -315,7 +315,7 @@ class DoseDB:
             result = self.db.execute_query(query, (dvh_id,), fetchone=True)
             
             if not result:
-                logger.warning(f"Không tìm thấy DVH với ID: {dvh_id}")
+                logger.warning("Không tìm thấy DVH với ID: %s", dvh_id)
                 return None
             
             dvh = {
@@ -332,8 +332,8 @@ class DoseDB:
             
             return dvh
         except Exception as e:
-            logger.error(f"Lỗi khi lấy thông tin DVH: {str(e)}")
-            raise DatabaseError(f"Không thể lấy thông tin DVH: {str(e)}")
+            logger.error("Lỗi khi lấy thông tin DVH: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể lấy thông tin DVH: %s" % str(e)) from e
 
     def get_structure_dvh(self, structure_id, dose_id=None):
         """
@@ -374,8 +374,8 @@ class DoseDB:
             
             return dvhs
         except Exception as e:
-            logger.error(f"Lỗi khi lấy DVH của cấu trúc: {str(e)}")
-            raise DatabaseError(f"Không thể lấy DVH của cấu trúc: {str(e)}")
+            logger.error("Lỗi khi lấy DVH của cấu trúc: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể lấy DVH của cấu trúc: %s" % str(e)) from e
 
     def calculate_dvh(self, dose_id, structure_id, dose_grid=None, structure_mask=None, 
                      dvh_type='cumulative', binsize=0.1):
@@ -406,13 +406,13 @@ class DoseDB:
                 # TODO: Đọc dữ liệu liều từ file
                 # dose_grid = load_dose_data(dose_info.get('dose_values'))
                 
-                # Tạm thời tạo một mảng liều giả lập
+                # Tạm thởi tạo một mảng liều giả lập
                 dose_grid = np.random.random((10, 10, 10)) * 60.0  # Giả lập liều từ 0-60 Gy
             
             # Lấy thông tin cấu trúc nếu chưa cung cấp structure_mask
             if structure_mask is None:
                 # TODO: Lấy và tạo mặt nạ cấu trúc
-                # Tạm thời tạo một mặt nạ cấu trúc giả lập
+                # Tạm thởi tạo một mặt nạ cấu trúc giả lập
                 structure_mask = np.random.choice([0, 1], size=dose_grid.shape, p=[0.8, 0.2])
             
             # Tính toán DVH
@@ -460,11 +460,11 @@ class DoseDB:
                 metadata={'calculation_time': datetime.now().isoformat()}
             )
             
-            logger.info(f"Đã tính toán DVH cho cấu trúc {structure_id} với liều {dose_id}")
+            logger.info("Đã tính toán DVH cho cấu trúc %s với liều %s", structure_id, dose_id)
             return dvh_id
         except Exception as e:
-            logger.error(f"Lỗi khi tính toán DVH: {str(e)}")
-            raise DatabaseError(f"Không thể tính toán DVH: {str(e)}")
+            logger.error("Lỗi khi tính toán DVH: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể tính toán DVH: %s" % str(e)) from e
 
     def get_dose_metrics(self, dvh_id):
         """
@@ -488,7 +488,7 @@ class DoseDB:
             # TODO: Đọc dữ liệu DVH từ file
             # dvh_data = load_dvh_data(dvh_info.get('dvh_data'))
             
-            # Tạm thời tạo dữ liệu DVH giả lập
+            # Tạm thởi tạo dữ liệu DVH giả lập
             dvh_data = {
                 'type': 'cumulative',
                 'binsize': 0.1,
@@ -531,11 +531,11 @@ class DoseDB:
             # CI = (V95% / PTV volume)
             # Cần thêm thông tin về thể tích PTV để tính
             
-            logger.info(f"Đã tính toán các chỉ số liều cho DVH: {dvh_id}")
+            logger.info("Đã tính toán các chỉ số liều cho DVH: %s", dvh_id)
             return metrics
         except Exception as e:
-            logger.error(f"Lỗi khi tính toán chỉ số liều: {str(e)}")
-            raise DatabaseError(f"Không thể tính toán chỉ số liều: {str(e)}")
+            logger.error("Lỗi khi tính toán chỉ số liều: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể tính toán chỉ số liều: %s" % str(e)) from e
 
     def import_dose_from_dicom(self, plan_id, dose_dict, dose_data=None):
         """
@@ -576,8 +576,8 @@ class DoseDB:
                     dose_grid=dose_grid_path
                 )
             
-            logger.info(f"Đã import phân bố liều từ DICOM: {dose_id}")
+            logger.info("Đã import phân bố liều từ DICOM: %s", dose_id)
             return dose_id
         except Exception as e:
-            logger.error(f"Lỗi khi import liều từ DICOM: {str(e)}")
-            raise DatabaseError(f"Không thể import liều từ DICOM: {str(e)}")
+            logger.error("Lỗi khi import liều từ DICOM: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể import liều từ DICOM: %s" % str(e)) from e

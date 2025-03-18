@@ -220,60 +220,71 @@ class PatientDatabase:
 
     def create_patient(self, name, birth_date=None, gender=None, metadata=None):
         """
-        Tạo bản ghi bệnh nhân mới trong cơ sở dữ liệu.
-
+        Tạo một bệnh nhân mới trong cơ sở dữ liệu.
+        
         Args:
-            name (str): Tên của bệnh nhân.
-            birth_date (str, optional): Ngày sinh của bệnh nhân (định dạng ISO).
-            gender (str, optional): Giới tính của bệnh nhân.
-            metadata (dict, optional): Metadata bổ sung của bệnh nhân.
-
+            name (str): Tên của bệnh nhân
+            birth_date (str, optional): Ngày sinh của bệnh nhân
+            gender (str, optional): Giới tính của bệnh nhân
+            metadata (dict, optional): Siêu dữ liệu bổ sung
+            
         Returns:
-            str: ID của bệnh nhân vừa được tạo.
-
+            str: ID của bệnh nhân mới tạo
+            
         Raises:
-            DatabaseError: Nếu có lỗi xảy ra trong quá trình tạo bệnh nhân.
+            DatabaseError: Nếu có lỗi xảy ra khi tạo bệnh nhân
         """
         try:
             patient_id = str(uuid.uuid4())
-            now = datetime.now().isoformat()
-            metadata_json = json.dumps(metadata) if metadata else None
-
+            created_at = datetime.now().isoformat()
+            updated_at = created_at
+            
+            # Chuyển đổi metadata thành chuỗi JSON (nếu có)
+            metadata_str = json.dumps(metadata) if metadata else None
+            
+            # Chuẩn bị câu truy vấn
             query = """
-            INSERT INTO patients (id, name, birth_date, gender, created_at, updated_at, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO patients (id, name, birth_date, gender, created_date, updated_date, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """
-            params = (patient_id, name, birth_date, gender, now, now, metadata_json)
             
-            self.db.execute_query(query, params)
-            logger.info(f"Đã tạo bệnh nhân mới với ID: {patient_id}")
+            # Chuẩn bị tham số
+            params = (patient_id, name, birth_date, gender, created_at, updated_at, metadata_str)
             
+            # Thực hiện câu truy vấn
+            self.db.execute_insert(query, params)
+            
+            logger.info("Đã tạo bệnh nhân mới: %s, ID: %s", name, patient_id)
             return patient_id
         except Exception as e:
-            logger.error(f"Lỗi khi tạo bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể tạo bệnh nhân: {str(e)}")
-
+            logger.error("Lỗi khi tạo bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể tạo bệnh nhân: %s" % str(e)) from e
+            
     def get_patient(self, patient_id):
         """
-        Lấy thông tin bệnh nhân theo ID.
-
+        Lấy thông tin của một bệnh nhân theo ID.
+        
         Args:
-            patient_id (str): ID của bệnh nhân.
-
+            patient_id (str): ID của bệnh nhân
+            
         Returns:
-            dict: Thông tin bệnh nhân hoặc None nếu không tìm thấy.
-
+            dict: Thông tin của bệnh nhân hoặc None nếu không tìm thấy
+            
         Raises:
-            DatabaseError: Nếu có lỗi xảy ra trong quá trình truy vấn.
+            DatabaseError: Nếu có lỗi xảy ra khi truy vấn
         """
         try:
+            # Chuẩn bị câu truy vấn
             query = "SELECT * FROM patients WHERE id = ?"
-            result = self.db.execute_query(query, (patient_id,), fetchone=True)
+            
+            # Thực hiện câu truy vấn
+            result = self.db.execute_query(query, (patient_id,))
             
             if not result:
-                logger.warning(f"Không tìm thấy bệnh nhân với ID: {patient_id}")
+                logger.warning("Không tìm thấy bệnh nhân với ID: %s", patient_id)
                 return None
-            
+                
+            # Xử lý kết quả truy vấn
             patient = {
                 'id': result[0],
                 'name': result[1],
@@ -284,109 +295,140 @@ class PatientDatabase:
                 'metadata': json.loads(result[6]) if result[6] else None
             }
             
+            logger.debug("Đã lấy thông tin bệnh nhân ID: %s", patient_id)
             return patient
         except Exception as e:
-            logger.error(f"Lỗi khi lấy thông tin bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể lấy thông tin bệnh nhân: {str(e)}")
-
+            logger.error("Lỗi khi lấy thông tin bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể lấy thông tin bệnh nhân: %s" % str(e)) from e
+            
     def update_patient(self, patient_id, name=None, birth_date=None, gender=None, metadata=None):
         """
-        Cập nhật thông tin bệnh nhân.
-
+        Cập nhật thông tin của một bệnh nhân.
+        
         Args:
-            patient_id (str): ID của bệnh nhân.
-            name (str, optional): Tên mới của bệnh nhân.
-            birth_date (str, optional): Ngày sinh mới của bệnh nhân.
-            gender (str, optional): Giới tính mới của bệnh nhân.
-            metadata (dict, optional): Metadata mới của bệnh nhân.
-
+            patient_id (str): ID của bệnh nhân
+            name (str, optional): Tên mới của bệnh nhân
+            birth_date (str, optional): Ngày sinh mới
+            gender (str, optional): Giới tính mới
+            metadata (dict, optional): Siêu dữ liệu mới
+            
         Returns:
-            bool: True nếu cập nhật thành công.
-
+            bool: True nếu cập nhật thành công, False nếu không tìm thấy bệnh nhân
+            
         Raises:
-            DatabaseError: Nếu có lỗi xảy ra trong quá trình cập nhật.
+            DatabaseError: Nếu có lỗi xảy ra khi cập nhật
         """
         try:
-            # Lấy thông tin hiện tại của bệnh nhân
-            current_patient = self.get_patient(patient_id)
-            if not current_patient:
-                logger.warning(f"Không thể cập nhật bệnh nhân không tồn tại: {patient_id}")
-                return False
-            
-            # Chuẩn bị dữ liệu cập nhật
-            update_data = {}
-            if name is not None:
-                update_data['name'] = name
-            if birth_date is not None:
-                update_data['birth_date'] = birth_date
-            if gender is not None:
-                update_data['gender'] = gender
-            
-            # Xử lý metadata
-            if metadata is not None:
-                current_metadata = current_patient.get('metadata', {}) or {}
-                if isinstance(metadata, dict):
-                    # Merge metadata mới vào metadata hiện tại
-                    merged_metadata = {**current_metadata, **metadata}
-                    update_data['metadata'] = json.dumps(merged_metadata)
-                else:
-                    update_data['metadata'] = json.dumps(metadata)
-            
-            if not update_data:
-                logger.info(f"Không có dữ liệu cập nhật cho bệnh nhân: {patient_id}")
-                return True
-            
-            # Thêm thời gian cập nhật
-            update_data['updated_at'] = datetime.now().isoformat()
-            
-            # Xây dựng câu truy vấn SQL
-            set_clause = ", ".join([f"{key} = ?" for key in update_data.keys()])
-            query = f"UPDATE patients SET {set_clause} WHERE id = ?"
-            
-            # Chuẩn bị tham số
-            params = list(update_data.values())
-            params.append(patient_id)
-            
-            # Thực thi truy vấn
-            self.db.execute_query(query, params)
-            logger.info(f"Đã cập nhật bệnh nhân: {patient_id}")
-            
-            return True
-        except Exception as e:
-            logger.error(f"Lỗi khi cập nhật bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể cập nhật bệnh nhân: {str(e)}")
-
-    def delete_patient(self, patient_id):
-        """
-        Xóa bệnh nhân khỏi cơ sở dữ liệu.
-
-        Args:
-            patient_id (str): ID của bệnh nhân.
-
-        Returns:
-            bool: True nếu xóa thành công.
-
-        Raises:
-            DatabaseError: Nếu có lỗi xảy ra trong quá trình xóa.
-        """
-        try:
-            # Kiểm tra bệnh nhân có tồn tại không
+            # Kiểm tra xem bệnh nhân có tồn tại không
             patient = self.get_patient(patient_id)
             if not patient:
-                logger.warning(f"Không thể xóa bệnh nhân không tồn tại: {patient_id}")
+                logger.warning("Không thể cập nhật: Không tìm thấy bệnh nhân với ID: %s", patient_id)
                 return False
+                
+            # Chuẩn bị các trường cần cập nhật
+            updates = []
+            params = []
             
-            # Thực hiện xóa bệnh nhân và tất cả dữ liệu liên quan
-            self.db.execute_transaction([
-                ("DELETE FROM plans WHERE patient_id = ?", (patient_id,)),
-                ("DELETE FROM patients WHERE id = ?", (patient_id,))
-            ])
+            if name is not None:
+                updates.append("name = ?")
+                params.append(name)
+                
+            if birth_date is not None:
+                updates.append("birth_date = ?")
+                params.append(birth_date)
+                
+            if gender is not None:
+                updates.append("gender = ?")
+                params.append(gender)
+                
+            if metadata is not None:
+                updates.append("metadata = ?")
+                params.append(json.dumps(metadata))
+                
+            # Luôn cập nhật thởi gian cập nhật
+            updated_at = datetime.now().isoformat()
+            updates.append("updated_date = ?")
+            params.append(updated_at)
             
-            logger.info(f"Đã xóa bệnh nhân: {patient_id}")
+            if not updates:
+                logger.debug("Không có thông tin nào cần cập nhật cho bệnh nhân ID: %s", patient_id)
+                return True
+                
+            # Chuẩn bị câu truy vấn
+            query = "UPDATE patients SET " + ", ".join(updates) + " WHERE id = ?"
+            params.append(patient_id)
+            
+            # Thực hiện cập nhật
+            self.db.execute_update(query, params)
+            
+            logger.info("Đã cập nhật bệnh nhân ID: %s", patient_id)
             return True
         except Exception as e:
-            logger.error(f"Lỗi khi xóa bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể xóa bệnh nhân: {str(e)}")
+            logger.error("Lỗi khi cập nhật bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể cập nhật bệnh nhân: %s" % str(e)) from e
+            
+    def delete_patient(self, patient_id):
+        """
+        Xóa một bệnh nhân và tất cả các dữ liệu liên quan.
+        
+        Args:
+            patient_id (str): ID của bệnh nhân cần xóa
+            
+        Returns:
+            bool: True nếu xóa thành công, False nếu không tìm thấy bệnh nhân
+            
+        Raises:
+            DatabaseError: Nếu có lỗi xảy ra khi xóa
+        """
+        try:
+            # Kiểm tra xem bệnh nhân có tồn tại không
+            patient = self.get_patient(patient_id)
+            if not patient:
+                logger.warning("Không thể xóa: Không tìm thấy bệnh nhân với ID: %s", patient_id)
+                return False
+                
+            # Xóa tất cả kế hoạch điều trị liên quan trước
+            self._delete_all_plans(patient_id)
+                
+            # Thực hiện xóa bệnh nhân
+            query = "DELETE FROM patients WHERE id = ?"
+            params = (patient_id,)
+            
+            self.db.execute_update(query, params)
+            logger.info("Đã xóa bệnh nhân ID: %s", patient_id)
+            
+            return True
+        except Exception as e:
+            logger.error("Lỗi khi xóa bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể xóa bệnh nhân: %s" % str(e)) from e
+
+    def get_all_patients(self):
+        """
+        Lấy danh sách tất cả các bệnh nhân.
+
+        Returns:
+            list: Danh sách các bệnh nhân
+
+        Raises:
+            DatabaseError: Nếu có lỗi xảy ra trong quá trình lấy danh sách
+        """
+        try:
+            query = "SELECT * FROM patients ORDER BY name"
+            patients = self.db.execute_query(query, fetchall=True)
+            
+            # Parse metadata từ JSON nếu có
+            for patient in patients:
+                if patient.get('metadata'):
+                    try:
+                        patient['metadata'] = json.loads(patient['metadata'])
+                    except json.JSONDecodeError:
+                        logger.warning("Không thể parse metadata cho bệnh nhân ID: %s", patient['id'])
+            
+            logger.info("Đã lấy danh sách %d bệnh nhân", len(patients))
+            return patients
+        except Exception as e:
+            logger.error("Lỗi khi lấy danh sách bệnh nhân: %s", str(e))
+            raise DatabaseError("Không thể lấy danh sách bệnh nhân") from e
 
     def search_patients(self, name=None, birth_date=None, gender=None, limit=100, offset=0):
         """
@@ -411,7 +453,7 @@ class PatientDatabase:
             
             if name:
                 conditions.append("name LIKE ?")
-                params.append(f"%{name}%")
+                params.append("%" + name + "%")
             
             if birth_date:
                 conditions.append("birth_date = ?")
@@ -446,10 +488,11 @@ class PatientDatabase:
                 }
                 patients.append(patient)
             
+            logger.debug("Tìm thấy %d bệnh nhân thỏa mãn tiêu chí", len(patients))
             return patients
         except Exception as e:
-            logger.error(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể tìm kiếm bệnh nhân: {str(e)}")
+            logger.error("Lỗi khi tìm kiếm bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể tìm kiếm bệnh nhân: %s" % str(e)) from e
 
     def count_patients(self, name=None, birth_date=None, gender=None):
         """
@@ -472,7 +515,7 @@ class PatientDatabase:
             
             if name:
                 conditions.append("name LIKE ?")
-                params.append(f"%{name}%")
+                params.append("%" + name + "%")
             
             if birth_date:
                 conditions.append("birth_date = ?")
@@ -488,28 +531,49 @@ class PatientDatabase:
                 query += " WHERE " + " AND ".join(conditions)
             
             # Thực hiện truy vấn
-            result = self.db.execute_query(query, params, fetchone=True)
+            result = self.db.execute_query(query, params)
             
-            return result[0] if result else 0
+            # Xử lý kết quả
+            count = result[0] if result else 0
+            logger.debug("Số lượng bệnh nhân thỏa mãn tiêu chí: %d", count)
+            return count
         except Exception as e:
-            logger.error(f"Lỗi khi đếm bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể đếm bệnh nhân: {str(e)}")
+            logger.error("Lỗi khi đếm bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Không thể đếm bệnh nhân: %s" % str(e)) from e
 
-    def get_all_patients(self, limit=100, offset=0):
+    def get_all_patients_paged(self, limit=100, offset=0):
         """
-        Lấy danh sách tất cả bệnh nhân.
+        Lấy danh sách tất cả các bệnh nhân với phân trang.
 
         Args:
-            limit (int, optional): Số lượng kết quả tối đa.
-            offset (int, optional): Vị trí bắt đầu lấy kết quả.
+            limit (int, optional): Số lượng bệnh nhân tối đa cần lấy. Mặc định là 100.
+            offset (int, optional): Vị trí bắt đầu lấy dữ liệu. Mặc định là 0.
 
         Returns:
-            list: Danh sách tất cả bệnh nhân.
+            list: Danh sách bệnh nhân
 
         Raises:
-            DatabaseError: Nếu có lỗi xảy ra trong quá trình truy vấn.
+            DatabaseError: Nếu có lỗi xảy ra trong quá trình lấy danh sách bệnh nhân
         """
-        return self.search_patients(limit=limit, offset=offset)
+        try:
+            query = "SELECT * FROM patients ORDER BY name LIMIT ? OFFSET ?"
+            params = (limit, offset)
+            
+            patients = self.db.execute_query(query, params, fetchall=True)
+            
+            # Parse metadata từ JSON nếu có
+            for patient in patients:
+                if patient.get('metadata'):
+                    try:
+                        patient['metadata'] = json.loads(patient['metadata'])
+                    except json.JSONDecodeError:
+                        logger.warning("Không thể parse metadata cho bệnh nhân ID: %s", patient['id'])
+            
+            logger.info("Đã lấy danh sách %d bệnh nhân (limit=%d, offset=%d)", len(patients), limit, offset)
+            return patients
+        except Exception as e:
+            logger.error("Lỗi khi lấy danh sách bệnh nhân: %s", str(e))
+            raise DatabaseError("Không thể lấy danh sách bệnh nhân") from e
 
     def get_patient_studies(self, patient_id):
         """
@@ -544,8 +608,8 @@ class PatientDatabase:
             
             return studies
         except Exception as e:
-            logger.error(f"Lỗi khi lấy danh sách study của bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể lấy danh sách study của bệnh nhân: {str(e)}")
+            logger.error("Lỗi khi lấy danh sách study của bệnh nhân: %s", str(e))
+            raise DatabaseError("Không thể lấy danh sách study của bệnh nhân") from e
 
     def get_patient_plans(self, patient_id):
         """
@@ -580,5 +644,50 @@ class PatientDatabase:
             
             return plans
         except Exception as e:
-            logger.error(f"Lỗi khi lấy danh sách kế hoạch điều trị của bệnh nhân: {str(e)}")
-            raise DatabaseError(f"Không thể lấy danh sách kế hoạch điều trị của bệnh nhân: {str(e)}")
+            logger.error("Lỗi khi lấy danh sách kế hoạch điều trị của bệnh nhân: %s", str(e))
+            raise DatabaseError("Không thể lấy danh sách kế hoạch điều trị của bệnh nhân") from e
+
+    def _delete_all_plans(self, patient_id):
+        """
+        Xóa tất cả các kế hoạch điều trị liên quan đến bệnh nhân.
+
+        Args:
+            patient_id (str): ID của bệnh nhân.
+
+        Returns:
+            bool: True nếu xóa thành công, False nếu có lỗi.
+
+        Note:
+            Phương thức này được sử dụng nội bộ trước khi xóa bệnh nhân.
+        """
+        try:
+            # Xóa kế hoạch điều trị (plans)
+            query = "DELETE FROM plans WHERE patient_id = ?"
+            self.db.execute_update(query, (patient_id,))
+            
+            # Xóa cấu trúc (structures) nếu có
+            query = "DELETE FROM structures WHERE patient_id = ?"
+            self.db.execute_update(query, (patient_id,))
+            
+            # Xóa liều (doses) nếu có
+            query = "DELETE FROM doses WHERE patient_id = ?"
+            self.db.execute_update(query, (patient_id,))
+            
+            # Xóa các nghiên cứu (studies) nếu có
+            query = "DELETE FROM studies WHERE patient_id = ?"
+            self.db.execute_update(query, (patient_id,))
+            
+            # Xóa các series nếu có
+            query = "DELETE FROM series WHERE patient_id = ?"
+            self.db.execute_update(query, (patient_id,))
+            
+            # Xóa các instances nếu có
+            query = "DELETE FROM instances WHERE patient_id = ?"
+            self.db.execute_update(query, (patient_id,))
+            
+            logger.info("Đã xóa tất cả kế hoạch điều trị liên quan đến bệnh nhân ID: %s", patient_id)
+            return True
+        except Exception as e:
+            logger.error("Lỗi khi xóa kế hoạch điều trị: %s", str(e))
+            # Không raise lỗi ở đây vì đây là phương thức nội bộ, lỗi sẽ được xử lý ở phương thức gọi
+            return False

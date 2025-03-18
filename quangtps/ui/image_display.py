@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import (
     QRadioButton, QButtonGroup, QFrame, QGridLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QRectF, QPointF
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush, QFont
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QBrush, QFont, QPainterPath
 
 try:
     import matplotlib
@@ -39,6 +39,11 @@ class ImageSliceWidget(QWidget):
     
     # Tín hiệu được phát khi vị trí con trỏ thay đổi
     position_changed = pyqtSignal(int, int, int)  # slice_idx, x, y
+    mouse_pressed = pyqtSignal(int, int, int, Qt.MouseButton)  # slice_idx, x, y, button
+    mouse_moved = pyqtSignal(int, int, int)  # slice_idx, x, y
+    mouse_released = pyqtSignal(int, int, int, Qt.MouseButton)  # slice_idx, x, y, button
+    key_pressed = pyqtSignal(int)  # key
+    key_released = pyqtSignal(int)  # key
     
     def __init__(self, parent=None):
         """
@@ -63,6 +68,9 @@ class ImageSliceWidget(QWidget):
         self.contours = {}  # Dict của các contour: {name: [(slice_idx, contour_points), ...]}
         self.contour_colors = {}  # Dict màu sắc contour: {name: QColor}
         self.contour_visibility = {}  # Dict hiển thị contour: {name: bool}
+        
+        # Dữ liệu liều lượng
+        self.dose_data = None
         
         # UI
         self._init_ui()
@@ -148,18 +156,18 @@ class ImageSliceWidget(QWidget):
             
             self._update_display()
     
-    def set_slice_index(self, idx):
+    def set_slice_idx(self, idx):
         """
-        Thiết lập chỉ số lát cắt hiện tại.
+        Thiết lập chỉ số lát cắt.
         
         Parameters
         ----------
         idx : int
-            Chỉ số lát cắt
+            Chỉ số lát cắt mới
         """
         if self.image_data is None:
             return
-        
+            
         # Xác định giới hạn chỉ số dựa trên mặt phẳng
         if self.view_plane == 'axial':
             max_slice = self.image_data.shape[0] - 1
@@ -174,6 +182,17 @@ class ImageSliceWidget(QWidget):
         if idx != self.slice_idx:
             self.slice_idx = idx
             self._update_display()
+    
+    def set_slice_index(self, idx):
+        """
+        Bí danh cho phương thức set_slice_idx để đảm bảo tính tương thích.
+        
+        Parameters
+        ----------
+        idx : int
+            Chỉ số lát cắt mới
+        """
+        self.set_slice_idx(idx)
     
     def set_zoom(self, factor):
         """
@@ -316,6 +335,43 @@ class ImageSliceWidget(QWidget):
             self.contour_colors[name] = color
             self._update_display()
     
+    def set_dose_data(self, dose_data, colormap='jet', alpha=0.7):
+        """
+        Thiết lập dữ liệu liều lượng xạ trị để hiển thị chồng lên hình ảnh nền.
+        
+        Parameters
+        ----------
+        dose_data : ndarray
+            Dữ liệu liều lượng 2D (y, x) kiểu numpy array
+        colormap : str, optional
+            Bảng màu để hiển thị (mặc định: 'jet')
+        alpha : float, optional
+            Độ trong suốt của lớp hiển thị liều (mặc định: 0.7)
+        """
+        if dose_data is None:
+            self.dose_data = None
+            self._update_display()
+            return
+            
+        # Lưu dữ liệu liều lượng vào bộ nhớ
+        if len(dose_data.shape) == 2:
+            # Nếu là lát cắt 2D, tạo tập dữ liệu 3D với 1 lát cắt
+            self.dose_data = np.expand_dims(dose_data, axis=0)
+        else:
+            # Nếu đã là dữ liệu 3D thì sử dụng trực tiếp
+            self.dose_data = dose_data
+            
+        # Lưu các thông số hiển thị
+        self.dose_colormap = colormap
+        self.dose_alpha = alpha
+        
+        # Thiết lập chỉ số lát cắt mặc định nếu chưa được thiết lập
+        if not hasattr(self, 'slice_idx'):
+            self.slice_idx = 0
+        
+        # Cập nhật hiển thị
+        self._update_display()
+    
     def _get_current_slice(self):
         """
         Lấy lát cắt hiện tại dựa trên mặt phẳng xem.
@@ -323,11 +379,12 @@ class ImageSliceWidget(QWidget):
         Returns
         -------
         ndarray
-            Dữ liệu lát cắt 2D
+            Lát cắt 2D (y, x) hiện tại
         """
         if self.image_data is None:
             return None
         
+        # Xác định giới hạn chỉ số dựa trên mặt phẳng
         if self.view_plane == 'axial':
             # Lát cắt ngang (z cố định)
             if 0 <= self.slice_idx < self.image_data.shape[0]:
@@ -418,8 +475,46 @@ class ImageSliceWidget(QWidget):
             
             painter.end()
         
+        # Vẽ dữ liệu liều lượng lên pixmap
+        if self.dose_data is not None:
+            # Tạo bản sao để vẽ lên
+            painter = QPainter(pixmap)
+            
+            # Vẽ dữ liệu liều lượng cho lát cắt hiện tại
+            dose_slice = self.dose_data[self.slice_idx, :, :]
+            dose_min, dose_max = np.min(dose_slice), np.max(dose_slice)
+            dose_range = dose_max - dose_min
+            
+            # Áp dụng colormap
+            if dose_range > 0:
+                dose_normalized = (dose_slice - dose_min) / dose_range
+            else:
+                dose_normalized = np.zeros_like(dose_slice)
+            
+            # Vẽ dữ liệu liều lượng
+            for y in range(dose_slice.shape[0]):
+                for x in range(dose_slice.shape[1]):
+                    dose_value = dose_normalized[y, x]
+                    # Chuyển đổi sang giá trị int trước khi tạo QColor
+                    r = int(255 * dose_value)
+                    color = QColor(r, 0, 0)  # Màu đỏ cho liều lượng
+                    painter.setPen(QPen(color))
+                    # Chuyển tọa độ về kiểu int trước khi vẽ
+                    px = int(x * self.zoom_factor + self.pan_offset[0])
+                    py = int(y * self.zoom_factor + self.pan_offset[1])
+                    painter.drawPoint(px, py)
+            
+            painter.end()
+        
         # Hiển thị pixmap
         self.image_frame.setPixmap(pixmap)
+    
+    def update_display(self):
+        """
+        Bí danh công khai cho phương thức _update_display.
+        Cập nhật hiển thị hình ảnh dựa trên dữ liệu hiện tại.
+        """
+        self._update_display()
     
     def mousePressEvent(self, event):
         """
@@ -446,6 +541,149 @@ class ImageSliceWidget(QWidget):
         
         # Phát tín hiệu với vị trí
         self.position_changed.emit(self.slice_idx, image_x, image_y)
+        self.mouse_pressed.emit(self.slice_idx, image_x, image_y, event.button())
+    
+    def mouseMoveEvent(self, event):
+        """
+        Xử lý sự kiện di chuyển chuột.
+        
+        Parameters
+        ----------
+        event : QMouseEvent
+            Sự kiện chuột
+        """
+        if self.image_data is None:
+            return
+        
+        # Lấy tọa độ chuột
+        pos = event.pos()
+        
+        # Chuyển đổi tọa độ chuột thành tọa độ hình ảnh
+        frame_pos = self.image_frame.mapFrom(self, pos)
+        pixmap_pos = self.image_frame.mapFromParent(frame_pos)
+        
+        # Tính toán tọa độ thực tế trên hình ảnh (bỏ qua zoom và pan)
+        image_x = int((pixmap_pos.x() - self.pan_offset[0]) / self.zoom_factor)
+        image_y = int((pixmap_pos.y() - self.pan_offset[1]) / self.zoom_factor)
+        
+        # Phát tín hiệu với vị trí
+        self.mouse_moved.emit(self.slice_idx, image_x, image_y)
+    
+    def mouseReleaseEvent(self, event):
+        """
+        Xử lý sự kiện khi chuột được thả ra.
+        
+        Parameters
+        ----------
+        event : QMouseEvent
+            Sự kiện chuột
+        """
+        if self.image_data is None:
+            return
+        
+        # Lấy tọa độ chuột
+        pos = event.pos()
+        
+        # Chuyển đổi tọa độ chuột thành tọa độ hình ảnh
+        frame_pos = self.image_frame.mapFrom(self, pos)
+        pixmap_pos = self.image_frame.mapFromParent(frame_pos)
+        
+        # Tính toán tọa độ thực tế trên hình ảnh (bỏ qua zoom và pan)
+        image_x = int((pixmap_pos.x() - self.pan_offset[0]) / self.zoom_factor)
+        image_y = int((pixmap_pos.y() - self.pan_offset[1]) / self.zoom_factor)
+        
+        # Phát tín hiệu với vị trí
+        self.mouse_released.emit(self.slice_idx, image_x, image_y, event.button())
+    
+    def keyPressEvent(self, event):
+        """
+        Xử lý sự kiện nhấn phím.
+        
+        Parameters
+        ----------
+        event : QKeyEvent
+            Sự kiện phím
+        """
+        self.key_pressed.emit(event.key())
+    
+    def keyReleaseEvent(self, event):
+        """
+        Xử lý sự kiện thả phím.
+        
+        Parameters
+        ----------
+        event : QKeyEvent
+            Sự kiện phím
+        """
+        self.key_released.emit(event.key())
+    
+    def set_brightness(self, value):
+        """
+        Thiết lập độ sáng cho hình ảnh.
+        
+        Parameters
+        ----------
+        value : int
+            Giá trị độ sáng
+        """
+        # Điều chỉnh cửa sổ Hounsfield dựa trên độ sáng
+        window_min, window_max = self.hounsfield_window
+        window_center = (window_min + window_max) // 2
+        
+        # Áp dụng độ sáng bằng cách thay đổi tâm cửa sổ Hounsfield
+        new_center = window_center + value
+        window_width = window_max - window_min
+        
+        # Thiết lập cửa sổ Hounsfield mới
+        self.set_hounsfield_window(new_center - window_width // 2, new_center + window_width // 2)
+    
+    def set_contrast(self, value):
+        """
+        Thiết lập độ tương phản cho hình ảnh.
+        
+        Parameters
+        ----------
+        value : int
+            Giá trị độ tương phản
+        """
+        # Điều chỉnh cửa sổ Hounsfield dựa trên độ tương phản
+        window_min, window_max = self.hounsfield_window
+        window_center = (window_min + window_max) // 2
+        window_width = window_max - window_min
+        
+        # Áp dụng độ tương phản bằng cách thay đổi độ rộng cửa sổ Hounsfield
+        # Giá trị value càng cao, độ tương phản càng thấp (cửa sổ rộng hơn)
+        # Giá trị value càng thấp, độ tương phản càng cao (cửa sổ hẹp hơn)
+        new_width = max(10, window_width + value * 10)  # Đảm bảo cửa sổ không quá hẹp
+        
+        # Thiết lập cửa sổ Hounsfield mới
+        self.set_hounsfield_window(window_center - new_width // 2, window_center + new_width // 2)
+    
+    def set_background_data(self, image_data):
+        """
+        Thiết lập dữ liệu nền (hình ảnh giải phẫu) cho hiển thị.
+        
+        Parameters
+        ----------
+        image_data : ndarray
+            Dữ liệu hình ảnh 2D (y, x) kiểu numpy array
+        """
+        if image_data is None:
+            return
+            
+        # Lưu dữ liệu hình ảnh nền vào bộ nhớ
+        if len(image_data.shape) == 2:
+            # Nếu là lát cắt 2D, tạo tập dữ liệu 3D với 1 lát cắt
+            self.image_data = np.expand_dims(image_data, axis=0)
+        else:
+            # Nếu đã là dữ liệu 3D thì sử dụng trực tiếp
+            self.image_data = image_data
+            
+        # Thiết lập chỉ số lát cắt mặc định
+        self.slice_idx = 0
+        
+        # Cập nhật hiển thị
+        self._update_display()
 
 
 class ImageControlWidget(QWidget):
@@ -455,6 +693,8 @@ class ImageControlWidget(QWidget):
     view_changed = pyqtSignal(str)  # 'axial', 'coronal', 'sagittal'
     slice_changed = pyqtSignal(int)
     window_changed = pyqtSignal(int, int)  # min, max
+    brightness_changed = pyqtSignal(int)  # brightness value
+    contrast_changed = pyqtSignal(int)  # contrast value
     
     def __init__(self, parent=None):
         """
@@ -655,6 +895,7 @@ class ImageDisplay(QWidget):
     # Tín hiệu
     window_changed = pyqtSignal(int, int)  # window width, window level
     position_changed = pyqtSignal(int, int)  # x, y coordinates
+    mouse_position_changed = pyqtSignal(int, int, float)  # x, y, giá trị tại vị trí
     
     def __init__(self, parent=None):
         """Khởi tạo ImageDisplay."""
@@ -667,6 +908,7 @@ class ImageDisplay(QWidget):
         self.zoom_factor = 1.0
         self.pan_offset = (0, 0)
         self.current_tool = "pan"  # pan, zoom, measure, window
+        self.title = ""  # Thêm biến title để lưu tiêu đề
         
         # UI setup
         self._init_ui()
@@ -745,6 +987,24 @@ class ImageDisplay(QWidget):
     def _update_display(self):
         """Cập nhật hiển thị hình ảnh."""
         if self.image_data is None:
+            # Hiển thị tiêu đề trên nền đen nếu không có hình ảnh
+            if self.title:
+                blank_image = np.zeros((200, 200), dtype=np.uint8)
+                h, w = blank_image.shape
+                qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                pixmap = QPixmap.fromImage(qimage)
+                
+                # Vẽ tiêu đề lên pixmap
+                painter = QPainter(pixmap)
+                painter.setPen(QPen(Qt.white))
+                font = QFont()
+                font.setBold(True)
+                font.setPointSize(12)
+                painter.setFont(font)
+                painter.drawText(pixmap.rect(), Qt.AlignCenter, self.title)
+                painter.end()
+                
+                self.image_frame.setPixmap(pixmap)
             return
             
         # Áp dụng cửa sổ
@@ -774,6 +1034,25 @@ class ImageDisplay(QWidget):
             if w_zoomed > 0 and h_zoomed > 0:
                 pixmap = pixmap.scaled(w_zoomed, h_zoomed, Qt.KeepAspectRatio)
         
+        # Vẽ tiêu đề nếu có
+        if self.title:
+            painter = QPainter(pixmap)
+            painter.setPen(QPen(Qt.white))
+            
+            # Tạo font đậm cho tiêu đề
+            font = QFont()
+            font.setBold(True)
+            font.setPointSize(10)
+            painter.setFont(font)
+            
+            # Vẽ nền chữ bán trong suốt
+            rect = QRectF(5, 5, pixmap.width() - 10, 25)
+            painter.fillRect(rect, QBrush(QColor(0, 0, 0, 128)))
+            
+            # Vẽ chữ
+            painter.drawText(rect, Qt.AlignCenter, self.title)
+            painter.end()
+        
         # Hiển thị pixmap
         self.image_frame.setPixmap(pixmap)
         
@@ -795,6 +1074,26 @@ class ImageDisplay(QWidget):
     def mouseMoveEvent(self, event):
         """Xử lý sự kiện di chuyển chuột."""
         super().mouseMoveEvent(event)
+        
+        # Lấy vị trí chuột
+        pos = event.pos()
+        x, y = pos.x(), pos.y()
+        
+        # Hiệu chỉnh theo zoom và pan
+        if self.image_data is not None and self.zoom_factor > 0:
+            # Điều chỉnh tọa độ để tính toán vị trí thực trong hình ảnh
+            x_img = int((x - self.pan_offset[0]) / self.zoom_factor)
+            y_img = int((y - self.pan_offset[1]) / self.zoom_factor)
+            
+            # Kiểm tra nếu tọa độ nằm trong phạm vi của hình ảnh
+            if 0 <= x_img < self.image_data.shape[1] and 0 <= y_img < self.image_data.shape[0]:
+                # Lấy giá trị pixel tại vị trí đó
+                pixel_value = float(self.image_data[y_img, x_img])
+                # Phát tín hiệu với vị trí và giá trị pixel
+                self.mouse_position_changed.emit(x_img, y_img, pixel_value)
+            else:
+                # Nếu nằm ngoài vùng hình ảnh, phát tín hiệu với giá trị không hợp lệ
+                self.mouse_position_changed.emit(x_img, y_img, float('nan'))
         
         if event.buttons() & Qt.LeftButton:
             # Xử lý theo công cụ hiện tại
@@ -829,7 +1128,17 @@ class ImageDisplay(QWidget):
             tool_name: Tên công cụ ('pan', 'zoom', 'window', 'measure')
         """
         self.current_tool = tool_name
-
+        
+    def set_title(self, title):
+        """
+        Thiết lập tiêu đề cho màn hình hiển thị.
+        
+        Args:
+            title: Tiêu đề hiển thị
+        """
+        self.title = title
+        self._update_display()
+        
 # Kiểm tra các module cần thiết
 try:
     import pydicom

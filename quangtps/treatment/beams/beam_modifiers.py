@@ -12,7 +12,7 @@ import uuid
 import logging
 import numpy as np
 from enum import Enum
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -41,45 +41,59 @@ class BeamModifier:
         name : str
             Tên của thiết bị điều biến
         modifier_type : ModifierType
-            Loại thiết bị điều biến
+            Loại thiết bị điều biến (WEDGE, BLOCK, BOLUS, ...)
         modifier_id : str, optional
             ID duy nhất của thiết bị điều biến
         """
         self.name = name
         self.modifier_type = modifier_type
         self.modifier_id = modifier_id if modifier_id else str(uuid.uuid4())
-        self.is_active = True
-        self.metadata = {}
+        self.created_at = None
+        self.updated_at = None
     
-    def activate(self):
-        """Kích hoạt thiết bị điều biến."""
-        self.is_active = True
-    
-    def deactivate(self):
-        """Vô hiệu hóa thiết bị điều biến."""
-        self.is_active = False
-    
-    def get_effective_size_change(self) -> Tuple[float, float]:
+    def get_name(self) -> str:
         """
-        Lấy sự thay đổi kích thước hiệu dụng của trường xạ.
+        Lấy tên của thiết bị điều biến.
         
         Returns
         -------
-        Tuple[float, float]
-            Sự thay đổi kích thước theo X và Y (cm)
+        str
+            Tên của thiết bị điều biến
         """
-        return (0.0, 0.0)
+        return self.name
     
-    def get_attenuation_factor(self) -> float:
+    def get_id(self) -> str:
         """
-        Lấy hệ số suy giảm của thiết bị điều biến.
+        Lấy ID của thiết bị điều biến.
         
         Returns
         -------
-        float
-            Hệ số suy giảm
+        str
+            ID của thiết bị điều biến
         """
-        return 1.0
+        return self.modifier_id
+    
+    def get_type(self) -> ModifierType:
+        """
+        Lấy loại của thiết bị điều biến.
+        
+        Returns
+        -------
+        ModifierType
+            Loại thiết bị điều biến
+        """
+        return self.modifier_type
+    
+    def set_name(self, name: str) -> None:
+        """
+        Thiết lập tên cho thiết bị điều biến.
+        
+        Parameters
+        ----------
+        name : str
+            Tên của thiết bị điều biến
+        """
+        self.name = name
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -88,39 +102,15 @@ class BeamModifier:
         Returns
         -------
         Dict[str, Any]
-            Dictionary chứa thông tin thiết bị điều biến
+            Dictionary chứa thông tin cơ bản của thiết bị điều biến
         """
         return {
             "name": self.name,
-            "type": self.modifier_type.value,
             "modifier_id": self.modifier_id,
-            "is_active": self.is_active,
-            "metadata": self.metadata
+            "modifier_type": self.modifier_type,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
         }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'BeamModifier':
-        """
-        Tạo đối tượng BeamModifier từ dictionary.
-        
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Dictionary chứa thông tin thiết bị điều biến
-            
-        Returns
-        -------
-        BeamModifier
-            Đối tượng BeamModifier
-        """
-        modifier = cls(
-            name=data["name"],
-            modifier_type=ModifierType(data["type"]),
-            modifier_id=data["modifier_id"]
-        )
-        modifier.is_active = data["is_active"]
-        modifier.metadata = data.get("metadata", {})
-        return modifier
 
 
 class Wedge(BeamModifier):
@@ -153,7 +143,7 @@ class Wedge(BeamModifier):
         wedge_type : str, optional
             Loại wedge (PHYSICAL, DYNAMIC, VIRTUAL)
         """
-        super(BeamModifier, self).__init__(name, ModifierType.WEDGE, wedge_id)
+        super().__init__(name, ModifierType.WEDGE, wedge_id)
         self.angle = angle
         self.orientation = orientation
         self.wedge_type = wedge_type
@@ -220,7 +210,7 @@ class Wedge(BeamModifier):
         Dict[str, Any]
             Dictionary chứa thông tin wedge
         """
-        data = super(BeamModifier, self).to_dict()
+        data = super().to_dict()
         data.update({
             "angle": self.angle,
             "orientation": self.orientation,
@@ -281,7 +271,7 @@ class Block(BeamModifier):
         block_id : str, optional
             ID duy nhất của block
         """
-        super(BeamModifier, self).__init__(name, ModifierType.BLOCK, block_id)
+        super().__init__(name, ModifierType.BLOCK, block_id)
         self.points = points
         self.thickness = 7.5  # Độ dày block (cm)
         self.material = "Cerrobend"  # Vật liệu
@@ -381,7 +371,7 @@ class Block(BeamModifier):
         Dict[str, Any]
             Dictionary chứa thông tin block
         """
-        data = super(BeamModifier, self).to_dict()
+        data = super().to_dict()
         data.update({
             "points": self.points,
             "thickness": self.thickness,
@@ -446,7 +436,7 @@ class Bolus(BeamModifier):
         bolus_id : str, optional
             ID duy nhất của bolus
         """
-        super(BeamModifier, self).__init__(name, ModifierType.BOLUS, bolus_id)
+        super().__init__(name, ModifierType.BOLUS, bolus_id)
         self.thickness = thickness
         self.material = "Tissue Equivalent"
         self.relative_electron_density = 1.0  # Tương đương mô
@@ -515,7 +505,7 @@ class Bolus(BeamModifier):
         Dict[str, Any]
             Dictionary chứa thông tin bolus
         """
-        data = super(BeamModifier, self).to_dict()
+        data = super().to_dict()
         data.update({
             "thickness": self.thickness,
             "material": self.material,
@@ -581,7 +571,7 @@ class Compensator(BeamModifier):
         compensator_id : str, optional
             ID duy nhất của compensator
         """
-        super(BeamModifier, self).__init__(name, ModifierType.COMPENSATOR, compensator_id)
+        super().__init__(name, ModifierType.COMPENSATOR, compensator_id)
         self.material = "Brass"  # Vật liệu: Brass, Aluminum, Lead, etc.
         self.density = 8.5  # Mật độ vật liệu (g/cm³)
         self.mount_distance = 15.0  # Khoảng cách từ compensator đến isocenter (cm)
@@ -686,7 +676,7 @@ class Compensator(BeamModifier):
         Dict[str, Any]
             Dictionary chứa thông tin compensator
         """
-        data = super(BeamModifier, self).to_dict()
+        data = super().to_dict()
         data.update({
             "material": self.material,
             "density": self.density,

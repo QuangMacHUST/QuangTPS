@@ -17,7 +17,7 @@ from scipy import ndimage
 from quangtps.core.exceptions import ValidationError
 from quangtps.segmentation.manual_segmentation.drawing_tools import DrawingToolManager
 from quangtps.segmentation.structures.structure_set import StructureSet
-from quangtps.segmentation.structures.structure_library import Structure
+from quangtps.segmentation.structures.structure import Structure
 from quangtps.segmentation.contour.contour_tools import ContourTool
 
 logger = logging.getLogger(__name__)

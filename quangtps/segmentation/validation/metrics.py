@@ -18,8 +18,8 @@ from skimage import measure
 from scipy.spatial import distance
 
 from quangtps.core.exceptions import ValidationError
-from quangtps.segmentation.structures.structure_library import Structure
-
+from quangtps.segmentation.structures.structure import Structure
+from quangtps.segmentation.structures.structure_set import StructureSet
 logger = logging.getLogger(__name__)
 
 

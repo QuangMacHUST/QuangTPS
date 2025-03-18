@@ -19,7 +19,7 @@ from pynetdicom.sop_class import (
     StudyRootQueryRetrieveInformationModelFind,
     StudyRootQueryRetrieveInformationModelGet,
     StudyRootQueryRetrieveInformationModelMove,
-    VerificationSOPClass
+    VerificationServiceClass
 )
 import pydicom
 
@@ -59,7 +59,7 @@ class PACSClient:
         self.ae.requested_contexts += StoragePresentationContexts
         
         # Thêm context cho verification
-        self.ae.add_requested_context(VerificationSOPClass)
+        self.ae.add_requested_context(VerificationServiceClass)
         
         logger.info(f"Initialized AE with title {self.local_ae_title}")
     

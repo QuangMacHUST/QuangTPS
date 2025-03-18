@@ -14,7 +14,9 @@ from enum import Enum
 
 from quangtps.treatment.beams.beam import Beam
 from quangtps.treatment.machine.carbon_ion import CarbonIonMachine
+from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.fractionation import Fractionation
+from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ class CarbonIonPlanningMethod(str, Enum):
     BIOLOGICAL_OPTIMIZATION = "BIOLOGICAL_OPTIMIZATION"  # Using RBE models
     BRAGG_PEAK_BOOST = "BRAGG_PEAK_BOOST"  # Boost using the Bragg peak
 
-class CarbonIonTherapy:
+class CarbonIonTherapy(BaseTreatmentTechnique):
     """
     Class for Carbon Ion Therapy treatment technique.
     
@@ -62,15 +64,14 @@ class CarbonIonTherapy:
         carbon_id : str, optional
             Unique ID for the plan
         """
-        self.name = name
-        self.carbon_id = carbon_id or f"carbon_{name.lower().replace(' ', '_')}"
-        self.technique = technique
-        self.planning_method = planning_method
+        super().__init__(
+            name=name,
+            technique_id=carbon_id,
+            category=TechniqueCategory.PARTICLE
+        )
         
-        # Carbon Ion-specific attributes
-        self.beams: List[Beam] = []
-        self.machine: Optional[CarbonIonMachine] = None
-        self.fractionation: Optional[Fractionation] = None
+        self.delivery_technique = technique
+        self.planning_method = planning_method
         
         # Treatment parameters
         self.total_dose = 60.0  # GyE (Gray Equivalent)
@@ -86,7 +87,42 @@ class CarbonIonTherapy:
         self.setup_uncertainty = 2.0  # mm
         self.range_uncertainty = 3.5  # % of range
         
-    def set_fractionation(self, fractionation: Fractionation):
+        logger.info(f"Created new Carbon Ion Therapy plan: {name} (ID: {self.technique_id})")
+        
+    def get_name(self) -> str:
+        """
+        Get the name of the technique.
+        
+        Returns
+        -------
+        str
+            The name of the technique
+        """
+        return self.name
+    
+    def get_id(self) -> str:
+        """
+        Get the unique identifier of the technique.
+        
+        Returns
+        -------
+        str
+            The technique ID
+        """
+        return self.technique_id
+    
+    def get_category(self) -> TechniqueCategory:
+        """
+        Get the category of the technique.
+        
+        Returns
+        -------
+        TechniqueCategory
+            The technique category
+        """
+        return self.category
+    
+    def set_fractionation(self, fractionation: Fractionation) -> None:
         """
         Set fractionation scheme.
         
@@ -97,19 +133,26 @@ class CarbonIonTherapy:
         """
         self.fractionation = fractionation
         self.total_dose = fractionation.total_dose
+        logger.info(f"Set fractionation for Carbon Ion plan {self.name}: "
+                   f"{fractionation.num_fractions} fractions, "
+                   f"{fractionation.dose_per_fraction} GyE per fraction")
         
-    def set_machine(self, machine: CarbonIonMachine):
+    def set_machine(self, machine: TreatmentMachine) -> None:
         """
         Set treatment machine.
         
         Parameters
         ----------
-        machine : CarbonIonMachine
-            Carbon ion accelerator for treatment
+        machine : TreatmentMachine
+            Treatment machine for carbon ion therapy
         """
+        if not isinstance(machine, CarbonIonMachine):
+            raise ValueError(f"Carbon Ion therapy requires a CarbonIonMachine, got {type(machine).__name__}")
+            
         self.machine = machine
+        logger.info(f"Set treatment machine for Carbon Ion plan {self.name}: {machine.name}")
         
-    def add_beam(self, beam: Beam):
+    def add_beam(self, beam: Beam) -> None:
         """
         Add a beam to the Carbon Ion plan.
         
@@ -118,9 +161,22 @@ class CarbonIonTherapy:
         beam : Beam
             Beam to add
         """
-        self.beams.append(beam)
+        if beam not in self.beams:
+            self.beams.append(beam)
+            logger.info(f"Added beam {beam.beam_name} to Carbon Ion plan {self.name}")
+    
+    def get_beams(self) -> List[Beam]:
+        """
+        Get the list of beams in the Carbon Ion plan.
         
-    def set_planning_method(self, method: CarbonIonPlanningMethod):
+        Returns
+        -------
+        List[Beam]
+            List of beams in the plan
+        """
+        return self.beams
+        
+    def set_planning_method(self, method: CarbonIonPlanningMethod) -> None:
         """
         Set the planning method.
         
@@ -136,8 +192,10 @@ class CarbonIonTherapy:
             self.robust_optimization = True
         else:
             self.robust_optimization = False
+        
+        logger.info(f"Set planning method for Carbon Ion plan {self.name}: {method.value}")
             
-    def set_rbe_parameters(self, model: str, alpha_beta_ratio: float):
+    def set_rbe_parameters(self, model: str, alpha_beta_ratio: float) -> None:
         """
         Set RBE calculation parameters.
         
@@ -150,8 +208,10 @@ class CarbonIonTherapy:
         """
         self.rbe_model = model
         self.alpha_beta_ratio = alpha_beta_ratio
+        logger.info(f"Set RBE parameters for Carbon Ion plan {self.name}: "
+                   f"model={model}, α/β={alpha_beta_ratio} Gy")
         
-    def set_robust_parameters(self, setup_uncertainty: float, range_uncertainty: float):
+    def set_robust_parameters(self, setup_uncertainty: float, range_uncertainty: float) -> None:
         """
         Set robust optimization parameters.
         
@@ -165,8 +225,10 @@ class CarbonIonTherapy:
         self.setup_uncertainty = setup_uncertainty
         self.range_uncertainty = range_uncertainty
         self.robust_optimization = True
+        logger.info(f"Set robust parameters for Carbon Ion plan {self.name}: "
+                   f"setup={setup_uncertainty} mm, range={range_uncertainty}%")
         
-    def set_target_structures(self, structure_ids: List[str]):
+    def set_target_structures(self, structure_ids: List[str]) -> None:
         """
         Set target structures.
         
@@ -176,8 +238,9 @@ class CarbonIonTherapy:
             List of structure IDs
         """
         self.target_structures = structure_ids
+        logger.info(f"Set {len(structure_ids)} target structures for Carbon Ion plan {self.name}")
         
-    def set_oar_structures(self, structure_ids: List[str]):
+    def set_oar_structures(self, structure_ids: List[str]) -> None:
         """
         Set organs-at-risk structures.
         
@@ -187,8 +250,9 @@ class CarbonIonTherapy:
             List of structure IDs
         """
         self.oar_structures = structure_ids
+        logger.info(f"Set {len(structure_ids)} OAR structures for Carbon Ion plan {self.name}")
         
-    def add_optimization_objective(self, objective: Dict[str, Any]):
+    def add_optimization_objective(self, objective: Dict[str, Any]) -> None:
         """
         Add an optimization objective.
         
@@ -198,22 +262,26 @@ class CarbonIonTherapy:
             Optimization objective
         """
         self.optimization_objectives.append(objective)
-        
+        logger.info(f"Added optimization objective for Carbon Ion plan {self.name}: "
+                   f"structure={objective.get('structure', 'unknown')}, "
+                   f"type={objective.get('type', 'unknown')}")
+    
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert Carbon Ion Therapy plan to dictionary.
+        Convert Carbon Ion plan to a dictionary.
         
         Returns
         -------
         Dict[str, Any]
-            Dictionary representation
+            Dictionary representation of the plan
         """
-        return {
-            "name": self.name,
-            "carbon_id": self.carbon_id,
-            "technique": self.technique,
-            "planning_method": self.planning_method,
-            "total_dose": self.total_dose,
+        # Start with the base technique dictionary
+        result = super().to_dict()
+        
+        # Add Carbon Ion-specific attributes
+        result.update({
+            "delivery_technique": self.delivery_technique.value,
+            "planning_method": self.planning_method.value,
             "dose_prescription_type": self.dose_prescription_type,
             "rbe_model": self.rbe_model,
             "alpha_beta_ratio": self.alpha_beta_ratio,
@@ -222,16 +290,15 @@ class CarbonIonTherapy:
             "optimization_objectives": self.optimization_objectives,
             "robust_optimization": self.robust_optimization,
             "setup_uncertainty": self.setup_uncertainty,
-            "range_uncertainty": self.range_uncertainty,
-            "fractionation": self.fractionation.to_dict() if self.fractionation else None,
-            "machine": self.machine.machine_id if self.machine else None,
-            "beams": [beam.to_dict() for beam in self.beams]
-        }
+            "range_uncertainty": self.range_uncertainty
+        })
+        
+        return result
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CarbonIonTherapy':
         """
-        Create Carbon Ion Therapy plan from dictionary.
+        Create a Carbon Ion plan from a dictionary.
         
         Parameters
         ----------
@@ -241,24 +308,68 @@ class CarbonIonTherapy:
         Returns
         -------
         CarbonIonTherapy
-            Carbon Ion Therapy plan instance
+            CarbonIonTherapy instance
         """
+        # Create delivery technique enum from string
+        delivery_technique = CarbonIonDeliveryTechnique(data.get("delivery_technique", 
+                                                        CarbonIonDeliveryTechnique.ACTIVE_SCANNING.value))
+        
+        # Create planning method enum from string
+        planning_method = CarbonIonPlanningMethod(data.get("planning_method", 
+                                                 CarbonIonPlanningMethod.MULTI_FIELD_OPTIMIZATION.value))
+        
+        # Create basic plan
         plan = cls(
             name=data["name"],
-            technique=data["technique"],
-            planning_method=data["planning_method"],
-            carbon_id=data["carbon_id"]
+            technique=delivery_technique,
+            planning_method=planning_method,
+            carbon_id=data["technique_id"]
         )
         
-        plan.total_dose = data["total_dose"]
-        plan.dose_prescription_type = data["dose_prescription_type"]
-        plan.rbe_model = data["rbe_model"]
-        plan.alpha_beta_ratio = data["alpha_beta_ratio"]
-        plan.target_structures = data["target_structures"]
-        plan.oar_structures = data["oar_structures"]
-        plan.optimization_objectives = data["optimization_objectives"]
-        plan.robust_optimization = data["robust_optimization"]
-        plan.setup_uncertainty = data["setup_uncertainty"]
-        plan.range_uncertainty = data["range_uncertainty"]
+        # Restore specific parameters
+        if "dose_prescription_type" in data:
+            plan.dose_prescription_type = data["dose_prescription_type"]
+            
+        if "rbe_model" in data:
+            plan.rbe_model = data["rbe_model"]
+            
+        if "alpha_beta_ratio" in data:
+            plan.alpha_beta_ratio = data["alpha_beta_ratio"]
+            
+        if "target_structures" in data:
+            plan.target_structures = data["target_structures"]
+            
+        if "oar_structures" in data:
+            plan.oar_structures = data["oar_structures"]
+            
+        if "optimization_objectives" in data:
+            plan.optimization_objectives = data["optimization_objectives"]
+            
+        if "robust_optimization" in data:
+            plan.robust_optimization = data["robust_optimization"]
+            
+        if "setup_uncertainty" in data:
+            plan.setup_uncertainty = data["setup_uncertainty"]
+            
+        if "range_uncertainty" in data:
+            plan.range_uncertainty = data["range_uncertainty"]
+        
+        # Restore common components (machine, fractionation, beams) if present
+        if "machine" in data and data["machine"]:
+            from quangtps.treatment.machine.machine_factory import MachineFactory
+            machine_factory = MachineFactory()
+            machine = machine_factory.create_from_dict(data["machine"])
+            plan.set_machine(machine)
+        
+        if "fractionation" in data and data["fractionation"]:
+            fractionation = Fractionation.from_dict(data["fractionation"])
+            plan.set_fractionation(fractionation)
+        
+        if "beams" in data and data["beams"]:
+            from quangtps.treatment.beams.beam_factory import BeamFactory
+            beam_factory = BeamFactory()
+            for beam_data in data["beams"]:
+                beam = beam_factory.create_from_dict(beam_data)
+                plan.add_beam(beam)
         
         return plan
