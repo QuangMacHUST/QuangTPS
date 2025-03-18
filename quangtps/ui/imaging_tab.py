@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QDir, QPoint, QRect
 from PyQt5.QtGui import QIcon, QPixmap, QColor, QPalette, QPainter, QPen, QBrush
 
+from quangtps.ui.image_viewer import ImageViewer
 from quangtps.ui.image_display import ImageSliceWidget, ImageControlWidget
 from quangtps.ui.dicom_loader import DicomLoader, DicomSeries
 from quangtps.ui.base_contour_tool import ContourToolManager, Contour, ContourCollection
@@ -395,15 +396,11 @@ class ImagingTab(QWidget):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Widget hiển thị lát cắt
-        self.image_widget = ImageSliceWidget()
-        
-        # Widget điều khiển hình ảnh
-        self.image_control = ImageControlWidget()
+        # Widget hiển thị hình ảnh đa mặt phẳng và 3D
+        self.image_viewer = ImageViewer()
         
         # Thêm vào layout trái
-        left_layout.addWidget(self.image_widget, 4)
-        left_layout.addWidget(self.image_control, 1)
+        left_layout.addWidget(self.image_viewer, 1)
         
         # === Panel phải - Công cụ contour và điều khiển ===
         right_panel = QWidget()
@@ -434,7 +431,8 @@ class ImagingTab(QWidget):
     def _init_tools(self):
         """Khởi tạo các công cụ contour."""
         # Thiết lập widget hiển thị cho tool manager
-        self.contour_tool_manager.set_image_widget(self.image_widget)
+        # Sử dụng axial_view từ image_viewer cho các công cụ contour
+        self.contour_tool_manager.set_image_widget(self.image_viewer.axial_view)
         
         # Thêm các công cụ contour
         self.contour_tool_manager.add_tool(FreehandContourTool())
@@ -455,12 +453,17 @@ class ImagingTab(QWidget):
         # Kết nối tín hiệu thay đổi công cụ
         self.contour_control.tool_changed.connect(self.contour_tool_manager.set_active_tool)
         
-        # Kết nối tín hiệu sự kiện chuột từ image widget đến tool manager
-        self.image_widget.mouse_pressed.connect(self.contour_tool_manager.mouse_press)
-        self.image_widget.mouse_moved.connect(self.contour_tool_manager.mouse_move)
-        self.image_widget.mouse_released.connect(self.contour_tool_manager.mouse_release)
-        self.image_widget.key_pressed.connect(self.contour_tool_manager.key_press)
-        self.image_widget.key_released.connect(self.contour_tool_manager.key_release)
+        # Kết nối tín hiệu sự kiện chuột từ image viewer đến tool manager
+        self.image_viewer.axial_view.mouse_pressed.connect(self.contour_tool_manager.mouse_press)
+        self.image_viewer.axial_view.mouse_moved.connect(self.contour_tool_manager.mouse_move)
+        self.image_viewer.axial_view.mouse_released.connect(self.contour_tool_manager.mouse_release)
+        self.image_viewer.axial_view.key_pressed.connect(self.contour_tool_manager.key_press)
+        self.image_viewer.axial_view.key_released.connect(self.contour_tool_manager.key_release)
+        
+        # Kết nối tín hiệu scroll để thay đổi lát cắt trong các view
+        self.image_viewer.axial_view.wheelEvent = self._on_wheel_event_axial
+        self.image_viewer.sagittal_view.wheelEvent = self._on_wheel_event_sagittal
+        self.image_viewer.coronal_view.wheelEvent = self._on_wheel_event_coronal
         
         # Kết nối tín hiệu từ các công cụ contour
         for tool_name in ["Freehand", "Brush", "Circle", "Rectangle", "Threshold", "AutoThreshold"]:
@@ -468,11 +471,63 @@ class ImagingTab(QWidget):
             if tool:
                 tool.contour_created.connect(self.contour_control.add_contour_from_points)
                 tool.contour_updated.connect(self.contour_control.add_contour_from_points)
-        
-        # Kết nối tín hiệu điều khiển hình ảnh
-        self.image_control.brightness_changed.connect(self.image_widget.set_brightness)
-        self.image_control.contrast_changed.connect(self.image_widget.set_contrast)
-        self.image_control.slice_changed.connect(self.image_widget.set_slice_index)
+    
+    def _on_wheel_event_axial(self, event):
+        """Xử lý sự kiện cuộn chuột trên view Axial."""
+        if self.current_series and self.current_series.pixel_data is not None:
+            delta = event.angleDelta().y()
+            current_z = self.image_viewer.current_position[2]
+            
+            # Tính toán chỉ số slice mới
+            if delta > 0:
+                # Cuộn lên - slice giảm
+                new_z = max(0, current_z - 1)
+            else:
+                # Cuộn xuống - slice tăng
+                new_z = min(self.current_series.pixel_data.shape[0] - 1, current_z + 1)
+            
+            # Cập nhật vị trí slice
+            self.image_viewer.current_position[2] = new_z
+            self.image_viewer._update_displays()
+            
+            # Cập nhật thanh trượt
+            self.image_viewer.slice_slider.setValue(new_z)
+    
+    def _on_wheel_event_sagittal(self, event):
+        """Xử lý sự kiện cuộn chuột trên view Sagittal."""
+        if self.current_series and self.current_series.pixel_data is not None:
+            delta = event.angleDelta().y()
+            current_x = self.image_viewer.current_position[0]
+            
+            # Tính toán chỉ số slice mới
+            if delta > 0:
+                # Cuộn lên - slice giảm
+                new_x = max(0, current_x - 1)
+            else:
+                # Cuộn xuống - slice tăng
+                new_x = min(self.current_series.pixel_data.shape[1] - 1, current_x + 1)
+            
+            # Cập nhật vị trí slice
+            self.image_viewer.current_position[0] = new_x
+            self.image_viewer._update_displays()
+    
+    def _on_wheel_event_coronal(self, event):
+        """Xử lý sự kiện cuộn chuột trên view Coronal."""
+        if self.current_series and self.current_series.pixel_data is not None:
+            delta = event.angleDelta().y()
+            current_y = self.image_viewer.current_position[1]
+            
+            # Tính toán chỉ số slice mới
+            if delta > 0:
+                # Cuộn lên - slice giảm
+                new_y = max(0, current_y - 1)
+            else:
+                # Cuộn xuống - slice tăng
+                new_y = min(self.current_series.pixel_data.shape[2] - 1, current_y + 1)
+            
+            # Cập nhật vị trí slice
+            self.image_viewer.current_position[1] = new_y
+            self.image_viewer._update_displays()
     
     def _on_load_dicom(self):
         """Xử lý sự kiện khi người dùng muốn tải DICOM từ thư mục."""
@@ -507,11 +562,8 @@ class ImagingTab(QWidget):
         if not self.current_series:
             return
         
-        # Thiết lập dữ liệu hình ảnh cho widget hiển thị
-        self.image_widget.set_image_data(self.current_series.pixel_data)
-        
-        # Thiết lập thông tin slice cho widget điều khiển
-        self.image_control.set_slice_count(self.current_series.num_slices)
+        # Thiết lập dữ liệu hình ảnh cho ImageViewer
+        self.image_viewer.load_image(self.current_series.image)
         
         # Cập nhật thông tin series
         self._update_series_info()
@@ -536,14 +588,14 @@ class ImagingTab(QWidget):
         slice_info : Dict
             Thông tin bổ sung về lát cắt
         """
-        # Thiết lập dữ liệu hình ảnh cho widget hiển thị
-        self.image_widget.set_image_data(image_data)
+        # Tạo đối tượng Image từ dữ liệu hình ảnh
+        from quangtps.imaging.image import Image
+        image = Image()
+        image.data = image_data
+        image.modality = "CT"  # Mặc định là CT nếu không có thông tin cụ thể
         
-        # Thiết lập thông tin slice cho widget điều khiển
-        if image_data is not None:
-            self.image_control.set_slice_count(image_data.shape[0])
-        
-        # Các xử lý khác nếu cần
+        # Thiết lập dữ liệu hình ảnh cho ImageViewer
+        self.image_viewer.load_image(image)
     
     def get_contours(self):
         """
@@ -576,4 +628,4 @@ class ImagingTab(QWidget):
         int
             Chỉ số lát cắt
         """
-        return self.image_widget.slice_idx if self.image_widget else 0
+        return self.image_viewer.slice_idx if self.image_viewer else 0

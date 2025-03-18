@@ -11,8 +11,21 @@ từ các nguồn khác nhau, bao gồm file riêng lẻ và series DICOM.
 import os
 import logging
 import numpy as np
-from typing import Dict, List, Any, Optional, Tuple, Union
-from collections import defaultdict
+from typing import Dict, List, Any, Optional
+
+# Import các thư viện PyQt cho GUI
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
+    QFileDialog, QTreeWidget, QTreeWidgetItem, QProgressBar,
+    QSplitter, QGridLayout, QGroupBox, QComboBox, QMessageBox,
+    QTabWidget, QFrame, QLineEdit, QCheckBox, QRadioButton
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QIcon, QFont
+
+# Import các module cần thiết từ quangtps
+from quangtps.imaging.image import Image
+from quangtps.database.patient_db import Patient, Study, Series
 
 try:
     import pydicom
@@ -60,6 +73,10 @@ class DicomSeries:
         self.image_orientation = None  # Hướng của hình ảnh
         self.pixel_spacing = None  # Khoảng cách giữa các pixel
         self.slice_thickness = None  # Độ dày lát cắt
+        self.base_directory = ""  # Thư mục gốc của series
+        
+        # Thiết lập thư mục gốc mặc định
+        self.base_directory = ""
     
     def add_file(self, file_path: str) -> bool:
         """
@@ -179,6 +196,9 @@ class DicomSeries:
             self.image_position = image.GetOrigin()
             self.image_orientation = image.GetDirection()
             
+            # Lưu base_directory (thư mục gốc của series)
+            self.base_directory = os.path.dirname(self.files[0]) if self.files else ""
+            
             return True
         
         except Exception as e:
@@ -199,47 +219,44 @@ class DicomSeries:
             slices = [pydicom.dcmread(file) for file in self.files]
             
             # Sắp xếp các lát cắt theo vị trí
-            if hasattr(slices[0], 'ImagePositionPatient') and slices[0].ImagePositionPatient:
-                slices.sort(key=lambda s: s.ImagePositionPatient[2])
-            elif hasattr(slices[0], 'SliceLocation') and slices[0].SliceLocation:
-                slices.sort(key=lambda s: s.SliceLocation)
+            if hasattr(slices[0], 'ImagePositionPatient'):
+                # Sắp xếp theo vị trí dọc theo trục z (thường là vị trí thứ 3)
+                slices = sorted(slices, key=lambda s: s.ImagePositionPatient[2])
+            elif hasattr(slices[0], 'SliceLocation'):
+                # Sắp xếp theo vị trí lát cắt
+                slices = sorted(slices, key=lambda s: s.SliceLocation)
             else:
-                # Không thể sắp xếp theo vị trí
-                logger.warning("Không thể sắp xếp các lát cắt theo vị trí")
-                return False
+                # Nếu không có thông tin vị trí, sắp xếp theo InstanceNumber
+                slices = sorted(slices, key=lambda s: s.InstanceNumber)
+                
+            # Trích xuất dữ liệu pixel từ các lát cắt
+            img_shape = list(slices[0].pixel_array.shape)
+            img_shape.insert(0, len(slices))  # Thêm chiềm z
             
-            # Lấy kích thước pixel và số lát cắt
-            pixel_shape = slices[0].pixel_array.shape
-            num_slices = len(slices)
+            self.image_data = np.zeros(img_shape, dtype=slices[0].pixel_array.dtype)
             
-            # Tạo mảng 3D
-            self.image_data = np.zeros((num_slices, *pixel_shape), dtype=np.int16)
-            
-            # Điền dữ liệu vào mảng 3D
+            # Gán dữ liệu từ từng lát cắt
             for i, s in enumerate(slices):
                 self.image_data[i, :, :] = s.pixel_array
             
-            # Rescale dữ liệu nếu cần thiết (đối với CT)
-            if hasattr(slices[0], 'RescaleIntercept') and hasattr(slices[0], 'RescaleSlope'):
-                intercept = slices[0].RescaleIntercept
-                slope = slices[0].RescaleSlope
-                self.image_data = self.image_data * slope + intercept
-            
             # Lưu metadata
-            if hasattr(slices[0], 'PixelSpacing') and slices[0].PixelSpacing:
+            if hasattr(slices[0], 'PixelSpacing'):
                 self.pixel_spacing = slices[0].PixelSpacing
             
-            if hasattr(slices[0], 'SliceThickness') and slices[0].SliceThickness:
+            if hasattr(slices[0], 'SliceThickness'):
                 self.slice_thickness = slices[0].SliceThickness
             
-            if hasattr(slices[0], 'ImagePositionPatient') and slices[0].ImagePositionPatient:
+            if hasattr(slices[0], 'ImagePositionPatient'):
                 self.image_position = slices[0].ImagePositionPatient
             
-            if hasattr(slices[0], 'ImageOrientationPatient') and slices[0].ImageOrientationPatient:
+            if hasattr(slices[0], 'ImageOrientationPatient'):
                 self.image_orientation = slices[0].ImageOrientationPatient
+
+            # Lưu base_directory (thư mục gốc của series)
+            self.base_directory = os.path.dirname(self.files[0]) if self.files else ""
             
             return True
-        
+            
         except Exception as e:
             logger.error(f"Lỗi khi tải dữ liệu với pydicom: {str(e)}")
             return False
@@ -541,18 +558,6 @@ def get_dicom_file_metadata(file_path: str) -> Dict[str, Any]:
         logger.error(f"Lỗi khi trích xuất metadata từ {file_path}: {str(e)}")
         return {"Error": str(e)}
 
-# Thêm imports cần thiết cho GUI
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-    QFileDialog, QTreeWidget, QTreeWidgetItem, QProgressBar,
-    QSplitter, QGridLayout, QGroupBox, QComboBox, QMessageBox,
-    QTabWidget, QFrame, QLineEdit, QCheckBox, QRadioButton
-)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QIcon, QFont
-
-from quangtps.imaging.image import Image
-from quangtps.database.patient_db import Patient, Study, Series
 
 class DicomLoaderWidget(QWidget):
     """

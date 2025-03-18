@@ -909,6 +909,7 @@ class ImageDisplay(QWidget):
         self.pan_offset = (0, 0)
         self.current_tool = "pan"  # pan, zoom, measure, window
         self.title = ""  # Thêm biến title để lưu tiêu đề
+        self.handle_wheel_event = False  # Mặc định không xử lý sự kiện wheel, để xử lý ở cấp cao hơn
         
         # UI setup
         self._init_ui()
@@ -1106,14 +1107,19 @@ class ImageDisplay(QWidget):
             
     def wheelEvent(self, event):
         """Xử lý sự kiện lăn chuột."""
+        # Chỉ xử lý sự kiện wheel nếu handle_wheel_event = True
+        if self.handle_wheel_event:
+            # Xử lý zoom
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.set_zoom(self.zoom_factor * 1.1)
+            elif delta < 0:
+                self.set_zoom(self.zoom_factor / 1.1)
+            event.accept()
+        else:
+            # Nếu không xử lý, để event được truyền lên parent widget
+            event.ignore()
         super().wheelEvent(event)
-        
-        # Xử lý zoom
-        delta = event.angleDelta().y()
-        if delta > 0:
-            self.set_zoom(self.zoom_factor * 1.1)
-        elif delta < 0:
-            self.set_zoom(self.zoom_factor / 1.1)
             
     def resizeEvent(self, event):
         """Xử lý sự kiện thay đổi kích thước."""
@@ -1128,6 +1134,12 @@ class ImageDisplay(QWidget):
             tool_name: Tên công cụ ('pan', 'zoom', 'window', 'measure')
         """
         self.current_tool = tool_name
+        
+        # Nếu công cụ là zoom, bật xử lý sự kiện wheel
+        if tool_name == "zoom":
+            self.handle_wheel_event = True
+        else:
+            self.handle_wheel_event = False
         
     def set_title(self, title):
         """

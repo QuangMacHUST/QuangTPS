@@ -89,8 +89,8 @@ class DBConnector:
                     name TEXT NOT NULL,
                     birth_date TEXT,
                     gender TEXT,
-                    created_date TEXT,
-                    updated_date TEXT,
+                    created_at TEXT,
+                    updated_at TEXT,
                     metadata TEXT
                 )
             ''')

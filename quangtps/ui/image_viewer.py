@@ -23,8 +23,10 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QRectF, QPoint
 from PyQt5.QtGui import (
     QImage, QPixmap, QPainter, QColor, QPen, QBrush, QFont, QTransform,
-    QMouseEvent, QWheelEvent, QKeyEvent
+    QMouseEvent, QKeyEvent
 )
+
+from PyQt5.QtCore import QWheelEvent
 
 from quangtps.core.logging import get_logger
 from quangtps.imaging.image import Image
@@ -207,6 +209,11 @@ class ImageViewer(QWidget):
         self.axial_view.mouse_position_changed.connect(self._update_position_info)
         self.sagittal_view.mouse_position_changed.connect(self._update_position_info)
         self.coronal_view.mouse_position_changed.connect(self._update_position_info)
+        
+        # Kết nối sự kiện wheel từ các view đến hàm xử lý thay đổi lát cắt
+        self.axial_view.installEventFilter(self)
+        self.sagittal_view.installEventFilter(self)
+        self.coronal_view.installEventFilter(self)
     
     def load_image(self, image: Image):
         """
@@ -439,10 +446,58 @@ class ImageViewer(QWidget):
         # Lấy giá trị HU tại vị trí hiện tại nếu nằm trong phạm vi
         try:
             hu_value = self.primary_image.data[z, x, y]
-        except:
+        except IndexError:
             hu_value = "-"
             
         self.info_label.setText(f"Slice: {z+1}/{depth} | Pos: ({x}, {y}, {z}) | HU: {hu_value}")
         
         # Phát tín hiệu thay đổi vị trí
         self.position_changed.emit(x, y, z)
+        
+    def eventFilter(self, source, event):
+        """
+        Lọc sự kiện từ các widget con để xử lý sự kiện wheel từ các màn hình hiển thị.
+        
+        Args:
+            source: Đối tượng phát sự kiện
+            event: Sự kiện được phát
+        
+        Returns:
+            bool: True nếu sự kiện đã được xử lý, False nếu không
+        """
+        if event.type() == QWheelEvent.Type.Wheel and self.primary_image and self.primary_image.data is not None:
+            delta = event.angleDelta().y()
+            step = 1 if delta < 0 else -1  # Đảo ngược hướng để phù hợp với thói quen cuộn
+            
+            if source == self.axial_view:
+                # Thay đổi lát cắt Axial (z)
+                z = self.current_position[2]
+                new_z = max(0, min(z + step, self.primary_image.data.shape[0] - 1))
+                if new_z != z:
+                    self.current_position[2] = new_z
+                    self.slice_slider.setValue(new_z)  # Cập nhật giá trị thanh trượt
+                    self._update_displays()
+                    self._update_info_label()
+                return True
+                
+            elif source == self.sagittal_view:
+                # Thay đổi lát cắt Sagittal (x)
+                x = self.current_position[0]
+                new_x = max(0, min(x + step, self.primary_image.data.shape[1] - 1))
+                if new_x != x:
+                    self.current_position[0] = new_x
+                    self._update_displays()
+                    self._update_info_label()
+                return True
+                
+            elif source == self.coronal_view:
+                # Thay đổi lát cắt Coronal (y)
+                y = self.current_position[1]
+                new_y = max(0, min(y + step, self.primary_image.data.shape[2] - 1))
+                if new_y != y:
+                    self.current_position[1] = new_y
+                    self._update_displays()
+                    self._update_info_label()
+                return True
+                
+        return super().eventFilter(source, event)
