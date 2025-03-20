@@ -80,119 +80,169 @@ class DBConnector:
             logger.info("Đã ngắt kết nối cơ sở dữ liệu")
     
     def _create_tables(self):
-        """Tạo các bảng cơ sở dữ liệu nếu chưa tồn tại"""
-        try:
-            # Tạo bảng patients
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS patients (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    birth_date TEXT,
-                    gender TEXT,
-                    created_at TEXT,
-                    updated_at TEXT,
-                    metadata TEXT
-                )
-            ''')
-            
-            # Tạo bảng studies
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS studies (
-                    id TEXT PRIMARY KEY,
-                    patient_id TEXT NOT NULL,
-                    description TEXT,
-                    study_date TEXT,
-                    study_time TEXT,
-                    metadata TEXT,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Tạo bảng series
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS series (
-                    id TEXT PRIMARY KEY,
-                    study_id TEXT NOT NULL,
-                    patient_id TEXT NOT NULL,
-                    modality TEXT,
-                    description TEXT,
-                    series_date TEXT,
-                    series_time TEXT,
-                    metadata TEXT,
-                    FOREIGN KEY (study_id) REFERENCES studies (id) ON DELETE CASCADE,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Tạo bảng instances (images)
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS instances (
-                    id TEXT PRIMARY KEY,
-                    series_id TEXT NOT NULL,
-                    study_id TEXT NOT NULL,
-                    patient_id TEXT NOT NULL,
-                    instance_number INTEGER,
-                    file_path TEXT,
-                    metadata TEXT,
-                    FOREIGN KEY (series_id) REFERENCES series (id) ON DELETE CASCADE,
-                    FOREIGN KEY (study_id) REFERENCES studies (id) ON DELETE CASCADE,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Tạo bảng cấu trúc (structures)
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS structures (
-                    id TEXT PRIMARY KEY,
-                    patient_id TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    structure_type TEXT,
-                    color TEXT,
-                    opacity REAL,
-                    data TEXT,
-                    metadata TEXT,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Tạo bảng kế hoạch (plans)
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS plans (
-                    id TEXT PRIMARY KEY,
-                    patient_id TEXT NOT NULL,
-                    study_id TEXT,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    created_at TEXT,
-                    updated_at TEXT,
-                    metadata TEXT,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE,
-                    FOREIGN KEY (study_id) REFERENCES studies (id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Tạo bảng liều (doses)
-            self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS doses (
-                    id TEXT PRIMARY KEY,
-                    plan_id TEXT NOT NULL,
-                    patient_id TEXT NOT NULL,
-                    dose_type TEXT,
-                    dose_unit TEXT,
-                    dose_data TEXT,
-                    metadata TEXT,
-                    FOREIGN KEY (plan_id) REFERENCES plans (id) ON DELETE CASCADE,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
-                )
-            ''')
-            
-            # Lưu các thay đổi
-            self.connection.commit()
-            logger.info("Đã tạo các bảng cơ sở dữ liệu nếu chưa tồn tại")
-            
-        except Exception as e:
-            logger.error("Lỗi khi tạo bảng cơ sở dữ liệu: %s", str(e), exc_info=True)
-            raise DatabaseError("Lỗi khi tạo bảng cơ sở dữ liệu: %s" % str(e)) from e
+        """
+        Tạo các bảng cần thiết cho cơ sở dữ liệu nếu chưa tồn tại.
+        """
+        # Tạo bảng patients
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS patients (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                birth_date TEXT,
+                gender TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                created_date TEXT,
+                metadata TEXT
+            )
+        """)
+        
+        # Tạo bảng studies
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS studies (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                description TEXT,
+                study_date TEXT,
+                study_time TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )
+        """)
+        
+        # Tạo bảng series
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS series (
+                id TEXT PRIMARY KEY,
+                study_id TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
+                modality TEXT,
+                description TEXT,
+                series_date TEXT,
+                series_time TEXT,
+                metadata TEXT,
+                file_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (study_id) REFERENCES studies (id),
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )
+        """)
+        
+        # Tạo bảng structures
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS structures (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT,
+                color TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                file_path TEXT,
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )
+        """)
+        
+        # Tạo bảng structure_sets
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS structure_sets (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                study_id TEXT,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                FOREIGN KEY (patient_id) REFERENCES patients (id),
+                FOREIGN KEY (study_id) REFERENCES studies (id)
+            )
+        """)
+        
+        # Tạo bảng structure_set_items để lưu trữ cấu trúc nào thuộc tập hợp nào
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS structure_set_items (
+                structure_set_id TEXT NOT NULL,
+                structure_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (structure_set_id, structure_id),
+                FOREIGN KEY (structure_set_id) REFERENCES structure_sets (id),
+                FOREIGN KEY (structure_id) REFERENCES structures (id)
+            )
+        """)
+        
+        # Tạo bảng plans
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS plans (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                technique TEXT,
+                prescribed_dose REAL,
+                fraction_count INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )
+        """)
+        
+        # Tạo bảng beams
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS beams (
+                id TEXT PRIMARY KEY,
+                plan_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                gantry_angle REAL,
+                collimator_angle REAL,
+                couch_angle REAL,
+                isocenter_x REAL,
+                isocenter_y REAL,
+                isocenter_z REAL,
+                monitor_units REAL,
+                weight REAL,
+                energy TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                FOREIGN KEY (plan_id) REFERENCES plans (id)
+            )
+        """)
+        
+        # Tạo bảng dose_distributions
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS dose_distributions (
+                id TEXT PRIMARY KEY,
+                plan_id TEXT NOT NULL,
+                beam_id TEXT,
+                type TEXT NOT NULL,
+                file_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                FOREIGN KEY (plan_id) REFERENCES plans (id),
+                FOREIGN KEY (beam_id) REFERENCES beams (id)
+            )
+        """)
+        
+        # Tạo bảng dvh
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS dvh (
+                id TEXT PRIMARY KEY,
+                plan_id TEXT NOT NULL,
+                structure_id TEXT NOT NULL,
+                file_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT,
+                FOREIGN KEY (plan_id) REFERENCES plans (id),
+                FOREIGN KEY (structure_id) REFERENCES structures (id)
+            )
+        """)
     
     def execute_query(self, query: str, params: Optional[Tuple] = None, fetchall: bool = False):
         """

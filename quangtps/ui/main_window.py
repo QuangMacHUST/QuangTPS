@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QApplication, QWidget, QTabWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QAction, QFileDialog,
     QMessageBox, QDockWidget, QTreeView, QSplitter, QToolBar,
-    QStatusBar, QProgressBar
+    QStatusBar, QProgressBar, QDialog
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon, QFont, QPixmap
@@ -34,6 +34,8 @@ from quangtps.ui.image_viewer import ImageViewer
 from quangtps.ui.imaging_tab import ImagingTab
 from quangtps.ui.workflow_panel import WorkflowManager
 from quangtps.ui.plan_evaluation import PlanEvaluationWidget
+from quangtps.ui.dicom_loader import DicomLoaderWidget
+from quangtps.database.patient_db import PatientDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -347,9 +349,31 @@ class MainWindow(QMainWindow):
     def _import_dicom(self):
         """Nhập dữ liệu DICOM."""
         logger.info("Nhập DICOM")
-        dicom_dir = QFileDialog.getExistingDirectory(self, "Chọn thư mục DICOM")
-        if dicom_dir:
-            QMessageBox.information(self, "Thông báo", f"Sẽ nhập DICOM từ thư mục: {dicom_dir}")
+        
+        # Tạo dialog cho DicomLoader
+        dicom_dialog = QDialog(self)
+        dicom_dialog.setWindowTitle("Nhập dữ liệu DICOM")
+        dicom_dialog.setMinimumSize(1000, 600)
+        
+        # Layout chính cho dialog
+        layout = QVBoxLayout(dicom_dialog)
+        
+        # Tạo widget DICOM Loader
+        dicom_loader = DicomLoaderWidget(dicom_dialog)
+        layout.addWidget(dicom_loader)
+        
+        # Kết nối tín hiệu khi một series được nhập
+        def on_series_imported(patient_id, study_id, series_id):
+            logger.info(f"Series được nhập: {patient_id}, {study_id}, {series_id}")
+            # Cập nhật UI sau khi nhập
+            self._update_ui_state()
+            # Tự động đóng dialog sau khi nhập thành công
+            dicom_dialog.accept()
+        
+        dicom_loader.series_imported.connect(on_series_imported)
+        
+        # Hiển thị dialog
+        dicom_dialog.exec_()
     
     def _export_data(self):
         """Xuất dữ liệu."""

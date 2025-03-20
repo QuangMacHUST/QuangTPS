@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -552,3 +551,229 @@ class StructureLibrary:
         """Create default templates for pelvis region."""
         # Implementation would be similar to head_and_neck but with pelvis-specific structures
         pass
+
+
+class StandardStructureLibrary(StructureLibrary):
+    """
+    Standard structure library containing common clinical structure templates.
+    
+    This class provides a pre-defined library of common clinical structures
+    organized by anatomical site, following international guidelines and
+    recommendations like RTOG, ESTRO, and ICRU.
+    """
+    
+    def __init__(self):
+        """
+        Initialize the standard structure library with predefined templates.
+        """
+        super().__init__(name="Standard Clinical Structures", 
+                         description="Standard clinical structure templates following international guidelines")
+        self._load_standard_templates()
+    
+    def _load_standard_templates(self):
+        """Load standard structure templates from resources or create them programmatically."""
+        # Head and Neck structures
+        self._add_head_and_neck_structures()
+        
+        # Brain structures
+        self._add_brain_structures()
+        
+        # Thorax structures
+        self._add_thorax_structures()
+        
+        # Breast structures
+        self._add_breast_structures()
+        
+        # Abdomen structures
+        self._add_abdomen_structures()
+        
+        # Pelvis structures
+        self._add_pelvis_structures()
+    
+    def _add_head_and_neck_structures(self):
+        """Add standard head and neck structures."""
+        # Organs at risk
+        oars = [
+            ("Parotid_L", "Left Parotid Gland", (170, 51, 106)),
+            ("Parotid_R", "Right Parotid Gland", (170, 51, 106)),
+            ("Brainstem", "Brainstem", (250, 208, 122)),
+            ("SpinalCord", "Spinal Cord", (255, 140, 0)),
+            ("Mandible", "Mandible", (222, 184, 135)),
+            ("Larynx", "Larynx", (255, 160, 122)),
+            ("OralCavity", "Oral Cavity", (205, 92, 92)),
+            ("Esophagus", "Esophagus", (219, 112, 147)),
+            ("Thyroid", "Thyroid", (255, 215, 0)),
+            ("Cochlea_L", "Left Cochlea", (240, 230, 140)),
+            ("Cochlea_R", "Right Cochlea", (240, 230, 140)),
+        ]
+        
+        for code, name, color in oars:
+            template = StructureTemplate(
+                name=name,
+                structure_type=StructureType.ORGAN_AT_RISK,
+                color=color,
+                description=f"Standard {name} structure for head and neck planning"
+            )
+            self.add_template(
+                template, 
+                AnatomicalSite.HEAD_AND_NECK,
+                StructureType.ORGAN_AT_RISK
+            )
+    
+    def _add_brain_structures(self):
+        """Add standard brain structures."""
+        # Organs at risk
+        oars = [
+            ("Brain", "Brain", (250, 128, 114)),
+            ("Eye_L", "Left Eye", (70, 130, 180)),
+            ("Eye_R", "Right Eye", (70, 130, 180)),
+            ("OpticNerve_L", "Left Optic Nerve", (65, 105, 225)),
+            ("OpticNerve_R", "Right Optic Nerve", (65, 105, 225)),
+            ("OpticChiasm", "Optic Chiasm", (176, 224, 230)),
+            ("Pituitary", "Pituitary Gland", (255, 182, 193)),
+            ("Hippocampus_L", "Left Hippocampus", (221, 160, 221)),
+            ("Hippocampus_R", "Right Hippocampus", (221, 160, 221)),
+        ]
+        
+        for code, name, color in oars:
+            template = StructureTemplate(
+                name=name,
+                structure_type=StructureType.ORGAN_AT_RISK,
+                color=color,
+                description=f"Standard {name} structure for brain planning"
+            )
+            self.add_template(
+                template, 
+                AnatomicalSite.BRAIN,
+                StructureType.ORGAN_AT_RISK
+            )
+    
+    def _add_thorax_structures(self):
+        """Add standard thorax structures."""
+        # Organs at risk
+        oars = [
+            ("Lung_L", "Left Lung", (152, 251, 152)),
+            ("Lung_R", "Right Lung", (152, 251, 152)),
+            ("Heart", "Heart", (220, 20, 60)),
+            ("EsophagusThorax", "Thoracic Esophagus", (219, 112, 147)),
+            ("SpinalCordThorax", "Thoracic Spinal Cord", (255, 140, 0)),
+            ("Trachea", "Trachea", (240, 248, 255)),
+            ("BrachialPlexus_L", "Left Brachial Plexus", (186, 85, 211)),
+            ("BrachialPlexus_R", "Right Brachial Plexus", (186, 85, 211)),
+        ]
+        
+        for code, name, color in oars:
+            template = StructureTemplate(
+                name=name,
+                structure_type=StructureType.ORGAN_AT_RISK,
+                color=color,
+                description=f"Standard {name} structure for thorax planning"
+            )
+            self.add_template(
+                template, 
+                AnatomicalSite.THORAX,
+                StructureType.ORGAN_AT_RISK
+            )
+    
+    def _add_breast_structures(self):
+        """Add standard breast structures."""
+        # Organs at risk
+        oars = [
+            ("Breast_L", "Left Breast", (255, 182, 193)),
+            ("Breast_R", "Right Breast", (255, 182, 193)),
+            ("AxillaryLN_L", "Left Axillary Lymph Nodes", (176, 196, 222)),
+            ("AxillaryLN_R", "Right Axillary Lymph Nodes", (176, 196, 222)),
+            ("ChestWall_L", "Left Chest Wall", (233, 150, 122)),
+            ("ChestWall_R", "Right Chest Wall", (233, 150, 122)),
+        ]
+        
+        for code, name, color in oars:
+            template = StructureTemplate(
+                name=name,
+                structure_type=StructureType.ORGAN_AT_RISK,
+                color=color,
+                description=f"Standard {name} structure for breast planning"
+            )
+            self.add_template(
+                template, 
+                AnatomicalSite.BREAST,
+                StructureType.ORGAN_AT_RISK
+            )
+    
+    def _add_abdomen_structures(self):
+        """Add standard abdomen structures."""
+        # Organs at risk
+        oars = [
+            ("Liver", "Liver", (178, 34, 34)),
+            ("Kidney_L", "Left Kidney", (255, 0, 0)),
+            ("Kidney_R", "Right Kidney", (255, 0, 0)),
+            ("Stomach", "Stomach", (255, 140, 0)),
+            ("Spleen", "Spleen", (148, 0, 211)),
+            ("Pancreas", "Pancreas", (255, 218, 185)),
+            ("Bowel", "Bowel", (210, 180, 140)),
+            ("Duodenum", "Duodenum", (255, 165, 0)),
+        ]
+        
+        for code, name, color in oars:
+            template = StructureTemplate(
+                name=name,
+                structure_type=StructureType.ORGAN_AT_RISK,
+                color=color,
+                description=f"Standard {name} structure for abdominal planning"
+            )
+            self.add_template(
+                template, 
+                AnatomicalSite.ABDOMEN,
+                StructureType.ORGAN_AT_RISK
+            )
+    
+    def _add_pelvis_structures(self):
+        """Add standard pelvis structures."""
+        # Organs at risk
+        oars = [
+            ("Bladder", "Bladder", (255, 255, 0)),
+            ("Rectum", "Rectum", (139, 69, 19)),
+            ("FemoralHead_L", "Left Femoral Head", (220, 220, 220)),
+            ("FemoralHead_R", "Right Femoral Head", (220, 220, 220)),
+            ("Prostate", "Prostate", (0, 0, 255)),
+            ("SeminalVesicle", "Seminal Vesicle", (65, 105, 225)),
+            ("PenileBulb", "Penile Bulb", (238, 130, 238)),
+            ("Vagina", "Vagina", (255, 192, 203)),
+            ("Uterus", "Uterus", (199, 21, 133)),
+        ]
+        
+        for code, name, color in oars:
+            template = StructureTemplate(
+                name=name,
+                structure_type=StructureType.ORGAN_AT_RISK,
+                color=color,
+                description=f"Standard {name} structure for pelvic planning"
+            )
+            self.add_template(
+                template, 
+                AnatomicalSite.PELVIS,
+                StructureType.ORGAN_AT_RISK
+            )
+
+
+class UserStructureLibrary(StructureLibrary):
+    """
+    User-defined structure library for custom clinical structure templates.
+    
+    This class allows users to create and maintain their own library of
+    structure templates, which can include customized versions of standard
+    structures or entirely new structures.
+    """
+    
+    def __init__(self, name: str = "User Structures", description: str = "Custom user-defined structure templates"):
+        """
+        Initialize the user structure library.
+        
+        Parameters
+        ----------
+        name : str, optional
+            Name of the user library
+        description : str, optional
+            Description of the user library
+        """
+        super().__init__(name=name, description=description)

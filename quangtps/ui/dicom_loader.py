@@ -25,7 +25,9 @@ from PyQt5.QtGui import QIcon, QFont
 
 # Import các module cần thiết từ quangtps
 from quangtps.imaging.image import Image
-from quangtps.database.patient_db import Patient, Study, Series
+from quangtps.database.patient_db import Patient, Study, Series, PatientDatabase
+from quangtps.database.image_db import ImageSeries, ImageDatabase
+from quangtps.core.logging import get_logger
 
 try:
     import pydicom
@@ -40,7 +42,7 @@ try:
 except ImportError:
     SITK_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DicomSeries:
@@ -330,6 +332,7 @@ class DicomLoader:
     def __init__(self):
         """Khởi tạo DicomLoader."""
         self.series_list = []  # Danh sách các chuỗi DICOM đã tải
+        self.base_directory = ""  # Thư mục gốc chứa dữ liệu DICOM
         
         # Kiểm tra các thư viện cần thiết
         self._check_libraries()
@@ -392,6 +395,9 @@ class DicomLoader:
         if not PYDICOM_AVAILABLE:
             logger.error("Không thể tải thư mục DICOM vì thiếu thư viện pydicom")
             return []
+        
+        # Cập nhật thư mục gốc
+        self.base_directory = directory_path
         
         # Danh sách chuỗi mới
         new_series_list = []
@@ -583,6 +589,10 @@ class DicomLoaderWidget(QWidget):
         self.current_directory = ""
         self.current_series = None
         
+        # Khởi tạo cơ sở dữ liệu
+        self.patient_db = PatientDatabase()
+        self.image_db = ImageDatabase()
+        
         # UI
         self._init_ui()
     
@@ -741,7 +751,6 @@ class DicomLoaderWidget(QWidget):
             patient_name = metadata.get('PatientName', 'Unknown')
             
             study_uid = metadata.get('StudyInstanceUID', 'Unknown')
-            study_desc = metadata.get('StudyDescription', 'Unknown Study')
             study_date = metadata.get('StudyDate', '')
             
             # Tạo entry cho bệnh nhân nếu chưa tồn tại
@@ -754,7 +763,6 @@ class DicomLoaderWidget(QWidget):
             # Tạo entry cho nghiên cứu nếu chưa tồn tại
             if study_uid not in patients[patient_id]['studies']:
                 patients[patient_id]['studies'][study_uid] = {
-                    'description': study_desc,
                     'date': study_date,
                     'series': []
                 }
@@ -770,7 +778,7 @@ class DicomLoaderWidget(QWidget):
             
             for study_uid, study_info in patient_info['studies'].items():
                 study_item = QTreeWidgetItem(patient_item)
-                study_item.setText(0, f"{study_info['description']} - {study_info['date']}")
+                study_item.setText(0, f"{study_info['date']}")
                 study_item.setData(0, Qt.UserRole, {'type': 'study', 'id': study_uid})
                 
                 for series in study_info['series']:
@@ -844,12 +852,47 @@ class DicomLoaderWidget(QWidget):
             patient_id = metadata.get('PatientID', 'Unknown')
             patient_name = metadata.get('PatientName', 'Unknown')
             study_uid = metadata.get('StudyInstanceUID', 'Unknown')
-            study_desc = metadata.get('StudyDescription', 'Unknown Study')
             series_id = self.current_series.series_id
             
             # Đặt trạng thái
-            self.status_label.setText(f"Đang nhập chuỗi {self.current_series.description}...")
+            self.status_label.setText("Đang nhập chuỗi %s..." % self.current_series.description)
             self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(30)
+            
+            # Tạo hoặc cập nhật bệnh nhân trong cơ sở dữ liệu
+            birth_date = metadata.get('PatientBirthDate', None)
+            gender = metadata.get('PatientSex', None)
+            
+            # Kiểm tra xem bệnh nhân đã tồn tại chưa
+            patient = self.patient_db.get_patient(patient_id)
+            if not patient:
+                logger.info("Tạo bệnh nhân mới với ID: %s", patient_id)
+                patient_metadata = {k: v for k, v in metadata.items() if k.startswith('Patient')}
+                patient_id = self.patient_db.create_patient(
+                    patient_id=patient_id,
+                    name=patient_name,
+                    birth_date=birth_date,
+                    gender=gender,
+                    metadata=patient_metadata
+                )
+            
+            # Kiểm tra và tạo nghiên cứu nếu cần
+            study = self.patient_db.get_study(study_uid)
+            if not study:
+                logger.info("Tạo nghiên cứu mới với ID: %s", study_uid)
+                study_metadata = {k: v for k, v in metadata.items() if k.startswith('Study')}
+                study_desc = metadata.get('StudyDescription', '')
+                study_date = metadata.get('StudyDate', '')
+                study_time = metadata.get('StudyTime', '')
+                self.patient_db.create_study(
+                    study_id=study_uid,
+                    patient_id=patient_id,
+                    description=study_desc,
+                    study_date=study_date,
+                    study_time=study_time,
+                    metadata=study_metadata
+                )
+            
             self.progress_bar.setValue(50)
             
             # Tạo đối tượng hình ảnh từ chuỗi DICOM
@@ -867,22 +910,35 @@ class DicomLoaderWidget(QWidget):
                     if key not in image.metadata:
                         image.metadata[key] = value
                 
-                # TODO: Lưu hình ảnh vào cơ sở dữ liệu
+                # Lưu hình ảnh vào cơ sở dữ liệu
+                self.progress_bar.setValue(70)
                 
-                self.status_label.setText(f"Đã nhập thành công chuỗi {self.current_series.description}")
+                # Lưu hình ảnh sử dụng ImageDatabase
+                series_desc = metadata.get('SeriesDescription', 'Unknown Series')
+                saved_series_id = self.image_db.save_image(
+                    image=image,
+                    series_id=series_id,
+                    patient_id=patient_id,
+                    study_id=study_uid,
+                    description=series_desc,
+                    metadata=metadata
+                )
+                
+                self.status_label.setText("Đã nhập thành công chuỗi %s" % self.current_series.description)
                 self.progress_bar.setValue(100)
                 
                 # Phát tín hiệu đã nhập
-                self.series_imported.emit(patient_id, study_uid, series_id)
+                self.series_imported.emit(patient_id, study_uid, saved_series_id)
                 
                 # Hiển thị thông báo thành công
                 QMessageBox.information(self, "Nhập thành công", 
-                                      f"Đã nhập thành công chuỗi DICOM: {self.current_series.description}")
+                                      "Đã nhập thành công chuỗi DICOM: %s" % self.current_series.description)
             else:
-                raise ValueError(f"Không hỗ trợ dạng hình ảnh: {self.current_series.modality}")
+                raise ValueError("Không hỗ trợ dạng hình ảnh: %s" % self.current_series.modality)
                 
         except Exception as e:
-            self.status_label.setText(f"Lỗi khi nhập: {str(e)}")
-            QMessageBox.warning(self, "Lỗi nhập dữ liệu", f"Không thể nhập chuỗi DICOM: {str(e)}")
-        
-        self.progress_bar.setVisible(False)
+            logger.error("Lỗi khi nhập chuỗi DICOM: %s", str(e), exc_info=True)
+            self.status_label.setText("Lỗi khi nhập: %s" % str(e))
+            self.progress_bar.setValue(0)
+            QMessageBox.critical(self, "Lỗi khi nhập", 
+                               "Không thể nhập chuỗi DICOM:\n%s" % str(e))

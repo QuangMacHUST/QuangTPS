@@ -36,6 +36,7 @@ class Patient:
         self.metadata = metadata or {}
         self.studies = []
         self.created_at = datetime.now().isoformat()
+        self.created_date = datetime.now()  
         self.updated_at = self.created_at
     
     def add_study(self, study):
@@ -77,6 +78,7 @@ class Patient:
             "gender": self.gender,
             "metadata": self.metadata,
             "created_at": self.created_at,
+            "created_date": self.created_date.isoformat(), 
             "updated_at": self.updated_at,
             "studies": [study.to_dict() for study in self.studies]
         }
@@ -237,16 +239,17 @@ class PatientDatabase:
         try:
             patient_id = str(uuid.uuid4())
             created_at = datetime.now().isoformat()
+            created_date = created_at  # Thêm trường created_date
             metadata_json = json.dumps(metadata) if metadata else "{}"
             
             query = '''
-                INSERT INTO patients (id, name, birth_date, gender, created_at, updated_at, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO patients (id, name, birth_date, gender, created_at, updated_at, created_date, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             '''
             
             self.db.execute_query(
                 query, 
-                (patient_id, name, birth_date, gender, created_at, created_at, metadata_json)
+                (patient_id, name, birth_date, gender, created_at, created_at, created_date, metadata_json)
             )
             
             logger.info("Đã tạo bệnh nhân mới với ID: %s", patient_id)
@@ -254,7 +257,7 @@ class PatientDatabase:
             
         except Exception as e:
             logger.error("Lỗi khi tạo bệnh nhân: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Lỗi khi tạo bệnh nhân: {str(e)}") from e
+            raise DatabaseError("Lỗi khi tạo bệnh nhân: %s" % str(e)) from e
             
     def get_patient(self, patient_id):
         """
@@ -272,10 +275,10 @@ class PatientDatabase:
         try:
             # Thực hiện truy vấn
             query = "SELECT * FROM patients WHERE id = ?"
-            patient_data = self.db.execute_query(query, (patient_id,), fetchone=True)
+            patient_data = self.db.execute_query(query, (patient_id,), fetchall=False)
             
             if not patient_data:
-                logger.warning(f"Không tìm thấy bệnh nhân với ID: {patient_id}")
+                logger.warning("Không tìm thấy bệnh nhân với ID: %s", patient_id)
                 return None
             
             # Chuyển đổi dữ liệu về dict
@@ -290,12 +293,12 @@ class PatientDatabase:
             else:
                 patient_dict['metadata'] = {}
             
-            logger.info(f"Đã lấy thông tin bệnh nhân: {patient_id}")
+            logger.info("Đã lấy thông tin bệnh nhân: %s", patient_id)
             return patient_dict
             
         except Exception as e:
-            logger.error(f"Lỗi khi lấy thông tin bệnh nhân: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Lỗi khi lấy thông tin bệnh nhân: {str(e)}") from e
+            logger.error("Lỗi khi lấy thông tin bệnh nhân: %s", str(e), exc_info=True)
+            raise DatabaseError("Lỗi khi lấy thông tin bệnh nhân: %s" % str(e)) from e
             
     def update_patient(self, patient_id, name=None, birth_date=None, gender=None, metadata=None):
         """
@@ -375,7 +378,7 @@ class PatientDatabase:
             
         except Exception as e:
             logger.error("Lỗi khi cập nhật bệnh nhân: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Lỗi khi cập nhật bệnh nhân: {str(e)}") from e
+            raise DatabaseError("Lỗi khi cập nhật bệnh nhân: %s" % str(e)) from e
             
     def delete_patient(self, patient_id):
         """

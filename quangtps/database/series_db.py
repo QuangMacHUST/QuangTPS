@@ -91,7 +91,7 @@ class SeriesDB:
                 query = "SELECT * FROM series WHERE series_uid = ?"
                 params = (series_uid,)
             
-            result = self.db.execute_query(query, params, fetchone=True)
+            result = self.db.execute_query(query, params, fetchall=False)
             
             if not result:
                 logger.warning(f"Không tìm thấy series với ID: {series_id or series_uid}")
@@ -260,26 +260,9 @@ class SeriesDB:
             params.extend([limit, offset])
             
             # Thực hiện truy vấn
-            results = self.db.execute_query(query, params, fetchall=True)
+            result = self.db.execute_query(query, params, fetchall=False)
             
-            # Xử lý kết quả
-            series_list = []
-            for row in results:
-                series = {
-                    'id': row[0],
-                    'study_id': row[1],
-                    'series_uid': row[2],
-                    'series_number': row[3],
-                    'modality': row[4],
-                    'series_description': row[5],
-                    'image_count': row[6],
-                    'created_at': row[7],
-                    'updated_at': row[8],
-                    'metadata': json.loads(row[9]) if row[9] else None
-                }
-                series_list.append(series)
-            
-            return series_list
+            return result[0] if result else 0
         except Exception as e:
             logger.error(f"Lỗi khi tìm kiếm series: {str(e)}")
             raise DatabaseError(f"Không thể tìm kiếm series: {str(e)}")
@@ -321,7 +304,7 @@ class SeriesDB:
                 query += " WHERE " + " AND ".join(conditions)
             
             # Thực hiện truy vấn
-            result = self.db.execute_query(query, params, fetchone=True)
+            result = self.db.execute_query(query, params, fetchall=False)
             
             return result[0] if result else 0
         except Exception as e:
@@ -405,7 +388,7 @@ class SeriesDB:
         """
         try:
             query = "SELECT COUNT(*) FROM images WHERE series_id = ?"
-            result = self.db.execute_query(query, (series_id,), fetchone=True)
+            result = self.db.execute_query(query, (series_id,), fetchall=False)
             
             return result[0] if result else 0
         except Exception as e:
