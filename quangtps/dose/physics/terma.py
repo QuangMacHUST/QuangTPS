@@ -1,217 +1,279 @@
-"""
-Module tính toán TERMA (Total Energy Released per unit MAss).
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-TERMA là tổng năng lượng phát ra trên đơn vị khối lượng tại điểm tương tác
-của photon với vật chất. TERMA là bước đầu tiên trong quá trình tính toán
-phân bố liều, trước khi áp dụng kernel để mô phỏng sự lan truyền của năng
-lượng từ điểm tương tác ban đầu.
+"""
+TERMA calculation for radiotherapy dose calculation.
+
+This module provides functions for calculating the TERMA (Total Energy Released
+per unit MAss) distribution, which is the first step in convolution/superposition
+dose calculation algorithms.
 """
 
 import numpy as np
 import logging
-from typing import Tuple, Dict, Any, Optional
+from typing import Dict, List, Tuple, Optional, Union, Any
 
 logger = logging.getLogger(__name__)
 
-def calculate_terma(density_array: np.ndarray,
-                   spacing: Tuple[float, float, float],
-                   beam_energy: float,
-                   beam_direction: np.ndarray,
-                   beam_mu: float,
-                   beam_isocenter: np.ndarray,
-                   beam_field_size: Tuple[float, float] = (100.0, 100.0),
-                   beam_spectrum: Optional[Dict[float, float]] = None) -> np.ndarray:
+def calculate_terma(ct_data: np.ndarray, 
+                  density_map: np.ndarray, 
+                  fluence: np.ndarray, 
+                  spectrum: Dict[float, float],
+                  spacing: Tuple[float, float, float]) -> np.ndarray:
     """
-    Tính toán TERMA cho một chùm tia.
+    Calculate the TERMA distribution.
     
-    Parameters:
-        density_array (np.ndarray): Mảng mật độ điện tử
-        spacing (tuple): Khoảng cách voxel (mm)
-        beam_energy (float): Năng lượng chùm tia (MV)
-        beam_direction (np.ndarray): Hướng chùm tia
-        beam_mu (float): Số MU (Monitor Units)
-        beam_isocenter (np.ndarray): Tọa độ tâm (mm)
-        beam_field_size (tuple, optional): Kích thước trường (mm)
-        beam_spectrum (dict, optional): Phổ năng lượng chùm tia (energy -> weight)
-    
-    Returns:
-        np.ndarray: Mảng TERMA
+    Parameters
+    ----------
+    ct_data : np.ndarray
+        CT data in Hounsfield units
+    density_map : np.ndarray
+        Density map in g/cm^3
+    fluence : np.ndarray
+        Fluence distribution
+    spectrum : Dict[float, float]
+        Energy spectrum (energy -> relative intensity)
+    spacing : Tuple[float, float, float]
+        Grid spacing (mm)
+        
+    Returns
+    -------
+    np.ndarray
+        TERMA distribution
     """
-    logger.info(f"Calculating TERMA for beam with energy {beam_energy} MV")
+    logger.info("Calculating TERMA...")
     
-    # Khởi tạo mảng TERMA
-    terma = np.zeros_like(density_array, dtype=np.float32)
+    # Initialize TERMA grid
+    terma = np.zeros_like(ct_data, dtype=np.float32)
     
-    # Lấy kích thước mảng
-    depth, height, width = density_array.shape
+    # Get grid dimensions
+    nx, ny, nz = ct_data.shape
     
-    # Chuẩn hóa hướng chùm tia
-    beam_direction = beam_direction / np.linalg.norm(beam_direction)
+    # Convert spectrum to arrays for easier processing
+    energies = np.array(list(spectrum.keys()))
+    intensities = np.array(list(spectrum.values()))
     
-    # Chuyển đổi tọa độ isocenter từ hệ tọa độ thế giới sang hệ tọa độ voxel
-    # Giả định rằng isocenter được định nghĩa trong cùng hệ tọa độ với spacing
-    isocenter_voxel = np.array([
-        beam_isocenter[2] / spacing[2],  # Z (depth)
-        beam_isocenter[1] / spacing[1],  # Y (height)
-        beam_isocenter[0] / spacing[0]   # X (width)
-    ])
+    # Normalize spectrum
+    intensities = intensities / np.sum(intensities)
     
-    # Tính toán hệ số suy giảm chùm tia (beam attenuation) dựa trên năng lượng
-    # Giá trị μ/ρ (hệ số suy giảm khối) cho nước ở các năng lượng khác nhau
-    # Nguồn: NIST Data Gateway
-    mu_rho_water = {
-        1.0: 0.0706,   # 1 MV
-        2.0: 0.0494,   # 2 MV
-        4.0: 0.0358,   # 4 MV
-        6.0: 0.0297,   # 6 MV
-        10.0: 0.0233,  # 10 MV
-        15.0: 0.0195,  # 15 MV
-        18.0: 0.0180,  # 18 MV
-        20.0: 0.0174   # 20 MV
-    }
+    # Calculate the mass attenuation coefficients for each energy
+    # and accumulate TERMA contributions
+    for i, energy in enumerate(energies):
+        intensity = intensities[i]
+        
+        # Skip very low intensities
+        if intensity < 0.001:
+            continue
+        
+        # Calculate mass attenuation coefficients for this energy
+        mu_rho = calculate_mass_attenuation(energy, ct_data)
+        
+        # Calculate radiological depths
+        rad_depths = calculate_radiological_depths(density_map, mu_rho, spacing)
+        
+        # Calculate TERMA contribution for this energy
+        # TERMA = fluence * energy * (mu/rho)
+        terma_contrib = fluence * energy * mu_rho * np.exp(-rad_depths) * intensity
+        
+        # Accumulate TERMA
+        terma += terma_contrib
     
-    # Nội suy hệ số suy giảm khối cho năng lượng cụ thể
-    energies = np.array(list(mu_rho_water.keys()))
-    mu_rhos = np.array(list(mu_rho_water.values()))
-    
-    mu_rho = np.interp(beam_energy, energies, mu_rhos) if beam_energy not in mu_rho_water else mu_rho_water[beam_energy]
-    
-    # Tính tỉ lệ liều-MU tại điểm tham chiếu (thường là 100 cGy/MU ở độ sâu cực đại)
-    # Đơn giản hóa: giả định rằng 1 MU = 1 cGy tại độ sâu cực đại
-    dose_per_mu = 0.01  # Gy/MU (1 cGy = 0.01 Gy)
-    
-    # Tính toán TERMA cho mỗi voxel
-    # Sử dụng ray tracing để theo dõi chùm tia xuyên qua vật thể
-    for z in range(depth):
-        for y in range(height):
-            for x in range(width):
-                # Tính khoảng cách từ voxel đến isocenter
-                voxel_pos = np.array([z, y, x])
-                vec_to_isocenter = voxel_pos - isocenter_voxel
-                
-                # Tìm khoảng cách dọc theo chùm tia (chiếu vec_to_isocenter lên beam_direction)
-                along_beam_dist = np.dot(vec_to_isocenter, beam_direction)
-                
-                # Tính khoảng cách vuông góc với chùm tia
-                perp_vec = vec_to_isocenter - along_beam_dist * beam_direction
-                perp_dist = np.linalg.norm(perp_vec)
-                
-                # Chuyển đổi khoảng cách từ voxel sang mm
-                perp_dist_mm = perp_dist * np.mean(spacing)
-                along_beam_dist_mm = along_beam_dist * np.mean(spacing)
-                
-                # Kiểm tra nếu voxel nằm trong trường chùm tia
-                field_x, field_y = beam_field_size
-                if abs(perp_vec[2]) * spacing[0] > field_x / 2 or abs(perp_vec[1]) * spacing[1] > field_y / 2:
-                    continue  # Voxel nằm ngoài trường chùm tia
-                
-                # Tính procentional depth dose (PDD) dựa trên along_beam_dist
-                # Đơn giản hóa: sử dụng mô hình PDD có dạng exp(-μ*d)
-                pdd = calculate_pdd(along_beam_dist_mm, beam_energy)
-                
-                # Tính off-axis ratio (OAR)
-                oar = calculate_oar(perp_dist_mm, field_x, field_y, beam_energy)
-                
-                # Tính TERMA tại voxel này
-                terma_value = dose_per_mu * beam_mu * pdd * oar
-                
-                # TERMA là liều trước khi xem xét lan truyền năng lượng thứ cấp
-                # TERMA = μ/ρ * Ψ (fluence)
-                # Ở đây, chúng ta tính fluence từ terma_value
-                terma[z, y, x] = terma_value * mu_rho * density_array[z, y, x]
-    
-    # Cấu trúc chùm tia (beam modifiers như MLC, jaw, v.v.) có thể được áp dụng ở đây
-    
+    logger.info("TERMA calculation completed.")
     return terma
 
-def calculate_pdd(depth: float, energy: float) -> float:
+def calculate_mass_attenuation(energy: float, ct_data: np.ndarray) -> np.ndarray:
     """
-    Tính Percentage Depth Dose (PDD) cho một độ sâu và năng lượng cụ thể.
+    Calculate mass attenuation coefficients from CT data.
     
-    Parameters:
-        depth (float): Độ sâu (mm)
-        energy (float): Năng lượng chùm tia (MV)
-    
-    Returns:
-        float: Giá trị PDD
+    Parameters
+    ----------
+    energy : float
+        Photon energy (MV)
+    ct_data : np.ndarray
+        CT data in Hounsfield units
+        
+    Returns
+    -------
+    np.ndarray
+        Mass attenuation coefficients (cm²/g)
     """
-    # Tính tham số cho mô hình PDD
-    # Mô hình đơn giản: PDD(d) = e^(-μ₁*d) + b*e^(-μ₂*d)
+    # Simplified model based on CT number
+    # In a real implementation, this would use a more accurate model
+    # based on material composition and ICRU or NIST data
     
-    # Tham số cho độ sâu cực đại dựa trên năng lượng
-    # Đơn giản hóa: d_max = 0.6 * energy (cm)
-    d_max = 0.6 * energy * 10  # mm
+    # Convert HU to relative electron density (approximate)
+    rel_ed = 1.0 + ct_data * 0.001
     
-    # Tham số suy giảm
-    mu_1 = 0.00800 - 0.00033 * energy
-    mu_2 = 0.00200 - 0.00013 * energy
-    b = 0.3
+    # Clip to physical range
+    rel_ed = np.clip(rel_ed, 0.001, 3.0)
     
-    if depth < d_max:
-        # Build-up region
-        return (depth / d_max) * np.exp(mu_1 * (depth - d_max))
+    # Calculate mass attenuation coefficient (simplified)
+    # This is a very approximate model
+    # The attenuation coefficient depends on energy and material atomic number
+    if energy < 1.0:
+        # Low energy: photoelectric effect dominates
+        mu_rho = 0.05 * rel_ed * (1.0 / energy)**2.5
+    elif energy < 5.0:
+        # Medium energy: Compton effect dominates
+        mu_rho = 0.03 * rel_ed * (1.0 / energy)**1.0
     else:
-        # Beyond d_max
-        return np.exp(-mu_1 * (depth - d_max)) + b * np.exp(-mu_2 * (depth - d_max))
+        # High energy: pair production increases
+        mu_rho = 0.02 * rel_ed * (1.0 / energy)**0.5
+    
+    return mu_rho
 
-def calculate_oar(distance: float, field_x: float, field_y: float, energy: float) -> float:
+def calculate_radiological_depths(density_map: np.ndarray, 
+                                mu_rho: np.ndarray, 
+                                spacing: Tuple[float, float, float]) -> np.ndarray:
     """
-    Tính Off-Axis Ratio (OAR) cho một khoảng cách ngang.
+    Calculate radiological depths for TERMA calculation.
     
-    Parameters:
-        distance (float): Khoảng cách ngang từ trục chùm tia (mm)
-        field_x (float): Chiều rộng trường (mm)
-        field_y (float): Chiều cao trường (mm)
-        energy (float): Năng lượng chùm tia (MV)
-    
-    Returns:
-        float: Giá trị OAR
+    Parameters
+    ----------
+    density_map : np.ndarray
+        Density map in g/cm^3
+    mu_rho : np.ndarray
+        Mass attenuation coefficients (cm²/g)
+    spacing : Tuple[float, float, float]
+        Grid spacing (mm)
+        
+    Returns
+    -------
+    np.ndarray
+        Radiological depths
     """
-    # Mô hình đơn giản: OAR(r) = exp(-σ*r²)
-    # σ phụ thuộc vào năng lượng và kích thước trường
+    # Get grid dimensions
+    nx, ny, nz = density_map.shape
     
-    # Tính σ dựa trên năng lượng và kích thước trường
-    field_size = np.sqrt(field_x * field_y) / 10  # Convert to cm
-    sigma = 0.0015 - 0.00005 * energy + 0.00001 * field_size
+    # Initialize depths array
+    depths = np.zeros_like(density_map)
     
-    # Tính OAR
-    return np.exp(-sigma * distance * distance)
+    # Calculate linear attenuation coefficient
+    mu = mu_rho * density_map
+    
+    # Calculate step size in cm (convert from mm)
+    dx = spacing[0] / 10.0
+    
+    # Calculate depths along each ray (simplified)
+    # Assuming beam direction is along the x-axis
+    # A real implementation would account for beam angle and divergence
+    
+    # Accumulate depths
+    for i in range(1, nx):
+        depths[i, :, :] = depths[i-1, :, :] + mu[i-1, :, :] * dx
+    
+    return depths
 
-def get_beam_spectrum(energy: float) -> Dict[float, float]:
+def calculate_energy_fluence(fluence: np.ndarray, 
+                           spectrum: Dict[float, float]) -> np.ndarray:
     """
-    Lấy phổ năng lượng cho chùm tia xạ trị.
+    Calculate energy fluence from photon fluence and spectrum.
     
-    Parameters:
-        energy (float): Năng lượng danh định của chùm tia (MV)
-    
-    Returns:
-        dict: Phổ năng lượng (E -> tỉ lệ)
+    Parameters
+    ----------
+    fluence : np.ndarray
+        Photon fluence distribution
+    spectrum : Dict[float, float]
+        Energy spectrum (energy -> relative intensity)
+        
+    Returns
+    -------
+    np.ndarray
+        Energy fluence distribution
     """
-    # Mô hình đơn giản cho phổ năng lượng
-    # Thực tế, phổ năng lượng phức tạp hơn và phụ thuộc vào máy xạ trị cụ thể
+    # Convert spectrum to arrays for easier processing
+    energies = np.array(list(spectrum.keys()))
+    intensities = np.array(list(spectrum.values()))
     
-    spectrum = {}
+    # Normalize spectrum
+    intensities = intensities / np.sum(intensities)
     
-    # Tạo phổ từ 0 đến energy * 1.2
-    max_energy = energy * 1.2
-    num_bins = 20
+    # Calculate mean energy
+    mean_energy = np.sum(energies * intensities)
     
-    for i in range(num_bins):
-        e = i * max_energy / (num_bins - 1)
+    # Calculate energy fluence
+    energy_fluence = fluence * mean_energy
+    
+    return energy_fluence
+
+def calculate_polyenergetic_terma(ct_data: np.ndarray, 
+                                density_map: np.ndarray, 
+                                fluence: np.ndarray, 
+                                spectrum: Dict[float, float],
+                                spacing: Tuple[float, float, float]) -> np.ndarray:
+    """
+    Calculate polyenergetic TERMA using spectrum splitting.
+    
+    This is a more efficient method for polyenergetic beams that
+    groups similar energies together to reduce computation time.
+    
+    Parameters
+    ----------
+    ct_data : np.ndarray
+        CT data in Hounsfield units
+    density_map : np.ndarray
+        Density map in g/cm^3
+    fluence : np.ndarray
+        Fluence distribution
+    spectrum : Dict[float, float]
+        Energy spectrum (energy -> relative intensity)
+    spacing : Tuple[float, float, float]
+        Grid spacing (mm)
         
-        # Mô hình phân bố giản đơn
-        if e < 0.2 * energy:
-            weight = e / (0.2 * energy)
-        elif e < energy:
-            weight = 1.0
-        else:
-            weight = np.exp(-(e - energy) / (0.1 * energy))
+    Returns
+    -------
+    np.ndarray
+        TERMA distribution
+    """
+    logger.info("Calculating polyenergetic TERMA using spectrum splitting...")
+    
+    # Group spectrum into energy bins
+    energy_bins = {
+        "low": (0.0, 1.0),     # 0-1 MV
+        "medium": (1.0, 4.0),  # 1-4 MV
+        "high": (4.0, 25.0)    # 4+ MV
+    }
+    
+    # Initialize TERMA grid
+    terma = np.zeros_like(ct_data, dtype=np.float32)
+    
+    # Process each energy bin
+    for bin_name, (e_min, e_max) in energy_bins.items():
+        # Filter spectrum for this bin
+        bin_spectrum = {
+            energy: intensity for energy, intensity in spectrum.items()
+            if e_min <= energy < e_max
+        }
         
-        spectrum[e] = weight
+        # Skip if bin is empty
+        if not bin_spectrum:
+            continue
+        
+        # Calculate bin weight (sum of intensities)
+        bin_weight = sum(bin_spectrum.values())
+        
+        # Skip if bin weight is negligible
+        if bin_weight < 0.001:
+            continue
+        
+        # Calculate mean energy for this bin
+        energies = np.array(list(bin_spectrum.keys()))
+        intensities = np.array(list(bin_spectrum.values()))
+        mean_energy = np.sum(energies * intensities) / np.sum(intensities)
+        
+        # Calculate mass attenuation coefficients for mean energy
+        mu_rho = calculate_mass_attenuation(mean_energy, ct_data)
+        
+        # Calculate radiological depths
+        rad_depths = calculate_radiological_depths(density_map, mu_rho, spacing)
+        
+        # Calculate TERMA contribution for this bin
+        terma_contrib = fluence * mean_energy * mu_rho * np.exp(-rad_depths) * bin_weight
+        
+        # Accumulate TERMA
+        terma += terma_contrib
+        
+        logger.info(f"Processed {bin_name} energy bin with mean energy {mean_energy:.2f} MV")
     
-    # Chuẩn hóa phổ
-    total = sum(spectrum.values())
-    for e in spectrum:
-        spectrum[e] /= total
-    
-    return spectrum
+    logger.info("Polyenergetic TERMA calculation completed.")
+    return terma

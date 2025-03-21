@@ -1,25 +1,18 @@
 """
-Module chứa các mô hình vật lý liên quan đến tính toán liều.
+Module chứa các tính toán vật lý liều lượng cho xạ trị.
 
-Module này cung cấp các hàm và lớp để mô phỏng các hiện tượng vật lý trong quá trình 
-tính toán liều xạ trị, bao gồm TERMA, tán xạ, hiệu chỉnh không đồng nhất, 
-Linear Energy Transfer (LET), và Relative Biological Effectiveness (RBE).
+Module cung cấp các tính toán vật lý cần thiết cho việc ước tính và dự đoán các đặc tính 
+vật lý của liều lượng, bao gồm các tham số như LET, RBE và BNCT.
 """
 
-from quangtps.dose.physics.terma import calculate_terma, calculate_pdd, calculate_oar, get_beam_spectrum
-from quangtps.dose.physics.scatter import calculate_scatter, calculate_scatter_kernel
-from quangtps.dose.physics.heterogeneity import apply_heterogeneity_correction
 from quangtps.dose.physics.let import calculate_let
-from quangtps.dose.physics.rbe import calculate_rbe
+from quangtps.dose.physics.rbe import calculate_rbe, calculate_rbe_weighted_dose
+from quangtps.dose.physics.bnct import calculate_bnct_dose, calculate_tumor_to_normal_ratio
 
 __all__ = [
-    'calculate_terma',
-    'calculate_pdd',
-    'calculate_oar',
-    'get_beam_spectrum',
-    'calculate_scatter',
-    'calculate_scatter_kernel',
-    'apply_heterogeneity_correction',
     'calculate_let',
-    'calculate_rbe'
+    'calculate_rbe',
+    'calculate_rbe_weighted_dose',
+    'calculate_bnct_dose',
+    'calculate_tumor_to_normal_ratio'
 ]

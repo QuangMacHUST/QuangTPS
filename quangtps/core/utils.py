@@ -8,6 +8,7 @@ import psutil
 import hashlib
 import platform
 import numpy as np
+import os
 from datetime import datetime
 
 class Timer:
@@ -64,6 +65,24 @@ def hash_file(file_path, algorithm='sha256'):
         for chunk in iter(lambda: f.read(4096), b''):
             hash_obj.update(chunk)
     return hash_obj.hexdigest()
+
+def ensure_directory(directory_path):
+    """
+    Đảm bảo thư mục tồn tại, nếu không tạo mới thư mục đó.
+    
+    Parameters
+    ----------
+    directory_path : str
+        Đường dẫn đến thư mục cần đảm bảo
+        
+    Returns
+    -------
+    str
+        Đường dẫn đến thư mục đã được đảm bảo tồn tại
+    """
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path, exist_ok=True)
+    return directory_path
 
 def get_system_info():
     """Trả về thông tin về hệ thống"""

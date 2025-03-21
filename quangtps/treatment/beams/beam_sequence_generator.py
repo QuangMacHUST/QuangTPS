@@ -14,7 +14,7 @@ from typing import List, Dict, Optional, Any
 from enum import Enum
 
 from quangtps.treatment.beams.beam import Beam
-from quangtps.treatment.beams.beam_geometry import GantryAngle, PatientSupportAngle
+from quangtps.treatment.beams.beam_geometry import BeamGeometry, GantryDirection, CouchDirection
 from quangtps.treatment.machine.accelerator import Accelerator
 
 logger = logging.getLogger(__name__)
@@ -58,33 +58,29 @@ class BeamSequenceGenerator:
                                couch_angle: float = 0.0,
                                isocenter: List[float] = None) -> List[Beam]:
         """
-        Tạo danh sách các chùm tia với góc cách đều nhau.
+        Tạo trình tự chùm tia với các góc cách đều nhau.
         
         Parameters
         ----------
         num_beams : int
-            Số lượng chùm tia cần tạo
+            Số lượng chùm tia
         start_angle : float, optional
-            Góc bắt đầu (độ), mặc định là 0.0
+            Góc bắt đầu (độ), mặc định là 0
         total_arc : float, optional
-            Tổng góc quay (độ), mặc định là 360.0
+            Tổng độ rộng của cung (độ), mặc định là 360
         couch_angle : float, optional
-            Góc xoay bàn hỗ trợ (độ), mặc định là 0.0
+            Góc bàn hỗ trợ (độ), mặc định là 0
         isocenter : List[float], optional
-            Vị trí tâm quay [x, y, z] (mm), mặc định là [0, 0, 0]
+            Tọa độ tâm xoay (isocenter), mặc định là [0, 0, 0]
             
         Returns
         -------
         List[Beam]
             Danh sách các chùm tia
         """
-        if num_beams <= 0:
-            logger.warning("Number of beams must be positive")
-            return []
-        
-        if not isocenter:
+        if isocenter is None:
             isocenter = [0, 0, 0]
-        
+            
         angle_step = total_arc / num_beams
         beams = []
         
@@ -94,9 +90,9 @@ class BeamSequenceGenerator:
             gantry_angle = gantry_angle % 360.0
             
             beam = Beam(f"Beam_{i+1}")
-            beam.set_gantry_angle(GantryAngle(gantry_angle))
-            beam.set_patient_support_angle(PatientSupportAngle(couch_angle))
-            beam.set_isocenter(isocenter)
+            beam.geometry.set_gantry_angle(gantry_angle, GantryDirection.CW)
+            beam.geometry.set_couch_angle(couch_angle, CouchDirection.CW)
+            beam.geometry.set_isocenter(isocenter[0], isocenter[1], isocenter[2])
             
             beams.append(beam)
         
@@ -165,9 +161,9 @@ class BeamSequenceGenerator:
         beams = []
         for i in range(num_beams):
             beam = Beam(f"Beam_{i+1}")
-            beam.set_gantry_angle(GantryAngle(default_angles[i]))
-            beam.set_patient_support_angle(PatientSupportAngle(default_couch_angles[i]))
-            beam.set_isocenter([0, 0, 0])
+            beam.geometry.set_gantry_angle(default_angles[i], GantryDirection.CW)
+            beam.geometry.set_couch_angle(default_couch_angles[i], CouchDirection.CW)
+            beam.geometry.set_isocenter(0, 0, 0)
             
             beams.append(beam)
         
@@ -235,36 +231,35 @@ class BeamSequenceGenerator:
         beams = []
         for i in range(num_arcs):
             beam = Beam(f"Arc_{i+1}")
-            beam.set_gantry_angle(GantryAngle(start_angles[i]))
-            beam.set_patient_support_angle(PatientSupportAngle(couch_angles[i]))
-            beam.set_isocenter([0, 0, 0])
+            beam.geometry.set_gantry_angle(start_angles[i], GantryDirection.CW)
+            beam.geometry.set_couch_angle(couch_angles[i], CouchDirection.CW)
+            beam.geometry.set_isocenter(0, 0, 0)
             
-            # Thiết lập thuộc tính arc
-            beam.is_arc = True
-            beam.arc_start_angle = start_angles[i]
-            beam.arc_stop_angle = stop_angles[i]
-            beam.arc_direction = 1 if (stop_angles[i] - start_angles[i]) % 360 > 0 else -1
+            # TODO: Thêm thông tin arc (góc kết thúc, hướng quay, v.v.) vào metadata
+            beam.add_metadata("arc_start_angle", start_angles[i])
+            beam.add_metadata("arc_stop_angle", stop_angles[i])
+            beam.add_metadata("is_arc", True)
             
             beams.append(beam)
         
         logger.info(f"Created {num_arcs} VMAT arcs")
         return beams
-    
+
     def create_proton_beams(self, 
                          num_beams: int = 3, 
                          site: str = "GENERAL",
                          technique: str = "PBS") -> List[Beam]:
         """
-        Tạo các chùm tia proton.
+        Tạo các chùm tia cho kỹ thuật điều trị proton.
         
         Parameters
         ----------
         num_beams : int, optional
-            Số lượng chùm tia, mặc định là 3 cho proton
+            Số lượng chùm tia, mặc định là 3
         site : str, optional
             Vị trí điều trị, mặc định là "GENERAL"
         technique : str, optional
-            Kỹ thuật điều trị proton (PBS hoặc PASSIVE_SCATTERING), mặc định là "PBS"
+            Kỹ thuật điều trị (PBS, US, DS), mặc định là "PBS"
             
         Returns
         -------
@@ -274,23 +269,23 @@ class BeamSequenceGenerator:
         # Các góc mặc định cho các vị trí điều trị khác nhau
         site_configs = {
             "PROSTATE": {
-                "angles": [90, 180, 270],  # Các góc gantry phổ biến cho trường hợp xạ trị tuyến tiền liệt bằng proton
-                "couch_angles": [0, 0, 0],
+                "angles": [90, 270],  # Lateral beams for prostate
+                "couch_angles": [0, 0],  # Góc bàn hỗ trợ
             },
             "HEAD_NECK": {
-                "angles": [0, 70, 290],  # Các góc gantry phổ biến cho trường hợp xạ trị đầu-cổ bằng proton
+                "angles": [0, 70, 290],  # Common angles for head and neck
                 "couch_angles": [0, 0, 0],
             },
             "BRAIN": {
-                "angles": [0, 120, 240],  # Các góc gantry phổ biến cho trường hợp xạ trị não bằng proton
-                "couch_angles": [0, 0, 0],
+                "angles": [0, 45, 90, 270, 315],  # Multiple angles for brain
+                "couch_angles": [0, 0, 0, 0, 0],
             },
             "LUNG": {
-                "angles": [0, 150, 210],  # Các góc gantry phổ biến cho trường hợp xạ trị phổi bằng proton
-                "couch_angles": [0, 0, 0],
+                "angles": [0, 180],  # AP/PA for lung
+                "couch_angles": [0, 0],
             },
             "GENERAL": {
-                "angles": [0, 120, 240],  # Mặc định - chia đều 360 độ cho 3 chùm tia
+                "angles": [0, 120, 240],  # Mặc định - 3 chùm cách đều
                 "couch_angles": [0, 0, 0],
             }
         }
@@ -306,24 +301,24 @@ class BeamSequenceGenerator:
         
         # Điều chỉnh số lượng góc nếu cần
         if num_beams != len(default_angles):
-            # Nếu num_beams khác với số lượng góc mặc định, tạo các góc cách đều
             return self.create_equidistant_beams(num_beams, start_angle=0.0)
         
-        # Tạo các chùm tia
+        # Tạo các chùm tia proton
         beams = []
         for i in range(num_beams):
-            beam = Beam(f"Proton_Beam_{i+1}")
-            beam.set_gantry_angle(GantryAngle(default_angles[i]))
-            beam.set_patient_support_angle(PatientSupportAngle(default_couch_angles[i]))
-            beam.set_isocenter([0, 0, 0])
+            beam = Beam(f"Proton_{i+1}")
+            beam.set_beam_type(BeamType.PROTON)
             
-            # Thiết lập thuộc tính proton
-            beam.is_proton = True
-            beam.proton_technique = technique  # "PBS" hoặc "PASSIVE_SCATTERING"
+            beam.geometry.set_gantry_angle(default_angles[i], GantryDirection.CW)
+            beam.geometry.set_couch_angle(default_couch_angles[i], CouchDirection.CW)
+            beam.geometry.set_isocenter(0, 0, 0)
+            
+            # Thêm thông tin kỹ thuật vào metadata
+            beam.add_metadata("technique", technique)
             
             beams.append(beam)
         
-        logger.info(f"Created {num_beams} proton beams for {site} using {technique} technique")
+        logger.info(f"Created {num_beams} proton beams using {technique} technique for {site}")
         return beams
     
     def create_carbon_ion_beams(self, 
@@ -331,42 +326,38 @@ class BeamSequenceGenerator:
                             site: str = "GENERAL",
                             technique: str = "PBS") -> List[Beam]:
         """
-        Tạo các chùm tia ion carbon.
+        Tạo các chùm tia cho kỹ thuật điều trị carbon ion.
         
         Parameters
         ----------
         num_beams : int, optional
-            Số lượng chùm tia, mặc định là 2 cho ion carbon
+            Số lượng chùm tia, mặc định là 2
         site : str, optional
             Vị trí điều trị, mặc định là "GENERAL"
         technique : str, optional
-            Kỹ thuật điều trị ion carbon (PBS, PASSIVE_SCATTERING, RASTER_SCANNING), mặc định là "PBS"
+            Kỹ thuật điều trị (PBS, RS), mặc định là "PBS"
             
         Returns
         -------
         List[Beam]
-            Danh sách các chùm tia ion carbon
+            Danh sách các chùm tia carbon ion
         """
-        # Thông thường ion carbon chỉ sử dụng 1-2 chùm tia
-        if num_beams > 3:
-            logger.warning(f"Carbon ion therapy typically uses fewer beams. Requested: {num_beams}")
-        
         # Các góc mặc định cho các vị trí điều trị khác nhau
         site_configs = {
             "PROSTATE": {
-                "angles": [90, 270],  # Các góc gantry phổ biến cho trường hợp xạ trị tuyến tiền liệt bằng ion carbon
-                "couch_angles": [0, 0],
+                "angles": [90, 270],  # Lateral beams for prostate
+                "couch_angles": [0, 0],  # Góc bàn hỗ trợ
             },
             "HEAD_NECK": {
-                "angles": [0, 180],  # Các góc gantry phổ biến cho trường hợp xạ trị đầu-cổ bằng ion carbon
+                "angles": [0, 180],  # AP/PA for H&N
                 "couch_angles": [0, 0],
             },
             "BRAIN": {
-                "angles": [0, 180],  # Các góc gantry phổ biến cho trường hợp xạ trị não bằng ion carbon
-                "couch_angles": [0, 0],
+                "angles": [0, 90, 270],  # Multiple angles for brain
+                "couch_angles": [0, 0, 0],
             },
             "GENERAL": {
-                "angles": [0, 180],  # Mặc định - chùm tia đối
+                "angles": [0, 180],  # Mặc định - 2 chùm đối diện
                 "couch_angles": [0, 0],
             }
         }
@@ -382,94 +373,77 @@ class BeamSequenceGenerator:
         
         # Điều chỉnh số lượng góc nếu cần
         if num_beams != len(default_angles):
-            # Với ion carbon, thường dùng 180 độ đối diện
-            if num_beams == 1:
-                default_angles = [0]
-                default_couch_angles = [0]
-            elif num_beams == 3:
-                default_angles = [0, 120, 240]
-                default_couch_angles = [0, 0, 0]
-            else:
-                # Nếu num_beams khác với số lượng mặc định, tạo các góc cách đều từ 0 đến 360
-                return self.create_equidistant_beams(num_beams, start_angle=0.0)
+            # Carbon ion thường dùng số lượng chùm tia ít hơn
+            total_arc = 180  # Carbon ion often uses ≤180 degrees
+            return self.create_equidistant_beams(num_beams, start_angle=0.0, total_arc=total_arc)
         
-        # Tạo các chùm tia
+        # Tạo các chùm tia carbon ion
         beams = []
         for i in range(num_beams):
-            beam = Beam(f"Carbon_Beam_{i+1}")
-            beam.set_gantry_angle(GantryAngle(default_angles[i]))
-            beam.set_patient_support_angle(PatientSupportAngle(default_couch_angles[i]))
-            beam.set_isocenter([0, 0, 0])
+            beam = Beam(f"Carbon_{i+1}")
+            beam.set_beam_type(BeamType.CARBON)
             
-            # Thiết lập thuộc tính ion carbon
-            beam.is_carbon_ion = True
-            beam.carbon_ion_technique = technique  # "PBS", "PASSIVE_SCATTERING", "RASTER_SCANNING"
+            beam.geometry.set_gantry_angle(default_angles[i], GantryDirection.CW)
+            beam.geometry.set_couch_angle(default_couch_angles[i], CouchDirection.CW)
+            beam.geometry.set_isocenter(0, 0, 0)
+            
+            # Thêm thông tin kỹ thuật vào metadata
+            beam.add_metadata("technique", technique)
             
             beams.append(beam)
         
-        logger.info(f"Created {num_beams} carbon ion beams for {site} using {technique} technique")
+        logger.info(f"Created {num_beams} carbon ion beams using {technique} technique for {site}")
         return beams
     
     def optimize_beam_sequence(self, 
                             beams: List[Beam], 
                             strategy: BeamArrangementStrategy = BeamArrangementStrategy.EQUIDISTANT) -> List[Beam]:
         """
-        Tối ưu hóa trình tự chùm tia dựa trên chiến lược nhất định.
+        Tối ưu hóa trình tự chùm tia dựa trên chiến lược chỉ định.
         
         Parameters
         ----------
         beams : List[Beam]
-            Danh sách các chùm tia cần tối ưu hóa
+            Danh sách chùm tia đầu vào
         strategy : BeamArrangementStrategy, optional
-            Chiến lược tối ưu hóa, mặc định là EQUIDISTANT
+            Chiến lược sắp xếp chùm tia, mặc định là Equidistant
             
         Returns
         -------
         List[Beam]
-            Danh sách chùm tia đã tối ưu hóa
+            Danh sách chùm tia đã được tối ưu
         """
-        if not beams:
-            logger.warning("Empty beam list, nothing to optimize")
-            return []
-        
+        # Chỉ triển khai một số chiến lược đơn giản
         if strategy == BeamArrangementStrategy.EQUIDISTANT:
-            # Với chiến lược cách đều, đã xử lý trong hàm tạo
-            return beams
+            # Ví dụ: điều chỉnh góc để cách đều nhau
+            num_beams = len(beams)
+            
+            if num_beams > 0:
+                angle_step = 360.0 / num_beams
+                for i, beam in enumerate(beams):
+                    gantry_angle = i * angle_step
+                    beam.geometry.set_gantry_angle(gantry_angle, GantryDirection.CW)
+                
+                logger.info(f"Optimized {num_beams} beams using Equidistant strategy")
         
         elif strategy == BeamArrangementStrategy.OPTIMAL_OAR_SPARING:
-            # Mô phỏng việc tối ưu hóa để bảo vệ các cơ quan nguy cấp
-            # Trong thực tế, điều này đòi hỏi thông tin về vị trí của các cơ quan nguy cấp
-            logger.info("Optimizing beam arrangement for OAR sparing")
-            # Đây là một mô phỏng đơn giản, cần được thay thế bằng một thuật toán thực tế
-            # trong một hệ thống thực
-            return beams
-        
-        elif strategy == BeamArrangementStrategy.IMRT_DEFAULT:
-            # Sắp xếp lại các chùm tia theo cấu hình mặc định cho IMRT
-            num_beams = len(beams)
-            return self.create_imrt_beams(num_beams)
-        
-        elif strategy == BeamArrangementStrategy.VMAT_DEFAULT:
-            # Trong thực tế, một trường VMAT thường bao gồm 1-2 arc
-            # Đây chỉ là mô phỏng đơn giản
-            if len(beams) < 2:
-                logger.warning("At least 2 beams needed for VMAT")
-                return beams
+            # Triển khai thuật toán tối ưu bảo vệ các cơ quan nguy cấp
+            logger.warning("OPTIMAL_OAR_SPARING strategy not fully implemented yet")
             
-            # Tạo một arc từ chùm tia đầu tiên đến chùm tia cuối cùng
-            first_beam = beams[0]
-            last_beam = beams[-1]
+            # Ví dụ đơn giản: dùng các góc khác với góc cơ quan nguy cấp
+            # Giả định: OARs nằm ở phía trước và bên trái
+            oar_angles = [0, 90]  # Giả định
             
-            return self.create_vmat_arcs(1, [first_beam.gantry_angle.angle], [last_beam.gantry_angle.angle])
+            for beam in beams:
+                current_angle = beam.geometry.gantry_angle
+                if any(abs(current_angle - oar_angle) < 20 for oar_angle in oar_angles):
+                    # Điều chỉnh góc nếu quá gần OAR
+                    new_angle = (current_angle + 40) % 360
+                    beam.geometry.set_gantry_angle(new_angle, GantryDirection.CW)
+            
+            logger.info(f"Applied simple OAR sparing optimizations to {len(beams)} beams")
         
-        elif strategy == BeamArrangementStrategy.PROTON_DEFAULT:
-            # Sắp xếp lại các chùm tia theo cấu hình mặc định cho proton
-            num_beams = len(beams)
-            return self.create_proton_beams(num_beams)
-        
-        else:  # CUSTOM hoặc không xác định
-            # Không thay đổi trình tự
-            return beams
+        return beams
     
     def create_beam_sequence(self, 
                           strategy: BeamArrangementStrategy, 
@@ -477,7 +451,7 @@ class BeamSequenceGenerator:
                           site: str = "GENERAL",
                           technique: str = None) -> List[Beam]:
         """
-        Tạo trình tự chùm tia dựa trên chiến lược và các tham số.
+        Phương thức tiện ích để tạo trình tự chùm tia dựa trên chiến lược.
         
         Parameters
         ----------
@@ -488,33 +462,26 @@ class BeamSequenceGenerator:
         site : str, optional
             Vị trí điều trị, mặc định là "GENERAL"
         technique : str, optional
-            Kỹ thuật điều trị, ví dụ "IMRT", "VMAT", "PBS", "PASSIVE_SCATTERING"
+            Kỹ thuật điều trị, mặc định là None
             
         Returns
         -------
         List[Beam]
-            Danh sách các chùm tia
+            Danh sách chùm tia được tạo
         """
+        beams = []
+        
         if strategy == BeamArrangementStrategy.EQUIDISTANT:
-            return self.create_equidistant_beams(num_beams)
-        
+            beams = self.create_equidistant_beams(num_beams)
         elif strategy == BeamArrangementStrategy.IMRT_DEFAULT:
-            return self.create_imrt_beams(num_beams, site)
-        
+            beams = self.create_imrt_beams(num_beams, site)
         elif strategy == BeamArrangementStrategy.VMAT_DEFAULT:
-            # VMAT thường sử dụng 1-2 arc
-            num_arcs = min(num_beams, 2)
-            return self.create_vmat_arcs(num_arcs)
-        
+            beams = self.create_vmat_arcs(num_beams)
         elif strategy == BeamArrangementStrategy.PROTON_DEFAULT:
-            proton_technique = technique if technique else "PBS"
-            return self.create_proton_beams(num_beams, site, proton_technique)
-        
+            beams = self.create_proton_beams(num_beams, site, technique or "PBS")
         elif strategy == BeamArrangementStrategy.OPTIMAL_OAR_SPARING:
-            # Đối với chiến lược này, cần thông tin về vị trí các cơ quan nguy cấp
-            # Tạm thời sử dụng cấu hình IMRT mặc định
-            return self.create_imrt_beams(num_beams, site)
+            # Tạo chùm tia equidistant và sau đó tối ưu
+            beams = self.create_equidistant_beams(num_beams)
+            beams = self.optimize_beam_sequence(beams, strategy)
         
-        else:  # CUSTOM
-            # Đối với chiến lược tùy chỉnh, mặc định là tạo các chùm tia cách đều
-            return self.create_equidistant_beams(num_beams)
+        return beams

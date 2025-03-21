@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Dict, List, Any, Optional, Tuple, Union
 import numpy as np
 
-from quangtps.treatment.plan import TreatmentPlan
+from quangtps.planning.plan import Plan
 from quangtps.treatment.techniques.imrt import IMRT
 from quangtps.treatment.techniques.vmat import VMAT
 from quangtps.treatment.techniques.stereotactic import SRS, SBRT
@@ -510,7 +510,7 @@ class TreatmentQAManager:
     
     def create_standard_qa_tests_for_plan(
         self,
-        plan: TreatmentPlan,
+        plan: Plan,
         technique: Any
     ) -> List[str]:
         """
@@ -518,7 +518,7 @@ class TreatmentQAManager:
         
         Parameters
         ----------
-        plan : TreatmentPlan
+        plan : Plan
             Kế hoạch điều trị
         technique : Any
             Kỹ thuật xạ trị
@@ -914,13 +914,13 @@ def perform_treatment_qa(test: TreatmentQATest, measurements: Dict[str, float]) 
     return result
 
 
-def evaluate_plan_quality(plan: TreatmentPlan, dose_distribution: np.ndarray, structures: Dict[str, np.ndarray]) -> PlanQualityMetrics:
+def evaluate_plan_quality(plan: Plan, dose_distribution: np.ndarray, structures: Dict[str, np.ndarray]) -> PlanQualityMetrics:
     """
     Đánh giá chất lượng của kế hoạch điều trị.
     
     Parameters
     ----------
-    plan : TreatmentPlan
+    plan : Plan
         Kế hoạch điều trị
     dose_distribution : np.ndarray
         Phân bố liều

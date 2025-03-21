@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import calendar
 
 from quangtps.treatment.treatment_delivery import TreatmentCourse, TreatmentStatus, FractionStatus, TreatmentFraction
-from quangtps.treatment.machine.machine_specs import MachineSpecs
+from quangtps.treatment.machine.machine_specs import MachineSpecification
 
 logger = logging.getLogger(__name__)
 
@@ -406,7 +406,7 @@ class TreatmentScheduler:
     def __init__(
         self,
         machine_id: str,
-        machine_specs: Optional[MachineSpecs] = None,
+        machine_specs: Optional[MachineSpecification] = None,
         slot_duration_minutes: int = 15
     ):
         """
@@ -416,7 +416,7 @@ class TreatmentScheduler:
         ----------
         machine_id : str
             ID của máy xạ trị
-        machine_specs : MachineSpecs, optional
+        machine_specs : MachineSpecification, optional
             Thông số kỹ thuật của máy xạ trị
         slot_duration_minutes : int, optional
             Thời lượng mặc định của mỗi khoảng thời gian (phút)

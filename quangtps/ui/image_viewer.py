@@ -20,13 +20,18 @@ from PyQt5.QtWidgets import (
     QSplitter, QTabWidget, QToolBar, QSpinBox, QDoubleSpinBox,
     QScrollArea, QFrame, QSizePolicy, QFormLayout, QRadioButton
 )
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QRectF, QPoint
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QRectF, QPoint, QEvent
 from PyQt5.QtGui import (
     QImage, QPixmap, QPainter, QColor, QPen, QBrush, QFont, QTransform,
-    QMouseEvent, QKeyEvent
+    QMouseEvent, QKeyEvent, QWheelEvent
 )
 
-from PyQt5.QtCore import QWheelEvent
+try:
+    from PyQt5.QtDataVisualization import Q3DScatter
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
+    logging.warning("PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.")
 
 from quangtps.core.logging import get_logger
 from quangtps.imaging.image import Image
@@ -58,12 +63,12 @@ class ImageViewer(QWidget):
         self.dose_grid = None       # Lưới liều
         
         # Trạng thái hiển thị
-        self.view_mode = "MPR"  # MPR (Multi-Planar Reconstruction) hoặc 3D
+        self.view_mode = "4-View"  # "4-View" (3 mặt phẳng + 3D) hoặc "Single"
         self.window_width = 500
         self.window_level = 40
         self.overlay_opacity = 0.7
         self.current_position = [0, 0, 0]  # Vị trí hiện tại trong không gian 3D
-        self.current_tool = "pan"  # Công cụ hiện tại (pan, zoom, window, measure...)
+        self.current_tool = "pan"  # Công cụ hiện tại (pan, zoom, window...)
         
         # Khởi tạo giao diện
         self._init_ui()
@@ -79,7 +84,7 @@ class ImageViewer(QWidget):
         
         # Nút chọn chế độ xem
         view_mode_combo = QComboBox()
-        view_mode_combo.addItems(["MPR", "3D"])
+        view_mode_combo.addItems(["4-View", "Axial", "Sagittal", "Coronal", "3D"])
         view_mode_combo.setCurrentText(self.view_mode)
         view_mode_combo.currentTextChanged.connect(self._change_view_mode)
         self.toolbar.addWidget(QLabel("Chế độ xem:"))
@@ -148,40 +153,67 @@ class ImageViewer(QWidget):
         preset_btn.setPopupMode(QToolButton.InstantPopup)
         self.toolbar.addWidget(preset_btn)
         
-        # Khu vực hiển thị chính
-        self.splitter = QSplitter(Qt.Vertical)
-        main_layout.addWidget(self.splitter, 1)
+        # Khu vực hiển thị chính - Sử dụng grid layout cho hiển thị linh hoạt
+        self.view_container = QWidget()
+        main_layout.addWidget(self.view_container, 1)
         
-        # Khu vực hiển thị MPR
+        # Layout chính chứa các view
+        self.views_layout = QHBoxLayout(self.view_container)
+        self.views_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Tạo widget chứa các view 2D
         self.mpr_widget = QWidget()
-        self.mpr_layout = QHBoxLayout(self.mpr_widget)
+        self.mpr_layout = QVBoxLayout(self.mpr_widget)
         self.mpr_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Tạo grid layout cho 3 view 2D
+        self.grid_layout = QHBoxLayout()
+        self.mpr_layout.addLayout(self.grid_layout)
         
         # Tạo 3 màn hình hiển thị cho 3 mặt phẳng: Axial, Sagittal, Coronal
         self.axial_view = ImageDisplay()
-        self.axial_view.setMinimumSize(300, 300)
+        self.axial_view.setMinimumSize(250, 250)
         self.axial_view.set_title("Axial")
         
         self.sagittal_view = ImageDisplay()
-        self.sagittal_view.setMinimumSize(300, 300)
+        self.sagittal_view.setMinimumSize(250, 250)
         self.sagittal_view.set_title("Sagittal")
         
         self.coronal_view = ImageDisplay()
-        self.coronal_view.setMinimumSize(300, 300)
+        self.coronal_view.setMinimumSize(250, 250)
         self.coronal_view.set_title("Coronal")
         
-        # Thêm các màn hình vào layout
-        self.mpr_layout.addWidget(self.axial_view)
-        self.mpr_layout.addWidget(self.sagittal_view)
-        self.mpr_layout.addWidget(self.coronal_view)
-        
-        # Khu vực hiển thị 3D
+        # Tạo view 3D
         self.view_3d = QWidget()
         self.view_3d_layout = QVBoxLayout(self.view_3d)
-        self.view_3d_layout.addWidget(QLabel("Hiển thị 3D (Chưa triển khai)"))
+        self.view_3d.setMinimumSize(250, 250)
+        self.view_3d_layout.addWidget(QLabel("Hiển thị 3D"))
         
-        # Thêm các widget vào splitter
-        self.splitter.addWidget(self.mpr_widget)
+        # Thêm view 3D
+        if VISUALIZATION_AVAILABLE:
+            try:
+                self.scatter = Q3DScatter()
+                self.scatter_widget = QWidget.createWindowContainer(self.scatter)
+                self.scatter_widget.setMinimumSize(250, 250)
+                self.view_3d_layout.addWidget(self.scatter_widget)
+            except Exception as e:
+                logger.error("Lỗi khi tạo view 3D: %s", str(e))
+                self.view_3d_layout.addWidget(QLabel("Không thể hiển thị 3D: " + str(e)))
+        else:
+            self.view_3d_layout.addWidget(QLabel("Chức năng 3D không khả dụng"))
+        
+        # Thêm các view vào grid
+        self.grid_layout.addWidget(self.axial_view)
+        self.grid_layout.addWidget(self.sagittal_view)
+        self.views_layout.addWidget(self.mpr_widget, 2)
+        self.views_layout.addWidget(self.view_3d, 1)
+        
+        # Widget ở dưới cùng cho coronal view
+        self.bottom_widget = QWidget()
+        self.bottom_layout = QVBoxLayout(self.bottom_widget)
+        self.bottom_layout.setContentsMargins(0, 0, 0, 0)
+        self.bottom_layout.addWidget(self.coronal_view)
+        self.mpr_layout.addWidget(self.bottom_widget)
         
         # Thanh trượt và thông tin
         info_widget = QWidget()
@@ -201,9 +233,6 @@ class ImageViewer(QWidget):
         info_layout.addWidget(self.info_label)
         
         main_layout.addWidget(info_widget)
-        
-        # Hiển thị chế độ MPR mặc định
-        self._update_view_mode()
         
         # Kết nối sự kiện giữa các chế độ xem
         self.axial_view.mouse_position_changed.connect(self._update_position_info)
@@ -273,25 +302,50 @@ class ImageViewer(QWidget):
     
     def _change_view_mode(self, mode: str):
         """
-        Thay đổi chế độ xem giữa MPR và 3D.
+        Thay đổi chế độ xem giữa các mode hiển thị.
         
         Args:
-            mode: Chế độ xem mới (MPR hoặc 3D)
+            mode: Chế độ xem mới (4-View, Axial, Sagittal, Coronal, 3D)
         """
         self.view_mode = mode
         self._update_view_mode()
     
     def _update_view_mode(self):
         """Cập nhật giao diện dựa trên chế độ xem hiện tại."""
-        # Xóa các widget hiện tại khỏi splitter
-        while self.splitter.count() > 0:
-            self.splitter.widget(0).setParent(None)
+        # Ẩn tất cả các view trước
+        self.axial_view.setVisible(False)
+        self.sagittal_view.setVisible(False)
+        self.coronal_view.setVisible(False)
+        self.view_3d.setVisible(False)
         
-        # Thêm widget phù hợp với chế độ xem
-        if self.view_mode == "MPR":
-            self.splitter.addWidget(self.mpr_widget)
-        else:  # 3D mode
-            self.splitter.addWidget(self.view_3d)
+        # Hiển thị theo chế độ được chọn
+        if self.view_mode == "4-View":
+            self.mpr_widget.setVisible(True)
+            self.view_3d.setVisible(True)
+            self.axial_view.setVisible(True)
+            self.sagittal_view.setVisible(True)
+            self.coronal_view.setVisible(True)
+        elif self.view_mode == "Axial":
+            self.mpr_widget.setVisible(True)
+            self.view_3d.setVisible(False)
+            self.axial_view.setVisible(True)
+            self.sagittal_view.setVisible(False)
+            self.coronal_view.setVisible(False)
+        elif self.view_mode == "Sagittal":
+            self.mpr_widget.setVisible(True)
+            self.view_3d.setVisible(False)
+            self.axial_view.setVisible(False)
+            self.sagittal_view.setVisible(True)
+            self.coronal_view.setVisible(False)
+        elif self.view_mode == "Coronal":
+            self.mpr_widget.setVisible(True)
+            self.view_3d.setVisible(False)
+            self.axial_view.setVisible(False)
+            self.sagittal_view.setVisible(False)
+            self.coronal_view.setVisible(True)
+        elif self.view_mode == "3D":
+            self.mpr_widget.setVisible(False)
+            self.view_3d.setVisible(True)
     
     def _set_current_tool(self, tool: str):
         """
@@ -453,7 +507,7 @@ class ImageViewer(QWidget):
         
         # Phát tín hiệu thay đổi vị trí
         self.position_changed.emit(x, y, z)
-        
+    
     def eventFilter(self, source, event):
         """
         Lọc sự kiện từ các widget con để xử lý sự kiện wheel từ các màn hình hiển thị.
@@ -465,7 +519,7 @@ class ImageViewer(QWidget):
         Returns:
             bool: True nếu sự kiện đã được xử lý, False nếu không
         """
-        if event.type() == QWheelEvent.Type.Wheel and self.primary_image and self.primary_image.data is not None:
+        if event.type() == QEvent.Wheel and self.primary_image and self.primary_image.data is not None:
             delta = event.angleDelta().y()
             step = 1 if delta < 0 else -1  # Đảo ngược hướng để phù hợp với thói quen cuộn
             

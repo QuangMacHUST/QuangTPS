@@ -104,44 +104,40 @@ class PatientBrowser(QWidget):
                 patient_item.setText(1, patient.get('id', ''))
                 
                 # Hiển thị ngày sinh nếu có
-                birth_date = patient.get('birth_date')
+                birth_date = patient.get('birth_date', '')
                 patient_item.setText(2, birth_date if birth_date else "")
                 
                 # Hiển thị giới tính
-                gender = patient.get('gender')
+                gender = patient.get('gender', '')
                 patient_item.setText(3, gender if gender else "")
                 
                 patient_item.setData(0, Qt.UserRole, {"type": "patient", "data": patient})
                 
                 # Thêm các kế hoạch của bệnh nhân nếu có
-                plans = self.patient_db.get_patient_plans(patient.get('id'))
-                if plans:
-                    for plan in plans:
-                        plan_item = QTreeWidgetItem(patient_item)
-                        plan_item.setText(0, plan.get('name', 'Không tên'))
-                        plan_item.setText(1, plan.get('id', ''))
-                        status = plan.get('status', '')
-                        plan_item.setText(2, status)
-                        
-                        # Đặt màu sắc theo trạng thái kế hoạch
-                        if status == 'APPROVED':
-                            plan_item.setForeground(2, QColor("green"))
-                        elif status == 'REJECTED':
-                            plan_item.setForeground(2, QColor("red"))
-                        elif status == 'REVIEW':
-                            plan_item.setForeground(2, QColor("orange"))
-                        
-                        plan_item.setData(0, Qt.UserRole, {
-                            "type": "plan", 
-                            "id": plan.get('id'),
-                            "patient_id": patient.get('id')
-                        })
-            
-            self.patient_tree.expandAll()
-            
+                try:
+                    plans = self.patient_db.get_patient_plans(patient.get('id', ''))
+                    if plans:
+                        for plan in plans:
+                            plan_item = QTreeWidgetItem(patient_item)
+                            plan_item.setText(0, plan.get('name', 'Không tên'))
+                            plan_item.setText(1, plan.get('id', ''))
+                            
+                            # Hiển thị ngày tạo
+                            created_date = plan.get('created_at', '')
+                            if created_date:
+                                # Hiển thị dạng ngày
+                                plan_item.setText(2, created_date.split('T')[0] if 'T' in created_date else created_date)
+                            
+                            plan_item.setData(0, Qt.UserRole, {"type": "plan", "data": plan, "patient_id": patient.get('id', '')})
+                except Exception as e:
+                    logger.warning("Không thể tải kế hoạch cho bệnh nhân %s: %s", patient.get('id', ''), str(e))
+                    
         except Exception as e:
             logger.error("Lỗi khi tải danh sách bệnh nhân: %s", str(e))
-            QMessageBox.warning(self, "Lỗi", f"Không thể tải danh sách bệnh nhân: {str(e)}")
+            QMessageBox.critical(self, "Lỗi", f"Không thể tải danh sách bệnh nhân: {str(e)}")
+        
+        # Tự động mở rộng cây
+        self.patient_tree.expandAll()
     
     def refresh_patients(self):
         """
@@ -167,12 +163,14 @@ class PatientBrowser(QWidget):
             item = self.patient_tree.topLevelItem(i)
             item_data = item.data(0, Qt.UserRole)
             
-            if item_data and item_data.get("type") == "patient" and item_data.get("id") == patient_id:
-                # Chọn item
-                self.patient_tree.setCurrentItem(item)
-                # Gọi phương thức xử lý sự kiện chọn
-                self._on_selection_changed()
-                return
+            if item_data and item_data.get("type") == "patient":
+                patient_data = item_data.get("data", {})
+                if patient_data and patient_data.get("id") == patient_id:
+                    # Chọn item
+                    self.patient_tree.setCurrentItem(item)
+                    # Gọi phương thức xử lý sự kiện chọn
+                    self._on_selection_changed()
+                    return
                 
         logger.warning("Không tìm thấy bệnh nhân có ID: %s", patient_id)
     
@@ -210,10 +208,16 @@ class PatientBrowser(QWidget):
         if not item_data:
             return
             
-        if item_data["type"] == "patient":
-            self.patient_selected.emit(item_data["data"])
-        elif item_data["type"] == "plan":
-            self.plan_selected.emit(item_data["patient_id"], item_data["id"])
+        item_type = item_data.get("type")
+        if item_type == "patient":
+            patient_data = item_data.get("data")
+            if patient_data:
+                self.patient_selected.emit(patient_data.get("id", ""))
+        elif item_type == "plan":
+            patient_id = item_data.get("patient_id", "")
+            plan_id = item_data.get("data", {}).get("id", "")
+            if patient_id and plan_id:
+                self.plan_selected.emit(patient_id, plan_id)
     
     def _show_context_menu(self, position):
         """Hiển thị menu ngữ cảnh cho item được chọn."""

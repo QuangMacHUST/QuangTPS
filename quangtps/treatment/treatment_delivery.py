@@ -17,7 +17,7 @@ import calendar
 import math
 
 from quangtps.treatment.fractionation import Fractionation
-from quangtps.treatment.plan import TreatmentPlan
+from quangtps.treatment.plan import get_plan_class
 from quangtps.core.patient import Patient
 
 logger = logging.getLogger(__name__)

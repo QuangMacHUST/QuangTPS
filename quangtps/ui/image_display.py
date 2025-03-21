@@ -897,6 +897,13 @@ class ImageDisplay(QWidget):
     position_changed = pyqtSignal(int, int)  # x, y coordinates
     mouse_position_changed = pyqtSignal(int, int, float)  # x, y, giá trị tại vị trí
     
+    # Thêm các tín hiệu cần thiết cho tương tác với công cụ contour
+    mouse_pressed = pyqtSignal(int, int, int, Qt.MouseButton)  # slice_idx, x, y, button
+    mouse_moved = pyqtSignal(int, int, int)  # slice_idx, x, y
+    mouse_released = pyqtSignal(int, int, int, Qt.MouseButton)  # slice_idx, x, y, button
+    key_pressed = pyqtSignal(int)  # key
+    key_released = pyqtSignal(int)  # key
+    
     def __init__(self, parent=None):
         """Khởi tạo ImageDisplay."""
         super().__init__(parent)
@@ -1059,52 +1066,121 @@ class ImageDisplay(QWidget):
         
     def mousePressEvent(self, event):
         """Xử lý sự kiện nhấn chuột."""
-        super().mousePressEvent(event)
+        # Lưu vị trí bắt đầu
+        self.last_pos = event.pos()
         
-        if event.button() == Qt.LeftButton:
-            # Lấy vị trí trong tọa độ ảnh
-            pos = event.pos()
-            x = pos.x()
-            y = pos.y()
-            
-            # TODO: Chuyển tọa độ screen sang tọa độ ảnh
-            
-            # Phát tín hiệu thay đổi vị trí
-            self.position_changed.emit(x, y)
-            
+        # Chuyển đổi tọa độ từ vị trí màn hình sang vị trí trong ảnh
+        img_x, img_y = self._screen_to_image_coords(event.pos().x(), event.pos().y())
+        
+        # Xử lý công cụ hiện tại
+        if self.current_tool == "pan":
+            # Không làm gì đặc biệt, chỉ lưu vị trí bắt đầu
+            pass
+        elif self.current_tool == "window":
+            # Lưu giá trị cửa sổ ban đầu
+            self.initial_window_width = self.window_width
+            self.initial_window_center = self.window_level
+        
+        # Phát tín hiệu cho các công cụ contour
+        slice_idx = 0  # Giả sử slice_idx là 0, cần cập nhật theo dữ liệu thực tế
+        if hasattr(self, 'current_slice_idx'):
+            slice_idx = self.current_slice_idx
+        self.mouse_pressed.emit(slice_idx, img_x, img_y, event.button())
+
     def mouseMoveEvent(self, event):
         """Xử lý sự kiện di chuyển chuột."""
-        super().mouseMoveEvent(event)
-        
-        # Lấy vị trí chuột
-        pos = event.pos()
-        x, y = pos.x(), pos.y()
-        
-        # Hiệu chỉnh theo zoom và pan
-        if self.image_data is not None and self.zoom_factor > 0:
-            # Điều chỉnh tọa độ để tính toán vị trí thực trong hình ảnh
-            x_img = int((x - self.pan_offset[0]) / self.zoom_factor)
-            y_img = int((y - self.pan_offset[1]) / self.zoom_factor)
+        if not self.last_pos:
+            self.last_pos = event.pos()
+            return
             
-            # Kiểm tra nếu tọa độ nằm trong phạm vi của hình ảnh
-            if 0 <= x_img < self.image_data.shape[1] and 0 <= y_img < self.image_data.shape[0]:
-                # Lấy giá trị pixel tại vị trí đó
-                pixel_value = float(self.image_data[y_img, x_img])
-                # Phát tín hiệu với vị trí và giá trị pixel
-                self.mouse_position_changed.emit(x_img, y_img, pixel_value)
-            else:
-                # Nếu nằm ngoài vùng hình ảnh, phát tín hiệu với giá trị không hợp lệ
-                self.mouse_position_changed.emit(x_img, y_img, float('nan'))
+        # Chuyển đổi tọa độ từ vị trí màn hình sang vị trí trong ảnh
+        img_x, img_y = self._screen_to_image_coords(event.pos().x(), event.pos().y())
         
+        # Tính toán vị trí
+        dx = event.x() - self.last_pos.x()
+        dy = event.y() - self.last_pos.y()
+        
+        # Xử lý dựa trên công cụ hiện tại
         if event.buttons() & Qt.LeftButton:
-            # Xử lý theo công cụ hiện tại
             if self.current_tool == "pan":
-                # TODO: Xử lý pan
-                pass
+                # Xử lý pan
+                self.pan_offset = (self.pan_offset[0] + dx, self.pan_offset[1] + dy)
+                self._update_display()
             elif self.current_tool == "window":
-                # TODO: Xử lý thay đổi cửa sổ
-                pass
+                # Xử lý thay đổi cửa sổ
+                # dx thay đổi width, dy thay đổi center
+                new_width = max(1, self.initial_window_width + dx)
+                new_center = self.initial_window_center - dy
+                self.set_window(new_width, new_center)
+        
+        # Phát tín hiệu cho các công cụ contour
+        slice_idx = 0  # Giả sử slice_idx là 0, cần cập nhật theo dữ liệu thực tế
+        if hasattr(self, 'current_slice_idx'):
+            slice_idx = self.current_slice_idx
+        self.mouse_moved.emit(slice_idx, img_x, img_y)
+        
+        # Cập nhật vị trí
+        self.last_pos = event.pos()
+        
+        # Thông báo vị trí chuột
+        self.mouse_position_changed.emit(img_x, img_y, self._get_pixel_value(img_x, img_y))
+
+    def mouseReleaseEvent(self, event):
+        """Xử lý sự kiện thả chuột."""
+        # Chuyển đổi tọa độ từ vị trí màn hình sang vị trí trong ảnh
+        img_x, img_y = self._screen_to_image_coords(event.pos().x(), event.pos().y())
+        
+        # Phát tín hiệu cho các công cụ contour
+        slice_idx = 0  # Giả sử slice_idx là 0, cần cập nhật theo dữ liệu thực tế
+        if hasattr(self, 'current_slice_idx'):
+            slice_idx = self.current_slice_idx
+        self.mouse_released.emit(slice_idx, img_x, img_y, event.button())
+        
+        self.last_pos = None
+        
+    def keyPressEvent(self, event):
+        """Xử lý sự kiện nhấn phím."""
+        # Phát tín hiệu cho các công cụ contour
+        self.key_pressed.emit(event.key())
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Xử lý sự kiện thả phím."""
+        # Phát tín hiệu cho các công cụ contour
+        self.key_released.emit(event.key())
+        super().keyReleaseEvent(event)
+
+    def _screen_to_image_coords(self, x, y):
+        """Chuyển đổi tọa độ màn hình sang tọa độ trong ảnh."""
+        if not hasattr(self, 'image_rect') or not self.image_rect:
+            return 0, 0
             
+        # Tọa độ tương đối trong hình chữ nhật hiển thị
+        rel_x = (x - self.image_rect.x()) / self.image_rect.width()
+        rel_y = (y - self.image_rect.y()) / self.image_rect.height()
+        
+        # Chuyển đổi sang tọa độ trong ảnh
+        if self.image_data is not None:
+            img_width = self.image_data.shape[1] if len(self.image_data.shape) > 1 else 1
+            img_height = self.image_data.shape[0] if len(self.image_data.shape) > 0 else 1
+            
+            img_x = int(rel_x * img_width)
+            img_y = int(rel_y * img_height)
+            
+            # Đảm bảo tọa độ nằm trong khoảng hợp lệ
+            img_x = max(0, min(img_x, img_width - 1))
+            img_y = max(0, min(img_y, img_height - 1))
+            
+            return img_x, img_y
+        
+        return 0, 0
+        
+    def _get_pixel_value(self, x, y):
+        """Lấy giá trị pixel tại vị trí x, y."""
+        if self.image_data is not None and 0 <= y < self.image_data.shape[0] and 0 <= x < self.image_data.shape[1]:
+            return float(self.image_data[y, x])
+        return 0.0
+
     def wheelEvent(self, event):
         """Xử lý sự kiện lăn chuột."""
         # Chỉ xử lý sự kiện wheel nếu handle_wheel_event = True

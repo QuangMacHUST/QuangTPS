@@ -12,13 +12,17 @@ import logging
 import datetime
 import uuid
 from enum import Enum
-from typing import Dict, List, Any, Optional, Tuple, Union, Set
+from typing import Dict, List, Any, Optional, Tuple, Union, Set, TYPE_CHECKING
 import os
 import json
 import pickle
 
+# Use TYPE_CHECKING to prevent circular imports
+if TYPE_CHECKING:
+    from quangtps.planning.plan import Plan
+
 from quangtps.core.patient import Patient
-from quangtps.treatment.plan import TreatmentPlan
+from quangtps.treatment.plan import get_plan_class
 from quangtps.treatment.fractionation import Fractionation
 from quangtps.treatment.treatment_delivery import TreatmentCourse, TreatmentStatus, FractionStatus, TreatmentFraction
 from quangtps.treatment.scheduler import TreatmentScheduler, TimeSlot
@@ -38,36 +42,43 @@ class TreatmentManager:
     
     def __init__(self, data_path: str = "data/treatment"):
         """
-        Khởi tạo quản lý điều trị.
+        Khởi tạo đối tượng TreatmentManager.
         
         Parameters
         ----------
         data_path : str, optional
-            Đường dẫn thư mục dữ liệu
+            Đường dẫn để lưu dữ liệu, mặc định là 'data/treatment'
         """
         self.data_path = data_path
         
-        # Đảm bảo thư mục dữ liệu tồn tại
-        os.makedirs(data_path, exist_ok=True)
-        os.makedirs(os.path.join(data_path, "patients"), exist_ok=True)
-        os.makedirs(os.path.join(data_path, "plans"), exist_ok=True)
-        os.makedirs(os.path.join(data_path, "courses"), exist_ok=True)
-        os.makedirs(os.path.join(data_path, "machines"), exist_ok=True)
-        os.makedirs(os.path.join(data_path, "schedulers"), exist_ok=True)
+        # Tạo thư mục nếu chưa tồn tại
+        try:
+            if not os.path.exists(data_path):
+                os.makedirs(data_path)
+            
+            # Tạo các thư mục con
+            for sub_dir in ["patients", "plans", "courses", "machines", "schedulers"]:
+                sub_path = os.path.join(data_path, sub_dir)
+                if not os.path.exists(sub_path):
+                    os.makedirs(sub_path)
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo thư mục dữ liệu: {e}")
         
         # Các đối tượng quản lý
         self.patients: Dict[str, Patient] = {}
-        self.plans: Dict[str, TreatmentPlan] = {}
+        self.plans: Dict[str, Any] = {}  # Will contain Plan objects from planning module
         self.courses: Dict[str, TreatmentCourse] = {}
         self.machines: Dict[str, TreatmentMachine] = {}
         self.schedulers: Dict[str, TreatmentScheduler] = {}
         
-        # Load dữ liệu
+        # Tải dữ liệu từ file nếu có
         self._load_patients()
         self._load_plans()
         self._load_courses()
         self._load_machines()
         self._load_schedulers()
+        
+        logger.info("Đã khởi tạo TreatmentManager")
     
     def _load_patients(self):
         """Load dữ liệu bệnh nhân từ file."""
@@ -84,18 +95,20 @@ class TreatmentManager:
                     logger.error(f"Lỗi khi load bệnh nhân từ file {file_path}: {e}")
     
     def _load_plans(self):
-        """Load dữ liệu kế hoạch điều trị từ file."""
+        """Tải thông tin các kế hoạch điều trị từ file."""
         plans_dir = os.path.join(self.data_path, "plans")
-        for filename in os.listdir(plans_dir):
-            if filename.endswith(".json"):
-                file_path = os.path.join(plans_dir, filename)
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        plan = TreatmentPlan.from_dict(data)
-                        self.plans[plan.plan_id] = plan
-                except Exception as e:
-                    logger.error(f"Lỗi khi load kế hoạch điều trị từ file {file_path}: {e}")
+        if os.path.exists(plans_dir):
+            for file_name in os.listdir(plans_dir):
+                if file_name.endswith(".json"):
+                    file_path = os.path.join(plans_dir, file_name)
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            Plan = get_plan_class()
+                            plan = Plan.from_dict(data)
+                            self.plans[plan.plan_id] = plan
+                    except Exception as e:
+                        logger.error(f"Lỗi khi tải kế hoạch điều trị từ file {file_path}: {e}")
     
     def _load_courses(self):
         """Load dữ liệu đợt điều trị từ file."""
@@ -155,19 +168,21 @@ class TreatmentManager:
         except Exception as e:
             logger.error(f"Lỗi khi lưu bệnh nhân vào file {file_path}: {e}")
     
-    def _save_plan(self, plan: TreatmentPlan):
+    def _save_plan(self, plan):
         """
         Lưu dữ liệu kế hoạch điều trị vào file.
         
         Parameters
         ----------
-        plan : TreatmentPlan
+        plan : Any
             Kế hoạch điều trị cần lưu
         """
-        file_path = os.path.join(self.data_path, "plans", f"{plan.plan_id}.json")
+        plans_dir = os.path.join(self.data_path, "plans")
+        file_path = os.path.join(plans_dir, f"{plan.plan_id}.json")
+        
         try:
             with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(plan.to_dict(), f, ensure_ascii=False, indent=2)
+                json.dump(plan.to_dict(), f, ensure_ascii=False, indent=4)
         except Exception as e:
             logger.error(f"Lỗi khi lưu kế hoạch điều trị vào file {file_path}: {e}")
     
@@ -326,29 +341,38 @@ class TreatmentManager:
     
     # Các phương thức CRUD cho TreatmentPlan
     
-    def add_plan(self, plan: TreatmentPlan) -> bool:
+    def add_plan(self, plan) -> bool:
         """
         Thêm kế hoạch điều trị mới.
         
         Parameters
         ----------
-        plan : TreatmentPlan
+        plan : Any
             Kế hoạch điều trị cần thêm
             
         Returns
         -------
         bool
-            True nếu thành công, False nếu thất bại
+            True nếu thêm thành công, False nếu không
         """
-        if plan.plan_id in self.plans:
-            logger.warning(f"Kế hoạch điều trị có ID {plan.plan_id} đã tồn tại.")
+        # Kiểm tra xem bệnh nhân có tồn tại không
+        if not plan.patient_id in self.patients:
+            logger.error(f"Bệnh nhân với ID {plan.patient_id} không tồn tại")
             return False
-            
+        
+        # Kiểm tra xem kế hoạch đã tồn tại chưa
+        if plan.plan_id in self.plans:
+            logger.warning(f"Kế hoạch điều trị với ID {plan.plan_id} đã tồn tại")
+            return False
+        
+        # Thêm kế hoạch
         self.plans[plan.plan_id] = plan
         self._save_plan(plan)
+        
+        logger.info(f"Đã thêm kế hoạch điều trị {plan.plan_name} (ID: {plan.plan_id})")
         return True
     
-    def get_plan(self, plan_id: str) -> Optional[TreatmentPlan]:
+    def get_plan(self, plan_id: str) -> Optional[Any]:
         """
         Lấy thông tin kế hoạch điều trị.
         
@@ -359,31 +383,35 @@ class TreatmentManager:
             
         Returns
         -------
-        Optional[TreatmentPlan]
-            Đối tượng TreatmentPlan nếu tồn tại, None nếu không
+        Optional[Any]
+            Đối tượng Plan nếu tồn tại, None nếu không
         """
         return self.plans.get(plan_id)
     
-    def update_plan(self, plan: TreatmentPlan) -> bool:
+    def update_plan(self, plan) -> bool:
         """
         Cập nhật thông tin kế hoạch điều trị.
         
         Parameters
         ----------
-        plan : TreatmentPlan
+        plan : Any
             Kế hoạch điều trị cần cập nhật
             
         Returns
         -------
         bool
-            True nếu thành công, False nếu thất bại
+            True nếu cập nhật thành công, False nếu không
         """
+        # Kiểm tra xem kế hoạch có tồn tại không
         if plan.plan_id not in self.plans:
-            logger.warning(f"Kế hoạch điều trị có ID {plan.plan_id} không tồn tại.")
+            logger.error(f"Kế hoạch điều trị với ID {plan.plan_id} không tồn tại")
             return False
-            
+        
+        # Cập nhật kế hoạch
         self.plans[plan.plan_id] = plan
         self._save_plan(plan)
+        
+        logger.info(f"Đã cập nhật kế hoạch điều trị {plan.plan_name} (ID: {plan.plan_id})")
         return True
     
     def delete_plan(self, plan_id: str) -> bool:
@@ -418,7 +446,7 @@ class TreatmentManager:
             
         return True
     
-    def get_patient_plans(self, patient_id: str) -> List[TreatmentPlan]:
+    def get_patient_plans(self, patient_id: str) -> List[Any]:
         """
         Lấy danh sách kế hoạch điều trị của một bệnh nhân.
         
@@ -429,7 +457,7 @@ class TreatmentManager:
             
         Returns
         -------
-        List[TreatmentPlan]
+        List[Any]
             Danh sách kế hoạch điều trị
         """
         return [plan for plan in self.plans.values() if plan.patient_id == patient_id]

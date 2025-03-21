@@ -1,17 +1,25 @@
 """
-Module chứa các thuật toán tính toán liều.
+Module containing dose calculation algorithms.
 
-Module này cung cấp các lớp triển khai cụ thể cho các thuật toán tính toán liều khác nhau,
-bao gồm CCC, Pencil Beam, AAA, và có thể mở rộng với các thuật toán khác như
-Acuros XB, Convolution Superposition, Monte Carlo và GBBS.
+This module provides classes for calculating dose distributions
+using various algorithms for radiotherapy treatment planning.
 """
 
-from quangtps.dose.algorithms.ccc import CollapsedConeImplementer
-from quangtps.dose.algorithms.pencil_beam import PencilBeamImplementer
-from quangtps.dose.algorithms.aaa import AAAImplementer
+from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
+from quangtps.dose.algorithms.collapsed_cone import CollapsedConeAlgorithm
+from quangtps.dose.algorithms.monte_carlo import MonteCarloAlgorithm
+from quangtps.dose.algorithms.aaa import AAAAlgorithm
+from quangtps.dose.algorithms.acuros import AcurosAlgorithm
+from quangtps.dose.algorithms.gbbs import GBBSAlgorithm
+from quangtps.dose.algorithms.ccc import CCCAlgorithm
 
-__all__ = [
-    'CollapsedConeImplementer',
-    'PencilBeamImplementer',
-    'AAAImplementer'
-]
+# Register available algorithms
+AVAILABLE_ALGORITHMS = {
+    "PENCIL_BEAM": PencilBeamAlgorithm,
+    "COLLAPSED_CONE": CollapsedConeAlgorithm,
+    "MONTE_CARLO": MonteCarloAlgorithm,
+    "AAA": AAAAlgorithm,
+    "ACUROS": AcurosAlgorithm,
+    "GBBS": GBBSAlgorithm,
+    "CCC": CCCAlgorithm
+}

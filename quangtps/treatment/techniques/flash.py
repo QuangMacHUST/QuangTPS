@@ -26,7 +26,7 @@ class FLASHMode(str, Enum):
     PHOTON = "PHOTON"      # FLASH treatment with photons
     PROTON = "PROTON"      # FLASH treatment with protons
 
-class FLASHRadiotherapy(BaseTreatmentTechnique):
+class FLASHTherapy(BaseTreatmentTechnique):
     """
     Class for FLASH Radiotherapy technique.
     
@@ -157,7 +157,7 @@ class FLASHRadiotherapy(BaseTreatmentTechnique):
             Dose rate in Gy/s
         """
         if dose_rate < 40.0:
-            logger.warning("Dose rate %.2f Gy/s may be too low for FLASH effect", 
+            logger.warning("Dose rate of %.2f Gy/s may be below FLASH threshold (40 Gy/s)", 
                           dose_rate)
         
         self.dose_rate = dose_rate
@@ -173,9 +173,9 @@ class FLASHRadiotherapy(BaseTreatmentTechnique):
             Dictionary representation of the FLASH treatment
         """
         return {
-            'name': self.name,
             'id': self.technique_id,
-            'type': 'FLASH',
+            'name': self.name,
+            'technique_type': 'FLASH',
             'category': self.category.value,
             'mode': self.mode.value,
             'dose_rate': self.dose_rate,
@@ -186,7 +186,7 @@ class FLASHRadiotherapy(BaseTreatmentTechnique):
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'FLASHRadiotherapy':
+    def from_dict(cls, data: Dict[str, Any]) -> 'FLASHTherapy':
         """
         Create a FLASH treatment from a dictionary.
         
@@ -197,13 +197,16 @@ class FLASHRadiotherapy(BaseTreatmentTechnique):
             
         Returns
         -------
-        FLASHRadiotherapy
-            New FLASH treatment instance
+        FLASHTherapy
+            FLASH treatment created from the dictionary
         """
+        if data.get('technique_type') != 'FLASH':
+            raise ValueError("Dictionary does not contain valid FLASH data")
+            
         flash = cls(
             name=data.get('name', 'Default FLASH'),
             technique_id=data.get('id'),
-            mode=FLASHMode(data.get('mode', FLASHMode.ELECTRON.value))
+            mode=FLASHMode(data.get('mode', 'ELECTRON'))
         )
         
         flash.dose_rate = data.get('dose_rate', 40.0)
@@ -214,5 +217,8 @@ class FLASHRadiotherapy(BaseTreatmentTechnique):
         
         return flash
 
+# Add alias for backwards compatibility
+FLASHRadiotherapy = FLASHTherapy
+
 # Ensure class is exported correctly
-__all__ = ['FLASHMode', 'FLASHRadiotherapy']
+__all__ = ['FLASHMode', 'FLASHTherapy']

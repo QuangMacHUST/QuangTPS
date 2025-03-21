@@ -1,510 +1,711 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
+"""
+Implementation of the Monte Carlo dose calculation algorithm.
+
+This module provides a class for calculating dose distributions using
+the Monte Carlo algorithm for radiotherapy treatment planning.
+"""
+
+import os
 import numpy as np
 import logging
-import SimpleITK as sitk
-import concurrent.futures
-from typing import Dict, List, Tuple, Optional, Union, Any
 import time
-import random
-from dataclasses import dataclass
-import math
+import json
+from typing import Dict, List, Tuple, Optional, Union
+from concurrent.futures import ProcessPoolExecutor
 
-from quangtps.core.constants import ELECTRON_REST_MASS_ENERGY
-from quangtps.core.types import DoseGrid, BeamParameters
-from quangtps.physics.interaction import PhotonInteraction, ElectronInteraction
-from quangtps.physics.material import MaterialProperties, create_material_map_from_ct
-from quangtps.physics.particle import Particle, ParticleType, ParticleHistory
-from quangtps.physics.source import PhotonSource, ElectronSource
-from quangtps.dose.base import DoseCalculationAlgorithm, DoseCalculationResult
-
+from quangtps.core.exceptions import DoseCalculationError
+from quangtps.imaging.image import Image
+from quangtps.planning.beam import Beam
+from quangtps.dose.beam_data_processor import BeamModel, BeamModelParameter
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class MonteCarloParameters:
-    """Parameters for Monte Carlo dose calculation."""
-    number_of_histories: int = 10000000  # Number of particle histories to simulate
-    uncertainty_threshold: float = 0.02  # Target statistical uncertainty (relative)
-    electron_cutoff_energy: float = 0.2  # MeV, energy below which electrons are locally absorbed
-    photon_cutoff_energy: float = 0.01  # MeV, energy below which photons are locally absorbed
-    use_variance_reduction: bool = True  # Enable variance reduction techniques
-    number_of_threads: int = 8  # Number of parallel threads to use
-    voxel_grid_resolution: Optional[Tuple[float, float, float]] = None  # Optional dose grid resolution override (mm)
-    random_seed: Optional[int] = None  # Random seed for reproducibility
-    transport_mechanics: str = "condensed"  # "condensed" or "detailed" electron transport
-    # Physics parameters
-    use_delta_scattering: bool = True  # Use delta scattering for photon transport
-    use_mott_correction: bool = True  # Use Mott correction for electron scattering
-    use_bremsstrahlung: bool = True  # Simulate bremsstrahlung photon production
-    report_progress: bool = True  # Report progress during calculation
-    progress_interval: int = 1000000  # Number of histories between progress reports
-
-
-class MonteCarloEngine:
-    """Core Monte Carlo particle transport engine."""
-    
-    def __init__(self, parameters: MonteCarloParameters):
-        """Initialize the Monte Carlo engine.
-        
-        Args:
-            parameters: Configuration parameters for the simulation
-        """
-        self.parameters = parameters
-        self.random_generator = random.Random(parameters.random_seed)
-        self.photon_interaction = PhotonInteraction()
-        self.electron_interaction = ElectronInteraction()
-        self.material_properties = MaterialProperties()
-        
-    def transport_particle(self, particle: Particle, dose_grid: np.ndarray, 
-                          materials: np.ndarray, voxel_sizes: Tuple[float, float, float]) -> List[Particle]:
-        """Transport a single particle through the geometry and score dose.
-        
-        Args:
-            particle: The particle to transport
-            dose_grid: The dose grid to score to (modified in-place)
-            materials: Material index grid with same dimensions as dose_grid
-            voxel_sizes: Size of each voxel in mm
-        
-        Returns:
-            List of secondary particles generated during transport
-        """
-        secondaries = []
-        
-        # Continue until particle is absorbed or leaves the geometry
-        while particle.is_alive:
-            # Get current voxel indices
-            ix, iy, iz = self._get_voxel_indices(particle.position, voxel_sizes)
-            
-            # Check if particle is within dose grid boundaries
-            if not self._is_in_geometry(ix, iy, iz, dose_grid.shape):
-                particle.is_alive = False
-                continue
-            
-            # Get material at current position
-            material_index = materials[ix, iy, iz]
-            material = self.material_properties.get_material(material_index)
-            
-            # Handle transport based on particle type
-            if particle.type == ParticleType.PHOTON:
-                # Determine distance to next interaction
-                mfp = self.photon_interaction.get_mean_free_path(material, particle.energy)
-                distance = -math.log(self.random_generator.random()) * mfp
-                
-                # Check if interaction occurs within current voxel
-                voxel_path = self._track_through_voxel(particle, ix, iy, iz, voxel_sizes)
-                
-                if distance <= voxel_path:
-                    # Move particle to interaction site
-                    self._move_particle(particle, distance)
-                    
-                    # Score energy deposition from photon interaction (if any)
-                    energy_dep, new_particles = self.photon_interaction.interact(
-                        particle, material, self.random_generator)
-                    
-                    if energy_dep > 0:
-                        self._score_dose(dose_grid, ix, iy, iz, energy_dep, material)
-                    
-                    # Add secondary particles to tracking list
-                    for new_particle in new_particles:
-                        if ((new_particle.type == ParticleType.ELECTRON and 
-                            new_particle.energy > self.parameters.electron_cutoff_energy) or
-                            (new_particle.type == ParticleType.PHOTON and 
-                            new_particle.energy > self.parameters.photon_cutoff_energy)):
-                            secondaries.append(new_particle)
-                    
-                    # Terminate current particle if it was absorbed
-                    if particle.energy <= self.parameters.photon_cutoff_energy:
-                        # Deposit remaining energy locally
-                        self._score_dose(dose_grid, ix, iy, iz, particle.energy, material)
-                        particle.is_alive = False
-                else:
-                    # Move to voxel boundary
-                    self._move_particle(particle, voxel_path)
-            
-            elif particle.type == ParticleType.ELECTRON:
-                if self.parameters.transport_mechanics == "condensed":
-                    # Condensed history approach - take larger steps
-                    step_length = min(0.1 * material.radiation_length, 
-                                    self._get_max_voxel_dimension(voxel_sizes) * 0.5)
-                    
-                    # Calculate energy loss for this step (continuous slowing down approximation)
-                    energy_loss = self.electron_interaction.calculate_energy_loss(
-                        particle.energy, material, step_length)
-                    
-                    # Score energy deposition
-                    self._score_dose(dose_grid, ix, iy, iz, energy_loss, material)
-                    particle.energy -= energy_loss
-                    
-                    # Handle multiple scattering (change direction)
-                    self.electron_interaction.apply_multiple_scattering(
-                        particle, material, step_length, self.random_generator)
-                    
-                    # Move particle
-                    self._move_particle(particle, step_length)
-                    
-                    # Check for discrete interactions (delta ray, bremsstrahlung)
-                    if self.parameters.use_bremsstrahlung and self.random_generator.random() < 0.05:
-                        # Simplified bremsstrahlung production probability
-                        photon_energy = self.electron_interaction.sample_bremsstrahlung_energy(
-                            particle.energy, self.random_generator)
-                        
-                        if photon_energy > self.parameters.photon_cutoff_energy:
-                            # Create bremsstrahlung photon
-                            photon = Particle(
-                                position=particle.position.copy(),
-                                direction=self._sample_bremsstrahlung_direction(particle, self.random_generator),
-                                energy=photon_energy,
-                                type=ParticleType.PHOTON
-                            )
-                            secondaries.append(photon)
-                            particle.energy -= photon_energy
-                else:
-                    # Detailed history approach - shorter steps with discrete interactions
-                    # This would be a more detailed implementation
-                    pass
-                
-                # Check if electron energy is below cutoff
-                if particle.energy <= self.parameters.electron_cutoff_energy:
-                    # Deposit remaining energy locally
-                    self._score_dose(dose_grid, ix, iy, iz, particle.energy, material)
-                    particle.is_alive = False
-            
-        return secondaries
-    
-    def _get_voxel_indices(self, position: np.ndarray, voxel_sizes: Tuple[float, float, float]) -> Tuple[int, int, int]:
-        """Convert position coordinates to voxel indices."""
-        ix = int(position[0] / voxel_sizes[0])
-        iy = int(position[1] / voxel_sizes[1])
-        iz = int(position[2] / voxel_sizes[2])
-        return ix, iy, iz
-    
-    def _is_in_geometry(self, ix: int, iy: int, iz: int, shape: Tuple[int, int, int]) -> bool:
-        """Check if the given indices are within the geometry bounds."""
-        return 0 <= ix < shape[0] and 0 <= iy < shape[1] and 0 <= iz < shape[2]
-    
-    def _track_through_voxel(self, particle: Particle, ix: int, iy: int, iz: int, 
-                            voxel_sizes: Tuple[float, float, float]) -> float:
-        """Calculate distance to voxel boundary along particle direction."""
-        # Position within voxel (relative to voxel lower corner)
-        pos_in_voxel = [
-            particle.position[0] - ix * voxel_sizes[0],
-            particle.position[1] - iy * voxel_sizes[1],
-            particle.position[2] - iz * voxel_sizes[2]
-        ]
-        
-        # Distance to boundaries in each direction
-        dist_to_boundary = [float('inf')] * 3
-        
-        for i in range(3):
-            if particle.direction[i] > 1e-6:  # Moving in positive direction
-                dist_to_boundary[i] = (voxel_sizes[i] - pos_in_voxel[i]) / particle.direction[i]
-            elif particle.direction[i] < -1e-6:  # Moving in negative direction
-                dist_to_boundary[i] = -pos_in_voxel[i] / particle.direction[i]
-        
-        # Return minimum positive distance to boundary
-        return min(dist_to_boundary)
-    
-    def _move_particle(self, particle: Particle, distance: float) -> None:
-        """Move particle along its direction by the specified distance."""
-        for i in range(3):
-            particle.position[i] += particle.direction[i] * distance
-    
-    def _score_dose(self, dose_grid: np.ndarray, ix: int, iy: int, iz: int, 
-                   energy: float, material: Any) -> None:
-        """Score energy deposition as dose in the specified voxel."""
-        if 0 <= ix < dose_grid.shape[0] and 0 <= iy < dose_grid.shape[1] and 0 <= iz < dose_grid.shape[2]:
-            # Convert from energy to dose (energy/mass)
-            dose = energy / material.density
-            dose_grid[ix, iy, iz] += dose
-    
-    def _get_max_voxel_dimension(self, voxel_sizes: Tuple[float, float, float]) -> float:
-        """Return the maximum voxel dimension."""
-        return max(voxel_sizes)
-    
-    def _sample_bremsstrahlung_direction(self, particle: Particle, random_generator: random.Random) -> np.ndarray:
-        """Sample direction for bremsstrahlung photon relative to electron direction."""
-        # Simplified model - bremsstrahlung photons are emitted in a narrow cone around electron direction
-        theta = 1.0 / (particle.energy + 1.0) * random_generator.random()  # Higher energy = narrower cone
-        phi = 2 * math.pi * random_generator.random()
-        
-        # Create coordinate system around electron direction
-        e1 = particle.direction
-        if abs(e1[0]) < 0.9:
-            e2 = np.cross(e1, [1, 0, 0])
-        else:
-            e2 = np.cross(e1, [0, 1, 0])
-        e2 = e2 / np.linalg.norm(e2)
-        e3 = np.cross(e1, e2)
-        
-        # Direction in local coordinate system
-        x = math.sin(theta) * math.cos(phi)
-        y = math.sin(theta) * math.sin(phi)
-        z = math.cos(theta)
-        
-        # Transform to global coordinates
-        direction = z * e1 + x * e2 + y * e3
-        return direction / np.linalg.norm(direction)
-
-
-class MonteCarloAlgorithm(DoseCalculationAlgorithm):
+class MonteCarloAlgorithm:
     """
-    Monte Carlo dose calculation algorithm implementation.
+    Implementation of the Monte Carlo dose calculation algorithm.
     
-    This algorithm simulates individual particle transport through matter 
-    to calculate dose distributions with high accuracy, especially in 
-    heterogeneous tissues.
+    This class provides methods for calculating 3D dose distributions
+    using the Monte Carlo algorithm for radiotherapy treatment planning.
     """
     
-    def __init__(self, parameters: Optional[MonteCarloParameters] = None):
+    DEFAULT_PARAMS = {
+        "num_histories": 1000000,  # Number of particle histories to simulate
+        "grid_size": 0.25,         # Calculation grid size in cm
+        "energy_cutoff": 0.01,     # Energy cutoff for particle tracking in MeV
+        "statistical_uncertainty": 2.0,  # Target statistical uncertainty in %
+        "threads": 8,              # Number of CPU threads to use
+        "use_gpu": False,          # Whether to use GPU acceleration if available
+        "max_chunk_size": 100000   # Maximum chunk size for particle batches
+    }
+    
+    def __init__(self):
         """
-        Initialize Monte Carlo algorithm with specified parameters.
-        
-        Args:
-            parameters: Configuration parameters for Monte Carlo simulation.
-                        If None, default parameters will be used.
+        Initialize the Monte Carlo algorithm with default parameters.
         """
-        super().__init__("Monte Carlo")
-        self.parameters = parameters or MonteCarloParameters()
-        self.engine = MonteCarloEngine(self.parameters)
+        self.beam_model = None
+        self.parameters = self.DEFAULT_PARAMS.copy()
+        self.material_lookup = None  # Will store CT number to material conversion
+        self.cross_section_data = None  # Will store material cross section data
         
-    def calculate(self, ct_image: sitk.Image, structures: Dict[str, sitk.Image],
-                 beam_parameters: BeamParameters) -> DoseCalculationResult:
+        # Initialize random number generator
+        self.rng = np.random.RandomState(seed=42)
+        
+        logger.info("Initialized Monte Carlo algorithm")
+    
+    def set_beam_model(self, beam_model: BeamModel):
         """
-        Calculate dose distribution using Monte Carlo simulation.
+        Set the beam model for dose calculation.
         
-        Args:
-            ct_image: CT image used for material and density information
-            structures: Dictionary of structure masks (target, OARs)
-            beam_parameters: Parameters describing the beam setup
-            
-        Returns:
-            Calculated dose distribution and additional information
+        Parameters
+        ----------
+        beam_model : BeamModel
+            The beam model containing beam data for dose calculation
         """
-        logger.info("Starting Monte Carlo dose calculation")
-        start_time = time.time()
+        self.beam_model = beam_model
+        logger.info(f"Set beam model: {beam_model.name}")
         
-        # Convert CT image to numpy array
-        ct_array = sitk.GetArrayFromImage(ct_image)
-        
-        # Get image geometry information
-        spacing = ct_image.GetSpacing()
-        origin = ct_image.GetOrigin()
-        size = ct_image.GetSize()
-        
-        # Set up dose grid (with same dimensions as CT image)
-        dose_grid = np.zeros_like(ct_array, dtype=np.float32)
-        
-        # Set up variance grid to track statistical uncertainty
-        variance_grid = np.zeros_like(dose_grid)
-        
-        # Initialize material map from CT
-        material_map = create_material_map_from_ct(ct_array)
-        
-        # Create source based on beam parameters
-        if beam_parameters.beam_type.lower() == "photon":
-            source = PhotonSource(beam_parameters)
-        elif beam_parameters.beam_type.lower() == "electron":
-            source = ElectronSource(beam_parameters)
+        # Load energy spectrum from beam model
+        if self.beam_model.has_parameter("energy_spectrum"):
+            self.energy_spectrum = self.beam_model.get_parameter("energy_spectrum")
+            logger.info("Loaded energy spectrum from beam model")
         else:
-            raise ValueError(f"Unsupported beam type: {beam_parameters.beam_type}")
+            logger.warning("Beam model does not contain energy spectrum, using default")
+    
+    def set_parameter(self, name: str, value: Any):
+        """
+        Set a calculation parameter.
         
-        # Set up batch processing
-        batch_size = min(1000000, self.parameters.number_of_histories)
-        num_batches = (self.parameters.number_of_histories + batch_size - 1) // batch_size
+        Parameters
+        ----------
+        name : str
+            Parameter name
+        value : Any
+            Parameter value
+        """
+        if name in self.parameters:
+            self.parameters[name] = value
+            logger.info(f"Set parameter {name} = {value}")
+        else:
+            logger.warning(f"Unknown parameter: {name}")
+    
+    def set_parameters(self, params: Dict[str, Any]):
+        """
+        Set multiple calculation parameters.
         
-        # Set up parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.parameters.number_of_threads) as executor:
-            for batch in range(num_batches):
-                batch_histories = min(batch_size, self.parameters.number_of_histories - batch * batch_size)
-                
-                # Submit batch calculations to thread pool
+        Parameters
+        ----------
+        params : Dict[str, Any]
+            Dictionary of parameter name/value pairs
+        """
+        for name, value in params.items():
+            self.set_parameter(name, value)
+    
+    def load_cross_section_data(self, data_file: str):
+        """
+        Load cross-section data for Monte Carlo simulation.
+        
+        Parameters
+        ----------
+        data_file : str
+            Path to cross-section data file
+        """
+        try:
+            with open(data_file, 'r') as f:
+                self.cross_section_data = json.load(f)
+            logger.info(f"Loaded cross-section data from {data_file}")
+        except Exception as e:
+            logger.error(f"Failed to load cross-section data: {str(e)}")
+    
+    def load_material_lookup(self, data_file: str):
+        """
+        Load CT number to material conversion table.
+        
+        Parameters
+        ----------
+        data_file : str
+            Path to material lookup data file
+        """
+        try:
+            with open(data_file, 'r') as f:
+                self.material_lookup = json.load(f)
+            logger.info(f"Loaded material lookup table from {data_file}")
+        except Exception as e:
+            logger.error(f"Failed to load material lookup table: {str(e)}")
+    
+    def calculate_beam_dose(self, beam: Beam, ct_image: Image) -> Image:
+        """
+        Calculate dose for a single beam using Monte Carlo simulation.
+        
+        Parameters
+        ----------
+        beam : Beam
+            The beam to calculate dose for
+        ct_image : Image
+            The CT image for dose calculation
+            
+        Returns
+        -------
+        Image
+            The calculated dose image
+        
+        Raises
+        ------
+        DoseCalculationError
+            If dose calculation fails
+        """
+        if self.beam_model is None:
+            logger.error("No beam model set for dose calculation")
+            raise DoseCalculationError("No beam model set for dose calculation")
+        
+        try:
+            # Start timing
+            start_time = time.time()
+            logger.info(f"Starting Monte Carlo calculation for beam: {beam.name}")
+            logger.info(f"Using {self.parameters['num_histories']} histories with " 
+                        f"{self.parameters['threads']} threads")
+            
+            # Convert CT to materials and densities
+            materials, densities = self._convert_ct_to_materials(ct_image)
+            
+            # Initialize dose and uncertainty grids
+            dose_grid = np.zeros_like(ct_image.data, dtype=np.float32)
+            uncertainty_grid = np.zeros_like(ct_image.data, dtype=np.float32)
+            
+            # Get beam parameters
+            source_position = beam.get_source_position()
+            isocenter = beam.isocenter
+            field_size = beam.field_size
+            gantry_angle = beam.gantry_angle
+            collimator_angle = beam.collimator_angle
+            couch_angle = beam.couch_angle
+            
+            # Get energy spectrum
+            if self.beam_model.has_parameter("energy_spectrum"):
+                energy_spectrum = self.beam_model.get_parameter("energy_spectrum")
+                energies = energy_spectrum.dimension_values[0]
+                probabilities = energy_spectrum.value_grid
+            else:
+                # Default energy spectrum if not available
+                energy_mean = float(beam.energy.replace("MV", "").replace("X", ""))
+                energies, probabilities = self._create_default_spectrum(energy_mean)
+            
+            # Split calculation into chunks for parallelization
+            num_histories = self.parameters["num_histories"]
+            chunk_size = min(num_histories // self.parameters["threads"], 
+                             self.parameters["max_chunk_size"])
+            num_chunks = int(np.ceil(num_histories / chunk_size))
+            
+            logger.info(f"Splitting calculation into {num_chunks} chunks of " 
+                        f"{chunk_size} histories each")
+            
+            # Process chunks in parallel
+            with ProcessPoolExecutor(max_workers=self.parameters["threads"]) as executor:
                 futures = []
-                for i in range(self.parameters.number_of_threads):
-                    # Distribute histories among threads
-                    thread_histories = batch_histories // self.parameters.number_of_threads
-                    if i < batch_histories % self.parameters.number_of_threads:
-                        thread_histories += 1
+                
+                for i in range(num_chunks):
+                    # Calculate chunk size (last chunk may be smaller)
+                    actual_chunk_size = min(chunk_size, num_histories - i * chunk_size)
                     
-                    if thread_histories > 0:
-                        futures.append(executor.submit(
-                            self._simulate_batch, 
-                            thread_histories, 
-                            source, 
-                            ct_array, 
-                            material_map, 
-                            spacing,
-                            batch * batch_size + i * (batch_histories // self.parameters.number_of_threads)
-                        ))
+                    # Submit chunk for processing
+                    future = executor.submit(
+                        self._simulate_particles,
+                        actual_chunk_size,
+                        ct_image.shape,
+                        ct_image.spacing,
+                        ct_image.origin,
+                        materials,
+                        densities,
+                        source_position,
+                        isocenter,
+                        field_size,
+                        gantry_angle,
+                        collimator_angle,
+                        couch_angle,
+                        energies,
+                        probabilities,
+                        i  # Seed offset
+                    )
+                    futures.append(future)
                 
-                # Collect results from all threads
-                batch_dose_grids = []
-                for future in concurrent.futures.as_completed(futures):
+                # Collect results from all chunks
+                for i, future in enumerate(futures):
                     try:
-                        thread_dose_grid = future.result()
-                        batch_dose_grids.append(thread_dose_grid)
+                        chunk_dose, chunk_uncertainty = future.result()
+                        
+                        # Combine results (weighting by number of histories)
+                        dose_grid += chunk_dose
+                        uncertainty_grid += chunk_uncertainty
+                        
+                        logger.info(f"Completed chunk {i+1}/{num_chunks}")
                     except Exception as e:
-                        logger.error(f"Thread error: {e}")
-                
-                # Combine batch results
-                for thread_dose_grid in batch_dose_grids:
-                    dose_grid += thread_dose_grid
-                
-                # Report progress
-                if self.parameters.report_progress:
-                    histories_completed = min((batch + 1) * batch_size, self.parameters.number_of_histories)
-                    progress = histories_completed / self.parameters.number_of_histories * 100
-                    logger.info(f"Monte Carlo progress: {progress:.1f}% ({histories_completed:,} / {self.parameters.number_of_histories:,} histories)")
+                        logger.error(f"Error in chunk {i+1}: {str(e)}")
+            
+            # Normalize by total number of histories
+            dose_grid /= num_histories
+            
+            # Calculate final statistical uncertainty
+            valid_dose = dose_grid > 0
+            if np.any(valid_dose):
+                mean_uncertainty = np.mean(uncertainty_grid[valid_dose] / dose_grid[valid_dose]) * 100
+                logger.info(f"Mean statistical uncertainty: {mean_uncertainty:.2f}%")
+            
+            # Create dose image
+            dose_image = Image(
+                data=dose_grid,
+                spacing=ct_image.spacing,
+                origin=ct_image.origin,
+                direction=ct_image.direction
+            )
+            
+            # Normalize to isocenter
+            self._normalize_to_isocenter(dose_image, isocenter)
+            
+            # Calculate total time
+            elapsed_time = time.time() - start_time
+            logger.info(f"Monte Carlo calculation completed in {elapsed_time:.2f} seconds")
+            
+            return dose_image
+            
+        except Exception as e:
+            error_msg = f"Error in Monte Carlo dose calculation: {str(e)}"
+            logger.error(error_msg)
+            raise DoseCalculationError(error_msg) from e
+    
+    def create_generic_beam_model(self, energy: str) -> BeamModel:
+        """
+        Create a generic beam model for the specified energy.
         
-        # Normalize dose to prescribed dose or MU
-        if beam_parameters.dose_grid_normalization:
-            normalization_factor = beam_parameters.dose_grid_normalization / np.max(dose_grid)
-            dose_grid *= normalization_factor
+        Parameters
+        ----------
+        energy : str
+            The beam energy (e.g., "6MV", "10MV")
+            
+        Returns
+        -------
+        BeamModel
+            A generic beam model
+        """
+        logger.info(f"Creating generic beam model for energy: {energy}")
         
-        # Calculate uncertainty
-        uncertainty_grid = np.sqrt(variance_grid) / dose_grid
-        uncertainty_grid[dose_grid < 0.1 * np.max(dose_grid)] = 0  # Ignore low dose regions
-        
-        # Create SimpleITK image from dose grid
-        dose_image = sitk.GetImageFromArray(dose_grid)
-        dose_image.SetSpacing(spacing)
-        dose_image.SetOrigin(origin)
-        
-        # Create uncertainty image
-        uncertainty_image = sitk.GetImageFromArray(uncertainty_grid)
-        uncertainty_image.SetSpacing(spacing)
-        uncertainty_image.SetOrigin(origin)
-        
-        calc_time = time.time() - start_time
-        logger.info(f"Monte Carlo dose calculation completed in {calc_time:.2f} seconds")
-        
-        # Return results
-        result = DoseCalculationResult(
-            dose=dose_image,
-            algorithm_name="Monte Carlo",
-            calculation_time=calc_time,
-            additional_data={
-                "uncertainty": uncertainty_image,
-                "max_uncertainty": np.max(uncertainty_grid),
-                "number_of_histories": self.parameters.number_of_histories
-            }
+        # Create basic beam model
+        model = BeamModel(
+            name=f"Generic {energy}",
+            energy=energy,
+            beam_type="PHOTON"
         )
         
-        return result
+        # Add energy spectrum
+        energy_mean = float(energy.replace("MV", "").replace("X", ""))
+        energies, probabilities = self._create_default_spectrum(energy_mean)
+        
+        spectrum_parameter = BeamModelParameter(
+            name="energy_spectrum",
+            value_grid=probabilities,
+            dimensions=["energy"],
+            units=["MeV"],
+            dimension_values=[energies],
+            interpolation_method="linear"
+        )
+        model.add_parameter(spectrum_parameter)
+        
+        # Add fluence map (uniform)
+        x_pos = np.linspace(-20, 20, 41)
+        y_pos = np.linspace(-20, 20, 41)
+        fluence_map = np.ones((len(y_pos), len(x_pos)))
+        
+        fluence_parameter = BeamModelParameter(
+            name="fluence_map",
+            value_grid=fluence_map,
+            dimensions=["y", "x"],
+            units=["cm", "cm"],
+            dimension_values=[y_pos, x_pos],
+            interpolation_method="linear"
+        )
+        model.add_parameter(fluence_parameter)
+        
+        # Add angular distribution (for particle direction sampling)
+        # This is a simplified model - real implementation would include more details
+        angles = np.linspace(0, 5, 11)  # Angles from 0 to 5 degrees
+        distribution = np.exp(-angles**2 / 2)  # Approximately Gaussian
+        
+        # Normalize
+        distribution = distribution / np.sum(distribution)
+        
+        angular_parameter = BeamModelParameter(
+            name="angular_distribution",
+            value_grid=distribution,
+            dimensions=["angle"],
+            units=["degree"],
+            dimension_values=[angles],
+            interpolation_method="linear"
+        )
+        model.add_parameter(angular_parameter)
+        
+        return model
     
-    def _simulate_batch(self, num_histories: int, source: Union[PhotonSource, ElectronSource], 
-                       ct_array: np.ndarray, material_map: np.ndarray, 
-                       voxel_sizes: Tuple[float, float, float], seed_offset: int) -> np.ndarray:
+    def _create_default_spectrum(self, nominal_energy: float) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Simulate a batch of particle histories.
+        Create a default energy spectrum for a given nominal energy.
         
-        Args:
-            num_histories: Number of particle histories to simulate
-            source: Particle source (photon or electron)
-            ct_array: CT image data
-            material_map: Material mapping for each voxel
-            voxel_sizes: Size of voxels in mm
-            seed_offset: Offset for random seed
+        Parameters
+        ----------
+        nominal_energy : float
+            Nominal beam energy in MV
             
-        Returns:
-            Dose grid from this batch of histories
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Energy values and corresponding probabilities
         """
-        # Create thread-local random generator with different seed
-        seed = None if self.parameters.random_seed is None else self.parameters.random_seed + seed_offset
-        rng = random.Random(seed)
+        # Create a simple energy distribution
+        # This is a very simplified model - real spectra are more complex
         
-        # Create local dose grid
-        local_dose_grid = np.zeros_like(ct_array, dtype=np.float32)
+        # Create energy bins from 0 to the nominal energy
+        energies = np.linspace(0.1, nominal_energy, 50)
         
-        # Set up local engine
-        engine = MonteCarloEngine(self.parameters)
-        engine.random_generator = rng
+        # Create probabilities (simplified model)
+        # Shape is roughly based on typical photon spectra
+        probabilities = (energies / nominal_energy) * np.exp(-(energies / nominal_energy)**2 * 3)
         
-        # Start particle histories
+        # Add a peak at higher energy (bremsstrahlung peak)
+        peak_pos = 0.8 * nominal_energy
+        peak_idx = np.argmin(np.abs(energies - peak_pos))
+        probabilities[peak_idx:] += 0.5 * np.exp(-((energies[peak_idx:] - peak_pos) / (0.1 * nominal_energy))**2)
+        
+        # Normalize
+        probabilities /= np.sum(probabilities)
+        
+        return energies, probabilities
+    
+    def _convert_ct_to_materials(self, ct_image: Image) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Convert CT image to material indices and densities.
+        
+        Parameters
+        ----------
+        ct_image : Image
+            The CT image in Hounsfield Units
+            
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Material indices and densities
+        """
+        # Simple conversion from HU to material and density
+        # In a real implementation, this would use the material lookup table
+        
+        hu_values = ct_image.data
+        
+        # Default material indices (simplified)
+        # 0: Air, 1: Soft tissue, 2: Bone
+        material_indices = np.zeros_like(hu_values, dtype=np.int32)
+        
+        # Set material based on HU value
+        material_indices[(hu_values > -500) & (hu_values <= 100)] = 1  # Soft tissue
+        material_indices[hu_values > 100] = 2  # Bone
+        
+        # Calculate density relative to water
+        densities = np.ones_like(hu_values, dtype=np.float32)
+        
+        # Air region
+        air_mask = hu_values <= -500
+        densities[air_mask] = 0.00121 * (1 + hu_values[air_mask] / 1000)
+        
+        # Soft tissue region
+        tissue_mask = (hu_values > -500) & (hu_values <= 100)
+        densities[tissue_mask] = 1.0 + 0.001 * hu_values[tissue_mask]
+        
+        # Bone region
+        bone_mask = hu_values > 100
+        densities[bone_mask] = 1.0 + 0.001 * hu_values[bone_mask]
+        
+        return material_indices, densities
+    
+    def _simulate_particles(self, 
+                           num_histories: int,
+                           grid_shape: Tuple[int, int, int],
+                           grid_spacing: Tuple[float, float, float],
+                           grid_origin: Tuple[float, float, float],
+                           materials: np.ndarray,
+                           densities: np.ndarray,
+                           source_position: np.ndarray,
+                           isocenter: np.ndarray,
+                           field_size: Tuple[float, float],
+                           gantry_angle: float,
+                           collimator_angle: float,
+                           couch_angle: float,
+                           energies: np.ndarray,
+                           energy_probabilities: np.ndarray,
+                           seed_offset: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Simulate a batch of particles for Monte Carlo dose calculation.
+        
+        This is the core function that simulates individual particles through the CT geometry.
+        
+        Parameters
+        ----------
+        num_histories : int
+            Number of particle histories to simulate
+        grid_shape : Tuple[int, int, int]
+            Shape of the CT/dose grid
+        grid_spacing : Tuple[float, float, float]
+            Spacing of the grid in cm
+        grid_origin : Tuple[float, float, float]
+            Origin of the grid in world coordinates
+        materials : np.ndarray
+            Material indices for each voxel
+        densities : np.ndarray
+            Density values for each voxel
+        source_position : np.ndarray
+            Source position in world coordinates
+        isocenter : np.ndarray
+            Isocenter position in world coordinates
+        field_size : Tuple[float, float]
+            Field size at isocenter in cm
+        gantry_angle : float
+            Gantry angle in degrees
+        collimator_angle : float
+            Collimator angle in degrees
+        couch_angle : float
+            Couch angle in degrees
+        energies : np.ndarray
+            Energy bins for the spectrum
+        energy_probabilities : np.ndarray
+            Probability distribution for the energy spectrum
+        seed_offset : int
+            Offset for the random seed
+        
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Dose and uncertainty grids
+        """
+        # Initialize dose and uncertainty grids
+        dose_grid = np.zeros(grid_shape, dtype=np.float32)
+        squared_dose_grid = np.zeros(grid_shape, dtype=np.float32)  # For uncertainty calculation
+        
+        # Initialize random number generator with offset seed for reproducibility
+        rng = np.random.RandomState(seed=42 + seed_offset)
+        
+        # Helper variables
+        nz, ny, nx = grid_shape
+        dz, dy, dx = grid_spacing
+        
+        # Get beam direction based on gantry and couch angles
+        gantry_rad = np.radians(gantry_angle)
+        couch_rad = np.radians(couch_angle)
+        collimator_rad = np.radians(collimator_angle)
+        
+        # Main beam direction
+        beam_dir = np.array([
+            np.sin(gantry_rad) * np.cos(couch_rad),
+            np.sin(couch_rad),
+            -np.cos(gantry_rad) * np.cos(couch_rad)
+        ])
+        
+        # Perpendicular directions (accounting for collimator rotation)
+        perp1 = np.array([
+            np.cos(gantry_rad) * np.cos(collimator_rad) + np.sin(gantry_rad) * np.sin(couch_rad) * np.sin(collimator_rad),
+            -np.cos(couch_rad) * np.sin(collimator_rad),
+            np.sin(gantry_rad) * np.cos(collimator_rad) - np.cos(gantry_rad) * np.sin(couch_rad) * np.sin(collimator_rad)
+        ])
+        
+        perp2 = np.array([
+            -np.cos(gantry_rad) * np.sin(collimator_rad) + np.sin(gantry_rad) * np.sin(couch_rad) * np.cos(collimator_rad),
+            np.cos(couch_rad) * np.cos(collimator_rad),
+            -np.sin(gantry_rad) * np.sin(collimator_rad) - np.cos(gantry_rad) * np.sin(couch_rad) * np.cos(collimator_rad)
+        ])
+        
+        # Source to isocenter distance (typically 100 cm)
+        SID = np.linalg.norm(source_position - isocenter)
+        
+        # Half field size in cm
+        half_field_x = field_size[0] / 2
+        half_field_y = field_size[1] / 2
+        
+        # Energy cutoff
+        energy_cutoff = self.parameters["energy_cutoff"]
+        
+        # Simulate particles
         for i in range(num_histories):
-            # Sample primary particle from source
-            primary_particle = source.sample_particle(rng)
+            # Sample particle energy from spectrum
+            energy = rng.choice(energies, p=energy_probabilities)
             
-            # Create particle history for tracking
-            history = ParticleHistory(primary_particle)
+            # Sample initial particle position (at source, with appropriate field spread)
+            # This is the starting point of the particle at the source
+            initial_pos = source_position.copy()
             
-            # Transport primary particle
-            secondary_particles = engine.transport_particle(
-                primary_particle, local_dose_grid, material_map, voxel_sizes)
+            # Sample initial direction (with appropriate beam divergence)
+            # First sample uniformly within field borders at isocenter plane
+            x_iso = rng.uniform(-half_field_x, half_field_x)
+            y_iso = rng.uniform(-half_field_y, half_field_y)
             
-            # Add secondaries to history
-            for secondary in secondary_particles:
-                history.add_secondary(secondary)
+            # Convert to a direction from source to isocenter plane
+            direction = beam_dir + (x_iso / SID) * perp1 + (y_iso / SID) * perp2
+            direction = direction / np.linalg.norm(direction)
             
-            # Transport all secondary particles
-            while history.has_active_secondaries():
-                secondary = history.get_next_secondary()
-                new_secondaries = engine.transport_particle(
-                    secondary, local_dose_grid, material_map, voxel_sizes)
+            # Add small random angular spread (simplified model of source size/angular distribution)
+            spread = 0.01  # Radians
+            theta = rng.normal(0, spread)
+            phi = rng.uniform(0, 2 * np.pi)
+            
+            # Apply small rotation to direction
+            sin_theta = np.sin(theta)
+            cos_theta = np.cos(theta)
+            sin_phi = np.sin(phi)
+            cos_phi = np.cos(phi)
+            
+            # Create orthogonal basis
+            v1 = direction
+            v2 = np.array([1, 0, 0]) if abs(direction[0]) < 0.9 else np.array([0, 1, 0])
+            v2 = v2 - np.dot(v2, v1) * v1
+            v2 = v2 / np.linalg.norm(v2)
+            v3 = np.cross(v1, v2)
+            
+            # Apply rotation
+            direction = cos_theta * v1 + sin_theta * cos_phi * v2 + sin_theta * sin_phi * v3
+            
+            # Track the particle through the geometry
+            pos = initial_pos.copy()
+            
+            while energy > energy_cutoff:
+                # Convert position to voxel indices
+                z_idx = int((pos[0] - grid_origin[0]) / dz)
+                y_idx = int((pos[1] - grid_origin[1]) / dy)
+                x_idx = int((pos[2] - grid_origin[2]) / dx)
                 
-                for new_secondary in new_secondaries:
-                    history.add_secondary(new_secondary)
+                # Check if we're inside the grid
+                if (0 <= z_idx < nz and 0 <= y_idx < ny and 0 <= x_idx < nx):
+                    # Get material and density at current position
+                    material = materials[z_idx, y_idx, x_idx]
+                    density = densities[z_idx, y_idx, x_idx]
+                    
+                    # Simplified interaction model
+                    # In a real implementation, this would use cross-section data
+                    
+                    # Determine step size based on mean free path
+                    # This is a simplified model - real implementation would be more complex
+                    mfp = self._calculate_mean_free_path(energy, material, density)
+                    step_size = -mfp * np.log(rng.uniform(0, 1))
+                    
+                    # Calculate energy deposition in this step
+                    if material > 0:  # Not air
+                        # Simplified energy deposition calculation
+                        # Real implementation would account for different interaction processes
+                        energy_dep = energy * 0.01 * density
+                        
+                        # Deposit energy in voxel
+                        dose_grid[z_idx, y_idx, x_idx] += energy_dep
+                        squared_dose_grid[z_idx, y_idx, x_idx] += energy_dep ** 2
+                    
+                    # Update energy (simplified)
+                    energy_loss = energy * 0.01 * density
+                    energy -= energy_loss
+                    
+                    # Update position
+                    pos += direction * step_size
+                    
+                    # Small chance of scattering (simplified)
+                    if rng.uniform(0, 1) < 0.1:
+                        # Simplified isotropic scattering for demonstration
+                        theta = np.arccos(1 - 2 * rng.uniform(0, 1))
+                        phi = 2 * np.pi * rng.uniform(0, 1)
+                        
+                        # Apply same rotation method as above
+                        sin_theta = np.sin(theta)
+                        cos_theta = np.cos(theta)
+                        sin_phi = np.sin(phi)
+                        cos_phi = np.cos(phi)
+                        
+                        # Create orthogonal basis
+                        v1 = direction
+                        v2 = np.array([1, 0, 0]) if abs(direction[0]) < 0.9 else np.array([0, 1, 0])
+                        v2 = v2 - np.dot(v2, v1) * v1
+                        v2 = v2 / np.linalg.norm(v2)
+                        v3 = np.cross(v1, v2)
+                        
+                        # Apply rotation
+                        direction = cos_theta * v1 + sin_theta * cos_phi * v2 + sin_theta * sin_phi * v3
+                else:
+                    # Particle left the grid
+                    break
         
-        # Normalize by number of histories
-        local_dose_grid /= num_histories
+        # Calculate uncertainty grid
+        uncertainty_grid = np.sqrt(squared_dose_grid - (dose_grid ** 2) / num_histories)
         
-        return local_dose_grid
+        return dose_grid, uncertainty_grid
     
-    def get_name(self) -> str:
-        """Get algorithm name."""
-        return "Monte Carlo"
-    
-    def get_description(self) -> str:
-        """Get algorithm description."""
-        return (
-            "Monte Carlo algorithm simulates the transport of individual particles (photons, electrons) "
-            "through matter. It tracks random interactions using probability distributions based on physics "
-            "principles to achieve the highest possible accuracy in heterogeneous tissues."
-        )
-    
-    def get_parameters(self) -> Dict[str, Any]:
-        """Get algorithm parameters."""
-        return {
-            "number_of_histories": self.parameters.number_of_histories,
-            "uncertainty_threshold": self.parameters.uncertainty_threshold,
-            "electron_cutoff_energy": self.parameters.electron_cutoff_energy,
-            "photon_cutoff_energy": self.parameters.photon_cutoff_energy,
-            "use_variance_reduction": self.parameters.use_variance_reduction,
-            "number_of_threads": self.parameters.number_of_threads,
-            "voxel_grid_resolution": self.parameters.voxel_grid_resolution,
-            "transport_mechanics": self.parameters.transport_mechanics
+    def _calculate_mean_free_path(self, energy: float, material: int, density: float) -> float:
+        """
+        Calculate mean free path for a particle in a material.
+        
+        Parameters
+        ----------
+        energy : float
+            Particle energy in MeV
+        material : int
+            Material index
+        density : float
+            Material density in g/cm³
+            
+        Returns
+        -------
+        float
+            Mean free path in cm
+        """
+        # Simplified model - real implementation would use cross-section data
+        # and account for different interaction processes
+        
+        # Base mean free path values at 1 MeV for different materials
+        base_mfp = {
+            0: 5000.0,  # Air (very long mfp)
+            1: 15.0,    # Soft tissue
+            2: 5.0      # Bone
         }
-    
-    def set_parameters(self, parameters: Dict[str, Any]) -> None:
-        """
-        Set algorithm parameters.
         
-        Args:
-            parameters: Dictionary of parameter names and values
+        # Energy scaling (simplified)
+        # Higher energy typically means longer mfp
+        energy_factor = energy ** 0.5
+        
+        # Density scaling
+        # Higher density means shorter mfp
+        density_factor = 1.0 / density if density > 0 else 1.0
+        
+        # Calculate mfp
+        mfp = base_mfp.get(material, 10.0) * energy_factor * density_factor
+        
+        return mfp
+    
+    def _normalize_to_isocenter(self, dose_image: Image, isocenter: np.ndarray):
         """
-        if "number_of_histories" in parameters:
-            self.parameters.number_of_histories = int(parameters["number_of_histories"])
-            
-        if "uncertainty_threshold" in parameters:
-            self.parameters.uncertainty_threshold = float(parameters["uncertainty_threshold"])
-            
-        if "electron_cutoff_energy" in parameters:
-            self.parameters.electron_cutoff_energy = float(parameters["electron_cutoff_energy"])
-            
-        if "photon_cutoff_energy" in parameters:
-            self.parameters.photon_cutoff_energy = float(parameters["photon_cutoff_energy"])
-            
-        if "use_variance_reduction" in parameters:
-            self.parameters.use_variance_reduction = bool(parameters["use_variance_reduction"])
-            
-        if "number_of_threads" in parameters:
-            self.parameters.number_of_threads = int(parameters["number_of_threads"])
-            
-        if "voxel_grid_resolution" in parameters:
-            self.parameters.voxel_grid_resolution = parameters["voxel_grid_resolution"]
-            
-        if "transport_mechanics" in parameters:
-            self.parameters.transport_mechanics = parameters["transport_mechanics"]
-            
-        # Update engine with new parameters
-        self.engine = MonteCarloEngine(self.parameters)
+        Normalize dose so that the isocenter receives 100% dose.
+        
+        Parameters
+        ----------
+        dose_image : Image
+            Dose image to normalize
+        isocenter : np.ndarray
+            Isocenter position in world coordinates
+        """
+        # Convert isocenter to voxel indices
+        iso_indices = dose_image.world_to_voxel(isocenter)
+        
+        # Get dose at isocenter
+        iso_z, iso_y, iso_x = np.round(iso_indices).astype(int)
+        
+        # Ensure within bounds
+        iso_z = np.clip(iso_z, 0, dose_image.data.shape[0]-1)
+        iso_y = np.clip(iso_y, 0, dose_image.data.shape[1]-1)
+        iso_x = np.clip(iso_x, 0, dose_image.data.shape[2]-1)
+        
+        iso_dose = dose_image.data[iso_z, iso_y, iso_x]
+        
+        if iso_dose > 0:
+            # Normalize to isocenter
+            dose_image.data = dose_image.data * (100.0 / iso_dose)
+            logger.info(f"Normalized dose to isocenter. Original value: {iso_dose:.2f}")
+        else:
+            logger.warning("Zero dose at isocenter, cannot normalize")

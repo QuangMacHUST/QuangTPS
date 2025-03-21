@@ -544,5 +544,340 @@ class IMRT(BaseTreatmentTechnique):
         return imrt
 
 
+class StaticIMRT(IMRT):
+    """
+    Lớp đại diện cho kỹ thuật xạ trị IMRT tĩnh (Step-and-Shoot).
+    
+    Mở rộng từ lớp IMRT cơ bản và đặc biệt hóa cho phương pháp Step-and-Shoot,
+    sử dụng các trường tĩnh với nhiều phân đoạn MLC.
+    """
+    
+    def __init__(self, 
+                 name: str = "Static IMRT Plan",
+                 technique_id: Optional[str] = None,
+                 optimization_type: IMRTOptimizationType = IMRTOptimizationType.FLUENCE_MAP):
+        """
+        Khởi tạo kế hoạch IMRT tĩnh (Step-and-Shoot).
+        
+        Parameters
+        ----------
+        name : str, optional
+            Tên kế hoạch, mặc định là "Static IMRT Plan"
+        technique_id : str, optional
+            ID kỹ thuật, nếu None, sẽ tự động tạo UUID
+        optimization_type : IMRTOptimizationType, optional
+            Loại tối ưu hóa, mặc định là Fluence Map Optimization
+        """
+        super().__init__(
+            name=name, 
+            technique_id=technique_id, 
+            optimization_type=optimization_type,
+            delivery_type=IMRTDeliveryType.STEP_AND_SHOOT
+        )
+        
+        # Tham số đặc biệt cho IMRT tĩnh
+        self.max_segments_per_beam = 10
+        self.min_segment_area = 4.0  # cm²
+        self.min_segment_mu = 2.0  # MU
+        
+        logger.info(
+            "Khởi tạo kế hoạch Static IMRT '%s' (ID: %s) với tối đa %d phân đoạn mỗi chùm tia",
+            self.name, self.technique_id, self.max_segments_per_beam
+        )
+    
+    def set_segmentation_parameters(self, max_segments: int, min_area: float, min_mu: float):
+        """
+        Thiết lập tham số phân đoạn cho IMRT tĩnh.
+        
+        Parameters
+        ----------
+        max_segments : int
+            Số phân đoạn tối đa cho mỗi chùm tia
+        min_area : float
+            Diện tích tối thiểu của phân đoạn (cm²)
+        min_mu : float
+            MU tối thiểu cho mỗi phân đoạn
+        """
+        self.max_segments_per_beam = max_segments
+        self.min_segment_area = min_area
+        self.min_segment_mu = min_mu
+        
+        logger.info(
+            "Thiết lập tham số phân đoạn cho kế hoạch Static IMRT '%s': max_segments=%d, min_area=%.2f cm², min_mu=%.2f MU",
+            self.name, max_segments, min_area, min_mu
+        )
+    
+    def segment_beams(self):
+        """
+        Phân đoạn các chùm tia cho IMRT tĩnh.
+        
+        Phân chia fluence map của mỗi chùm tia thành các phân đoạn MLC theo phương pháp Step-and-Shoot.
+        
+        Returns
+        -------
+        bool
+            True nếu phân đoạn thành công, False nếu không
+        """
+        if not self.fluence_maps:
+            logger.warning(
+                "Không thể phân đoạn chùm tia cho kế hoạch '%s': Chưa có fluence maps",
+                self.name
+            )
+            return False
+        
+        # Phân đoạn mỗi chùm tia
+        for beam_id, fluence in self.fluence_maps.items():
+            self.segment_info[beam_id] = self._create_step_and_shoot_segments(
+                fluence, 
+                self.max_segments_per_beam
+            )
+            
+            # Áp dụng giới hạn MU tối thiểu và diện tích tối thiểu
+            self._filter_segments_by_constraints(beam_id)
+        
+        logger.info(
+            "Đã phân đoạn %d chùm tia cho kế hoạch Static IMRT '%s'",
+            len(self.fluence_maps), self.name
+        )
+        
+        return True
+    
+    def _filter_segments_by_constraints(self, beam_id: str):
+        """
+        Lọc các phân đoạn dựa trên ràng buộc diện tích và MU tối thiểu.
+        
+        Parameters
+        ----------
+        beam_id : str
+            ID của chùm tia cần lọc phân đoạn
+        """
+        if beam_id not in self.segment_info:
+            return
+            
+        filtered_segments = []
+        
+        for segment in self.segment_info[beam_id]:
+            # Tính diện tích phân đoạn
+            area = self._calculate_segment_area(segment)
+            
+            # Kiểm tra ràng buộc
+            if area >= self.min_segment_area and segment['weight'] * 100 >= self.min_segment_mu:
+                filtered_segments.append(segment)
+        
+        # Cập nhật phân đoạn đã lọc
+        self.segment_info[beam_id] = filtered_segments
+    
+    def _calculate_segment_area(self, segment):
+        """
+        Tính diện tích của phân đoạn MLC.
+        
+        Parameters
+        ----------
+        segment : dict
+            Thông tin phân đoạn
+            
+        Returns
+        -------
+        float
+            Diện tích phân đoạn (cm²)
+        """
+        # Diện tích tương đối dựa trên số lượng ô mở
+        mlc_positions = segment.get('mlc_positions', [])
+        if not mlc_positions:
+            return 0.0
+            
+        # Đơn giản hóa: diện tích là tổng khoảng cách giữa các cặp lá MLC
+        area = 0.0
+        leaf_width = 0.5  # cm, giá trị ví dụ
+        
+        for i, pos in enumerate(mlc_positions):
+            if i % 2 == 0 and i+1 < len(mlc_positions):
+                gap = pos[1] - pos[0]  # Khoảng cách giữa lá A và B
+                if gap > 0:
+                    area += gap * leaf_width
+        
+        return area
+
+
+class DynamicIMRT(IMRT):
+    """
+    Lớp đại diện cho kỹ thuật xạ trị IMRT động (Sliding Window).
+    
+    Mở rộng từ lớp IMRT cơ bản và đặc biệt hóa cho phương pháp Sliding Window,
+    sử dụng các chuyển động liên tục của MLC.
+    """
+    
+    def __init__(self, 
+                 name: str = "Dynamic IMRT Plan",
+                 technique_id: Optional[str] = None,
+                 optimization_type: IMRTOptimizationType = IMRTOptimizationType.FLUENCE_MAP):
+        """
+        Khởi tạo kế hoạch IMRT động (Sliding Window).
+        
+        Parameters
+        ----------
+        name : str, optional
+            Tên kế hoạch, mặc định là "Dynamic IMRT Plan"
+        technique_id : str, optional
+            ID kỹ thuật, nếu None, sẽ tự động tạo UUID
+        optimization_type : IMRTOptimizationType, optional
+            Loại tối ưu hóa, mặc định là Fluence Map Optimization
+        """
+        super().__init__(
+            name=name, 
+            technique_id=technique_id, 
+            optimization_type=optimization_type,
+            delivery_type=IMRTDeliveryType.SLIDING_WINDOW
+        )
+        
+        # Tham số đặc biệt cho IMRT động
+        self.leaf_speed = 2.5  # cm/s
+        self.max_leaf_gap = 10.0  # cm
+        self.min_leaf_gap = 0.5  # cm
+        self.control_points_per_beam = 20
+        
+        logger.info(
+            "Khởi tạo kế hoạch Dynamic IMRT '%s' (ID: %s) với %d điểm điều khiển mỗi chùm tia",
+            self.name, self.technique_id, self.control_points_per_beam
+        )
+    
+    def set_dynamic_parameters(self, leaf_speed: float, max_gap: float, min_gap: float, control_points: int):
+        """
+        Thiết lập tham số động cho IMRT Sliding Window.
+        
+        Parameters
+        ----------
+        leaf_speed : float
+            Tốc độ di chuyển lá MLC (cm/s)
+        max_gap : float
+            Khoảng cách tối đa giữa các cặp lá MLC (cm)
+        min_gap : float
+            Khoảng cách tối thiểu giữa các cặp lá MLC (cm)
+        control_points : int
+            Số điểm điều khiển cho mỗi chùm tia
+        """
+        self.leaf_speed = leaf_speed
+        self.max_leaf_gap = max_gap
+        self.min_leaf_gap = min_gap
+        self.control_points_per_beam = control_points
+        
+        logger.info(
+            "Thiết lập tham số động cho kế hoạch Dynamic IMRT '%s': leaf_speed=%.2f cm/s, max_gap=%.2f cm, min_gap=%.2f cm, control_points=%d",
+            self.name, leaf_speed, max_gap, min_gap, control_points
+        )
+    
+    def segment_beams(self):
+        """
+        Tạo chuỗi chuyển động MLC cho IMRT động.
+        
+        Chuyển đổi fluence map của mỗi chùm tia thành chuỗi chuyển động MLC theo phương pháp Sliding Window.
+        
+        Returns
+        -------
+        bool
+            True nếu tạo chuỗi chuyển động thành công, False nếu không
+        """
+        if not self.fluence_maps:
+            logger.warning(
+                "Không thể tạo chuỗi chuyển động MLC cho kế hoạch '%s': Chưa có fluence maps",
+                self.name
+            )
+            return False
+        
+        # Tạo chuỗi chuyển động cho mỗi chùm tia
+        for beam_id, fluence in self.fluence_maps.items():
+            self.segment_info[beam_id] = self._create_sliding_window_segments(
+                fluence, 
+                self.control_points_per_beam
+            )
+            
+            # Áp dụng giới hạn tốc độ lá và khoảng cách lá
+            self._apply_dynamic_constraints(beam_id)
+        
+        logger.info(
+            "Đã tạo chuỗi chuyển động MLC cho %d chùm tia trong kế hoạch Dynamic IMRT '%s'",
+            len(self.fluence_maps), self.name
+        )
+        
+        return True
+    
+    def _apply_dynamic_constraints(self, beam_id: str):
+        """
+        Áp dụng các ràng buộc động cho chuỗi chuyển động MLC.
+        
+        Parameters
+        ----------
+        beam_id : str
+            ID của chùm tia cần áp dụng ràng buộc
+        """
+        if beam_id not in self.segment_info:
+            return
+            
+        segments = self.segment_info[beam_id]
+        
+        # Đảm bảo khoảng cách lá nằm trong giới hạn
+        for segment in segments:
+            mlc_positions = segment.get('mlc_positions', [])
+            
+            for i in range(len(mlc_positions)):
+                # Áp dụng khoảng cách tối thiểu và tối đa
+                pos_a, pos_b = mlc_positions[i]
+                gap = pos_b - pos_a
+                
+                if gap < self.min_leaf_gap:
+                    # Điều chỉnh để đạt khoảng cách tối thiểu
+                    center = (pos_a + pos_b) / 2
+                    mlc_positions[i] = (center - self.min_leaf_gap/2, center + self.min_leaf_gap/2)
+                
+                elif gap > self.max_leaf_gap:
+                    # Điều chỉnh để đạt khoảng cách tối đa
+                    center = (pos_a + pos_b) / 2
+                    mlc_positions[i] = (center - self.max_leaf_gap/2, center + self.max_leaf_gap/2)
+        
+        # Đảm bảo tốc độ lá không vượt quá giới hạn
+        self._limit_leaf_speed(segments)
+    
+    def _limit_leaf_speed(self, segments):
+        """
+        Giới hạn tốc độ di chuyển của lá MLC giữa các điểm điều khiển.
+        
+        Parameters
+        ----------
+        segments : list
+            Danh sách các phân đoạn (điểm điều khiển) của một chùm tia
+        """
+        if len(segments) <= 1:
+            return
+            
+        # Giả sử mỗi điểm điều khiển cách nhau 1 đơn vị thời gian
+        time_per_control_point = 1.0
+        max_displacement = self.leaf_speed * time_per_control_point
+        
+        # Duyệt qua các điểm điều khiển liên tiếp
+        for i in range(len(segments) - 1):
+            curr_positions = segments[i].get('mlc_positions', [])
+            next_positions = segments[i+1].get('mlc_positions', [])
+            
+            # Kiểm tra mỗi cặp lá
+            for j in range(min(len(curr_positions), len(next_positions))):
+                curr_pos_a, curr_pos_b = curr_positions[j]
+                next_pos_a, next_pos_b = next_positions[j]
+                
+                # Tính khoảng cách di chuyển
+                displacement_a = abs(next_pos_a - curr_pos_a)
+                displacement_b = abs(next_pos_b - curr_pos_b)
+                
+                # Giới hạn khoảng cách di chuyển
+                if displacement_a > max_displacement:
+                    # Điều chỉnh vị trí tiếp theo để tuân thủ tốc độ tối đa
+                    direction = 1 if next_pos_a > curr_pos_a else -1
+                    next_positions[j] = (curr_pos_a + direction * max_displacement, next_positions[j][1])
+                
+                if displacement_b > max_displacement:
+                    # Điều chỉnh vị trí tiếp theo để tuân thủ tốc độ tối đa
+                    direction = 1 if next_pos_b > curr_pos_b else -1
+                    next_positions[j] = (next_positions[j][0], curr_pos_b + direction * max_displacement)
+
+
 # Đảm bảo IMRT được xuất ra đúng cách
 __all__ = ['IMRT', 'IMRTOptimizationType', 'IMRTDeliveryType']

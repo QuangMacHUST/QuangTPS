@@ -19,7 +19,7 @@ from quangtps.planning.beam import BeamArrangement
 from quangtps.treatment.beams.beam import Beam
 from quangtps.treatment.techniques.vmat import VMAT
 from quangtps.treatment.techniques.imrt import IMRT
-from quangtps.treatment.techniques.conformal import Conformal3D
+from quangtps.treatment.techniques.conformal import Conformal3DRT
 from quangtps.treatment.machine.linac import Linac
 from quangtps.treatment.mlc.mlc_model import MLCModel
 from quangtps.segmentation.contour.contour_manager import ContourSet, ContourManager
@@ -59,6 +59,124 @@ class BeamConfigurator:
         self.contour_manager = contour_manager or ContourManager()
         logger.info("Khởi tạo BeamConfigurator")
     
+    # Phương thức mở rộng cho Beam
+    def _set_gantry_angle(self, beam: Beam, angle: float):
+        """
+        Đặt góc gantry cho chùm tia.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Đối tượng chùm tia
+        angle : float
+            Góc gantry (độ)
+        """
+        if hasattr(beam, 'geometry'):
+            beam.geometry.gantry_angle = angle
+        else:
+            # Nếu không có thuộc tính geometry, tạo mới
+            from quangtps.treatment.beams.beam_geometry import BeamGeometry
+            beam.geometry = BeamGeometry()
+            beam.geometry.gantry_angle = angle
+    
+    def _set_collimator_angle(self, beam: Beam, angle: float):
+        """
+        Đặt góc collimator cho chùm tia.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Đối tượng chùm tia
+        angle : float
+            Góc collimator (độ)
+        """
+        if hasattr(beam, 'geometry'):
+            beam.geometry.collimator_angle = angle
+        else:
+            # Nếu không có thuộc tính geometry, tạo mới
+            from quangtps.treatment.beams.beam_geometry import BeamGeometry
+            beam.geometry = BeamGeometry()
+            beam.geometry.collimator_angle = angle
+    
+    def _set_couch_angle(self, beam: Beam, angle: float):
+        """
+        Đặt góc bàn cho chùm tia.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Đối tượng chùm tia
+        angle : float
+            Góc bàn (độ)
+        """
+        if hasattr(beam, 'geometry'):
+            beam.geometry.couch_angle = angle
+        else:
+            # Nếu không có thuộc tính geometry, tạo mới
+            from quangtps.treatment.beams.beam_geometry import BeamGeometry
+            beam.geometry = BeamGeometry()
+            beam.geometry.couch_angle = angle
+    
+    def _set_field_size(self, beam: Beam, field_size: Tuple[float, float]):
+        """
+        Đặt kích thước trường chiếu cho chùm tia.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Đối tượng chùm tia
+        field_size : Tuple[float, float]
+            Kích thước trường chiếu (width, height) tính bằng cm
+        """
+        if hasattr(beam, 'geometry'):
+            beam.geometry.field_size = field_size
+        else:
+            # Nếu không có thuộc tính geometry, tạo mới
+            from quangtps.treatment.beams.beam_geometry import BeamGeometry
+            beam.geometry = BeamGeometry()
+            beam.geometry.field_size = field_size
+    
+    def _set_isocenter(self, beam: Beam, x: float, y: float, z: float):
+        """
+        Đặt tọa độ isocenter cho chùm tia.
+        
+        Parameters
+        ----------
+        beam : Beam
+            Đối tượng chùm tia
+        x : float
+            Tọa độ x (mm)
+        y : float
+            Tọa độ y (mm)
+        z : float
+            Tọa độ z (mm)
+        """
+        if hasattr(beam, 'geometry'):
+            beam.geometry.isocenter = (x, y, z)
+        else:
+            # Nếu không có thuộc tính geometry, tạo mới
+            from quangtps.treatment.beams.beam_geometry import BeamGeometry
+            beam.geometry = BeamGeometry()
+            beam.geometry.isocenter = (x, y, z)
+    
+    # Phương thức mở rộng cho BeamArrangement
+    def _add_beam(self, arrangement: BeamArrangement, beam: Beam):
+        """
+        Thêm chùm tia vào sắp xếp.
+        
+        Parameters
+        ----------
+        arrangement : BeamArrangement
+            Đối tượng sắp xếp chùm tia
+        beam : Beam
+            Đối tượng chùm tia cần thêm
+        """
+        if hasattr(arrangement, 'beams'):
+            arrangement.beams[beam.beam_id] = beam
+        else:
+            # Nếu không có thuộc tính beams, tạo mới
+            arrangement.beams = {beam.beam_id: beam}
+            
     def _get_target_center(self, contour_set_id: str, target_name: str) -> Tuple[float, float, float]:
         """
         Lấy tọa độ tâm của cấu trúc đích.
@@ -166,7 +284,7 @@ class BeamConfigurator:
         
         # Tạo sắp xếp chùm tia
         beam_arrangement = BeamArrangement()
-        beam_arrangement.set_isocenter(isocenter)
+        beam_arrangement.set_isocenter(isocenter[0], isocenter[1], isocenter[2])
         
         # Tính góc giữa các chùm tia
         angle_step = 360.0 / num_beams
@@ -176,20 +294,20 @@ class BeamConfigurator:
             angle = (start_angle + i * angle_step) % 360
             beam_id = f"B{i+1}"
             beam = Beam(beam_id)
-            beam.set_gantry_angle(angle)
-            beam.set_collimator_angle(0)
-            beam.set_couch_angle(0)
+            self._set_gantry_angle(beam, angle)
+            self._set_collimator_angle(beam, 0)
+            self._set_couch_angle(beam, 0)
             beam.set_energy(energy)
-            beam.set_isocenter(isocenter)
+            self._set_isocenter(beam, isocenter[0], isocenter[1], isocenter[2])
             
             # Cài đặt kích thước trường chiếu
             target_dimensions = self._get_target_dimension(contour_set_id, target_name)
             field_x = max(target_dimensions[0], target_dimensions[1]) * 1.2  # Thêm biên 20%
             field_y = max(target_dimensions[0], target_dimensions[2]) * 1.2
-            beam.set_field_size((field_x, field_y))
+            self._set_field_size(beam, (field_x, field_y))
             
             # Thêm chùm tia vào sắp xếp
-            beam_arrangement.add_beam(beam)
+            self._add_beam(beam_arrangement, beam)
         
         # Cài đặt các thông tin khác
         beam_arrangement.technique = BeamArrangementType.COPLANAR_EQUIDISTANT
@@ -229,26 +347,26 @@ class BeamConfigurator:
         
         # Tạo sắp xếp chùm tia
         beam_arrangement = BeamArrangement()
-        beam_arrangement.set_isocenter(isocenter)
+        beam_arrangement.set_isocenter(isocenter[0], isocenter[1], isocenter[2])
         
         # Tạo các chùm tia
         for i, angle in enumerate(angles):
             beam_id = f"B{i+1}"
             beam = Beam(beam_id)
-            beam.set_gantry_angle(angle)
-            beam.set_collimator_angle(0)
-            beam.set_couch_angle(0)
+            self._set_gantry_angle(beam, angle)
+            self._set_collimator_angle(beam, 0)
+            self._set_couch_angle(beam, 0)
             beam.set_energy(energy)
-            beam.set_isocenter(isocenter)
+            self._set_isocenter(beam, isocenter[0], isocenter[1], isocenter[2])
             
             # Cài đặt kích thước trường chiếu
             target_dimensions = self._get_target_dimension(contour_set_id, target_name)
             field_x = max(target_dimensions[0], target_dimensions[1]) * 1.2  # Thêm biên 20%
             field_y = max(target_dimensions[0], target_dimensions[2]) * 1.2
-            beam.set_field_size((field_x, field_y))
+            self._set_field_size(beam, (field_x, field_y))
             
             # Thêm chùm tia vào sắp xếp
-            beam_arrangement.add_beam(beam)
+            self._add_beam(beam_arrangement, beam)
         
         # Cài đặt các thông tin khác
         beam_arrangement.technique = BeamArrangementType.OPPOSING_FIELDS
@@ -297,19 +415,19 @@ class BeamConfigurator:
         
         # Tạo sắp xếp chùm tia
         beam_arrangement = BeamArrangement()
-        beam_arrangement.set_isocenter(isocenter)
+        beam_arrangement.set_isocenter(isocenter[0], isocenter[1], isocenter[2])
         
         # Tạo chùm tia VMAT
         beam_id = "VMAT_Arc1"
         beam = Beam(beam_id)
-        beam.set_isocenter(isocenter)
+        self._set_isocenter(beam, isocenter[0], isocenter[1], isocenter[2])
         beam.set_energy(energy)
         
         # Cài đặt kích thước trường chiếu
         target_dimensions = self._get_target_dimension(contour_set_id, target_name)
         field_x = max(target_dimensions[0], target_dimensions[1]) * 1.2  # Thêm biên 20%
         field_y = max(target_dimensions[0], target_dimensions[2]) * 1.2
-        beam.set_field_size((field_x, field_y))
+        self._set_field_size(beam, (field_x, field_y))
         
         # Thêm thông tin về cung VMAT
         vmat_config = {
@@ -324,7 +442,7 @@ class BeamConfigurator:
         }
         
         # Thêm chùm tia vào sắp xếp
-        beam_arrangement.add_beam(beam)
+        self._add_beam(beam_arrangement, beam)
         
         # Cài đặt các thông tin khác
         beam_arrangement.technique = BeamArrangementType.VMAT_SINGLE_ARC
@@ -385,7 +503,7 @@ class BeamConfigurator:
         
         # Tạo sắp xếp chùm tia
         beam_arrangement = BeamArrangement()
-        beam_arrangement.set_isocenter(isocenter)
+        beam_arrangement.set_isocenter(isocenter[0], isocenter[1], isocenter[2])
         
         # Cài đặt kích thước trường chiếu
         target_dimensions = self._get_target_dimension(contour_set_id, target_name)
@@ -398,10 +516,10 @@ class BeamConfigurator:
         # Cung 1
         beam_id1 = "VMAT_Arc1"
         beam1 = Beam(beam_id1)
-        beam1.set_isocenter(isocenter)
+        self._set_isocenter(beam1, isocenter[0], isocenter[1], isocenter[2])
         beam1.set_energy(energy)
-        beam1.set_field_size((field_x, field_y))
-        beam_arrangement.add_beam(beam1)
+        self._set_field_size(beam1, (field_x, field_y))
+        self._add_beam(beam_arrangement, beam1)
         
         vmat_config1 = {
             "arc_id": str(uuid.uuid4()),
@@ -418,10 +536,10 @@ class BeamConfigurator:
         # Cung 2
         beam_id2 = "VMAT_Arc2"
         beam2 = Beam(beam_id2)
-        beam2.set_isocenter(isocenter)
+        self._set_isocenter(beam2, isocenter[0], isocenter[1], isocenter[2])
         beam2.set_energy(energy)
-        beam2.set_field_size((field_x, field_y))
-        beam_arrangement.add_beam(beam2)
+        self._set_field_size(beam2, (field_x, field_y))
+        self._add_beam(beam_arrangement, beam2)
         
         vmat_config2 = {
             "arc_id": str(uuid.uuid4()),
@@ -476,7 +594,7 @@ class BeamConfigurator:
         
         # Tạo sắp xếp chùm tia
         beam_arrangement = BeamArrangement()
-        beam_arrangement.set_isocenter(isocenter)
+        beam_arrangement.set_isocenter(isocenter[0], isocenter[1], isocenter[2])
         
         # Cài đặt kích thước trường chiếu
         target_dimensions = self._get_target_dimension(contour_set_id, target_name)
@@ -534,7 +652,7 @@ class BeamConfigurator:
         for i in range(num_beams):
             beam_id = f"SRS{i+1}"
             beam = Beam(beam_id)
-            beam.set_isocenter(isocenter)
+            self._set_isocenter(beam, isocenter[0], isocenter[1], isocenter[2])
             beam.set_energy(energy)
             
             couch_angle = couch_angles[i]
@@ -549,18 +667,18 @@ class BeamConfigurator:
                 gantry_angle = noncoplanar_gantry_defaults[noncoplanar_index % len(noncoplanar_gantry_defaults)]
                 noncoplanar_index += 1
             
-            beam.set_gantry_angle(gantry_angle)
-            beam.set_couch_angle(couch_angle)
+            self._set_gantry_angle(beam, gantry_angle)
+            self._set_couch_angle(beam, couch_angle)
             
             # Đặt góc collimator để tránh tongue-and-groove effect
             collimator_angle = (gantry_angle + 45) % 90
-            beam.set_collimator_angle(collimator_angle)
+            self._set_collimator_angle(beam, collimator_angle)
             
             # Đặt kích thước trường
-            beam.set_field_size((field_size, field_size))
+            self._set_field_size(beam, (field_size, field_size))
             
             # Thêm chùm tia vào sắp xếp
-            beam_arrangement.add_beam(beam)
+            self._add_beam(beam_arrangement, beam)
         
         # Cài đặt các thông tin khác
         beam_arrangement.technique = BeamArrangementType.STEREOTACTIC

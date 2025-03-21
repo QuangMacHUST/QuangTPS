@@ -103,8 +103,7 @@ class DBConnector:
                 id TEXT PRIMARY KEY,
                 patient_id TEXT NOT NULL,
                 description TEXT,
-                study_date TEXT,
-                study_time TEXT,
+                date TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 metadata TEXT,
@@ -117,17 +116,24 @@ class DBConnector:
             CREATE TABLE IF NOT EXISTS series (
                 id TEXT PRIMARY KEY,
                 study_id TEXT NOT NULL,
-                patient_id TEXT NOT NULL,
-                modality TEXT,
                 description TEXT,
-                series_date TEXT,
-                series_time TEXT,
-                metadata TEXT,
-                file_path TEXT,
+                modality TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                FOREIGN KEY (study_id) REFERENCES studies (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
+                metadata TEXT,
+                data_path TEXT,
+                FOREIGN KEY (study_id) REFERENCES studies (id)
+            )
+        """)
+        
+        # Tạo bảng files để lưu trữ danh sách file thuộc về một series
+        self.execute_query("""
+            CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                series_id TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (series_id) REFERENCES series (id)
             )
         """)
         

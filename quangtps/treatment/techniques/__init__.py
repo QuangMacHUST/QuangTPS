@@ -4,7 +4,7 @@ Cung cấp các công cụ để định nghĩa và quản lý các kỹ thuật
 """
 
 from quangtps.treatment.techniques.conformal import Conformal3DRT
-from quangtps.treatment.techniques.imrt import IMRT
+from quangtps.treatment.techniques.imrt import IMRT, StaticIMRT, DynamicIMRT
 from quangtps.treatment.techniques.vmat import VMAT
 from quangtps.treatment.techniques.dcat import DCAT
 from quangtps.treatment.techniques.stereotactic import SRS, SBRT
@@ -23,6 +23,8 @@ from quangtps.treatment.techniques.tomotherapy import Tomotherapy
 __all__ = [
     'Conformal3DRT',
     'IMRT',
+    'StaticIMRT',
+    'DynamicIMRT',
     'VMAT',
     'DCAT',
     'SRS',

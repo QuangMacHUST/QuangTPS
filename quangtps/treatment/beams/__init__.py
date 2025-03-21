@@ -1,18 +1,23 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
-Beam module của QuangTPS.
-Cung cấp các công cụ để quản lý chùm tia trong hệ thống lập kế hoạch xạ trị.
+Module quản lý chùm tia trong quá trình lập kế hoạch xạ trị.
+
+Module này chứa các lớp và hàm để quản lý các chùm tia, bao gồm
+thông số vật lý, hình học và các thành phần liên quan khác.
 """
 
-from quangtps.treatment.beams.beam import Beam, BeamType, DoseSpecificationPoint
-from quangtps.treatment.beams.beam_geometry import BeamGeometry
-from quangtps.treatment.beams.beam_library import BeamLibrary, BeamTemplate, BeamArrangementTemplate
-from quangtps.treatment.beams.beam_modifiers import (
-    BeamModifier, ModifierType, Wedge, Block, Bolus, Compensator
-)
+from quangtps.treatment.beams.beam import Beam, BeamType
+from quangtps.treatment.beams.beam_modifiers import Wedge, Compensator, Block
+from quangtps.treatment.beams.beam_geometry import BeamGeometry, GantryDirection, CollimatorDirection, CouchDirection
+from quangtps.treatment.beams.beam_library import BeamLibrary, BeamTemplate
+from quangtps.treatment.beams.beam_sequence_generator import BeamSequenceGenerator
+from quangtps.treatment.beams.beam_data_importer import TrueBeamDataReader, BeamDataType
 
 __all__ = [
-    'Beam', 'BeamType', 'DoseSpecificationPoint',
-    'BeamGeometry',
-    'BeamLibrary', 'BeamTemplate', 'BeamArrangementTemplate',
-    'BeamModifier', 'ModifierType', 'Wedge', 'Block', 'Bolus', 'Compensator'
+    'Beam', 'BeamType', 'Wedge', 'Compensator', 'Block',
+    'BeamGeometry', 'GantryDirection', 'CollimatorDirection', 'CouchDirection',
+    'BeamLibrary', 'BeamTemplate', 'BeamSequenceGenerator',
+    'TrueBeamDataReader', 'BeamDataType'
 ]

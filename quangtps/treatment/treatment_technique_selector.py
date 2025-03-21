@@ -11,7 +11,11 @@ cho mỗi bệnh nhân dựa trên các chỉ định lâm sàng và đặc đi�
 import logging
 import uuid
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any, Optional, Union, Tuple, Type, TYPE_CHECKING
+
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from quangtps.planning.plan import Plan, PlanType
 
 from quangtps.treatment.techniques.dcat import DCAT
 from quangtps.treatment.techniques.imrt import IMRT, IMRTOptimizationType, IMRTDeliveryType
@@ -28,7 +32,7 @@ from quangtps.treatment.techniques.bnct import BNCT
 from quangtps.treatment.techniques.tbi import TBI
 
 from quangtps.treatment.fractionation import Fractionation
-from quangtps.treatment.plan import TreatmentPlan, TreatmentPlanType
+from quangtps.treatment.plan import get_plan_class, get_plan_type_enum
 from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 
 logger = logging.getLogger(__name__)
@@ -673,7 +677,7 @@ class TreatmentTechniqueSelector:
         fractionation: Fractionation,
         machine: Optional[TreatmentMachine] = None,
         **technique_params
-    ) -> Tuple[TreatmentPlan, Any]:
+    ) -> Tuple[Any, Any]:
         """
         Tạo một kế hoạch điều trị với kỹ thuật xạ trị.
         
@@ -696,14 +700,18 @@ class TreatmentTechniqueSelector:
             
         Returns
         -------
-        Tuple[TreatmentPlan, Any]
+        Tuple
             Kế hoạch điều trị và thể hiện kỹ thuật xạ trị
         """
         # Tạo ID kế hoạch
         plan_id = str(uuid.uuid4())
         
+        # Get Plan and PlanType classes dynamically
+        Plan = get_plan_class()
+        PlanType = get_plan_type_enum()
+        
         # Tạo kế hoạch điều trị
-        plan = TreatmentPlan(
+        plan = Plan(
             plan_name=plan_name,
             plan_id=plan_id,
             patient_id=patient_id,
@@ -714,20 +722,17 @@ class TreatmentTechniqueSelector:
         if isinstance(site, str):
             site = TreatmentSite(site)
         
-        plan.site = site.value
-        plan.set_fractionation(fractionation)
-        
         # Thiết lập loại kế hoạch dựa trên kỹ thuật
         if technique_name in ["IMRT", "VMAT"]:
-            plan.set_plan_type(TreatmentPlanType.EXTERNAL_BEAM)
+            plan.set_plan_type(PlanType.EXTERNAL_BEAM)
         elif technique_name in ["SRS", "SBRT"]:
-            plan.set_plan_type(TreatmentPlanType.STEREOTACTIC)
+            plan.set_plan_type(PlanType.STEREOTACTIC)
         elif technique_name == "ELECTRON":
-            plan.set_plan_type(TreatmentPlanType.ELECTRON)
+            plan.set_plan_type(PlanType.ELECTRON)
         elif technique_name in ["PROTON", "CARBON"]:
-            plan.set_plan_type(TreatmentPlanType.PARTICLE)
+            plan.set_plan_type(PlanType.PARTICLE)
         else:
-            plan.set_plan_type(TreatmentPlanType.EXTERNAL_BEAM)
+            plan.set_plan_type(PlanType.EXTERNAL_BEAM)
         
         # Tạo thể hiện kỹ thuật
         technique = self.create_technique_instance(
@@ -737,14 +742,13 @@ class TreatmentTechniqueSelector:
             **technique_params
         )
         
-        # Thiết lập thông tin phân đoạn và máy xạ trị
+        # Thiết lập phân đoạn và máy điều trị
         technique.set_fractionation(fractionation)
         
         if machine:
-            technique.set_treatment_machine(machine)
+            technique.set_machine(machine)
         
-        # Lưu thông tin kỹ thuật vào metadata của kế hoạch
-        plan.metadata["technique"] = technique_name
-        plan.metadata["technique_params"] = technique_params
+        # Liên kết kế hoạch và kỹ thuật
+        plan.treatment_technique = technique
         
         return plan, technique

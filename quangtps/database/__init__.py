@@ -8,7 +8,7 @@ from quangtps.database.patient_db import PatientDatabase
 from quangtps.database.study_db import StudyDB
 from quangtps.database.series_db import SeriesDB
 from quangtps.database.plan_db import PlanDB
-from quangtps.database.structure_db import StructureDB
+from quangtps.database.structure_db import StructureDatabase
 from quangtps.database.dose_db import DoseDB
 from quangtps.database.beam_db import BeamDB
 from quangtps.database.prescription_db import PrescriptionDB
@@ -20,7 +20,7 @@ __all__ = [
     'StudyDB',
     'SeriesDB',
     'PlanDB',
-    'StructureDB',
+    'StructureDatabase',
     'DoseDB',
     'BeamDB',
     'PrescriptionDB',

@@ -25,8 +25,8 @@ from quangtps.planning.comparison import PlanComparison
 
 # Import for different treatment techniques
 from quangtps.treatment.techniques.vmat import VMAT
-from quangtps.treatment.techniques.imrt import IMRT
-from quangtps.treatment.techniques.conformal import Conformal3D
+from quangtps.treatment.techniques.imrt import IMRT, StaticIMRT, DynamicIMRT
+from quangtps.treatment.techniques.conformal import Conformal3DRT
 from quangtps.treatment.techniques.stereotactic import SRS, SBRT
 from quangtps.treatment.techniques.proton import ProtonTherapy
 from quangtps.treatment.techniques.carbon import CarbonIonTherapy

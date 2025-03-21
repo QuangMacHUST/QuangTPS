@@ -25,6 +25,7 @@ from typing import List, Dict, Any, Union, Optional, Tuple
 
 from quangtps.dicom.dicom_reader import DicomReader
 from quangtps.dicom.pacs_client import PACSClient
+from quangtps.database.patient_db import PatientDatabase, Patient, Study, Series
 from quangtps.core.exceptions import DicomError, IOError, NetworkError, AuthenticationError
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class DicomImporter:
         self.temp_dir = temp_dir if temp_dir else tempfile.gettempdir()
         self.reader = DicomReader()
         self.pacs_client = PACSClient()
+        self.patient_db = PatientDatabase()
         
         # Tạo thư mục tạm nếu không tồn tại
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -354,3 +356,233 @@ class DicomImporter:
             return 'RTIMAGE'
         else:
             return modality 
+
+    def import_for_patient(self, directory_path: str, patient_id: Optional[str] = None) -> str:
+        """
+        Nhập dữ liệu DICOM cho một bệnh nhân cụ thể.
+        
+        Parameters
+        ----------
+        directory_path : str
+            Đường dẫn đến thư mục chứa file DICOM
+        patient_id : str, optional
+            ID của bệnh nhân cần nhập dữ liệu. Nếu None, sẽ tạo bệnh nhân mới từ thông tin DICOM.
+            
+        Returns
+        -------
+        str
+            ID của bệnh nhân
+            
+        Raises
+        ------
+        IOError
+            Nếu thư mục không tồn tại
+        DicomError
+            Nếu dữ liệu DICOM không hợp lệ hoặc không có thông tin bệnh nhân
+        """
+        categorized_datasets = self.import_from_directory(directory_path)
+        
+        # Lấy thông tin bệnh nhân từ dữ liệu DICOM
+        patient_info = self._extract_patient_info(categorized_datasets)
+        
+        if not patient_info:
+            raise DicomError("No valid patient information found in DICOM data")
+        
+        # Nếu không có patient_id, tạo bệnh nhân mới
+        if not patient_id:
+            try:
+                # Kiểm tra xem bệnh nhân đã tồn tại chưa (dựa vào Patient ID trong DICOM)
+                if 'dicom_id' in patient_info and patient_info['dicom_id']:
+                    existing_patients = self.patient_db.search_patients(
+                        query={'dicom_id': patient_info['dicom_id']}
+                    )
+                    if existing_patients:
+                        patient_id = existing_patients[0]['id']
+                        logger.info(f"Found existing patient with DICOM ID {patient_info['dicom_id']}, using patient_id: {patient_id}")
+                
+                # Nếu vẫn không có patient_id, tạo mới
+                if not patient_id:
+                    metadata = {
+                        'dicom_id': patient_info.get('dicom_id', ''),
+                        'notes': f"Imported from {directory_path}"
+                    }
+                    
+                    patient_id = self.patient_db.create_patient(
+                        name=patient_info.get('name', 'Unknown'),
+                        birth_date=patient_info.get('birth_date'),
+                        gender=patient_info.get('gender'),
+                        metadata=metadata
+                    )
+                    logger.info(f"Created new patient with ID: {patient_id}")
+            except Exception as e:
+                logger.error(f"Error creating patient: {str(e)}")
+                raise DicomError(f"Failed to create patient: {str(e)}")
+        
+        # Tạo nghiên cứu mới cho bệnh nhân
+        study_info = self._extract_study_info(categorized_datasets)
+        study = Study(
+            description=study_info.get('description', 'Imported Study'),
+            date=study_info.get('date'),
+            patient_id=patient_id,
+            metadata=study_info.get('metadata', {})
+        )
+        
+        # Tạo các chuỗi cho từng loại dữ liệu
+        for modality, datasets in categorized_datasets.items():
+            if not datasets:
+                continue
+                
+            # Tạo thư mục lưu trữ
+            storage_dir = os.path.join(
+                "data", "patients", patient_id, 
+                "studies", study.id, 
+                "series", modality.lower()
+            )
+            os.makedirs(storage_dir, exist_ok=True)
+            
+            # Lưu file DICOM
+            file_paths = []
+            for i, dataset in enumerate(datasets):
+                file_name = f"{modality}_{i+1:04d}.dcm"
+                file_path = os.path.join(storage_dir, file_name)
+                dataset.save_as(file_path)
+                file_paths.append(file_path)
+            
+            # Tạo chuỗi
+            series = Series(
+                description=f"{modality} Series",
+                modality=modality,
+                study_id=study.id,
+                metadata={
+                    'count': len(datasets),
+                    'first_instance_date': self._get_acquisition_date(datasets[0])
+                }
+            )
+            
+            # Thêm các file vào chuỗi
+            for file_path in file_paths:
+                series.add_file(file_path)
+                
+            # Thêm chuỗi vào nghiên cứu
+            study.add_series(series)
+        
+        # Lưu nghiên cứu vào cơ sở dữ liệu
+        self.patient_db.add_study_to_patient(patient_id, study)
+        
+        return patient_id
+    
+    def _extract_patient_info(self, categorized_datasets: Dict[str, List[pydicom.dataset.FileDataset]]) -> Dict[str, Any]:
+        """
+        Trích xuất thông tin bệnh nhân từ dữ liệu DICOM.
+        
+        Parameters
+        ----------
+        categorized_datasets : Dict[str, List[pydicom.dataset.FileDataset]]
+            Dữ liệu DICOM đã phân loại
+            
+        Returns
+        -------
+        Dict[str, Any]
+            Thông tin bệnh nhân
+        """
+        # Lấy một dataset đại diện (dùng dataset đầu tiên tìm thấy)
+        representative_dataset = None
+        for datasets in categorized_datasets.values():
+            if datasets:
+                representative_dataset = datasets[0]
+                break
+                
+        if not representative_dataset:
+            return {}
+            
+        try:
+            # Trích xuất thông tin bệnh nhân
+            patient_info = {
+                'name': getattr(representative_dataset, 'PatientName', 'Unknown').original_string if hasattr(getattr(representative_dataset, 'PatientName', 'Unknown'), 'original_string') else str(getattr(representative_dataset, 'PatientName', 'Unknown')),
+                'dicom_id': getattr(representative_dataset, 'PatientID', ''),
+                'birth_date': getattr(representative_dataset, 'PatientBirthDate', None),
+                'gender': getattr(representative_dataset, 'PatientSex', None),
+            }
+            
+            # Chuyển đổi giới tính theo quy ước của hệ thống
+            gender_map = {'M': 'male', 'F': 'female', 'O': 'other'}
+            if patient_info['gender'] in gender_map:
+                patient_info['gender'] = gender_map[patient_info['gender']]
+                
+            return patient_info
+            
+        except Exception as e:
+            logger.warning(f"Error extracting patient info: {str(e)}")
+            return {}
+    
+    def _extract_study_info(self, categorized_datasets: Dict[str, List[pydicom.dataset.FileDataset]]) -> Dict[str, Any]:
+        """
+        Trích xuất thông tin nghiên cứu từ dữ liệu DICOM.
+        
+        Parameters
+        ----------
+        categorized_datasets : Dict[str, List[pydicom.dataset.FileDataset]]
+            Dữ liệu DICOM đã phân loại
+            
+        Returns
+        -------
+        Dict[str, Any]
+            Thông tin nghiên cứu
+        """
+        # Lấy một dataset đại diện
+        representative_dataset = None
+        for datasets in categorized_datasets.values():
+            if datasets:
+                representative_dataset = datasets[0]
+                break
+                
+        if not representative_dataset:
+            return {}
+            
+        try:
+            # Trích xuất thông tin nghiên cứu
+            study_info = {
+                'description': getattr(representative_dataset, 'StudyDescription', 'Imported Study'),
+                'date': getattr(representative_dataset, 'StudyDate', None),
+                'study_instance_uid': getattr(representative_dataset, 'StudyInstanceUID', ''),
+                'metadata': {
+                    'accession_number': getattr(representative_dataset, 'AccessionNumber', ''),
+                    'study_id': getattr(representative_dataset, 'StudyID', ''),
+                    'referring_physician': str(getattr(representative_dataset, 'ReferringPhysicianName', '')),
+                }
+            }
+            
+            return study_info
+            
+        except Exception as e:
+            logger.warning(f"Error extracting study info: {str(e)}")
+            return {}
+    
+    def _get_acquisition_date(self, dataset: pydicom.dataset.FileDataset) -> str:
+        """
+        Lấy ngày thu nhận dữ liệu từ dataset DICOM.
+        
+        Parameters
+        ----------
+        dataset : pydicom.dataset.FileDataset
+            DICOM dataset
+            
+        Returns
+        -------
+        str
+            Ngày thu nhận dữ liệu dạng ISO
+        """
+        try:
+            # Thử lấy từ AcquisitionDate nếu có
+            if hasattr(dataset, 'AcquisitionDate'):
+                return dataset.AcquisitionDate
+            # Thử lấy từ SeriesDate
+            elif hasattr(dataset, 'SeriesDate'):
+                return dataset.SeriesDate
+            # Hoặc lấy từ StudyDate nếu không có các trường trên
+            elif hasattr(dataset, 'StudyDate'):
+                return dataset.StudyDate
+            else:
+                return ""
+        except Exception:
+            return "" 

@@ -1,363 +1,445 @@
-"""
-Triển khai thuật toán Pencil Beam cho tính toán liều xạ trị.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-Thuật toán Pencil Beam là một phương pháp tính toán liều dựa trên việc mô phỏng
-chùm tia như một tập hợp các chùm tia nhỏ (pencil beams), mỗi chùm đóng góp vào
-phân bố liều cuối cùng. Thuật toán này cân bằng giữa tốc độ và độ chính xác,
-đặc biệt phù hợp cho các trường hợp có sự không đồng nhất không quá phức tạp.
+"""
+Implementation of the Pencil Beam dose calculation algorithm.
+
+This module provides a class for calculating dose distributions using
+the Pencil Beam algorithm for radiotherapy treatment planning.
 """
 
 import numpy as np
-import SimpleITK as sitk
 import logging
-import time
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Tuple, Optional, Union
 
-from quangtps.core.exceptions import ValidationError, AlgorithmError
-from quangtps.dose.dose_engine import DoseCalculationAlgorithm, DoseCalculationImplementer
-from quangtps.dose.dose_grid import DoseGrid
-from quangtps.dose.physics.terma import calculate_terma
-from quangtps.dose.physics.heterogeneity import apply_heterogeneity_correction
+from quangtps.core.exceptions import DoseCalculationError
+from quangtps.imaging.image import Image
+from quangtps.planning.beam import Beam
+from quangtps.dose.beam_data_processor import BeamModel, BeamModelParameter
 
 logger = logging.getLogger(__name__)
 
-class PencilBeamImplementer(DoseCalculationImplementer):
+class PencilBeamAlgorithm:
     """
-    Triển khai thuật toán Pencil Beam cho tính toán liều xạ trị.
+    Implementation of the Pencil Beam dose calculation algorithm.
     
-    Thuật toán Pencil Beam sử dụng mô hình tích chập trong đó chùm tia được
-    chia thành các 'pencil beams' (chùm bút chì) riêng lẻ, mỗi chùm đóng góp
-    vào phân bố liều tổng thể.
+    This class provides methods for calculating 3D dose distributions
+    using the Pencil Beam algorithm for radiotherapy treatment planning.
     """
     
     def __init__(self):
-        """Khởi tạo PencilBeamImplementer."""
-        self.kernels = {}
-        self.initialize_kernels()
+        """
+        Initialize the Pencil Beam algorithm.
+        """
+        self.beam_model = None
+        self.calculate_heterogeneity = True
+        self.grid_size = 0.25  # Calculation grid size in cm
+        self.threads = 8  # Number of parallel threads
+        logger.info("Initialized Pencil Beam algorithm")
     
-    def supported_algorithms(self) -> List[DoseCalculationAlgorithm]:
+    def set_beam_model(self, beam_model: BeamModel):
         """
-        Trả về danh sách các thuật toán được hỗ trợ.
+        Set the beam model for dose calculation.
         
-        Returns:
-            list: Danh sách các thuật toán
+        Parameters
+        ----------
+        beam_model : BeamModel
+            The beam model containing beam data for dose calculation
         """
-        return [DoseCalculationAlgorithm.PENCIL_BEAM]
+        self.beam_model = beam_model
+        logger.info(f"Set beam model: {beam_model.name}")
     
-    def initialize_kernels(self):
+    def set_heterogeneity_correction(self, enabled: bool):
         """
-        Khởi tạo các kernel cho thuật toán Pencil Beam.
+        Enable or disable heterogeneity correction.
         
-        Các kernel được tạo cho các năng lượng chùm tia khác nhau.
+        Parameters
+        ----------
+        enabled : bool
+            Flag to enable or disable heterogeneity correction
         """
-        # Các năng lượng phổ biến trong xạ trị (MV)
-        energies = [6.0, 10.0, 15.0, 18.0]
-        
-        for energy in energies:
-            kernel = self._generate_pencil_beam_kernel(energy)
-            self.kernels[energy] = kernel
+        self.calculate_heterogeneity = enabled
+        status = "enabled" if enabled else "disabled"
+        logger.info(f"Heterogeneity correction {status}")
     
-    def _generate_pencil_beam_kernel(self, energy: float, size: int = 31) -> np.ndarray:
+    def set_calculation_parameters(self, grid_size: float = 0.25, threads: int = 8):
         """
-        Tạo kernel Pencil Beam cho một năng lượng cụ thể.
+        Set calculation parameters.
         
-        Parameters:
-            energy (float): Năng lượng chùm tia (MV)
-            size (int): Kích thước kernel (voxel)
-        
-        Returns:
-            np.ndarray: Kernel Pencil Beam
+        Parameters
+        ----------
+        grid_size : float
+            Calculation grid size in cm
+        threads : int
+            Number of parallel threads for calculation
         """
-        # Đảm bảo kích thước kernel là lẻ
-        if size % 2 == 0:
-            size += 1
-        
-        # Tạo kernel 2D cho Pencil Beam
-        kernel_2d = np.zeros((size, size), dtype=np.float32)
-        
-        # Tâm của kernel
-        center = size // 2
-        
-        # Sigma cho phân bố Gaussian phụ thuộc vào năng lượng
-        # Năng lượng cao có độ rộng chùm tia lớn hơn
-        sigma = 0.3 + 0.01 * energy  # Đơn vị đo: voxel
-        
-        # Tính giá trị kernel dựa trên phân bố Gaussian
-        for i in range(size):
-            for j in range(size):
-                # Khoảng cách đến tâm
-                dx = i - center
-                dy = j - center
-                r = np.sqrt(dx**2 + dy**2)
-                
-                # Phân bố Gaussian
-                kernel_2d[i, j] = np.exp(-0.5 * (r/sigma)**2) / (2 * np.pi * sigma**2)
-        
-        # Chuẩn hóa kernel để tổng bằng 1
-        kernel_2d /= np.sum(kernel_2d)
-        
-        return kernel_2d
+        self.grid_size = grid_size
+        self.threads = threads
+        logger.info(f"Set calculation parameters: grid_size={grid_size}cm, threads={threads}")
     
-    def calculate(self, 
-                 patient_ct: sitk.Image, 
-                 structures: Dict[str, np.ndarray], 
-                 beams: List[Dict[str, Any]], 
-                 reference_grid: DoseGrid,
-                 parameters: Dict[str, Any]) -> DoseGrid:
+    def calculate_beam_dose(self, beam: Beam, ct_image: Image) -> Image:
         """
-        Tính toán phân bố liều sử dụng thuật toán Pencil Beam.
+        Calculate dose for a single beam.
         
-        Parameters:
-            patient_ct (sitk.Image): Hình ảnh CT của bệnh nhân
-            structures (dict): Dict các cấu trúc
-            beams (list): Danh sách các chùm tia
-            reference_grid (DoseGrid): Lưới liều tham chiếu
-            parameters (dict): Các tham số tính toán
+        Parameters
+        ----------
+        beam : Beam
+            The beam to calculate dose for
+        ct_image : Image
+            The CT image for dose calculation
+            
+        Returns
+        -------
+        Image
+            The calculated dose image
         
-        Returns:
-            DoseGrid: Kết quả tính toán liều
-        
-        Raises:
-            AlgorithmError: Nếu có lỗi trong quá trình tính toán
+        Raises
+        ------
+        DoseCalculationError
+            If dose calculation fails
         """
-        logger.info("Starting dose calculation using Pencil Beam algorithm")
-        start_time = time.time()
+        if self.beam_model is None:
+            logger.error("No beam model set for dose calculation")
+            raise DoseCalculationError("No beam model set for dose calculation")
         
         try:
-            # Lấy tham số tính toán
-            prescription_dose = parameters.get('prescription_dose', 2.0)  # Gy
-            fractions = parameters.get('fractions', 1)
-            progress_callback = parameters.get('progress_callback', None)
-            heterogeneity_correction = parameters.get('heterogeneity_correction', True)
+            logger.info(f"Calculating dose for beam: {beam.name}")
             
-            # Lấy thông tin voxel từ CT
-            ct_array = sitk.GetArrayFromImage(patient_ct)
-            ct_spacing = patient_ct.GetSpacing()
-            ct_origin = patient_ct.GetOrigin()
-            ct_direction = patient_ct.GetDirection()
+            # Convert CT to electron density
+            electron_density = self._convert_ct_to_density(ct_image)
             
-            # Chuyển đổi HU sang mật độ điện tử
-            density_array = self.convert_hu_to_density(ct_array)
+            # Create dose grid
+            dose_grid = self._initialize_dose_grid(ct_image)
             
-            # Khởi tạo lưới liều kết quả
-            result_grid = DoseGrid.create_empty_grid(
-                reference_grid.get_shape(),
-                reference_grid.origin,
-                reference_grid.spacing,
-                reference_grid.direction
+            # Get beam parameters
+            source_position = beam.get_source_position()
+            isocenter = beam.isocenter
+            field_size = beam.field_size
+            gantry_angle = beam.gantry_angle
+            collimator_angle = beam.collimator_angle
+            
+            logger.info(f"Beam parameters: gantry={gantry_angle}°, field={field_size[0]}x{field_size[1]}cm, " 
+                        f"collimator={collimator_angle}°")
+            
+            # Calculate TERMA (Total Energy Released per unit MAss)
+            terma_grid = self._calculate_terma(
+                electron_density, 
+                dose_grid.shape, 
+                source_position, 
+                isocenter, 
+                field_size,
+                gantry_angle,
+                collimator_angle
             )
             
-            # Báo tiến độ: 10%
-            if progress_callback:
-                progress_callback(10)
+            # Convolve TERMA with dose deposition kernel
+            dose_data = self._convolve_with_kernel(terma_grid, electron_density)
             
-            # Tính toán liều cho mỗi chùm tia
-            total_dose = np.zeros(reference_grid.get_shape(), dtype=np.float32)
+            # Create dose image
+            dose_image = Image(
+                data=dose_data,
+                spacing=ct_image.spacing,
+                origin=ct_image.origin,
+                direction=ct_image.direction
+            )
             
-            for beam_index, beam in enumerate(beams):
-                # Lấy thông tin chùm tia
-                beam_energy = beam.get('energy', 6.0)  # MV
-                beam_mu = beam.get('mu', 100.0)  # MU
-                beam_direction = np.array(beam.get('direction', [0, 0, 1.0]))
-                beam_isocenter = np.array(beam.get('isocenter', [0, 0, 0]))
-                beam_sad = beam.get('sad', 1000.0)  # Khoảng cách nguồn-trục (mm)
-                beam_field_size = beam.get('field_size', (100.0, 100.0))  # mm
-                
-                # Chọn kernel phù hợp với năng lượng
-                if beam_energy not in self.kernels:
-                    # Tạo kernel mới nếu chưa có
-                    kernel = self._generate_pencil_beam_kernel(beam_energy)
-                    self.kernels[beam_energy] = kernel
-                else:
-                    kernel = self.kernels[beam_energy]
-                
-                # Tính toán TERMA cho chùm tia này
-                terma = calculate_terma(
-                    density_array=density_array,
-                    spacing=ct_spacing,
-                    beam_energy=beam_energy,
-                    beam_direction=beam_direction,
-                    beam_mu=beam_mu,
-                    beam_isocenter=beam_isocenter,
-                    beam_field_size=beam_field_size
-                )
-                
-                # Tính liều dựa trên TERMA và kernel Pencil Beam
-                beam_dose = self._calculate_dose_from_terma(
-                    terma=terma,
-                    density=density_array,
-                    spacing=ct_spacing,
-                    kernel=kernel,
-                    beam_direction=beam_direction
-                )
-                
-                # Áp dụng hiệu chỉnh không đồng nhất nếu được yêu cầu
-                if heterogeneity_correction:
-                    beam_dose = apply_heterogeneity_correction(
-                        dose=beam_dose,
-                        density=density_array,
-                        spacing=ct_spacing,
-                        energy=beam_energy,
-                        method='batho'  # Có thể thay đổi phương pháp hiệu chỉnh
-                    )
-                
-                # Cộng vào tổng liều
-                total_dose += beam_dose
-                
-                # Báo tiến độ: từ 10% đến 90%
-                if progress_callback:
-                    progress = 10 + 80 * (beam_index + 1) / len(beams)
-                    progress_callback(int(progress))
+            # Normalize to isocenter
+            self._normalize_to_isocenter(dose_image, isocenter)
             
-            # Chuẩn hóa liều theo liều kê đơn
-            max_dose = np.max(total_dose)
-            if max_dose > 0:
-                total_dose = total_dose * prescription_dose / max_dose
+            return dose_image
             
-            # Cập nhật kết quả
-            result_grid.set_grid_data(total_dose)
-            
-            # Báo tiến độ: 100%
-            if progress_callback:
-                progress_callback(100)
-            
-            calculation_time = time.time() - start_time
-            logger.info(f"Dose calculation completed in {calculation_time:.2f} seconds")
-            
-            return result_grid
-        
         except Exception as e:
-            logger.error(f"Error in Pencil Beam dose calculation: {str(e)}")
-            raise AlgorithmError(f"Error in Pencil Beam dose calculation: {str(e)}")
+            error_msg = f"Error in Pencil Beam dose calculation: {str(e)}"
+            logger.error(error_msg)
+            raise DoseCalculationError(error_msg) from e
     
-    def _calculate_dose_from_terma(self,
-                                  terma: np.ndarray,
-                                  density: np.ndarray,
-                                  spacing: Tuple[float, float, float],
-                                  kernel: np.ndarray,
-                                  beam_direction: np.ndarray) -> np.ndarray:
+    def create_generic_beam_model(self, energy: str) -> BeamModel:
         """
-        Tính toán phân bố liều từ TERMA sử dụng kernel Pencil Beam.
+        Create a generic beam model for the specified energy.
         
-        Parameters:
-            terma (np.ndarray): Mảng TERMA
-            density (np.ndarray): Mảng mật độ điện tử
-            spacing (tuple): Khoảng cách voxel (mm)
-            kernel (np.ndarray): Kernel Pencil Beam
-            beam_direction (np.ndarray): Hướng chùm tia
-        
-        Returns:
-            np.ndarray: Mảng liều
+        Parameters
+        ----------
+        energy : str
+            The beam energy (e.g., "6MV", "10MV")
+            
+        Returns
+        -------
+        BeamModel
+            A generic beam model
         """
-        # Khởi tạo mảng liều
-        dose = np.zeros_like(terma, dtype=np.float32)
+        logger.info(f"Creating generic beam model for energy: {energy}")
         
-        # Lấy kích thước
-        depth, height, width = terma.shape
+        # Create basic beam model
+        model = BeamModel(
+            name=f"Generic {energy}",
+            energy=energy,
+            beam_type="PHOTON"
+        )
         
-        # Chuẩn hóa hướng chùm tia
-        beam_direction = beam_direction / np.linalg.norm(beam_direction)
+        # Add PDD data for 10x10 field
+        depths = np.array([0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0])
         
-        # Xác định trục chính dựa trên hướng chùm tia
-        # Chùm tia thường đi dọc theo trục Z trong hệ tọa độ IEC
-        # Giả định trục Z là trục chính trong mô phỏng này
+        # Different PDD values based on energy
+        if energy == "6MV":
+            pdd_values = np.array([100.0, 99.5, 98.0, 95.0, 90.0, 85.0, 80.0, 60.0, 40.0, 30.0, 20.0, 15.0])
+        elif energy == "10MV":
+            pdd_values = np.array([100.0, 99.8, 99.0, 97.0, 94.0, 90.0, 87.0, 70.0, 50.0, 35.0, 25.0, 20.0])
+        else:  # Default to 15MV
+            pdd_values = np.array([100.0, 100.0, 99.5, 98.0, 96.0, 94.0, 91.0, 75.0, 55.0, 40.0, 30.0, 25.0])
         
-        # Xử lý mỗi mặt phẳng vuông góc với trục Z
-        for z in range(depth):
-            # Tạo mặt phẳng TERMA cho lớp này
-            terma_plane = terma[z, :, :]
+        pdd_parameter = BeamModelParameter(
+            name="pdd_10x10",
+            value_grid=pdd_values,
+            dimensions=["depth"],
+            units=["cm"],
+            dimension_values=[depths],
+            interpolation_method="cubic"
+        )
+        model.add_parameter(pdd_parameter)
+        
+        # Add profile data for 10x10 field at 10cm depth
+        positions = np.array([-20, -15, -10, -8, -6, -5, -4, -3, -2, -1, 0, 
+                              1, 2, 3, 4, 5, 6, 8, 10, 15, 20])
+        
+        # Generic profile (symmetric)
+        profile_values = np.array([2, 3, 5, 10, 40, 70, 90, 95, 98, 99.5, 100, 
+                                   99.5, 98, 95, 90, 70, 40, 10, 5, 3, 2])
+        
+        profile_parameter = BeamModelParameter(
+            name="profile_10x10_10cm",
+            value_grid=profile_values,
+            dimensions=["off_axis"],
+            units=["cm"],
+            dimension_values=[positions],
+            interpolation_method="cubic"
+        )
+        model.add_parameter(profile_parameter)
+        
+        # Add output factors for various field sizes
+        field_sizes_x = np.array([3, 5, 10, 15, 20, 30, 40])
+        field_sizes_y = np.array([3, 5, 10, 15, 20, 30, 40])
+        
+        # Generic output factors (example values)
+        of_grid = np.array([
+            [0.85, 0.87, 0.90, 0.92, 0.93, 0.95, 0.96],  # 3x3, 3x5, 3x10, etc.
+            [0.87, 0.90, 0.93, 0.95, 0.96, 0.97, 0.98],  # 5x3, 5x5, 5x10, etc.
+            [0.90, 0.93, 1.00, 1.02, 1.03, 1.05, 1.06],  # 10x3, 10x5, 10x10, etc.
+            [0.92, 0.95, 1.02, 1.04, 1.05, 1.07, 1.08],
+            [0.93, 0.96, 1.03, 1.05, 1.06, 1.08, 1.09],
+            [0.95, 0.97, 1.05, 1.07, 1.08, 1.10, 1.11],
+            [0.96, 0.98, 1.06, 1.08, 1.09, 1.11, 1.12]
+        ])
+        
+        of_parameter = BeamModelParameter(
+            name="output_factors",
+            value_grid=of_grid,
+            dimensions=["field_size_y", "field_size_x"],
+            units=["cm", "cm"],
+            dimension_values=[field_sizes_y, field_sizes_x],
+            interpolation_method="linear"
+        )
+        model.add_parameter(of_parameter)
+        
+        return model
+    
+    def _convert_ct_to_density(self, ct_image: Image) -> np.ndarray:
+        """
+        Convert CT image (in HU) to electron density relative to water.
+        
+        Parameters
+        ----------
+        ct_image : Image
+            The CT image in Hounsfield Units
             
-            # Tích chập với kernel để tạo ra liều
-            # Sử dụng tích chập nhanh qua FFT
-            import scipy.signal
-            dose_plane = scipy.signal.convolve2d(terma_plane, kernel, mode='same')
-            
-            # Lưu kết quả
-            dose[z, :, :] = dose_plane
+        Returns
+        -------
+        np.ndarray
+            Electron density relative to water
+        """
+        # Simple linear conversion from HU to relative electron density
+        # For a more accurate calculation, a proper CT calibration curve should be used
+        hu_values = ct_image.data
         
-        # Chia cho mật độ để chuyển đổi từ năng lượng sang liều
-        with np.errstate(divide='ignore', invalid='ignore'):
-            dose = np.divide(dose, density)
-            dose = np.nan_to_num(dose, nan=0.0, posinf=0.0, neginf=0.0)
+        # Basic conversion: 
+        # - Air (-1000 HU) to ~0 density
+        # - Water (0 HU) to 1.0 density
+        # - Bone (1000 HU) to ~1.8 density
+        rel_e_density = 1.0 + hu_values / 1000.0
+        
+        # Set minimum to a small positive number to avoid division by zero
+        rel_e_density = np.maximum(rel_e_density, 0.001)
+        
+        return rel_e_density
+    
+    def _initialize_dose_grid(self, ct_image: Image) -> np.ndarray:
+        """
+        Initialize an empty dose grid with the same dimensions as the CT image.
+        
+        Parameters
+        ----------
+        ct_image : Image
+            The CT image
+            
+        Returns
+        -------
+        np.ndarray
+            Empty dose grid
+        """
+        return np.zeros_like(ct_image.data)
+    
+    def _calculate_terma(self, 
+                         electron_density: np.ndarray, 
+                         grid_shape: Tuple[int, int, int],
+                         source_position: np.ndarray,
+                         isocenter: np.ndarray,
+                         field_size: Tuple[float, float],
+                         gantry_angle: float,
+                         collimator_angle: float) -> np.ndarray:
+        """
+        Calculate TERMA (Total Energy Released per unit MAss) grid.
+        
+        Parameters
+        ----------
+        electron_density : np.ndarray
+            Electron density grid
+        grid_shape : Tuple[int, int, int]
+            Shape of the output grid
+        source_position : np.ndarray
+            Source position in world coordinates
+        isocenter : np.ndarray
+            Isocenter position in world coordinates
+        field_size : Tuple[float, float]
+            Field size at isocenter in cm
+        gantry_angle : float
+            Gantry angle in degrees
+        collimator_angle : float
+            Collimator angle in degrees
+            
+        Returns
+        -------
+        np.ndarray
+            TERMA grid
+        """
+        # This is a simplified implementation for demonstration
+        # A full implementation would include:
+        # - Ray tracing from source through each voxel
+        # - Attenuation calculation based on electron density
+        # - Field shape and size consideration
+        # - Off-axis factors
+        
+        # Create empty TERMA grid
+        terma = np.zeros(grid_shape)
+        
+        # Simplified model: exponential attenuation from entrance
+        # This is an approximation - real implementation would be more complex
+        
+        # Get beam direction based on gantry angle
+        gantry_rad = np.radians(gantry_angle)
+        beam_dir = np.array([
+            np.sin(gantry_rad),
+            0,
+            -np.cos(gantry_rad)
+        ])
+        
+        # Calculate a simple planar TERMA
+        # This is just a placeholder for the real calculation
+        for z in range(grid_shape[0]):
+            for y in range(grid_shape[1]):
+                for x in range(grid_shape[2]):
+                    # Calculate position relative to isocenter
+                    rel_pos = np.array([z, y, x]) - isocenter
+                    
+                    # Project onto beam direction
+                    depth = np.dot(rel_pos, beam_dir)
+                    
+                    # Get perpendicular distance to central axis
+                    perpendicular = rel_pos - depth * beam_dir
+                    dist_to_axis = np.linalg.norm(perpendicular)
+                    
+                    # Simple field check (rectangular field)
+                    if dist_to_axis < field_size[0] / 2:
+                        # Depth-based attenuation
+                        if depth > 0:  # Only calculate forward from source
+                            # Simplified exponential attenuation
+                            mu_water = 0.05  # Approximate attenuation coefficient for water (1/cm)
+                            terma[z, y, x] = 100.0 * np.exp(-mu_water * depth * electron_density[z, y, x])
+        
+        return terma
+    
+    def _convolve_with_kernel(self, terma: np.ndarray, electron_density: np.ndarray) -> np.ndarray:
+        """
+        Convolve TERMA with dose deposition kernel to get dose.
+        
+        Parameters
+        ----------
+        terma : np.ndarray
+            TERMA grid
+        electron_density : np.ndarray
+            Electron density grid
+            
+        Returns
+        -------
+        np.ndarray
+            Dose grid
+        """
+        # This is a simplified implementation
+        # A full implementation would include a proper dose deposition kernel
+        # (e.g., point kernel, pencil beam kernel) and proper convolution
+        
+        # For simplicity, we'll use a simple 3D Gaussian kernel as an approximation
+        kernel_size = 5
+        sigma = 1.0
+        
+        # Create a simple Gaussian kernel
+        kernel = np.zeros((kernel_size, kernel_size, kernel_size))
+        center = kernel_size // 2
+        
+        for z in range(kernel_size):
+            for y in range(kernel_size):
+                for x in range(kernel_size):
+                    dist_sq = (z - center) ** 2 + (y - center) ** 2 + (x - center) ** 2
+                    kernel[z, y, x] = np.exp(-dist_sq / (2 * sigma ** 2))
+        
+        # Normalize the kernel
+        kernel = kernel / np.sum(kernel)
+        
+        # Apply convolution
+        from scipy.ndimage import convolve
+        dose = convolve(terma, kernel, mode='constant', cval=0.0)
+        
+        # Apply density scaling if heterogeneity correction is enabled
+        if self.calculate_heterogeneity:
+            dose = dose / np.maximum(electron_density, 0.001)
         
         return dose
     
-    def convert_hu_to_density(self, hu_array: np.ndarray) -> np.ndarray:
+    def _normalize_to_isocenter(self, dose_image: Image, isocenter: np.ndarray):
         """
-        Chuyển đổi giá trị HU sang mật độ điện tử.
+        Normalize dose so that the isocenter receives 100% dose.
         
-        Parameters:
-            hu_array (np.ndarray): Mảng giá trị HU
-        
-        Returns:
-            np.ndarray: Mảng mật độ điện tử
+        Parameters
+        ----------
+        dose_image : Image
+            Dose image to normalize
+        isocenter : np.ndarray
+            Isocenter position in voxel coordinates
         """
-        # Mô hình chuyển đổi đơn giản từ HU sang mật độ điện tử tương đối
-        # Mật độ điện tử tương đối = 1.0 cho nước (HU = 0)
+        # Convert isocenter to voxel indices
+        iso_indices = dose_image.world_to_voxel(isocenter)
         
-        density = np.zeros_like(hu_array, dtype=np.float32)
+        # Get dose at isocenter
+        iso_z, iso_y, iso_x = np.round(iso_indices).astype(int)
         
-        # HU < -1000 (không khí)
-        mask = hu_array <= -1000
-        density[mask] = 0.001
+        # Ensure within bounds
+        iso_z = np.clip(iso_z, 0, dose_image.data.shape[0]-1)
+        iso_y = np.clip(iso_y, 0, dose_image.data.shape[1]-1)
+        iso_x = np.clip(iso_x, 0, dose_image.data.shape[2]-1)
         
-        # -1000 < HU < 0 (phổi, mô mỡ)
-        mask = np.logical_and(-1000 < hu_array, hu_array < 0)
-        density[mask] = 1.0 + hu_array[mask] / 1000.0
+        iso_dose = dose_image.data[iso_z, iso_y, iso_x]
         
-        # 0 <= HU < 1000 (mô mềm, mô xương thưa)
-        mask = np.logical_and(0 <= hu_array, hu_array < 1000)
-        density[mask] = 1.0 + hu_array[mask] / 1000.0
-        
-        # 1000 <= HU (xương đặc, implant kim loại)
-        mask = 1000 <= hu_array
-        density[mask] = 2.0 + (hu_array[mask] - 1000) / 1000.0
-        
-        return density
-    
-    def get_description(self) -> str:
-        """
-        Trả về mô tả về thuật toán.
-        
-        Returns:
-            str: Mô tả thuật toán
-        """
-        return """
-        Pencil Beam là một thuật toán tính toán liều nhanh và ổn định sử dụng
-        kỹ thuật tích chập 2D để mô phỏng sự lan truyền của liều. Nó coi chùm
-        tia xạ trị như một tập hợp các 'chùm bút chì' riêng lẻ, mỗi chùm đóng
-        góp vào phân bố liều tổng thể.
-        
-        Thuật toán Pencil Beam có độ chính xác vừa phải và hiệu suất tốt, phù hợp
-        cho nhiều ứng dụng lâm sàng. Tuy nhiên, nó có thể thiếu chính xác trong
-        các tình huống có sự thay đổi mật độ mạnh, đặc biệt là tại các giao diện
-        mô-không khí hoặc phổi-mô.
-        """
-    
-    def get_parameters_info(self) -> Dict[str, Any]:
-        """
-        Trả về thông tin về các tham số có thể cấu hình.
-        
-        Returns:
-            dict: Thông tin về các tham số
-        """
-        return {
-            'heterogeneity_correction': {
-                'description': 'Bật/tắt hiệu chỉnh không đồng nhất',
-                'type': 'bool',
-                'default': True
-            },
-            'kernel_size': {
-                'description': 'Kích thước kernel Pencil Beam (voxel)',
-                'type': 'int',
-                'default': 31,
-                'min': 11,
-                'max': 101
-            },
-            'heterogeneity_method': {
-                'description': 'Phương pháp hiệu chỉnh không đồng nhất',
-                'type': 'str',
-                'default': 'batho',
-                'options': ['batho', 'epp', 'equivalent_tad']
-            }
-        }
+        if iso_dose > 0:
+            # Normalize to isocenter
+            dose_image.data = dose_image.data * (100.0 / iso_dose)
+            logger.info(f"Normalized dose to isocenter. Original value: {iso_dose:.2f}")
+        else:
+            logger.warning("Zero dose at isocenter, cannot normalize")

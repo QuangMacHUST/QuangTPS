@@ -78,6 +78,7 @@ class PluginError(QuangTPSError):
         if plugin_name:
             message_with_name = f"{message} in plugin '{plugin_name}'"
         super().__init__(message_with_name)
+
 class NetworkError(QuangTPSError):
     """Lỗi mạng"""
     def __init__(self, message="Network error", url=None):
@@ -96,3 +97,21 @@ class FusionError(QuangTPSError):
     """Lỗi khi thực hiện fusion hình ảnh"""
     def __init__(self, message="Image fusion error"):
         super().__init__(message)
+
+class DataProcessingError(QuangTPSError):
+    """Lỗi khi xử lý dữ liệu"""
+    def __init__(self, message="Data processing error", data_type=None):
+        self.data_type = data_type
+        message_with_type = message
+        if data_type:
+            message_with_type = f"{message} for data type '{data_type}'"
+        super().__init__(message_with_type)
+
+class DoseCalculationError(QuangTPSError):
+    """Lỗi khi tính toán liều"""
+    def __init__(self, message="Dose calculation error", algorithm=None):
+        self.algorithm = algorithm
+        message_with_algo = message
+        if algorithm:
+            message_with_algo = f"{message} using algorithm '{algorithm}'"
+        super().__init__(message_with_algo)

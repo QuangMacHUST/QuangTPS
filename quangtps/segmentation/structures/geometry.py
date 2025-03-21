@@ -2,252 +2,357 @@
 # -*- coding: utf-8 -*-
 
 """
-Module for geometry classes used in structure definitions.
+Module định nghĩa các đối tượng hình học cho phân đoạn trong QuangTPS.
 
-This module provides classes for representing 3D points, contours, and other
-geometric entities used in radiotherapy structure definition.
+Module này cung cấp các lớp cơ bản như Point (điểm), Contour (đường bao),
+và các hàm phụ trợ để thao tác với chúng.
 """
 
+import math
 import numpy as np
-from typing import List, Tuple, Optional, Union, Any, Dict
+from typing import List, Tuple, Union, Optional, Dict, Any
+from dataclasses import dataclass
+import uuid
 
-
+@dataclass
 class Point:
     """
-    Class representing a 3D point in space.
+    Đối tượng đại diện cho một điểm trong không gian 3D.
     
-    A Point contains x, y, z coordinates, typically in the patient coordinate system
-    measured in millimeters.
+    Attributes:
+        x (float): Tọa độ x
+        y (float): Tọa độ y
+        z (float): Tọa độ z
     """
+    x: float
+    y: float
+    z: float = 0.0
     
-    def __init__(self, x: float, y: float, z: float):
+    def to_tuple(self) -> Tuple[float, float, float]:
         """
-        Initialize a 3D point.
+        Chuyển đổi thành tuple.
         
-        Parameters
-        ----------
-        x : float
-            X-coordinate in mm
-        y : float
-            Y-coordinate in mm
-        z : float
-            Z-coordinate in mm
+        Returns:
+            Tuple[float, float, float]: (x, y, z)
         """
-        self.x = float(x)
-        self.y = float(y)
-        self.z = float(z)
+        return (self.x, self.y, self.z)
     
-    @classmethod
-    def from_array(cls, arr: Union[np.ndarray, List, Tuple]):
+    def to_list(self) -> List[float]:
         """
-        Create a Point from an array-like object.
+        Chuyển đổi thành list.
         
-        Parameters
-        ----------
-        arr : array-like
-            Array containing [x, y, z] coordinates
-            
-        Returns
-        -------
-        Point
-            New Point object
+        Returns:
+            List[float]: [x, y, z]
         """
-        if len(arr) < 3:
-            raise ValueError("Array must contain at least 3 elements for [x, y, z]")
-        return cls(arr[0], arr[1], arr[2])
+        return [self.x, self.y, self.z]
     
-    def to_array(self) -> np.ndarray:
+    def to_dict(self) -> Dict[str, float]:
         """
-        Convert the point to a numpy array.
+        Chuyển đổi thành dictionary.
         
-        Returns
-        -------
-        np.ndarray
-            Array containing [x, y, z] coordinates
+        Returns:
+            Dict[str, float]: {"x": x, "y": y, "z": z}
+        """
+        return {"x": self.x, "y": self.y, "z": self.z}
+    
+    def to_numpy(self) -> np.ndarray:
+        """
+        Chuyển đổi thành numpy array.
+        
+        Returns:
+            np.ndarray: shape (3,) chứa [x, y, z]
         """
         return np.array([self.x, self.y, self.z])
     
     def distance_to(self, other: 'Point') -> float:
         """
-        Calculate the Euclidean distance to another point.
+        Tính khoảng cách Euclidean đến điểm khác.
         
-        Parameters
-        ----------
-        other : Point
-            The other point
+        Parameters:
+            other (Point): Điểm cần tính khoảng cách đến
             
-        Returns
-        -------
-        float
-            The distance in mm
+        Returns:
+            float: Khoảng cách Euclidean
         """
-        return np.sqrt((self.x - other.x)**2 + 
-                       (self.y - other.y)**2 + 
-                       (self.z - other.z)**2)
+        return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2 + (self.z - other.z)**2)
     
-    def to_dict(self) -> Dict[str, float]:
+    def distance_to_xy(self, other: 'Point') -> float:
         """
-        Convert the point to a dictionary.
+        Tính khoảng cách Euclidean trên mặt phẳng xy đến điểm khác.
         
-        Returns
-        -------
-        Dict[str, float]
-            Dictionary with x, y, z keys
+        Parameters:
+            other (Point): Điểm cần tính khoảng cách đến
+            
+        Returns:
+            float: Khoảng cách Euclidean trên mặt phẳng xy
         """
-        return {'x': self.x, 'y': self.y, 'z': self.z}
+        return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Point':
+    def from_tuple(cls, coords: Tuple[float, float, float]) -> 'Point':
         """
-        Create a Point from a dictionary.
+        Tạo đối tượng Point từ tuple.
         
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Dictionary with x, y, z keys
+        Parameters:
+            coords (Tuple[float, float, float]): Tuple (x, y, z)
             
-        Returns
-        -------
-        Point
-            New Point object
+        Returns:
+            Point: Đối tượng Point mới
         """
-        return cls(data['x'], data['y'], data['z'])
+        return cls(x=coords[0], y=coords[1], z=coords[2] if len(coords) > 2 else 0.0)
     
-    def __eq__(self, other: 'Point') -> bool:
-        """Check if two points are equal (same coordinates)."""
-        if not isinstance(other, Point):
-            return False
-        return (self.x == other.x and 
-                self.y == other.y and 
-                self.z == other.z)
+    @classmethod
+    def from_list(cls, coords: List[float]) -> 'Point':
+        """
+        Tạo đối tượng Point từ list.
+        
+        Parameters:
+            coords (List[float]): List [x, y, z]
+            
+        Returns:
+            Point: Đối tượng Point mới
+        """
+        return cls(x=coords[0], y=coords[1], z=coords[2] if len(coords) > 2 else 0.0)
     
-    def __str__(self) -> str:
-        """String representation of the point."""
-        return f"Point({self.x:.2f}, {self.y:.2f}, {self.z:.2f})"
+    @classmethod
+    def from_dict(cls, data: Dict[str, float]) -> 'Point':
+        """
+        Tạo đối tượng Point từ dictionary.
+        
+        Parameters:
+            data (Dict[str, float]): Dictionary chứa "x", "y", và tùy chọn "z"
+            
+        Returns:
+            Point: Đối tượng Point mới
+        """
+        return cls(x=data["x"], y=data["y"], z=data.get("z", 0.0))
+    
+    @classmethod
+    def from_numpy(cls, array: np.ndarray) -> 'Point':
+        """
+        Tạo đối tượng Point từ numpy array.
+        
+        Parameters:
+            array (np.ndarray): Array shape (3,) hoặc (2,)
+            
+        Returns:
+            Point: Đối tượng Point mới
+        """
+        return cls(x=array[0], y=array[1], z=array[2] if len(array) > 2 else 0.0)
 
 
 class Contour:
     """
-    Class representing a contour in a radiotherapy structure.
+    Đối tượng đại diện cho một đường bao (contour) trong không gian 3D.
     
-    A contour is a closed polygon on a specific z-plane (slice), represented
-    by a series of connected 3D points.
+    Attributes:
+        points (List[Point]): Danh sách các điểm trong đường bao
+        z (float): Giá trị z của đường bao (giả sử tất cả các điểm có cùng z)
+        closed (bool): Nếu True, đường bao được coi là khép kín (điểm đầu = điểm cuối)
+        id (str): ID duy nhất của đường bao
     """
     
-    def __init__(self, points: Union[List[Point], np.ndarray], z: float = None):
+    def __init__(self, points: Optional[List[Point]] = None, z: float = 0.0, 
+                closed: bool = True, contour_id: Optional[str] = None):
         """
-        Initialize a contour.
+        Khởi tạo đường bao.
         
-        Parameters
-        ----------
-        points : List[Point] or np.ndarray
-            List of Point objects or numpy array of shape (N, 3) where N is the number of points
-        z : float, optional
-            Z-coordinate of the contour (slice position). If None, uses the z-value from the first point
+        Parameters:
+            points (Optional[List[Point]]): Danh sách các điểm
+            z (float): Giá trị z
+            closed (bool): Nếu True, đường bao được coi là khép kín
+            contour_id (Optional[str]): ID duy nhất, tự động tạo nếu không cung cấp
         """
-        self.points: List[Point] = []
+        self.points = points or []
+        self.z = z
+        self.closed = closed
+        self.id = contour_id or str(uuid.uuid4())
         
-        # Convert numpy array to list of Point objects if needed
-        if isinstance(points, np.ndarray):
-            for i in range(points.shape[0]):
-                self.points.append(Point(points[i, 0], points[i, 1], 
-                                         points[i, 2] if points.shape[1] > 2 else (z or 0.0)))
-        else:
-            self.points = list(points)
-        
-        # Use specified z or get from first point
-        self.z = z if z is not None else (self.points[0].z if self.points else 0.0)
+        # Đảm bảo tất cả các điểm có cùng giá trị z
+        for point in self.points:
+            point.z = z
     
-    @property
-    def num_points(self) -> int:
-        """Get the number of points in the contour."""
-        return len(self.points)
+    def add_point(self, point: Point):
+        """
+        Thêm một điểm vào đường bao.
+        
+        Parameters:
+            point (Point): Điểm cần thêm
+        """
+        point.z = self.z  # Đảm bảo điểm mới có cùng z
+        self.points.append(point)
     
-    def is_closed(self) -> bool:
-        """
-        Check if the contour is closed (first and last points are the same).
+    def close(self):
+        """Đóng đường bao bằng cách thêm điểm đầu tiên vào cuối nếu cần."""
+        if not self.closed or len(self.points) < 2:
+            return
+            
+        first_point = self.points[0]
+        last_point = self.points[-1]
         
-        Returns
-        -------
-        bool
-            True if the contour is closed
-        """
-        if len(self.points) < 3:
-            return False
-        first = self.points[0]
-        last = self.points[-1]
-        return first == last or first.distance_to(last) < 0.001
+        # Nếu điểm đầu và cuối không trùng nhau, thêm điểm đầu vào cuối
+        if first_point.distance_to_xy(last_point) > 1e-6:  # Sai số nhỏ
+            self.points.append(Point(first_point.x, first_point.y, self.z))
     
-    def close(self) -> None:
-        """Ensure the contour is closed by adding a copy of the first point at the end if needed."""
-        if not self.is_closed() and len(self.points) >= 3:
-            self.points.append(Point(self.points[0].x, self.points[0].y, self.points[0].z))
+    def to_numpy(self) -> np.ndarray:
+        """
+        Chuyển đổi thành numpy array.
+        
+        Returns:
+            np.ndarray: shape (n, 3) chứa các điểm [x, y, z]
+        """
+        return np.array([p.to_list() for p in self.points])
     
-    def to_array(self) -> np.ndarray:
+    def to_list(self) -> List[List[float]]:
         """
-        Convert the contour to a numpy array.
+        Chuyển đổi thành list.
         
-        Returns
-        -------
-        np.ndarray
-            Array of shape (N, 3) containing [x, y, z] for each point
+        Returns:
+            List[List[float]]: Danh sách các điểm [[x, y, z], ...]
         """
-        return np.array([[p.x, p.y, p.z] for p in self.points])
-    
-    def calculate_area(self) -> float:
-        """
-        Calculate the area of the contour using the Shoelace formula.
-        
-        Returns
-        -------
-        float
-            Area in mm²
-        """
-        if len(self.points) < 3:
-            return 0.0
-        
-        # Make sure the contour is closed
-        self.close()
-        
-        # Extract x, y coordinates
-        x = np.array([p.x for p in self.points])
-        y = np.array([p.y for p in self.points])
-        
-        # Shoelace formula
-        return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+        return [p.to_list() for p in self.points]
     
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert the contour to a dictionary.
+        Chuyển đổi thành dictionary.
         
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary representation of the contour
+        Returns:
+            Dict[str, Any]: Dictionary chứa thông tin đường bao
         """
         return {
-            'points': [p.to_dict() for p in self.points],
-            'z': self.z
+            "id": self.id,
+            "z": self.z,
+            "closed": self.closed,
+            "points": [p.to_dict() for p in self.points]
         }
+    
+    def get_length(self) -> float:
+        """
+        Tính chiều dài đường bao.
+        
+        Returns:
+            float: Tổng chiều dài của tất cả các đoạn
+        """
+        total_length = 0.0
+        for i in range(len(self.points) - 1):
+            total_length += self.points[i].distance_to_xy(self.points[i+1])
+            
+        # Thêm đoạn cuối nếu đường bao khép kín
+        if self.closed and len(self.points) > 1:
+            total_length += self.points[-1].distance_to_xy(self.points[0])
+            
+        return total_length
+    
+    def get_area(self) -> float:
+        """
+        Tính diện tích của đường bao (giả sử đường bao là đa giác đơn trên mặt phẳng xy).
+        
+        Returns:
+            float: Diện tích đa giác
+        """
+        if len(self.points) < 3:
+            return 0.0
+            
+        # Đảm bảo đường bao khép kín
+        self.close()
+        
+        # Sử dụng công thức Shoelace (Gauss's area formula)
+        area = 0.0
+        for i in range(len(self.points) - 1):
+            p1 = self.points[i]
+            p2 = self.points[i+1]
+            area += (p1.x * p2.y - p2.x * p1.y)
+            
+        return abs(area) / 2.0
+    
+    def is_point_inside(self, point: Point) -> bool:
+        """
+        Kiểm tra xem một điểm có nằm trong đường bao hay không (trên mặt phẳng xy).
+        
+        Parameters:
+            point (Point): Điểm cần kiểm tra
+            
+        Returns:
+            bool: True nếu điểm nằm trong đường bao
+        """
+        if len(self.points) < 3:
+            return False
+            
+        # Đảm bảo đường bao khép kín
+        self.close()
+        
+        # Sử dụng thuật toán ray casting
+        x, y = point.x, point.y
+        inside = False
+        
+        for i in range(len(self.points) - 1):
+            p1 = self.points[i]
+            p2 = self.points[i+1]
+            
+            if ((p1.y > y) != (p2.y > y)) and (x < (p2.x - p1.x) * (y - p1.y) / (p2.y - p1.y) + p1.x):
+                inside = not inside
+                
+        return inside
+    
+    @classmethod
+    def from_numpy(cls, array: np.ndarray, z: float = 0.0, closed: bool = True) -> 'Contour':
+        """
+        Tạo đối tượng Contour từ numpy array.
+        
+        Parameters:
+            array (np.ndarray): Array shape (n, 3) hoặc (n, 2)
+            z (float): Giá trị z nếu array có shape (n, 2)
+            closed (bool): Nếu True, đường bao được coi là khép kín
+            
+        Returns:
+            Contour: Đối tượng Contour mới
+        """
+        points = []
+        for i in range(array.shape[0]):
+            if array.shape[1] == 3:
+                points.append(Point(array[i, 0], array[i, 1], array[i, 2]))
+            else:
+                points.append(Point(array[i, 0], array[i, 1], z))
+                
+        return cls(points=points, z=z, closed=closed)
+    
+    @classmethod
+    def from_list(cls, points_list: List[List[float]], z: float = 0.0, closed: bool = True) -> 'Contour':
+        """
+        Tạo đối tượng Contour từ list.
+        
+        Parameters:
+            points_list (List[List[float]]): List các điểm [[x, y, z], ...]
+            z (float): Giá trị z nếu các điểm không có z
+            closed (bool): Nếu True, đường bao được coi là khép kín
+            
+        Returns:
+            Contour: Đối tượng Contour mới
+        """
+        points = []
+        for point_data in points_list:
+            if len(point_data) == 3:
+                points.append(Point(point_data[0], point_data[1], point_data[2]))
+            else:
+                points.append(Point(point_data[0], point_data[1], z))
+                
+        return cls(points=points, z=z, closed=closed)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Contour':
         """
-        Create a Contour from a dictionary.
+        Tạo đối tượng Contour từ dictionary.
         
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Dictionary representation of the contour
+        Parameters:
+            data (Dict[str, Any]): Dictionary chứa thông tin đường bao
             
-        Returns
-        -------
-        Contour
-            New Contour object
+        Returns:
+            Contour: Đối tượng Contour mới
         """
-        points = [Point.from_dict(p) for p in data['points']]
-        return cls(points, data.get('z'))
-    
-    def __str__(self) -> str:
-        """String representation of the contour."""
-        return f"Contour(z={self.z:.2f}, points={len(self.points)})"
+        points = [Point.from_dict(p) for p in data.get("points", [])]
+        return cls(
+            points=points,
+            z=data.get("z", 0.0),
+            closed=data.get("closed", True),
+            contour_id=data.get("id")
+        )

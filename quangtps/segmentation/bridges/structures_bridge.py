@@ -30,33 +30,30 @@ logger = logging.getLogger(__name__)
 # Ánh xạ từ kiểu cấu trúc imaging sang segmentation
 _TYPE_MAPPING_IMAGING_TO_SEGMENTATION = {
     ImagingStructureType.EXTERNAL: StructureType.EXTERNAL,
-    ImagingStructureType.PTV: StructureType.PTV,
-    ImagingStructureType.CTV: StructureType.CTV,
-    ImagingStructureType.GTV: StructureType.GTV,
-    ImagingStructureType.ITV: StructureType.ITV,
+    ImagingStructureType.PTV: StructureType.TARGET,
+    ImagingStructureType.CTV: StructureType.TARGET,
+    ImagingStructureType.GTV: StructureType.TARGET,
+    ImagingStructureType.ITV: StructureType.TARGET,
     ImagingStructureType.OAR: StructureType.OAR,
-    ImagingStructureType.ORGAN: StructureType.OTHER,
+    ImagingStructureType.ORGAN: StructureType.OAR,
     ImagingStructureType.BOLUS: StructureType.SUPPORT,
-    ImagingStructureType.AVOIDANCE: StructureType.OTHER,
+    ImagingStructureType.AVOIDANCE: StructureType.UNKNOWN,
     ImagingStructureType.SUPPORT: StructureType.SUPPORT,
-    ImagingStructureType.MARKER: StructureType.MARKER,
-    ImagingStructureType.REGISTRATION: StructureType.OTHER,
-    ImagingStructureType.ISOCENTER: StructureType.OTHER,
-    ImagingStructureType.UNDEFINED: StructureType.OTHER,
-    ImagingStructureType.CUSTOM: StructureType.OTHER
+    ImagingStructureType.MARKER: StructureType.UNKNOWN,
+    ImagingStructureType.REGISTRATION: StructureType.UNKNOWN,
+    ImagingStructureType.ISOCENTER: StructureType.UNKNOWN,
+    ImagingStructureType.UNDEFINED: StructureType.UNKNOWN,
+    ImagingStructureType.CUSTOM: StructureType.UNKNOWN
 }
 
 # Ánh xạ từ kiểu cấu trúc segmentation sang imaging
 _TYPE_MAPPING_SEGMENTATION_TO_IMAGING = {
     StructureType.EXTERNAL: ImagingStructureType.EXTERNAL,
-    StructureType.PTV: ImagingStructureType.PTV,
-    StructureType.CTV: ImagingStructureType.CTV,
-    StructureType.GTV: ImagingStructureType.GTV,
-    StructureType.ITV: ImagingStructureType.ITV,
+    StructureType.TARGET: ImagingStructureType.PTV,
     StructureType.OAR: ImagingStructureType.OAR,
+    StructureType.BODY: ImagingStructureType.EXTERNAL,
     StructureType.SUPPORT: ImagingStructureType.SUPPORT,
-    StructureType.MARKER: ImagingStructureType.MARKER,
-    StructureType.OTHER: ImagingStructureType.UNDEFINED
+    StructureType.UNKNOWN: ImagingStructureType.UNDEFINED
 }
 
 
