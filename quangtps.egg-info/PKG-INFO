@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: quangtps
+Version: 1.0.0
+Summary: Hệ thống lập kế hoạch xạ trị mã nguồn mở
+Author: QuangTPS Developers
+Author-email: quangtps@example.com
+License-File: LICENSE
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: scipy>=1.7.0
+Requires-Dist: pandas>=1.3.0
+Requires-Dist: pydicom>=2.2.0
+Requires-Dist: PyQt5>=5.15.0
+Requires-Dist: matplotlib>=3.4.0
+Requires-Dist: scikit-image>=0.18.0
+Requires-Dist: dicompyler-core>=0.5.5
+Dynamic: author
+Dynamic: author-email
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary

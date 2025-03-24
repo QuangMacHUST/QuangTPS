@@ -1,0 +1,2 @@
+[console_scripts]
+quangtps = quangtps.__main__:main

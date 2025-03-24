@@ -1,0 +1,61 @@
+================================================================================
+BÁO CÁO CHẨN ĐOÁN MÔI TRƯỜNG QUANGTPS
+================================================================================
+
+Thông tin hệ thống:
+------------------------------------------------------------
+OS                       : Windows
+OS Version               : 10.0.26100
+OS Release               : 11
+Machine                  : AMD64
+Processor                : AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD
+Python Version           : 3.12.9
+Python Implementation    : CPython
+Python Compiler          : MSC v.1929 64 bit (AMD64)
+Default Encoding         : utf-8
+Filesystem Encoding      : utf-8
+Locale                   : Vietnamese_Vietnam.utf8
+------------------------------------------------------------
+
+Kiểm tra các thư viện phụ thuộc:
+------------------------------------------------------------
+Thư viện             Phiên bản yêu cầu    Phiên bản hiện tại   Trạng thái
+------------------------------------------------------------
+numpy                1.20.0               1.26.4               OK        
+scipy                1.7.0                1.15.2               OK        
+pandas               1.3.0                2.2.3                OK        
+pydicom              2.2.0                2.4.4                OK        
+PyQt5                5.15.0               5.15.11              OK        
+matplotlib           3.4.0                3.10.0               OK        
+scikit-image         0.18.0               0.25.2               OK        
+dicompyler-core      0.5.5                0.5.6                OK        
+------------------------------------------------------------
+
+Tất cả thư viện phụ thuộc đã được cài đặt đúng phiên bản.
+
+Kiểm tra các module QuangTPS:
+------------------------------------------------------------
+quangtps.core                 : OK
+quangtps.database             : OK
+quangtps.dicom                : OK
+quangtps.dose                 : OK
+quangtps.evaluation           : OK
+quangtps.imaging              : OK
+quangtps.planning             : OK
+quangtps.reporting            : OK
+quangtps.segmentation         : OK
+quangtps.treatment            : OK
+quangtps.ui                   : OK
+quangtps.adaptive             : Lỗi (cannot import name 'Patient' from 'quangtps.core.types' (E:\hoctap\QuangTPS\quangtps\core\types.py))
+------------------------------------------------------------
+
+Các module còn lỗi:
+  - quangtps.adaptive: cannot import name 'Patient' from 'quangtps.core.types' (E:\hoctap\QuangTPS\quangtps\core\types.py)
+
+Kiểm tra GPU và CUDA:
+------------------------------------------------------------
+Không tìm thấy GPU hỗ trợ TensorFlow.
+
+PyTorch version: 2.6.0+cpu
+CUDA available: False
+------------------------------------------------------------

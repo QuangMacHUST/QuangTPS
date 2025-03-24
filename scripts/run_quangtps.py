@@ -16,14 +16,27 @@ import argparse
 import traceback
 from pathlib import Path
 
-# Import các module PyQt5 cần thiết ở cấp độ toàn cục để tránh lỗi linter
+# Thiết lập UTF-8 cho console trước khi import bất kỳ thứ gì
+if sys.platform == 'win32':
+    try:
+        import codecs
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        os.environ['PYTHONUTF8'] = '1'
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
+    except Exception as e:
+        print(f"Cảnh báo: Không thể thiết lập UTF-8 cho console: {str(e)}")
+
+# Import các module từ thư viện chuẩn
 try:
-    from PyQt5.QtWidgets import QApplication, QSplashScreen, QMessageBox
-    from PyQt5.QtGui import QPixmap
-    from PyQt5.QtCore import Qt, QTimer
+    # Thử import PyQt5 từ module thay vì class cụ thể
+    import PyQt5.QtWidgets as QtWidgets
+    import PyQt5.QtGui as QtGui
+    import PyQt5.QtCore as QtCore
     HAS_PYQT = True
-except ImportError:
-    print("CẢNH BÁO: Không thể import module PyQt5. Ứng dụng có thể không hoạt động đúng.")
+except ImportError as e:
+    print(f"CẢNH BÁO: Không thể import module PyQt5: {str(e)}")
+    print("Ứng dụng GUI sẽ không hoạt động. Vui lòng cài đặt PyQt5.")
     HAS_PYQT = False
 
 def setup_environment():
@@ -152,11 +165,11 @@ def check_dependencies():
 
 def show_splash_screen():
     """Hiển thị màn hình chào."""
-    # Tạo ứng dụng QApplication
+    # Đảm bảo PyQt5 được import
     if not HAS_PYQT:
         return None, None
         
-    app = QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     splash = None
     
     # Đường dẫn đến file splash screen
@@ -169,35 +182,63 @@ def show_splash_screen():
         "splash.png"
     )
     
-    # Kiểm tra xem file splash screen có tồn tại không
+    # Nếu không tìm thấy splash.png, tạo splash screen tự động
     if not os.path.exists(splash_path):
-        # Sử dụng splash screen mặc định
-        splash_path = os.path.join(
-            os.environ.get('QUANGTPS_ROOT', '.'),
-            "quangtps",
-            "ui",
-            "icons",
-            "splash.png"
-        )
+        pixmap = QtGui.QPixmap(600, 400)
+        pixmap.fill(QtGui.QColor(40, 44, 52))
+        
+        # Tạo gradient background
+        gradient = QtGui.QLinearGradient(0, 0, 0, pixmap.height())
+        gradient.setColorAt(0, QtGui.QColor(40, 44, 52))
+        gradient.setColorAt(1, QtGui.QColor(30, 34, 42))
+        
+        painter = QtGui.QPainter(pixmap)
+        painter.fillRect(pixmap.rect(), gradient)
+        
+        # Vẽ tiêu đề
+        painter.setPen(QtGui.QColor(255, 255, 255))
+        title_font = QtGui.QFont("Arial", 32, QtGui.QFont.Bold)
+        painter.setFont(title_font)
+        painter.drawText(pixmap.rect().adjusted(0, 50, 0, 0), QtCore.Qt.AlignHCenter, "QuangTPS")
+        
+        # Vẽ phụ đề
+        subtitle_font = QtGui.QFont("Arial", 16)
+        painter.setFont(subtitle_font)
+        painter.drawText(pixmap.rect().adjusted(0, 120, 0, 0), QtCore.Qt.AlignHCenter, "Hệ thống Lập kế hoạch Xạ trị")
+        
+        # Vẽ phiên bản
+        version_font = QtGui.QFont("Arial", 10)
+        painter.setFont(version_font)
+        painter.drawText(pixmap.rect().adjusted(0, 180, 0, 0), QtCore.Qt.AlignHCenter, "Phiên bản 1.0.0")
+        
+        # Hiển thị thời gian
+        painter.drawText(pixmap.rect().adjusted(0, 0, -20, -20), QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom, 
+                       f"Khởi động: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        painter.end()
+        
+        # Lưu lại để lần sau dùng
+        os.makedirs(os.path.dirname(splash_path), exist_ok=True)
+        pixmap.save(splash_path)
+        
+        splash = QtWidgets.QSplashScreen(pixmap)
+    else:
+        # Tạo splash screen từ file đã tồn tại
+        splash_pixmap = QtGui.QPixmap(splash_path)
+        splash = QtWidgets.QSplashScreen(splash_pixmap)
     
-    # Tạo splash screen nếu tìm thấy file
-    if os.path.exists(splash_path):
-        # Tạo splash screen
-        splash_pixmap = QPixmap(splash_path)
-        splash = QSplashScreen(splash_pixmap)
-        
-        # Thiết lập văn bản
-        splash.showMessage(
-            "Đang khởi động QuangTPS...",
-            Qt.AlignBottom | Qt.AlignCenter,
-            Qt.white
-        )
-        
-        # Hiển thị splash screen
-        splash.show()
-        
-        # Đảm bảo splash screen hiển thị
-        app.processEvents()
+    # Thiết lập văn bản
+    splash.showMessage(
+        "Đang khởi động QuangTPS...",
+        QtCore.Qt.AlignBottom | QtCore.Qt.AlignCenter,
+        QtGui.QColor(255, 255, 255)
+    )
+    
+    # Hiển thị splash screen
+    splash.show()
+    
+    # Đảm bảo splash screen hiển thị
+    app.processEvents()
     
     return app, splash
 
@@ -217,6 +258,9 @@ def parse_arguments():
     parser.add_argument('--demo', '-d', action='store_true',
                        help='Chạy ở chế độ demo với dữ liệu mẫu')
     
+    parser.add_argument('--debug', action='store_true',
+                       help='Chạy ở chế độ debug với thông tin chi tiết')
+    
     return parser.parse_args()
 
 def main():
@@ -228,24 +272,30 @@ def main():
     setup_environment()
     
     # Thiết lập logging
-    logger = setup_logging(args.verbose)
+    logger = setup_logging(args.verbose or args.debug)
     
     # Kiểm tra các thư viện phụ thuộc
     if not check_dependencies():
         logger.error("Không thể khởi động QuangTPS do thiếu thư viện")
         return 1
     
+    # Debug mode
+    if args.debug:
+        logger.debug("Đang chạy ở chế độ DEBUG")
+        # Chế độ debug thì không cần splash screen
+        args.no_splash = True
+    
     # Hiển thị splash screen nếu không ở chế độ console và không tắt splash screen
     if not args.console and not args.no_splash and HAS_PYQT:
         app, splash = show_splash_screen()
         if app is not None:
-            # Độ trễ để hiển thị splash screen
-            QTimer.singleShot(2000, lambda: start_application(app, splash, args))
+            # Độ trễ để hiển thị splash screen (đủ để người dùng thấy)
+            QtCore.QTimer.singleShot(2000, lambda: start_application(app, splash, args))
             # Bắt đầu vòng lặp sự kiện
             return app.exec_()
     else:
         if HAS_PYQT:
-            app = QApplication(sys.argv)
+            app = QtWidgets.QApplication(sys.argv)
             start_application(app, None, args)
             return app.exec_()
         else:
@@ -286,8 +336,8 @@ def start_application(app, splash, args):
         # Hiển thị thông báo lỗi cho người dùng
         try:
             if HAS_PYQT:
-                error_msg = QMessageBox()
-                error_msg.setIcon(QMessageBox.Critical)
+                error_msg = QtWidgets.QMessageBox()
+                error_msg.setIcon(QtWidgets.QMessageBox.Critical)
                 error_msg.setWindowTitle("Lỗi khởi động")
                 error_msg.setText("Không thể khởi động QuangTPS")
                 error_msg.setDetailedText(f"{str(e)}\n\n{error_traceback}")
@@ -295,7 +345,8 @@ def start_application(app, splash, args):
             else:
                 print(f"Lỗi nghiêm trọng: {str(e)}")
                 print(error_traceback)
-        except Exception:
+        except Exception as ex:
+            print(f"Không thể hiển thị hộp thoại lỗi: {str(ex)}")
             print(f"Lỗi nghiêm trọng: {str(e)}")
             print(error_traceback)
 

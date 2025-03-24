@@ -137,32 +137,30 @@
   - Đảm bảo tương thích với giao diện DoseCalculationDialog
   - Cải thiện ghi log thông tin về các mô hình được tìm thấy
 
-## [2025-03-28]
-### Fixed
-- Cải thiện xử lý tiếng Việt trong hệ thống logging:
-  - Cập nhật scripts/run_quangtps.py để xử lý lỗi encoding tiếng Việt trong console
-  - Cập nhật quangtps/core/logging.py để cải thiện xử lý tiếng Việt trong cả console và file log
-  - Thêm xử lý ngoại lệ chi tiết trong các hàm thiết lập logging để tránh crash ứng dụng
-  - Xóa handlers hiện có trước khi thêm handlers mới để tránh trùng lặp log
+## [2025-03-25]
 
-- Cải thiện cơ chế báo lỗi và xử lý sự cố:
-  - Cập nhật hàm start_application trong scripts/run_quangtps.py để hiển thị thông báo lỗi chi tiết hơn
-  - Thêm thông tin chi tiết về lỗi (traceback) trong log để dễ dàng gỡ rối
-  - Bổ sung cơ chế backup trong xử lý logging để đảm bảo ứng dụng vẫn hoạt động ngay cả khi có lỗi xảy ra với logging
+### Triển khai hiệu chỉnh thêm và sửa lỗi
+- Cập nhật file setup.py để cài đặt ứng dụng ở chế độ development giúp Python tìm thấy module quangtps
+- Thêm báo cáo chẩn đoán hệ thống trong scripts/setup_environment.py để chẩn đoán vấn đề
+- Sửa lỗi QPixmap trong hàm show_splash_screen trong quangtps/__main__.py
+- Cải thiện xử lý locale cho tiếng Việt trên hệ thống Windows
+- Thêm phương pháp so sánh phiên bản của thư viện mà không phụ thuộc vào pkg_resources đã lỗi thời
 
-- Sửa các vấn đề khác:
-  - Đảm bảo hàm show_splash_screen luôn trả về cùng kiểu dữ liệu (app, splash) trong mọi trường hợp
-  - Thêm QMessageBox.detailedText để hiển thị thông tin lỗi chi tiết khi ứng dụng gặp sự cố
+### Cải thiện khởi động ứng dụng
+- Cấu hình lại cách nhập các module PyQt5 để giảm lỗi linter 
+- Thêm phương thức tạo báo cáo chẩn đoán môi trường để hỗ trợ gỡ lỗi
+- Sửa lỗi không tìm thấy module quangtps bằng cách thêm thư mục gốc vào sys.path
+- Đảm bảo tạo splash screen ngay cả khi không có file splash.png
 
-## [2025-03-29]
-### Fixed
-- Sửa lỗi linter và import PyQt5:
-  - Cập nhật toàn bộ import PyQt5 trong scripts/run_quangtps.py để sử dụng cú pháp nhất quán
-  - Thêm xử lý lỗi ImportError khi không thể import PyQt5
-  - Đồng bộ việc sử dụng các module QtCore, QtWidgets, QtGui thay vì import từng class riêng lẻ
+### Cải thiện quản lý biểu tượng
+- Thêm tính năng tự động tạo splash.png nếu không tồn tại
+- Bổ sung sơ đồ màu gradient cho splash screen
 
-- Cải thiện triệt để hỗ trợ tiếng Việt:
-  - Tạo hàm setup_utf8_console() để cấu hình UTF-8 cho hệ thống một cách đầy đủ
-  - Đặt các biến môi trường PYTHONIOENCODING và PYTHONUTF8 để đảm bảo mã hóa đúng
-  - Thử thiết lập locale Vietnamese nếu có trên hệ thống Windows
-  - Đảm bảo file log sử dụng encoding UTF-8 
+### Thêm tính năng chế độ debug
+- Thêm tùy chọn `--debug` khi khởi động
+- Tự động vô hiệu hóa splash screen trong chế độ debug
+
+### Triển khai BeamDataManager
+- Thêm phương thức `get_beam_models()` để lấy mô hình theo loại
+- Quản lý dữ liệu chùm tia và mô hình chùm tia trong hệ thống
+- Hỗ trợ tải, lưu và quản lý mô hình chùm tia 

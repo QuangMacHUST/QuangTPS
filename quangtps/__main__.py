@@ -11,6 +11,7 @@ import os
 import argparse
 import traceback
 from pathlib import Path
+import time
 
 # Kiểm tra và cài đặt PyQt5
 try:
@@ -86,23 +87,60 @@ def setup_environment():
 def show_splash_screen(app):
     """Hiển thị màn hình splash khi khởi động"""
     # Tạo splash screen
+    from PyQt5.QtWidgets import QSplashScreen
+    from PyQt5.QtGui import QPixmap, QPainter, QColor, QFont, QLinearGradient
+    from PyQt5.QtCore import Qt
+
     splash_path = os.path.join(os.path.dirname(__file__), "ui", "icons", "new_icons", "splash.png")
     
     # Nếu không tìm thấy file splash, tạo splash screen mặc định
     if not os.path.exists(splash_path):
-        from PyQt5.QtGui import QPixmap, QPainter, QColor, QFont
         pixmap = QPixmap(600, 400)
         pixmap.fill(QColor(40, 44, 52))
+        
+        # Tạo gradient background
+        gradient = QLinearGradient(0, 0, 0, pixmap.height())
+        gradient.setColorAt(0, QColor(40, 44, 52))
+        gradient.setColorAt(1, QColor(30, 34, 42))
+        
         painter = QPainter(pixmap)
+        painter.fillRect(pixmap.rect(), gradient)
+        
+        # Vẽ tiêu đề
         painter.setPen(QColor(255, 255, 255))
-        font = QFont("Arial", 24)
-        painter.setFont(font)
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "QuangTPS\nHệ thống lập kế hoạch xạ trị mở")
+        title_font = QFont("Arial", 32, QFont.Bold)
+        painter.setFont(title_font)
+        painter.drawText(pixmap.rect().adjusted(0, 50, 0, 0), Qt.AlignHCenter, "QuangTPS")
+        
+        # Vẽ phụ đề
+        subtitle_font = QFont("Arial", 16)
+        painter.setFont(subtitle_font)
+        painter.drawText(pixmap.rect().adjusted(0, 120, 0, 0), Qt.AlignHCenter, "Hệ thống Lập kế hoạch Xạ trị")
+        
+        # Vẽ phiên bản
+        version_font = QFont("Arial", 10)
+        painter.setFont(version_font)
+        painter.drawText(pixmap.rect().adjusted(0, 180, 0, 0), Qt.AlignHCenter, "Phiên bản 1.0.0")
+        
+        # Hiển thị thời gian
+        painter.drawText(pixmap.rect().adjusted(0, 0, -20, -20), Qt.AlignRight | Qt.AlignBottom, 
+                       f"Khởi động: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
         painter.end()
+        
+        # Lưu lại để lần sau dùng
+        os.makedirs(os.path.dirname(splash_path), exist_ok=True)
+        pixmap.save(splash_path)
     else:
         pixmap = QPixmap(splash_path)
     
     splash = QSplashScreen(pixmap)
+    splash.showMessage(
+        "Đang khởi động QuangTPS...",
+        Qt.AlignBottom | Qt.AlignCenter,
+        QColor(255, 255, 255)
+    )
+    
     splash.show()
     app.processEvents()
     

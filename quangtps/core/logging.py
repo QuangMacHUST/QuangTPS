@@ -6,6 +6,7 @@ import os
 import sys
 import logging
 import locale
+import codecs
 from logging.handlers import RotatingFileHandler
 
 from .config import Config
@@ -26,20 +27,22 @@ def setup_utf8_console():
                 # Nếu không có locale tiếng Việt, sử dụng UTF-8 chung
                 locale.setlocale(locale.LC_ALL, '.65001')
             except locale.Error:
-                # Nếu vẫn không được, thử đặt môi trường trực tiếp
-                pass
+                try:
+                    # Thử set mặc định
+                    locale.setlocale(locale.LC_ALL, '')
+                except:
+                    # Nếu không thể, bỏ qua
+                    pass
+        
+        # Đặt các biến môi trường cho Python
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        os.environ['PYTHONUTF8'] = '1'
         
         try:
-            # Đặt PYTHONIOENCODING
-            os.environ['PYTHONIOENCODING'] = 'utf-8'
-            
             # Thiết lập utf-8 cho stdout và stderr
-            import codecs
-            sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
-            sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
-            
-            # Đặt biến môi trường PYTHONUTF8
-            os.environ['PYTHONUTF8'] = '1'
+            if hasattr(sys.stdout, 'buffer'):
+                sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+                sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
         except Exception as e:
             print(f"Cảnh báo: Không thể thiết lập UTF-8 cho console: {str(e)}")
     
@@ -94,7 +97,9 @@ def setup_logger(name="quangtps", log_file=None, level=None):
     if log_file:
         try:
             # Đảm bảo thư mục chứa file log tồn tại
-            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            log_dir = os.path.dirname(log_file)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
             
             # Tạo rotating file handler để tránh file log quá lớn
             file_handler = RotatingFileHandler(

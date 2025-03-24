@@ -1,0 +1,10 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+quangtps.egg-info/PKG-INFO
+quangtps.egg-info/SOURCES.txt
+quangtps.egg-info/dependency_links.txt
+quangtps.egg-info/entry_points.txt
+quangtps.egg-info/requires.txt
+quangtps.egg-info/top_level.txt
