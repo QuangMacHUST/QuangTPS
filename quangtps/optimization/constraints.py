@@ -16,17 +16,27 @@ from quangtps.dose.dose_grid import DoseGrid
 
 logger = logging.getLogger(__name__)
 
-@dataclass
 class ConstraintBase:
     """Lớp cơ sở cho các ràng buộc kế hoạch xạ trị."""
-    structure_name: str
-    is_enabled: bool = True
-    priority: int = 1  # Mức độ ưu tiên: 1 (cao nhất) - 5 (thấp nhất)
-    constraint_type: str = "None"
-    is_hard_constraint: bool = False  # True nếu là ràng buộc bắt buộc
     
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
+    def __init__(self, structure_name, is_enabled=True, priority=1, constraint_type="None", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc cơ bản
+        
+        Args:
+            structure_name: Tên cấu trúc
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên: 1 (cao nhất) - 5 (thấp nhất)
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        self.structure_name = structure_name
+        self.is_enabled = is_enabled
+        self.priority = priority
+        self.constraint_type = constraint_type
+        self.is_hard_constraint = is_hard_constraint
+        
+        # Xác thực các tham số
         if self.priority < 1 or self.priority > 5:
             raise ValueError(f"Mức độ ưu tiên phải trong khoảng [1, 5], nhận được: {self.priority}")
     
@@ -72,11 +82,23 @@ class ConstraintBase:
         """Trả về mô tả bằng văn bản của ràng buộc."""
         return f"Constraint cho {self.structure_name}"
 
-@dataclass
 class MaxDoseConstraint(ConstraintBase):
     """Ràng buộc liều tối đa cho cấu trúc."""
-    dose_limit: float  # Giới hạn liều tối đa, đơn vị Gy
-    constraint_type: str = "MaxDose"
+    
+    def __init__(self, structure_name, dose_limit, is_enabled=True, priority=1, constraint_type="MaxDose", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc liều tối đa
+        
+        Args:
+            structure_name: Tên cấu trúc
+            dose_limit: Giới hạn liều tối đa, đơn vị Gy
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        super().__init__(structure_name, is_enabled, priority, constraint_type, is_hard_constraint)
+        self.dose_limit = dose_limit
     
     def _evaluate_constraint(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> Tuple[bool, float]:
         """
@@ -106,11 +128,23 @@ class MaxDoseConstraint(ConstraintBase):
         """Trả về mô tả bằng văn bản của ràng buộc."""
         return f"Dmax ≤ {self.dose_limit:.1f} Gy cho {self.structure_name}"
 
-@dataclass
 class MeanDoseConstraint(ConstraintBase):
     """Ràng buộc liều trung bình cho cấu trúc."""
-    dose_limit: float  # Giới hạn liều trung bình, đơn vị Gy
-    constraint_type: str = "MeanDose"
+    
+    def __init__(self, structure_name, dose_limit, is_enabled=True, priority=1, constraint_type="MeanDose", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc liều trung bình
+        
+        Args:
+            structure_name: Tên cấu trúc
+            dose_limit: Giới hạn liều trung bình, đơn vị Gy
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        super().__init__(structure_name, is_enabled, priority, constraint_type, is_hard_constraint)
+        self.dose_limit = dose_limit
     
     def _evaluate_constraint(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> Tuple[bool, float]:
         """
@@ -140,11 +174,23 @@ class MeanDoseConstraint(ConstraintBase):
         """Trả về mô tả bằng văn bản của ràng buộc."""
         return f"Dmean ≤ {self.dose_limit:.1f} Gy cho {self.structure_name}"
 
-@dataclass
 class MinDoseConstraint(ConstraintBase):
     """Ràng buộc liều tối thiểu cho cấu trúc."""
-    dose_limit: float  # Giới hạn liều tối thiểu, đơn vị Gy
-    constraint_type: str = "MinDose"
+    
+    def __init__(self, structure_name, dose_limit, is_enabled=True, priority=1, constraint_type="MinDose", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc liều tối thiểu
+        
+        Args:
+            structure_name: Tên cấu trúc
+            dose_limit: Giới hạn liều tối thiểu, đơn vị Gy
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        super().__init__(structure_name, is_enabled, priority, constraint_type, is_hard_constraint)
+        self.dose_limit = dose_limit
     
     def _evaluate_constraint(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> Tuple[bool, float]:
         """
@@ -174,17 +220,29 @@ class MinDoseConstraint(ConstraintBase):
         """Trả về mô tả bằng văn bản của ràng buộc."""
         return f"Dmin ≥ {self.dose_limit:.1f} Gy cho {self.structure_name}"
 
-@dataclass
 class DoseVolumeConstraint(ConstraintBase):
     """Ràng buộc liều-thể tích (DVH constraint)."""
-    dose: float  # Mức liều, đơn vị Gy
-    volume_percent: float  # Phần trăm thể tích
-    direction: str = "upper"  # "upper" hoặc "lower"
-    constraint_type: str = "DoseVolume"
     
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        super().__post_init__()
+    def __init__(self, structure_name, dose, volume_percent, direction="upper", 
+                is_enabled=True, priority=1, constraint_type="DoseVolume", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc liều-thể tích
+        
+        Args:
+            structure_name: Tên cấu trúc
+            dose: Mức liều, đơn vị Gy
+            volume_percent: Phần trăm thể tích
+            direction: "upper" hoặc "lower"
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        super().__init__(structure_name, is_enabled, priority, constraint_type, is_hard_constraint)
+        self.dose = dose
+        self.volume_percent = volume_percent
+        self.direction = direction
+        
         if self.volume_percent < 0 or self.volume_percent > 100:
             raise ValueError(f"volume_percent phải nằm trong khoảng [0, 100], nhận được: {self.volume_percent}")
         
@@ -233,12 +291,26 @@ class DoseVolumeConstraint(ConstraintBase):
         else:
             return f"V{self.dose:.1f}Gy ≥ {self.volume_percent:.1f}% cho {self.structure_name}"
 
-@dataclass
 class HomogeneityConstraint(ConstraintBase):
     """Ràng buộc về tính đồng nhất của liều trong cấu trúc."""
-    prescription_dose: float  # Liều chỉ định, đơn vị Gy
-    max_hi: float = 0.15  # Chỉ số đồng nhất tối đa (ICRU83)
-    constraint_type: str = "Homogeneity"
+    
+    def __init__(self, structure_name, prescription_dose, max_hi=0.15, 
+                is_enabled=True, priority=1, constraint_type="Homogeneity", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc về tính đồng nhất
+        
+        Args:
+            structure_name: Tên cấu trúc
+            prescription_dose: Liều chỉ định, đơn vị Gy
+            max_hi: Chỉ số đồng nhất tối đa (ICRU83)
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        super().__init__(structure_name, is_enabled, priority, constraint_type, is_hard_constraint)
+        self.prescription_dose = prescription_dose
+        self.max_hi = max_hi
     
     def _evaluate_constraint(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> Tuple[bool, float]:
         """
@@ -279,12 +351,26 @@ class HomogeneityConstraint(ConstraintBase):
         """Trả về mô tả bằng văn bản của ràng buộc."""
         return f"HI ≤ {self.max_hi:.2f} cho {self.structure_name}"
 
-@dataclass
 class ConformityConstraint(ConstraintBase):
     """Ràng buộc về tính đồng dạng của liều so với cấu trúc đích."""
-    reference_dose: float  # Liều tham chiếu, thường là liều chỉ định, đơn vị Gy
-    min_ci: float = 0.8  # Chỉ số đồng dạng tối thiểu (Paddick CI)
-    constraint_type: str = "Conformity"
+    
+    def __init__(self, structure_name, reference_dose, min_ci=0.8, 
+                is_enabled=True, priority=1, constraint_type="Conformity", is_hard_constraint=False):
+        """
+        Khởi tạo ràng buộc về tính đồng dạng
+        
+        Args:
+            structure_name: Tên cấu trúc
+            reference_dose: Liều tham chiếu, thường là liều chỉ định, đơn vị Gy
+            min_ci: Chỉ số đồng dạng tối thiểu (Paddick CI)
+            is_enabled: Có kích hoạt ràng buộc này không
+            priority: Mức độ ưu tiên
+            constraint_type: Loại ràng buộc
+            is_hard_constraint: True nếu là ràng buộc bắt buộc
+        """
+        super().__init__(structure_name, is_enabled, priority, constraint_type, is_hard_constraint)
+        self.reference_dose = reference_dose
+        self.min_ci = min_ci
     
     def _evaluate_constraint(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> Tuple[bool, float]:
         """

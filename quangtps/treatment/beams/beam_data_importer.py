@@ -11,14 +11,24 @@ thông số vật lý của chùm tia như output factors, wedge factors, phân 
 
 import os
 import logging
+import datetime
 import numpy as np
 import pandas as pd
 from enum import Enum
 from typing import Dict, List, Tuple, Any, Optional, Union
+from pathlib import Path
+
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+                            QLabel, QComboBox, QFileDialog, QListWidget, 
+                            QProgressBar, QTextEdit, QMessageBox, QDialog)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 from quangtps.core.exceptions import ImportError
 from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.beams.beam import BeamType
+from quangtps.core.config import ConfigManager
+from quangtps.treatment.beams.truebeam_data_processor import TrueBeamDataProcessor
+from quangtps.dose.beam_data_processor import BeamModel
 
 logger = logging.getLogger(__name__)
 
@@ -37,296 +47,530 @@ class BeamDataType(str, Enum):
     ELECTRON_ENERGY = "Electron Energy"
     
 
+class BeamDataImportWorker(QThread):
+    """
+    Worker thread để xử lý dữ liệu chùm tia trong nền.
+    """
+    progressUpdated = pyqtSignal(int, str)
+    importFinished = pyqtSignal(object, object)
+    
+    def __init__(self, machine_type: str, source_dir: str, energies: List[str] = None):
+        """
+        Khởi tạo worker thread.
+        
+        Parameters
+        ----------
+        machine_type : str
+            Loại máy gia tốc (ví dụ: 'TrueBeam', 'VitalBeam', v.v.)
+        source_dir : str
+            Thư mục chứa dữ liệu chùm tia
+        energies : List[str], optional
+            Danh sách các mức năng lượng cần xử lý, nếu None thì xử lý tất cả
+        """
+        super().__init__()
+        self.machine_type = machine_type
+        self.source_dir = source_dir
+        self.energies = energies
+        self.results = {}
+    
+    def run(self):
+        """Thực hiện quá trình nhập dữ liệu."""
+        try:
+            # Cập nhật tiến trình
+            self.progressUpdated.emit(10, "Khởi tạo processor...")
+            
+            if self.machine_type == "TrueBeam":
+                processor = TrueBeamDataProcessor(data_dir=self.source_dir)
+                
+                # Quét tìm các file dữ liệu
+                self.progressUpdated.emit(20, "Quét tìm file dữ liệu...")
+                energy_files = processor.scan_for_beam_data_files()
+                
+                if not energy_files:
+                    self.importFinished.emit(False, {
+                        "error": f"Không tìm thấy file dữ liệu nào trong {self.source_dir}"
+                    })
+                    return
+                
+                available_energies = list(energy_files.keys())
+                self.results["available_energies"] = available_energies
+                
+                # Xác định các năng lượng cần xử lý
+                energies_to_process = self.energies if self.energies else available_energies
+                
+                # Lọc ra những năng lượng có sẵn
+                energies_to_process = [e for e in energies_to_process if e in available_energies]
+                
+                if not energies_to_process:
+                    self.importFinished.emit(False, {
+                        "error": "Không có mức năng lượng nào được chọn hoặc có sẵn"
+                    })
+                    return
+                
+                # Xử lý từng mức năng lượng
+                models = {}
+                total_energies = len(energies_to_process)
+                
+                for i, energy in enumerate(energies_to_process):
+                    progress = 30 + (i / total_energies) * 60
+                    self.progressUpdated.emit(int(progress), f"Đang xử lý năng lượng {energy}...")
+                    
+                    model = processor.create_beam_model(energy)
+                    if model:
+                        models[energy] = model
+                    else:
+                        self.importFinished.emit(False, {
+                            "error": f"Không thể tạo mô hình chùm tia cho năng lượng {energy}"
+                        })
+                        return
+                
+                # Lưu mô hình
+                self.progressUpdated.emit(90, "Đang lưu mô hình chùm tia...")
+                
+                config = ConfigManager().get_config()
+                output_dir = os.path.join(config.get('data_directory', 'data'), 'beam_data', 'models')
+                os.makedirs(output_dir, exist_ok=True)
+                
+                for energy, model in models.items():
+                    file_path = os.path.join(output_dir, f"TrueBeam_{energy}.json")
+                    model.save(file_path)
+                
+                self.results["models"] = models
+                self.results["output_dir"] = output_dir
+                
+                self.progressUpdated.emit(100, "Hoàn thành!")
+                self.importFinished.emit(True, self.results)
+            
+            else:
+                self.importFinished.emit(False, {
+                    "error": f"Loại máy gia tốc không được hỗ trợ: {self.machine_type}"
+                })
+                
+        except Exception as e:
+            logger.exception("Error in beam data import worker")
+            self.importFinished.emit(False, {
+                "error": f"Lỗi khi nhập dữ liệu: {str(e)}"
+            })
+
+
+class BeamDataImporterDialog(QDialog):
+    """
+    Dialog để nhập dữ liệu chùm tia vào hệ thống.
+    """
+    
+    def __init__(self, parent: Optional[QWidget] = None):
+        """
+        Khởi tạo dialog.
+        
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Widget cha
+        """
+        super().__init__(parent)
+        
+        self.setWindowTitle("Nhập Dữ Liệu Chùm Tia")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(500)
+        
+        self.config = ConfigManager().get_config()
+        self.init_ui()
+        
+        # Kết quả của quá trình nhập
+        self.import_results = {}
+    
+    def init_ui(self):
+        """Khởi tạo giao diện người dùng."""
+        layout = QVBoxLayout()
+        
+        # Chọn loại máy gia tốc
+        machine_layout = QHBoxLayout()
+        machine_layout.addWidget(QLabel("Loại máy gia tốc:"))
+        
+        self.machine_combo = QComboBox()
+        self.machine_combo.addItems(["TrueBeam", "VitalBeam", "Halcyon", "Khác"])
+        machine_layout.addWidget(self.machine_combo)
+        
+        layout.addLayout(machine_layout)
+        
+        # Chọn thư mục nguồn
+        source_layout = QHBoxLayout()
+        source_layout.addWidget(QLabel("Thư mục dữ liệu:"))
+        
+        self.source_edit = QTextEdit()
+        self.source_edit.setMaximumHeight(60)
+        self.source_edit.setReadOnly(True)
+        
+        # Thiết lập thư mục mặc định
+        default_dir = os.path.join(self.config.get('data_directory', 'data'), 'beam_data')
+        self.source_edit.setText(default_dir)
+        
+        source_layout.addWidget(self.source_edit)
+        
+        self.browse_button = QPushButton("Duyệt...")
+        self.browse_button.clicked.connect(self.browse_source_dir)
+        source_layout.addWidget(self.browse_button)
+        
+        layout.addLayout(source_layout)
+        
+        # Danh sách năng lượng
+        layout.addWidget(QLabel("Mức năng lượng khả dụng:"))
+        
+        self.energy_list = QListWidget()
+        self.energy_list.setSelectionMode(QListWidget.MultiSelection)
+        layout.addWidget(self.energy_list)
+        
+        # Nút quét
+        self.scan_button = QPushButton("Quét Thư Mục")
+        self.scan_button.clicked.connect(self.scan_directory)
+        layout.addWidget(self.scan_button)
+        
+        # Thanh tiến trình
+        layout.addWidget(QLabel("Tiến trình:"))
+        
+        self.progress_bar = QProgressBar()
+        layout.addWidget(self.progress_bar)
+        
+        self.status_label = QLabel("Sẵn sàng")
+        layout.addWidget(self.status_label)
+        
+        # Nút điều khiển
+        button_layout = QHBoxLayout()
+        
+        self.import_button = QPushButton("Nhập Dữ Liệu")
+        self.import_button.setEnabled(False)
+        self.import_button.clicked.connect(self.import_data)
+        button_layout.addWidget(self.import_button)
+        
+        self.cancel_button = QPushButton("Hủy")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+        
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def browse_source_dir(self):
+        """Mở dialog để chọn thư mục nguồn."""
+        dir_path = QFileDialog.getExistingDirectory(
+            self, 
+            "Chọn Thư Mục Dữ Liệu Chùm Tia",
+            self.source_edit.toPlainText()
+        )
+        
+        if dir_path:
+            self.source_edit.setText(dir_path)
+            self.scan_directory()
+    
+    def scan_directory(self):
+        """Quét thư mục để tìm dữ liệu chùm tia."""
+        source_dir = self.source_edit.toPlainText()
+        machine_type = self.machine_combo.currentText()
+        
+        if not os.path.isdir(source_dir):
+            QMessageBox.warning(self, "Lỗi", f"Thư mục không tồn tại: {source_dir}")
+            return
+        
+        self.energy_list.clear()
+        self.import_button.setEnabled(False)
+        self.status_label.setText("Đang quét thư mục...")
+        
+        try:
+            if machine_type == "TrueBeam":
+                processor = TrueBeamDataProcessor(data_dir=source_dir)
+                energy_files = processor.scan_for_beam_data_files()
+                
+                if energy_files:
+                    for energy in energy_files.keys():
+                        self.energy_list.addItem(energy)
+                    
+                    self.status_label.setText(f"Tìm thấy {len(energy_files)} mức năng lượng")
+                    self.import_button.setEnabled(True)
+                else:
+                    self.status_label.setText("Không tìm thấy file dữ liệu chùm tia nào")
+            else:
+                QMessageBox.information(
+                    self, 
+                    "Chưa Hỗ Trợ", 
+                    f"Loại máy gia tốc {machine_type} chưa được hỗ trợ trong phiên bản này."
+                )
+                self.status_label.setText("Loại máy gia tốc chưa được hỗ trợ")
+        
+        except Exception as e:
+            logger.exception("Error scanning directory")
+            QMessageBox.critical(self, "Lỗi", f"Lỗi khi quét thư mục: {str(e)}")
+            self.status_label.setText("Lỗi khi quét thư mục")
+    
+    def import_data(self):
+        """Bắt đầu quá trình nhập dữ liệu."""
+        source_dir = self.source_edit.toPlainText()
+        machine_type = self.machine_combo.currentText()
+        
+        # Lấy danh sách các mức năng lượng được chọn
+        selected_energies = []
+        for index in range(self.energy_list.count()):
+            item = self.energy_list.item(index)
+            if item.isSelected():
+                selected_energies.append(item.text())
+        
+        if not selected_energies:
+            # Nếu không có mức năng lượng nào được chọn, sử dụng tất cả
+            for index in range(self.energy_list.count()):
+                item = self.energy_list.item(index)
+                selected_energies.append(item.text())
+        
+        # Vô hiệu hóa các điều khiển
+        self.import_button.setEnabled(False)
+        self.scan_button.setEnabled(False)
+        self.browse_button.setEnabled(False)
+        self.machine_combo.setEnabled(False)
+        self.energy_list.setEnabled(False)
+        
+        # Cập nhật trạng thái
+        self.progress_bar.setValue(0)
+        self.status_label.setText("Bắt đầu nhập dữ liệu...")
+        
+        # Tạo và khởi động worker thread
+        self.worker = BeamDataImportWorker(
+            machine_type=machine_type,
+            source_dir=source_dir,
+            energies=selected_energies
+        )
+        
+        self.worker.progressUpdated.connect(self.update_progress)
+        self.worker.importFinished.connect(self.import_finished)
+        self.worker.start()
+    
+    def update_progress(self, value: int, message: str):
+        """
+        Cập nhật thanh tiến trình và thông báo trạng thái.
+        
+        Parameters
+        ----------
+        value : int
+            Giá trị tiến trình (0-100)
+        message : str
+            Thông báo trạng thái
+        """
+        self.progress_bar.setValue(value)
+        self.status_label.setText(message)
+    
+    def import_finished(self, success: bool, results: Dict[str, Any]):
+        """
+        Xử lý kết quả khi quá trình nhập hoàn tất.
+        
+        Parameters
+        ----------
+        success : bool
+            True nếu nhập thành công, False nếu có lỗi
+        results : Dict[str, Any]
+            Kết quả của quá trình nhập
+        """
+        # Kích hoạt lại các điều khiển
+        self.scan_button.setEnabled(True)
+        self.browse_button.setEnabled(True)
+        self.machine_combo.setEnabled(True)
+        self.energy_list.setEnabled(True)
+        
+        self.import_results = results
+        
+        if success:
+            models = results.get("models", {})
+            output_dir = results.get("output_dir", "")
+            
+            message = f"Đã nhập thành công {len(models)} mô hình chùm tia.\n"
+            message += f"Dữ liệu đã được lưu vào: {output_dir}"
+            
+            QMessageBox.information(self, "Thành Công", message)
+            self.accept()  # Đóng dialog với kết quả thành công
+        else:
+            error = results.get("error", "Lỗi không xác định")
+            QMessageBox.critical(self, "Lỗi", f"Nhập dữ liệu thất bại: {error}")
+            self.import_button.setEnabled(True)
+    
+    def get_results(self) -> Dict[str, Any]:
+        """
+        Lấy kết quả của quá trình nhập.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Kết quả của quá trình nhập
+        """
+        return self.import_results
+
+
 class TrueBeamDataReader:
     """
-    Lớp để đọc và phân tích dữ liệu chùm tia TrueBeam.
-    
-    Lớp này cung cấp các phương thức để đọc dữ liệu từ các file data chùm tia TrueBeam
-    và chuyển đổi chúng thành định dạng phù hợp cho hệ thống QuangTPS.
+    Lớp đọc và nhập dữ liệu từ máy gia tốc TrueBeam.
     """
     
-    def __init__(self, data_directory: str):
+    def __init__(self, base_dir: Optional[str] = None):
         """
-        Khởi tạo reader cho dữ liệu chùm tia TrueBeam.
+        Khởi tạo đối tượng đọc dữ liệu TrueBeam.
         
         Parameters
         ----------
-        data_directory : str
-            Đường dẫn đến thư mục chứa dữ liệu chùm tia TrueBeam
+        base_dir : str, optional
+            Thư mục cơ sở chứa dữ liệu TrueBeam, nếu None thì sẽ sử dụng thư mục mặc định
         """
-        self.data_directory = data_directory
-        self.beam_data = {}
-        self.energies = []
-        self.beam_types = []
+        config = ConfigManager().get_config()
+        self.base_dir = base_dir or os.path.join(config.get('data_directory', 'data'), 'beam_data', 'truebeam')
         
-    def scan_data_directory(self):
-        """
-        Quét thư mục dữ liệu để xác định các loại chùm tia và năng lượng có sẵn.
+        # Kiểm tra và tạo thư mục nếu cần
+        os.makedirs(self.base_dir, exist_ok=True)
         
-        Returns
-        -------
-        Tuple[List[str], List[str]]
-            Danh sách các năng lượng và loại chùm tia
-        """
-        logger.info(f"Scanning TrueBeam data directory: {self.data_directory}")
-        
-        # Danh sách các loại năng lượng chùm tia thường gặp
-        energy_patterns = {
-            "4X": "4MV", 
-            "6X": "6MV", 
-            "6FFF": "6MV FFF",
-            "8X": "8MV", 
-            "10X": "10MV", 
-            "10FFF": "10MV FFF",
-            "15X": "15MV", 
-            "18X": "18MV",
-            "20X": "20MV"
-        }
-        
-        found_energies = set()
-        found_types = set(["PHOTON", "ELECTRON"])
-        
-        # Quét các thư mục Excel
-        excel_files = []
-        for root, _, files in os.walk(self.data_directory):
-            for file in files:
-                if file.endswith(".xlsx") and not file.startswith("~$"):
-                    lower_filename = file.lower()
-                    
-                    # Tìm mẫu năng lượng trong tên file
-                    for pattern, energy_name in energy_patterns.items():
-                        if pattern.lower() in lower_filename:
-                            found_energies.add(energy_name)
-                    
-                    # Xác định electron vs photon
-                    if "electron" in lower_filename:
-                        found_types.add("ELECTRON")
-                    else:
-                        found_types.add("PHOTON")
-                    
-                    excel_files.append(os.path.join(root, file))
-        
-        # Quét thư mục W2CAD để tìm các file dữ liệu chi tiết
-        w2cad_dir = os.path.join(self.data_directory, "W2CAD")
-        if os.path.exists(w2cad_dir):
-            energy_dirs = [d for d in os.listdir(w2cad_dir) 
-                         if os.path.isdir(os.path.join(w2cad_dir, d))]
-            
-            for dir_name in energy_dirs:
-                # Xử lý thư mục năng lượng
-                for pattern, energy_name in energy_patterns.items():
-                    if pattern in dir_name:
-                        found_energies.add(energy_name)
-                
-                # Phân loại
-                if any(name in dir_name.upper() for name in ["FFF", "6X_FFF", "10X_FFF"]):
-                    found_types.add("FFF")
-                    
-        # Chuyển set thành list và sắp xếp
-        self.energies = sorted(list(found_energies))
-        self.beam_types = sorted(list(found_types))
-        
-        logger.info(f"Found energies: {self.energies}")
-        logger.info(f"Found beam types: {self.beam_types}")
-        
-        return self.energies, self.beam_types
+        self.processor = TrueBeamDataProcessor(data_dir=self.base_dir)
+        self.available_models = []
+        self.scan_existing_models()
     
-    def _parse_w2cad_file(self, file_path: str) -> Dict[str, Any]:
+    def scan_existing_models(self):
+        """Quét tìm các mô hình chùm tia đã có sẵn trong hệ thống."""
+        config = ConfigManager().get_config()
+        models_dir = os.path.join(config.get('data_directory', 'data'), 'beam_data', 'models')
+        
+        # Kiểm tra thư mục mô hình
+        if not os.path.isdir(models_dir):
+            logger.info(f"Models directory not found, creating: {models_dir}")
+            os.makedirs(models_dir, exist_ok=True)
+            return
+        
+        # Tìm các file mô hình
+        model_files = [f for f in os.listdir(models_dir) if f.startswith("TrueBeam_") and f.endswith(".json")]
+        
+        # Trích xuất tên năng lượng từ tên file
+        for file in model_files:
+            energy = file.replace("TrueBeam_", "").replace(".json", "")
+            self.available_models.append(energy)
+        
+        logger.info(f"Found {len(self.available_models)} existing TrueBeam models: {', '.join(self.available_models)}")
+    
+    def get_available_models(self) -> List[str]:
         """
-        Phân tích file dữ liệu chùm tia từ định dạng W2CAD.
+        Lấy danh sách các mô hình chùm tia có sẵn.
+        
+        Returns
+        -------
+        List[str]
+            Danh sách các mức năng lượng có mô hình
+        """
+        return self.available_models
+    
+    def load_model(self, energy: str) -> Optional[BeamModel]:
+        """
+        Tải mô hình chùm tia cho một mức năng lượng cụ thể.
         
         Parameters
         ----------
-        file_path : str
-            Đường dẫn đến file dữ liệu
+        energy : str
+            Mức năng lượng cần tải (ví dụ: "6MV", "10FFF")
             
         Returns
         -------
-        Dict[str, Any]
-            Dữ liệu đã phân tích
+        Optional[BeamModel]
+            Đối tượng mô hình chùm tia nếu tồn tại, None nếu không
         """
+        # Kiểm tra xem mô hình có tồn tại không
+        if energy not in self.available_models:
+            logger.warning(f"No model available for energy {energy}")
+            return None
+        
+        # Tải mô hình
+        config = ConfigManager().get_config()
+        models_dir = os.path.join(config.get('data_directory', 'data'), 'beam_data', 'models')
+        file_path = os.path.join(models_dir, f"TrueBeam_{energy}.json")
+        
         try:
-            data = {}
-            with open(file_path, 'r') as f:
-                lines = f.readlines()
-            
-            # Dòng đầu tiên thường chứa thông tin header
-            if lines and '|' in lines[0]:
-                header_parts = lines[0].strip().split('|')
-                if len(header_parts) > 1:
-                    header_info = header_parts[1].split(',')
-                    if len(header_info) >= 7:
-                        data['energy'] = header_info[0]
-                        data['wedge_angle'] = header_info[1]
-                        data['ssd'] = header_info[2]
-                        data['normalization_depth'] = header_info[3]
-                        data['field_size'] = header_info[4] + "x" + header_info[5]
-                        data['unit'] = header_info[6]
-            
-            # Đọc các giá trị
-            field_sizes = []
-            values = []
-            
-            # Tìm vị trí bắt đầu của dữ liệu
-            data_start = False
-            for i, line in enumerate(lines[1:], 1):
-                line = line.strip()
-                if not data_start and line and not line.startswith('|'):
-                    # Bắt đầu của dữ liệu
-                    field_sizes = [float(x) for x in line.split(',') if x.strip()]
-                    data_start = True
-                    continue
-                
-                if data_start and line and not line.startswith('|'):
-                    parts = line.split(',')
-                    if len(parts) > 1:
-                        try:
-                            depth = float(parts[0])
-                            row_values = [float(x) for x in parts[1:] if x.strip()]
-                            values.append([depth] + row_values)
-                        except ValueError:
-                            pass
-            
-            # Chuyển đổi thành numpy array để dễ xử lý
-            if field_sizes and values:
-                data['field_sizes'] = field_sizes
-                data['depths'] = np.array([row[0] for row in values])
-                data['values'] = np.array([row[1:] for row in values])
-            
-            return data
-        
+            model = BeamModel.load(file_path)
+            logger.info(f"Loaded beam model for energy {energy}")
+            return model
         except Exception as e:
-            logger.error(f"Error parsing W2CAD file {file_path}: {str(e)}")
-            return {}
+            logger.error(f"Error loading beam model for energy {energy}: {str(e)}")
+            return None
     
-    def _parse_excel_file(self, file_path: str) -> Dict[str, Any]:
+    def import_data_from_directory(self, directory: str, energies: List[str] = None) -> Dict[str, BeamModel]:
         """
-        Phân tích file Excel chứa dữ liệu chùm tia.
+        Nhập dữ liệu từ một thư mục cụ thể.
         
         Parameters
         ----------
-        file_path : str
-            Đường dẫn đến file Excel
+        directory : str
+            Thư mục chứa dữ liệu chùm tia
+        energies : List[str], optional
+            Danh sách các mức năng lượng cần nhập, nếu None thì nhập tất cả
             
         Returns
         -------
-        Dict[str, Any]
-            Dữ liệu đã phân tích
+        Dict[str, BeamModel]
+            Dictionary ánh xạ từ mức năng lượng tới đối tượng mô hình
         """
-        try:
-            # Xác định loại dữ liệu dựa trên tên file
-            basename = os.path.basename(file_path)
-            data_type = None
-            energy = None
-            
-            # Phân tích tên file để biết loại dữ liệu
-            if "MV" in basename:
-                if "FFF" in basename:
-                    if "6FFF" in basename:
-                        energy = "6MV FFF"
-                    elif "10FFF" in basename:
-                        energy = "10MV FFF"
-                    data_type = BeamDataType.FFF_PROFILE
-                else:
-                    for mv in ["4MV", "6MV", "8MV", "10MV", "15MV", "18MV", "20MV"]:
-                        if mv in basename:
-                            energy = mv
-                            break
-                    data_type = BeamDataType.PROFILE
-            elif "Electron" in basename:
-                energy = "Electron"
-                data_type = BeamDataType.ELECTRON_ENERGY
-            
-            # Đọc file Excel
-            try:
-                # Thử đọc tất cả các sheet
-                xls = pd.ExcelFile(file_path)
-                sheet_names = xls.sheet_names
-                
-                # Lưu dữ liệu từ các sheet
-                data = {
-                    "energy": energy,
-                    "data_type": data_type,
-                    "sheets": {}
-                }
-                
-                for sheet_name in sheet_names:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name)
-                    data["sheets"][sheet_name] = df.to_dict()
-                
-                return data
-                
-            except Exception as e:
-                logger.error(f"Error reading Excel file {file_path}: {str(e)}")
-                return {}
-        
-        except Exception as e:
-            logger.error(f"Error parsing Excel file {file_path}: {str(e)}")
+        if not os.path.isdir(directory):
+            logger.error(f"Directory not found: {directory}")
             return {}
+        
+        processor = TrueBeamDataProcessor(data_dir=directory)
+        
+        # Quét tìm các file dữ liệu
+        energy_files = processor.scan_for_beam_data_files()
+        if not energy_files:
+            logger.warning(f"No beam data files found in {directory}")
+            return {}
+        
+        # Xác định các năng lượng cần xử lý
+        available_energies = list(energy_files.keys())
+        energies_to_process = energies if energies else available_energies
+        
+        # Lọc ra những năng lượng có sẵn
+        energies_to_process = [e for e in energies_to_process if e in available_energies]
+        
+        # Xử lý từng mức năng lượng
+        models = {}
+        for energy in energies_to_process:
+            model = processor.create_beam_model(energy)
+            if model:
+                models[energy] = model
+            else:
+                logger.error(f"Failed to create beam model for energy {energy}")
+        
+        # Lưu các mô hình
+        config = ConfigManager().get_config()
+        output_dir = os.path.join(config.get('data_directory', 'data'), 'beam_data', 'models')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        for energy, model in models.items():
+            file_path = os.path.join(output_dir, f"TrueBeam_{energy}.json")
+            model.save(file_path)
+            
+            # Thêm vào danh sách mô hình có sẵn nếu chưa có
+            if energy not in self.available_models:
+                self.available_models.append(energy)
+        
+        logger.info(f"Imported {len(models)} beam models from {directory}")
+        return models
     
-    def read_beam_data(self, energy: str = None, data_type: BeamDataType = None) -> Dict[str, Any]:
+    def show_import_dialog(self, parent: QWidget = None) -> Tuple[bool, Dict[str, Any]]:
         """
-        Đọc dữ liệu chùm tia cho năng lượng và loại dữ liệu cụ thể.
+        Hiển thị dialog nhập dữ liệu.
         
         Parameters
         ----------
-        energy : str, optional
-            Năng lượng chùm tia, ví dụ "6MV", "10MV FFF". Nếu None, đọc tất cả.
-        data_type : BeamDataType, optional
-            Loại dữ liệu cần đọc. Nếu None, đọc tất cả.
+        parent : QWidget, optional
+            Widget cha
             
         Returns
         -------
-        Dict[str, Any]
-            Dữ liệu chùm tia đã đọc
+        Tuple[bool, Dict[str, Any]]
+            Tuple gồm kết quả (True nếu thành công) và dictionary kết quả
         """
-        result = {}
+        dialog = BeamDataImporterDialog(parent)
+        result = dialog.exec_()
         
-        # Quét thư mục dữ liệu
-        if not self.energies:
-            self.scan_data_directory()
-        
-        # Chuyển đổi energy pattern cần lọc
-        energy_filter = energy.upper() if energy else None
-        
-        # Đọc dữ liệu từ W2CAD nếu có
-        w2cad_dir = os.path.join(self.data_directory, "W2CAD")
-        if os.path.exists(w2cad_dir):
-            for root, dirs, files in os.walk(w2cad_dir):
-                for file in files:
-                    # Chỉ xử lý các file dữ liệu
-                    if file.endswith(('.txt', '.ASC')):
-                        file_path = os.path.join(root, file)
-                        
-                        # Lọc theo năng lượng nếu cần
-                        if energy_filter and energy_filter not in root.upper():
-                            continue
-                        
-                        # Phân tích file dữ liệu
-                        file_data = self._parse_w2cad_file(file_path)
-                        if file_data:
-                            # Lưu dữ liệu dưới đường dẫn tương đối
-                            rel_path = os.path.relpath(file_path, self.data_directory)
-                            result[rel_path] = file_data
-        
-        # Đọc các file Excel
-        for root, _, files in os.walk(self.data_directory):
-            for file in files:
-                if file.endswith('.xlsx') and not file.startswith('~$'):
-                    file_path = os.path.join(root, file)
-                    
-                    # Lọc theo năng lượng nếu cần
-                    if energy_filter and energy_filter not in file.upper():
-                        continue
-                    
-                    # Phân tích file Excel
-                    excel_data = self._parse_excel_file(file_path)
-                    if excel_data:
-                        # Lưu dữ liệu dưới đường dẫn tương đối
-                        rel_path = os.path.relpath(file_path, self.data_directory)
-                        result[rel_path] = excel_data
-        
-        return result
+        if result == QDialog.Accepted:
+            # Cập nhật danh sách mô hình có sẵn sau khi nhập thành công
+            self.scan_existing_models()
+            return True, dialog.get_results()
+        else:
+            return False, {}
 
 
 class BeamDataImporter:

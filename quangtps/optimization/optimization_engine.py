@@ -14,7 +14,7 @@ import threading
 import queue
 from enum import Enum, auto
 
-from quangtps.optimization.objectives import ObjectiveBase, ObjectiveCollection
+from quangtps.optimization.objectives import ObjectiveCollection
 from quangtps.optimization.constraints import ConstraintBase, ConstraintCollection
 from quangtps.dose.dose_grid import DoseGrid
 from quangtps.evaluation.dvh import calculate_dvh

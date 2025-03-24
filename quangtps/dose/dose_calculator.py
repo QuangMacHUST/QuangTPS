@@ -12,7 +12,7 @@ from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
 from quangtps.dose.algorithms.collapsed_cone import CollapsedConeAlgorithm 
 from quangtps.dose.algorithms.monte_carlo import MonteCarloAlgorithm
 from quangtps.planning.beam import Beam
-from quangtps.planning.plan import TreatmentPlan
+from quangtps.planning.plan import Plan
 from quangtps.dose.physics.truebeam_models import TruebeamModelManager
 
 logger = logging.getLogger(__name__)
@@ -123,13 +123,13 @@ class DoseCalculator:
             logger.error(error_msg)
             raise DoseCalculationError(error_msg) from e
     
-    def calculate_dose_for_plan(self, plan: TreatmentPlan, ct_image: Image) -> Image:
+    def calculate_dose_for_plan(self, plan: Plan, ct_image: Image) -> Image:
         """
         Calculate total dose for a treatment plan.
         
         Parameters
         ----------
-        plan : TreatmentPlan
+        plan : Plan
             The treatment plan to calculate dose for
         ct_image : Image
             The CT image for dose calculation

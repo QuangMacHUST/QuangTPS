@@ -18,8 +18,7 @@ from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.fractionation import Fractionation
 from quangtps.specialized.bnct.neutron import NeutronSourceType, BaseNeutronModel, AcceleratorNeutronModel
 from quangtps.specialized.bnct.neutron import ReactorNeutronModel, DDGeneratorModel, DTGeneratorModel, GenericNeutronModel
-from quangtps.physics.boron import BoronDistributionModel, BoronCompoundType, BPAModel, BSHModel
-from quangtps.physics.boron import BoronophenylalanineModel, GenericBoronModel
+from quangtps.specialized.bnct.boron import BoronDistributionModel, BoronCompoundType, TwoCompartmentModel
 
 logger = logging.getLogger(__name__)
 
@@ -186,18 +185,23 @@ class BNCT(BaseTreatmentTechnique):
         """
         compound_type = self.boron_compound
         
+        # Chuyển đổi từ enum BoronCompound (cũ) sang BoronCompoundType (mới)
         if compound_type == BoronCompound.BPA:
-            self._boron_model = BPAModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)
+            boron_type = BoronCompoundType.BPA
         elif compound_type == BoronCompound.BSH:
-            self._boron_model = BSHModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)
+            boron_type = BoronCompoundType.BSH
         elif compound_type == BoronCompound.BORONOPHENYLALANINE:
-            self._boron_model = BoronophenylalanineModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)
+            boron_type = BoronCompoundType.BPA
         else:
-            logger.error(
-                "Loại hợp chất boron không hợp lệ cho kế hoạch %s: %s",
-                self.name, compound_type
-            )
-            self._boron_model = GenericBoronModel(tumor_to_normal_ratio=self.tumor_to_normal_ratio)  # Sử dụng mô hình mặc định
+            boron_type = BoronCompoundType.CUSTOM
+            
+        # Sử dụng TwoCompartmentModel để mô hình hóa phân bố boron
+        self._boron_model = TwoCompartmentModel(
+            compound_type=boron_type,
+            k12=0.25,  # Hằng số tốc độ từ máu sang mô
+            k21=0.15,  # Hằng số tốc độ từ mô sang máu
+            k10=0.10   # Hằng số tốc độ thải trừ từ máu
+        )
             
         logger.info(
             "Đã thiết lập mô hình hợp chất boron %s cho kế hoạch BNCT '%s' với tỷ lệ u/lành %.2f",

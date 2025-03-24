@@ -16,7 +16,6 @@ import scipy.interpolate as interp
 from typing import Dict, List, Tuple, Any, Optional, Union
 
 from quangtps.core.exceptions import DataProcessingError
-from quangtps.treatment.beams.beam_data_importer import TrueBeamDataReader, BeamDataType
 from quangtps.dose.dose_grid import DoseGrid
 
 logger = logging.getLogger(__name__)
@@ -150,20 +149,20 @@ class BeamModel:
     
     def get_parameter(self, name: str) -> Optional[BeamModelParameter]:
         """
-        Lấy tham số theo tên.
+        Lấy tham số mô hình theo tên.
         
         Parameters
         ----------
         name : str
-            Tên tham số
+            Tên tham số cần lấy
             
         Returns
         -------
-        BeamModelParameter, optional
-            Tham số nếu tồn tại, None nếu không tìm thấy
+        Optional[BeamModelParameter]
+            Tham số tìm thấy hoặc None nếu không tồn tại
         """
-        return self.parameters.get(name)
-        
+        return self.parameters.get(name, None)
+    
     def get_parameter_names(self) -> List[str]:
         """
         Lấy danh sách tên các tham số.
@@ -246,6 +245,144 @@ class BeamModel:
         
         return model
 
+    def set_metadata(self, key: str, value: Any):
+        """
+        Thiết lập metadata cho mô hình.
+        
+        Parameters
+        ----------
+        key : str
+            Khóa metadata
+        value : Any
+            Giá trị metadata
+        """
+        self.metadata[key] = value
+    
+    def get_metadata(self, key: str, default: Any = None) -> Any:
+        """
+        Lấy giá trị metadata.
+        
+        Parameters
+        ----------
+        key : str
+            Khóa metadata
+        default : Any, optional
+            Giá trị mặc định nếu không tìm thấy khóa
+            
+        Returns
+        -------
+        Any
+            Giá trị metadata
+        """
+        return self.metadata.get(key, default)
+    
+    def save_to_json(self, filepath: str):
+        """
+        Lưu mô hình chùm tia vào file JSON.
+        
+        Parameters
+        ----------
+        filepath : str
+            Đường dẫn đến file JSON
+        """
+        import json
+        
+        # Tạo đối tượng JSON
+        beam_model_json = {
+            "name": self.name,
+            "energy": self.energy,
+            "beam_type": self.beam_type,
+            "metadata": self.metadata,
+            "parameters": {}
+        }
+        
+        # Chuyển đổi các tham số
+        for name, param in self.parameters.items():
+            param_json = {
+                "name": param.name,
+                "dimensions": param.dimensions,
+                "units": param.units,
+                "interpolation_method": param.interpolation_method,
+                "dimension_values": [values.tolist() for values in param.dimension_values],
+                "value_grid": param.value_grid.tolist()
+            }
+            beam_model_json["parameters"][name] = param_json
+        
+        # Ghi vào file
+        with open(filepath, 'w') as f:
+            json.dump(beam_model_json, f, indent=2)
+    
+    @classmethod
+    def load_from_json(cls, filepath: str) -> 'BeamModel':
+        """
+        Tải mô hình chùm tia từ file JSON.
+        
+        Parameters
+        ----------
+        filepath : str
+            Đường dẫn đến file JSON
+            
+        Returns
+        -------
+        BeamModel
+            Mô hình chùm tia đã tải
+        """
+        import json
+        
+        # Đọc file JSON
+        with open(filepath, 'r') as f:
+            beam_model_json = json.load(f)
+        
+        # Tạo mô hình
+        beam_model = cls(
+            name=beam_model_json["name"],
+            energy=beam_model_json["energy"],
+            beam_type=beam_model_json["beam_type"]
+        )
+        
+        # Thiết lập metadata
+        beam_model.metadata = beam_model_json["metadata"]
+        
+        # Tạo các tham số
+        for name, param_json in beam_model_json["parameters"].items():
+            # Chuyển đổi các mảng về numpy
+            dimension_values = [np.array(values) for values in param_json["dimension_values"]]
+            value_grid = np.array(param_json["value_grid"])
+            
+            # Tạo tham số
+            param = BeamModelParameter(
+                name=param_json["name"],
+                dimensions=param_json["dimensions"],
+                units=param_json["units"],
+                dimension_values=dimension_values,
+                value_grid=value_grid,
+                interpolation_method=param_json["interpolation_method"]
+            )
+            
+            # Thêm vào mô hình
+            beam_model.add_parameter(param)
+        
+        return beam_model
+    
+    def calculate_dose(self, point: np.ndarray, parameters: Dict[str, Any]) -> float:
+        """
+        Tính toán liều tại một điểm dựa trên mô hình.
+        
+        Parameters
+        ----------
+        point : np.ndarray
+            Tọa độ điểm cần tính liều
+        parameters : Dict[str, Any]
+            Các tham số cần thiết cho tính toán
+            
+        Returns
+        -------
+        float
+            Giá trị liều tại điểm
+        """
+        # Phương thức này cần được triển khai cụ thể cho từng loại mô hình
+        raise NotImplementedError("Phương thức này cần được triển khai trong lớp con")
+
 
 class BeamModelFactory:
     """
@@ -264,68 +401,79 @@ class BeamModelFactory:
         Parameters
         ----------
         data_directory : str
-            Đường dẫn đến thư mục dữ liệu TrueBeam
+            Thư mục chứa dữ liệu TrueBeam
         energy : str
-            Năng lượng chùm tia cần tạo mô hình
+            Năng lượng chùm tia (ví dụ: "6MV", "10FFF")
         output_file : str, optional
-            Đường dẫn đến file để lưu mô hình, nếu cần
+            Đường dẫn file để lưu mô hình, nếu None thì không lưu
             
         Returns
         -------
         BeamModel
             Mô hình chùm tia đã tạo
-            
-        Raises
-        ------
-        DataProcessingError
-            Nếu có lỗi trong quá trình xử lý dữ liệu
         """
         try:
-            logger.info(f"Creating beam model for {energy} from TrueBeam data in {data_directory}")
+            # Tạo tên mô hình
+            model_name = f"TrueBeam_{energy}"
             
             # Xác định loại chùm tia
-            beam_type = "PHOTON"
-            if "FFF" in energy:
+            if "FFF" in energy.upper():
                 beam_type = "PHOTON_FFF"
-            elif "MEV" in energy.upper():
+            elif "MV" in energy.upper() or "X" in energy.upper():
+                beam_type = "PHOTON"
+            elif "E" in energy.upper():
                 beam_type = "ELECTRON"
+            else:
+                beam_type = "PHOTON"
             
-            # Đọc dữ liệu TrueBeam
-            reader = TrueBeamDataReader(data_directory)
-            beam_data = reader.read_beam_data(energy=energy)
-            
-            if not beam_data:
-                raise DataProcessingError(f"No data found for energy {energy}")
-            
-            # Tạo mô hình chùm tia
-            model_name = f"TrueBeam_{energy.replace(' ', '_')}"
+            # Khởi tạo mô hình
             beam_model = BeamModel(name=model_name, energy=energy, beam_type=beam_type)
             
-            # Thêm metadata
-            beam_model.metadata = {
-                "source": "TrueBeam representative data",
-                "creation_date": BeamModelFactory._get_current_date(),
-                "data_files": list(beam_data.keys())
-            }
+            # Đọc dữ liệu TrueBeam
+            # Import TrueBeamDataReader ở đây để tránh circular import
+            from quangtps.treatment.beams.beam_data_importer import TrueBeamDataReader
+            reader = TrueBeamDataReader()
             
-            # Xử lý và tạo các tham số
+            # Quét thư mục dữ liệu
+            energy_files = reader.scan_directory(data_directory)
+            
+            if energy not in energy_files:
+                available = ", ".join(energy_files.keys())
+                raise DataProcessingError(f"Không tìm thấy dữ liệu cho năng lượng {energy}. Các năng lượng có sẵn: {available}")
+            
+            # Đọc dữ liệu chùm tia
+            beam_data = reader.read_beam_data(energy_files[energy])
+            
+            # Xử lý từng loại dữ liệu
             BeamModelFactory._process_pdd_data(beam_model, beam_data)
             BeamModelFactory._process_profile_data(beam_model, beam_data)
             BeamModelFactory._process_output_factors(beam_model, beam_data)
-            BeamModelFactory._process_wedge_factors(beam_model, beam_data)
+            
+            # Xử lý wedge factor nếu có
+            if 'wedge' in beam_data:
+                BeamModelFactory._process_wedge_factors(beam_model, beam_data)
+            
+            # Thêm metadata
+            beam_model.metadata = {
+                "source": "TrueBeam",
+                "creation_date": BeamModelFactory._get_current_date(),
+                "data_file": energy_files[energy]
+            }
             
             # Lưu mô hình nếu cần
             if output_file:
-                import json
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    json.dump(beam_model.to_dict(), f, indent=2)
-                logger.info(f"Beam model saved to {output_file}")
+                model_dict = beam_model.to_dict()
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                
+                with open(output_file, 'w') as f:
+                    import json
+                    json.dump(model_dict, f, indent=2)
             
             return beam_model
             
         except Exception as e:
-            logger.error(f"Error creating beam model: {str(e)}")
-            raise DataProcessingError(f"Failed to create beam model: {str(e)}")
+            logger.error(f"Lỗi khi tạo mô hình chùm tia TrueBeam: {str(e)}")
+            raise DataProcessingError(f"Không thể tạo mô hình chùm tia từ dữ liệu TrueBeam: {str(e)}")
     
     @staticmethod
     def _get_current_date():

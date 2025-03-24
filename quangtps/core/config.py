@@ -52,6 +52,11 @@ class Config:
         self.default_window_width = 400
         self.default_window_level = 40
         
+        # Cấu hình dữ liệu
+        self.data_directory = self.data_dir
+        self.beam_data_dir = os.path.join(self.data_dir, "beam_data")
+        os.makedirs(self.beam_data_dir, exist_ok=True)
+        
         # Tải cấu hình từ file nếu tồn tại
         self.config_file = os.path.join(self.root_dir, "config.json")
         if os.path.exists(self.config_file):
@@ -71,6 +76,8 @@ class Config:
         config_dict = {
             "log_level": self.log_level,
             "dicom_dir": self.dicom_dir,
+            "data_directory": self.data_directory,
+            "beam_data_dir": self.beam_data_dir,
             "default_window_width": self.default_window_width,
             "default_window_level": self.default_window_level
         }
@@ -98,3 +105,45 @@ class Config:
     def set(self, key, value):
         """Đặt giá trị cấu hình theo key"""
         setattr(self, key, value)
+
+
+class ConfigManager:
+    """
+    Quản lý cấu hình hệ thống sử dụng mẫu thiết kế Singleton.
+    Lớp này hoạt động như một wrapper xung quanh lớp Config.
+    """
+    
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ConfigManager, cls).__new__(cls)
+            cls._instance._config = Config.get_instance()
+        return cls._instance
+    
+    @classmethod
+    def get_instance(cls):
+        """Trả về instance duy nhất của ConfigManager"""
+        if cls._instance is None:
+            return cls()
+        return cls._instance
+    
+    def get_config(self):
+        """Trả về đối tượng cấu hình"""
+        return self._config
+    
+    def get_value(self, key, default=None):
+        """Lấy giá trị cấu hình theo key"""
+        return self._config.get(key, default)
+    
+    def set_value(self, key, value):
+        """Đặt giá trị cấu hình theo key"""
+        self._config.set(key, value)
+    
+    def save(self):
+        """Lưu cấu hình hiện tại vào file"""
+        self._config.save_config()
+    
+    def reload(self):
+        """Tải lại cấu hình từ file"""
+        self._config.load_config()

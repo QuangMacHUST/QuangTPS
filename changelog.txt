@@ -1,0 +1,21 @@
+# QuangTPS Changelog
+
+## Ngày 24/11/2024
+
+### Sửa lỗi
+1. Sửa lỗi trong `quangtps/dicom/pacs_client.py`:
+   - Thay thế `VerificationServiceClass.service_class` bằng UID trực tiếp '1.2.840.10008.1.1'
+
+2. Sửa lỗi trong `quangtps/ui/patient_tab.py`:
+   - Đổi `full_name_field` thành `name_edit` ở dòng kết nối tín hiệu vì biến full_name_field không tồn tại
+
+3. Sửa lỗi trong `quangtps/dose/algorithms/monte_carlo.py`:
+   - Sửa lỗi indentation trong phần tạo energy spectrum
+
+4. Sửa lỗi trong `quangtps/treatment/treatment_delivery.py`:
+   - Sửa lỗi indentation trong hàm update_fraction_status
+
+### Cài đặt công cụ
+- Cài đặt autopep8 để tự động định dạng mã nguồn
+
+### Thay đổi tiếp theo sẽ được thêm vào đây... 

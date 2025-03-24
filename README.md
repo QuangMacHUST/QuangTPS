@@ -243,5 +243,202 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở t
 *QuangTPS được phát triển với mục tiêu cung cấp một giải pháp mã nguồn mở chất lượng cao cho cộng đồng xạ trị ung thư. Mọi đóng góp và phản hồi đều được đánh giá cao và sẽ giúp cải thiện hệ thống này.*
 
 ## Cấu trúc của dự án
+QuangTPS/
+├── data/ - Data storage directory
+│   ├── beam_data/ - Beam data from linear accelerators
+│   ├── clinical_protocols/ - Clinical protocol templates
+│   ├── database/ - Local database files
+│   ├── dicom/ - DICOM file storage
+│   ├── images/ - Image resources
+│   ├── machine_data/ - Treatment machine configurations
+│   ├── models/ - AI/ML models for segmentation, etc.
+│   └── templates/ - Planning templates
+├── quangtps/ - Main application code
+│   ├── adaptive/ - Adaptive planning modules
+│   │   ├── deformation/ - Image deformation tools
+│   │   ├── dose_accumulation.py - Dose accumulation algorithms
+│   │   ├── four_d.py - 4D planning support
+│   │   ├── setup_error.py - Setup error analysis
+│   │   └── temporal_analysis.py - Temporal analysis tools
+│   ├── api/ - API interfaces
+│   │   ├── cpp_interface.py - C++ bindings for performance-critical operations
+│   │   ├── plugin_interface.py - Plugin system for extensions
+│   │   ├── python_api.py - Python API for scripting
+│   │   └── rest_api.py - REST API for external systems
+│   ├── common/ - Common utilities
+│   │   ├── paths.py - File path management
+│   │   └── widgets.py - Common UI widgets
+│   ├── core/ - Core system components
+│   │   ├── beam_types.py - Beam type definitions
+│   │   ├── config.py - System configuration
+│   │   ├── constants.py - System constants
+│   │   ├── exceptions.py - Custom exceptions
+│   │   ├── logging.py - Logging system
+│   │   ├── patient/ - Patient data models
+│   │   ├── types.py - Type definitions
+│   │   └── utils.py - Utility functions
+│   ├── database/ - Database management
+│   │   ├── beam_db.py - Beam database operations
+│   │   ├── db_connector.py - Database connection management
+│   │   ├── dose_db.py - Dose database operations
+│   │   ├── image_db.py - Image database operations
+│   │   ├── patient_db.py - Patient database operations
+│   │   ├── plan_db.py - Plan database operations
+│   │   ├── prescription_db.py - Prescription database operations
+│   │   ├── query.py - Database query utilities
+│   │   ├── series_db.py - Series database operations
+│   │   ├── structure_db.py - Structure database operations
+│   │   └── study_db.py - Study database operations
+│   ├── dicom/ - DICOM handling
+│   │   ├── cbct_processor.py - CBCT image processing
+│   │   ├── ct4d_manager.py - 4D-CT management
+│   │   ├── dicom_anonymizer.py - DICOM data anonymization
+│   │   ├── dicom_converter.py - Format conversion
+│   │   ├── dicom_dataset_manager.py - DICOM dataset handling
+│   │   ├── dicom_exporter.py - DICOM export functions
+│   │   ├── dicom_factory.py - DICOM object creation
+│   │   ├── dicom_fusion.py - Image fusion tools
+│   │   ├── dicom_importer.py - DICOM import functions
+│   │   ├── dicom_reader.py - DICOM file reading
+│   │   ├── dicom_sequence_manager.py - DICOM sequence handling
+│   │   ├── dicom_utils.py - DICOM utilities
+│   │   ├── dicom_validator.py - DICOM validation
+│   │   ├── dicom_writer.py - DICOM file writing
+│   │   ├── four_d_ct_processor.py - 4D-CT processing
+│   │   ├── pacs_client.py - PACS connectivity
+│   │   ├── pet_processor.py - PET image processing
+│   │   ├── rt_dose.py - RT-Dose handling
+│   │   ├── rt_image.py - RT-Image handling
+│   │   ├── rt_plan.py - RT-Plan handling
+│   │   └── rt_structure.py - RT-Structure handling
+│   ├── dose/ - Dose calculation
+│   │   ├── algorithms/ - Dose calculation algorithms
+│   │   ├── base.py - Base classes for dose calculation
+│   │   ├── beam_data_processor.py - Beam data processing
+│   │   ├── dose_calculation.py - Dose calculation framework
+│   │   ├── dose_calculator.py - Dose calculation manager
+│   │   ├── dose_engine.py - Dose calculation engine
+│   │   ├── dose_grid.py - Dose grid management
+│   │   ├── dose_visualization.py - Dose visualization tools
+│   │   └── physics/ - Physics models
+│   ├── evaluation/ - Plan evaluation
+│   │   ├── biological/ - Biological evaluation metrics
+│   │   ├── dose_analysis.py - Dose analysis tools
+│   │   ├── dvh/ - DVH calculation and analysis
+│   │   ├── evaluation_report.py - Evaluation reporting
+│   │   ├── metrics/ - Evaluation metrics
+│   │   ├── plan_comparison.py - Plan comparison tools
+│   │   └── qa/ - Quality assurance tools
+│   ├── imaging/ - Image handling
+│   │   ├── contour.py - Contour tools
+│   │   ├── fusion.py - Image fusion
+│   │   ├── image.py - Image processing
+│   │   ├── image_processing.py - Image processing functions
+│   │   ├── image_viewer.py - Image viewer core
+│   │   ├── integrated_viewer.py - Integrated image viewing
+│   │   ├── measurement.py - Image measurement tools
+│   │   ├── mpr_viewer.py - Multi-planar reconstruction
+│   │   ├── structures.py - Structure handling
+│   │   ├── visualization.py - Visualization utilities
+│   │   └── volume_renderer.py - 3D volume rendering
+│   ├── optimization/ - Plan optimization
+│   │   ├── constraints.py - Optimization constraints
+│   │   ├── kbp/ - Knowledge-based planning
+│   │   ├── methods/ - Optimization algorithms
+│   │   ├── objectives.py - Optimization objectives
+│   │   ├── optimization_engine.py - Optimization engine
+│   │   └── solver.py - Optimization solver
+│   ├── planning/ - Treatment planning
+│   │   ├── beam.py - Beam definition and handling
+│   │   ├── beam_configurator.py - Beam configuration tools
+│   │   ├── beam_data_config.py - Beam data configuration
+│   │   ├── comparison.py - Plan comparison
+│   │   ├── dose_visualization.py - Dose visualization
+│   │   ├── evaluation.py - Plan evaluation
+│   │   ├── mlc.py - MLC handling
+│   │   ├── optimization.py - Plan optimization
+│   │   ├── plan.py - Plan definition
+│   │   ├── prescription.py - Prescription management
+│   │   ├── template_manager.py - Template management
+│   │   ├── templates.py - Planning templates
+│   │   └── treatment_planner.py - Treatment planning tools
+│   ├── reporting/ - Reporting and export
+│   │   ├── data_export.py - Data export utilities
+│   │   ├── dicom_export.py - DICOM export utilities
+│   │   ├── excel_export.py - Excel export utilities
+│   │   ├── integration.py - Third-party integration
+│   │   ├── report_generator.py - Report generation
+│   │   └── report_templates.py - Report templates
+│   ├── scripts/ - System scripts
+│   │   ├── batch_processing.py - Batch processing tools
+│   │   ├── data_conversion.py - Data conversion tools
+│   │   └── system_check.py - System check utilities
+│   ├── segmentation/ - Image segmentation
+│   │   ├── auto/ - Auto-segmentation
+│   │   ├── auto_segmentation/ - Auto-segmentation tools
+│   │   ├── bridges/ - Segmentation integration bridges
+│   │   ├── contour/ - Contour tools
+│   │   ├── manual_segmentation/ - Manual segmentation tools
+│   │   ├── structures/ - Structure handling
+│   │   └── validation/ - Segmentation validation
+│   ├── treatment/ - Treatment delivery
+│   │   ├── beams/ - Beam delivery
+│   │   ├── fractionation.py - Fractionation schemes
+│   │   ├── machine/ - Treatment machine models
+│   │   ├── mlc/ - MLC delivery models
+│   │   ├── plan.py - Treatment plan implementation
+│   │   ├── scheduler.py - Treatment scheduling
+│   │   ├── techniques/ - Treatment techniques
+│   │   ├── treatment_delivery.py - Treatment delivery simulation
+│   │   ├── treatment_manager.py - Treatment management
+│   │   └── treatment_technique_selector.py - Technique selection
+│   └── ui/ - User interface
+│       ├── auto_segmentation_tool.py - Auto-segmentation interface
+│       ├── base_contour_tool.py - Base contour tools
+│       ├── bnct_widget.py - BNCT planning widget
+│       ├── dialogs/ - UI dialogs
+│       ├── dicom_loader.py - DICOM loading interface
+│       ├── dose_calculation_dialog.py - Dose calculation interface
+│       ├── dose_tab.py - Dose calculation tab
+│       ├── freehand_contour_tool.py - Freehand contouring
+│       ├── geometric_contour_tool.py - Geometric contouring
+│       ├── icons/ - UI icons
+│       ├── image_display.py - Image display
+│       ├── image_viewer.py - Image viewer interface
+│       ├── imaging_tab.py - Imaging tab
+│       ├── main_window.py - Main application window
+│       ├── patient_browser.py - Patient browser
+│       ├── patient_tab.py - Patient management tab
+│       ├── plan_evaluation.py - Plan evaluation interface
+│       ├── planning_tab.py - Planning tab
+│       ├── qa_tab.py - Quality assurance tab
+│       ├── reporting_tab.py - Reporting tab
+│       ├── structure_editor.py - Structure editing interface
+│       ├── structure_view.py - Structure viewing interface
+│       ├── styles/ - UI styles
+│       ├── threshold_contour_tool.py - Threshold-based contouring
+│       ├── treatment_planning_tab.py - Treatment planning tab
+│       ├── treatment_tab.py - Treatment delivery tab
+│       └── workflow_panel.py - Workflow panel
+└── scripts/ - Development and installation scripts
+    ├── generate_docs.sh - Documentation generation
+    ├── install.sh - Installation script
+    └── setup_dev.sh - Development environment setup
 
-
+## System Architecture
+The QuangTPS system follows a modular architecture with clear separation of concerns:
+Data Layer: Database and file management (database/, core/patient/)
+Business Logic Layer: Core algorithms and processing (dose/, planning/, optimization/, evaluation/)
+Presentation Layer: User interface components (ui/)
+Integration Layer: APIs and external system integration (api/, reporting/)
+Key architectural relationships:
+The Patient model is central, connecting to Studies, Series, Images, Structures, Plans, and Doses
+Treatment Plans reference Beams, which reference MLCs and Dose calculations
+The Evaluation module depends on Dose, Plans, and Structures
+The UI components communicate with business logic through controller classes
+The system follows these design principles:
+Modular design with clear component boundaries
+Separation of UI and business logic
+Comprehensive database for persistent storage
+Support for standard medical imaging formats (DICOM)
+Extensibility through plugins and APIs

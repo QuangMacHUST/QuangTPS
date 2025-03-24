@@ -115,3 +115,17 @@ class DoseCalculationError(QuangTPSError):
         if algorithm:
             message_with_algo = f"{message} using algorithm '{algorithm}'"
         super().__init__(message_with_algo)
+class BeamDataError(QuangTPSError):
+    """Lỗi khi xử lý dữ liệu chùm tia"""
+    def __init__(self, message="Beam data error", beam_type=None):
+        self.beam_type = beam_type
+        message_with_type = message
+        if beam_type:
+            message_with_type = f"{message} for beam type '{beam_type}'"
+class TreatmentDeliveryError(QuangTPSError):
+    """Lỗi khi thực hiện điều trị"""
+    def __init__(self, message="Treatment delivery error", delivery_type=None):
+        self.delivery_type = delivery_type
+        message_with_type = message
+        if delivery_type:
+            message_with_type = f"{message} for delivery type '{delivery_type}'"

@@ -33,7 +33,7 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 from quangtps.treatment.techniques.bnct import BNCT
-from quangtps.physics.boron import BoronCompound, BPA, BSH
+from quangtps.specialized.bnct.boron import BoronCompoundType, BoronDistributionModel, TwoCompartmentModel
 from quangtps.specialized.bnct.neutron import BaseNeutronModel, ReactorNeutronModel, AcceleratorNeutronModel
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,10 @@ class BNCTDoseAnalysisWidget(QWidget):
         
         # Chọn hợp chất Bo
         self.boron_compound_combo = QComboBox()
-        self.boron_compound_combo.addItems(["BPA", "BSH", "Kết hợp BPA và BSH", "Khác"])
+        self.boron_compound_combo.addItem(BoronCompoundType.BPA)
+        self.boron_compound_combo.addItem(BoronCompoundType.BSH)
+        self.boron_compound_combo.addItem("Kết hợp BPA và BSH")
+        self.boron_compound_combo.addItem(BoronCompoundType.CUSTOM)
         boron_form.addRow("Hợp chất Bo:", self.boron_compound_combo)
         
         # Nồng độ Bo
@@ -359,12 +362,14 @@ class BNCTDoseAnalysisWidget(QWidget):
         
         # Cập nhật thông tin hợp chất Bo
         compound_type = bnct_plan.boron_compound
-        if compound_type == "BPA":
+        if compound_type == BoronCompoundType.BPA:
             self.boron_compound_combo.setCurrentIndex(0)
-        elif compound_type == "BSH":
+        elif compound_type == BoronCompoundType.BSH:
             self.boron_compound_combo.setCurrentIndex(1)
-        else:
+        elif compound_type == "MIXED":
             self.boron_compound_combo.setCurrentIndex(2)
+        else:
+            self.boron_compound_combo.setCurrentIndex(3)
         
         self.boron_concentration_spin.setValue(bnct_plan.boron_concentration)
         self.tn_ratio_spin.setValue(bnct_plan.tumor_to_normal_ratio)

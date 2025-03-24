@@ -306,7 +306,7 @@ class LexicographicConstraint:
             return True, 0.0
         
         # Lưu trạng thái hiện tại của mục tiêu
-        obj = self.objective_collection[self.objective_index]
+        obj = self.objective_collection.objectives[self.objective_index]
         original_enabled = obj.is_enabled
         
         try:
@@ -328,7 +328,7 @@ class LexicographicConstraint:
     
     def get_info(self) -> Dict[str, Any]:
         """Trả về thông tin mô tả về ràng buộc."""
-        obj = self.objective_collection[self.objective_index]
+        obj = self.objective_collection.objectives[self.objective_index]
         return {
             "structure_name": obj.structure_name,
             "type": self.constraint_type,
@@ -341,7 +341,7 @@ class LexicographicConstraint:
     
     def get_description(self) -> str:
         """Trả về mô tả bằng văn bản của ràng buộc."""
-        obj = self.objective_collection[self.objective_index]
+        obj = self.objective_collection.objectives[self.objective_index]
         return f"Lexicographic: {obj.objective_type} cho {obj.structure_name} ≤ {self.max_value:.4f}"
 
 class GoalProgrammingMethod(ObjectiveBasedMethod):

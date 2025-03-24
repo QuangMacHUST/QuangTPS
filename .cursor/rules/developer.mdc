@@ -15,3 +15,4 @@ alwaysApply: false
 - You have to complete this treatment planning system
 - Ensure that system can work without errors
 - Ensure that system have full features and all the feature activate correctly
+- đảm bảo tính thống nhất của hệ thống, file phải rõ ràng, file nào tương ứng với tính năng nào, phải rõ ràng, rành mạch trong thiết kế và triển khai

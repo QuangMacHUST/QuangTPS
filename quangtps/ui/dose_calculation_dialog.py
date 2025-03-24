@@ -15,16 +15,22 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QGroupBox, QFormLayout, QSpinBox, QDoubleSpinBox,
     QCheckBox, QProgressBar, QFileDialog, QMessageBox, QTabWidget,
-    QWidget
+    QWidget, QButtonGroup, QGridLayout, QFrame, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QIcon
 
 from quangtps.core.exceptions import DoseCalculationError
 from quangtps.dose.dose_calculator import DoseCalculator
 from quangtps.dose.algorithms import AVAILABLE_ALGORITHMS
 from quangtps.planning.beam import Beam
-from quangtps.planning.plan import TreatmentPlan
+from quangtps.planning.plan import Plan
 from quangtps.imaging.image import Image
+from quangtps.treatment.beams.beam_data_importer import TrueBeamDataReader
+from quangtps.core.constants import DoseCalculationAlgorithm
+from quangtps.core.config import Config
+from quangtps.treatment.beams.truebeam_data_processor import TrueBeamDataProcessor
+from quangtps.ui.dialogs.beam_data_import_dialog import BeamDataImportDialog
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +134,10 @@ class DoseCalculationDialog(QDialog):
     Dialog for configuring and executing dose calculation.
     """
     
-    def __init__(self, parent=None, plan=None, ct_image=None):
+    # Tín hiệu khi người dùng chọn xong thuật toán và tham số
+    algorithmSelected = pyqtSignal(dict)
+    
+    def __init__(self, parent=None, plan=None, ct_image=None, config=None):
         """
         Initialize the dialog.
         
@@ -140,6 +149,8 @@ class DoseCalculationDialog(QDialog):
             Treatment plan to calculate dose for
         ct_image : Image, optional
             CT image for dose calculation
+        config : Config, optional
+            Configuration object
         """
         super().__init__(parent)
         
@@ -147,10 +158,15 @@ class DoseCalculationDialog(QDialog):
         self.ct_image = ct_image
         self.calculator = DoseCalculator()
         self.result_dose = None
+        self.config = config or Config()
         
-        self.setWindowTitle("Dose Calculation")
+        self.setWindowTitle("Tính toán liều")
         self.setMinimumWidth(600)
         self.setMinimumHeight(500)
+        
+        # Khởi tạo processor để lấy thông tin mô hình chùm tia
+        beam_model_dir = self.config.get_path('BEAM_MODEL_DIR')
+        self.beam_processor = TrueBeamDataProcessor(beam_model_dir)
         
         self._init_ui()
     
@@ -159,142 +175,24 @@ class DoseCalculationDialog(QDialog):
         layout = QVBoxLayout()
         
         # Main tabs
-        tab_widget = QTabWidget()
+        self.tab_widget = QTabWidget()
         
         # Basic settings tab
-        basic_tab = QWidget()
-        basic_layout = QVBoxLayout(basic_tab)
+        self.algorithm_tab = QWidget()
+        self.init_algorithm_tab()
+        self.tab_widget.addTab(self.algorithm_tab, "Thuật toán")
         
-        # Algorithm selection group
-        algorithm_group = QGroupBox("Calculation Algorithm")
-        algorithm_layout = QFormLayout(algorithm_group)
-        
-        self.algorithm_combo = QComboBox()
-        for algo_name in sorted(AVAILABLE_ALGORITHMS.keys()):
-            self.algorithm_combo.addItem(algo_name)
-        self.algorithm_combo.currentTextChanged.connect(self._on_algorithm_changed)
-        algorithm_layout.addRow("Algorithm:", self.algorithm_combo)
-        
-        self.machine_combo = QComboBox()
-        self.machine_combo.addItems(["Generic", "Truebeam", "Halcyon", "VitalBeam"])
-        algorithm_layout.addRow("Machine:", self.machine_combo)
-        
-        basic_layout.addWidget(algorithm_group)
-        
-        # Algorithm parameters group
-        self.params_group = QGroupBox("Algorithm Parameters")
-        self.params_layout = QFormLayout(self.params_group)
-        
-        # Common parameters
-        self.heterogeneity_checkbox = QCheckBox("Enable heterogeneity correction")
-        self.heterogeneity_checkbox.setChecked(True)
-        self.params_layout.addRow("", self.heterogeneity_checkbox)
-        
-        self.grid_size_spin = QDoubleSpinBox()
-        self.grid_size_spin.setRange(0.1, 1.0)
-        self.grid_size_spin.setSingleStep(0.05)
-        self.grid_size_spin.setValue(0.25)
-        self.grid_size_spin.setSuffix(" cm")
-        self.params_layout.addRow("Grid size:", self.grid_size_spin)
-        
-        self.threads_spin = QSpinBox()
-        self.threads_spin.setRange(1, 64)
-        self.threads_spin.setValue(8)
-        self.params_layout.addRow("Threads:", self.threads_spin)
-        
-        # Monte Carlo specific parameters (hidden by default)
-        self.mc_group = QGroupBox("Monte Carlo Settings")
-        self.mc_layout = QFormLayout(self.mc_group)
-        
-        self.histories_spin = QSpinBox()
-        self.histories_spin.setRange(10000, 100000000)
-        self.histories_spin.setSingleStep(10000)
-        self.histories_spin.setValue(1000000)
-        self.mc_layout.addRow("Histories:", self.histories_spin)
-        
-        self.uncertainty_spin = QDoubleSpinBox()
-        self.uncertainty_spin.setRange(0.1, 10.0)
-        self.uncertainty_spin.setSingleStep(0.1)
-        self.uncertainty_spin.setValue(2.0)
-        self.uncertainty_spin.setSuffix(" %")
-        self.mc_layout.addRow("Statistical uncertainty:", self.uncertainty_spin)
-        
-        self.use_gpu_checkbox = QCheckBox("Use GPU acceleration (if available)")
-        self.use_gpu_checkbox.setChecked(False)
-        self.mc_layout.addRow("", self.use_gpu_checkbox)
-        
-        # Hide MC settings by default
-        self.mc_group.setVisible(False)
-        
-        basic_layout.addWidget(self.params_group)
-        basic_layout.addWidget(self.mc_group)
-        
-        # Beam settings group
-        beam_group = QGroupBox("Beam Settings")
-        beam_layout = QFormLayout(beam_group)
-        
-        self.individual_beams_checkbox = QCheckBox("Calculate individual beam doses")
-        self.individual_beams_checkbox.setChecked(False)
-        beam_layout.addRow("", self.individual_beams_checkbox)
-        
-        if self.plan:
-            beam_info = QLabel(f"Plan: {self.plan.name}, {len(self.plan.beams)} beams")
-        else:
-            beam_info = QLabel("No plan selected")
-        beam_layout.addRow("Plan info:", beam_info)
-        
-        basic_layout.addWidget(beam_group)
-        
-        # Add stretch to push everything to the top
-        basic_layout.addStretch()
+        # Beam model tab
+        self.beam_model_tab = QWidget()
+        self.init_beam_model_tab()
+        self.tab_widget.addTab(self.beam_model_tab, "Mô hình chùm tia")
         
         # Advanced settings tab
-        advanced_tab = QWidget()
-        advanced_layout = QVBoxLayout(advanced_tab)
+        self.advanced_tab = QWidget()
+        self.init_advanced_tab()
+        self.tab_widget.addTab(self.advanced_tab, "Tùy chọn nâng cao")
         
-        # Beam model settings
-        model_group = QGroupBox("Beam Model Settings")
-        model_layout = QFormLayout(model_group)
-        
-        self.model_dir_edit = QLabel("Default")
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self._browse_model_dir)
-        
-        model_dir_layout = QHBoxLayout()
-        model_dir_layout.addWidget(self.model_dir_edit)
-        model_dir_layout.addWidget(browse_button)
-        model_layout.addRow("Model directory:", model_dir_layout)
-        
-        # Show available models
-        self.available_models_label = QLabel("No beam models loaded")
-        self.reload_models_button = QPushButton("Reload Models")
-        self.reload_models_button.clicked.connect(self._reload_models)
-        
-        model_buttons_layout = QHBoxLayout()
-        model_buttons_layout.addWidget(self.available_models_label)
-        model_buttons_layout.addWidget(self.reload_models_button)
-        model_layout.addRow("Status:", model_buttons_layout)
-        
-        advanced_layout.addWidget(model_group)
-        
-        # Add output settings
-        output_group = QGroupBox("Output Settings")
-        output_layout = QFormLayout(output_group)
-        
-        self.save_dose_checkbox = QCheckBox("Save dose to file after calculation")
-        self.save_dose_checkbox.setChecked(False)
-        output_layout.addRow("", self.save_dose_checkbox)
-        
-        advanced_layout.addWidget(output_group)
-        
-        # Add stretch to push everything to the top
-        advanced_layout.addStretch()
-        
-        # Add tabs to widget
-        tab_widget.addTab(basic_tab, "Basic Settings")
-        tab_widget.addTab(advanced_tab, "Advanced Settings")
-        
-        layout.addWidget(tab_widget)
+        layout.addWidget(self.tab_widget)
         
         # Progress bar
         self.progress_bar = QProgressBar()
@@ -304,182 +202,232 @@ class DoseCalculationDialog(QDialog):
         
         # Buttons
         button_layout = QHBoxLayout()
-        self.calculate_button = QPushButton("Calculate")
-        self.calculate_button.clicked.connect(self._calculate_dose)
-        self.cancel_button = QPushButton("Cancel")
+        self.calculate_button = QPushButton("Tính toán")
+        self.calculate_button.clicked.connect(self.accept_calculation)
+        self.cancel_button = QPushButton("Hủy")
         self.cancel_button.clicked.connect(self.reject)
-        self.close_button = QPushButton("Close")
-        self.close_button.clicked.connect(self.accept)
-        
         button_layout.addWidget(self.calculate_button)
         button_layout.addWidget(self.cancel_button)
-        button_layout.addStretch()
-        button_layout.addWidget(self.close_button)
         
         layout.addLayout(button_layout)
         
         self.setLayout(layout)
         
         # Initial setup
-        self._on_algorithm_changed(self.algorithm_combo.currentText())
-        self._reload_models()
+        self.update_beam_models()
     
-    def _on_algorithm_changed(self, algorithm_name):
-        """
-        Handle algorithm selection change.
+    def init_algorithm_tab(self):
+        """Khởi tạo tab thuật toán."""
+        layout = QVBoxLayout(self.algorithm_tab)
         
-        Parameters
-        ----------
-        algorithm_name : str
-            Name of the selected algorithm
-        """
-        # Set the calculator algorithm
-        try:
-            self.calculator.set_algorithm(algorithm_name)
-        except ValueError as e:
-            logger.error(f"Error setting algorithm: {str(e)}")
-            QMessageBox.warning(self, "Algorithm Error", f"Error setting algorithm: {str(e)}")
+        # Nhóm thuật toán
+        algorithm_group = QGroupBox("Thuật toán tính toán liều")
+        algorithm_layout = QVBoxLayout(algorithm_group)
         
-        # Show/hide algorithm-specific settings
-        self.mc_group.setVisible(algorithm_name == "MONTE_CARLO")
+        self.algorithm_buttons = QButtonGroup(self)
+        
+        # Các thuật toán
+        for algo in DoseCalculationAlgorithm:
+            radio_button = QRadioButton(algo.value)
+            if algo == DoseCalculationAlgorithm.COLLAPSED_CONE:
+                radio_button.setChecked(True)
+            
+            self.algorithm_buttons.addButton(radio_button)
+            algorithm_layout.addWidget(radio_button)
+        
+        layout.addWidget(algorithm_group)
+        
+        # Nhóm độ phân giải
+        resolution_group = QGroupBox("Độ phân giải tính toán")
+        resolution_layout = QFormLayout(resolution_group)
+        
+        self.grid_size_combo = QComboBox()
+        self.grid_size_combo.addItems(["2 mm", "3 mm", "4 mm", "5 mm"])
+        self.grid_size_combo.setCurrentIndex(1)  # 3 mm mặc định
+        resolution_layout.addRow("Kích thước lưới:", self.grid_size_combo)
+        
+        layout.addWidget(resolution_group)
+        
+        # Thêm không gian linh hoạt
+        layout.addStretch(1)
     
-    def _browse_model_dir(self):
-        """Browse for beam model directory."""
-        directory = QFileDialog.getExistingDirectory(self, "Select Beam Model Directory")
-        if directory:
-            self.model_dir_edit.setText(directory)
-            self.calculator = DoseCalculator(
-                algorithm=self.algorithm_combo.currentText(),
-                beam_model_dir=directory
-            )
-            self._reload_models()
+    def init_beam_model_tab(self):
+        """Khởi tạo tab mô hình chùm tia."""
+        layout = QVBoxLayout(self.beam_model_tab)
+        
+        # Nhóm mô hình chùm tia
+        beam_model_group = QGroupBox("Mô hình chùm tia hiện có")
+        beam_model_layout = QVBoxLayout(beam_model_group)
+        
+        # Danh sách mô hình chùm tia
+        self.beam_model_combo = QComboBox()
+        self.update_beam_models()
+        beam_model_layout.addWidget(self.beam_model_combo)
+        
+        # Nút nhập dữ liệu chùm tia mới
+        import_button_layout = QHBoxLayout()
+        
+        self.import_beam_data_button = QPushButton("Nhập dữ liệu chùm tia mới...")
+        self.import_beam_data_button.clicked.connect(self.show_beam_data_import_dialog)
+        import_button_layout.addWidget(self.import_beam_data_button)
+        
+        self.refresh_models_button = QPushButton("Làm mới")
+        self.refresh_models_button.clicked.connect(self.update_beam_models)
+        import_button_layout.addWidget(self.refresh_models_button)
+        
+        beam_model_layout.addLayout(import_button_layout)
+        
+        layout.addWidget(beam_model_group)
+        
+        # Thông tin mô hình chùm tia
+        info_group = QGroupBox("Thông tin mô hình")
+        info_layout = QFormLayout(info_group)
+        
+        self.energy_label = QLabel("")
+        info_layout.addRow("Năng lượng:", self.energy_label)
+        
+        self.beam_type_label = QLabel("")
+        info_layout.addRow("Loại chùm tia:", self.beam_type_label)
+        
+        layout.addWidget(info_group)
+        
+        # Cập nhật thông tin khi chọn mô hình
+        self.beam_model_combo.currentIndexChanged.connect(self.update_model_info)
+        if self.beam_model_combo.count() > 0:
+            self.update_model_info(0)
+        
+        # Thêm không gian linh hoạt
+        layout.addStretch(1)
     
-    def _reload_models(self):
-        """Reload available beam models."""
-        try:
-            available_models = self.calculator.get_available_beam_models()
-            
-            # Count total models
-            total_models = 0
-            for machine, beam_types in available_models.items():
-                for beam_type, energies in beam_types.items():
-                    total_models += len(energies)
-            
-            self.available_models_label.setText(f"{total_models} models loaded")
-            
-            # Enable machine selection based on available models
-            current_machine = self.machine_combo.currentText()
-            self.machine_combo.clear()
-            
-            # Always add Generic
-            self.machine_combo.addItem("Generic")
-            
-            # Add other machines if models are available
-            for machine in available_models.keys():
-                if machine.lower() != "generic":
-                    self.machine_combo.addItem(machine.capitalize())
-            
-            # Try to restore previous selection
-            index = self.machine_combo.findText(current_machine, Qt.MatchExactly)
-            if index >= 0:
-                self.machine_combo.setCurrentIndex(index)
-            
-        except Exception as e:
-            logger.error(f"Error loading beam models: {str(e)}")
-            self.available_models_label.setText("Error loading models")
+    def init_advanced_tab(self):
+        """Khởi tạo tab tùy chọn nâng cao."""
+        layout = QVBoxLayout(self.advanced_tab)
+        
+        # Nhóm tùy chọn tính toán
+        calc_options_group = QGroupBox("Tùy chọn tính toán")
+        calc_options_layout = QFormLayout(calc_options_group)
+        
+        self.threads_spinbox = QSpinBox()
+        self.threads_spinbox.setMinimum(1)
+        self.threads_spinbox.setMaximum(32)
+        self.threads_spinbox.setValue(4)
+        calc_options_layout.addRow("Số luồng tính toán:", self.threads_spinbox)
+        
+        self.density_correction_checkbox = QCheckBox("Hiệu chỉnh mật độ")
+        self.density_correction_checkbox.setChecked(True)
+        calc_options_layout.addRow("", self.density_correction_checkbox)
+        
+        self.use_gpu_checkbox = QCheckBox("Sử dụng GPU (nếu có)")
+        self.use_gpu_checkbox.setChecked(True)
+        calc_options_layout.addRow("", self.use_gpu_checkbox)
+        
+        layout.addWidget(calc_options_group)
+        
+        # Nhóm tùy chọn báo cáo
+        report_group = QGroupBox("Tùy chọn báo cáo")
+        report_layout = QFormLayout(report_group)
+        
+        self.save_intermediate_checkbox = QCheckBox("Lưu các bước trung gian")
+        report_layout.addRow("", self.save_intermediate_checkbox)
+        
+        self.generate_report_checkbox = QCheckBox("Tạo báo cáo tính toán liều")
+        self.generate_report_checkbox.setChecked(True)
+        report_layout.addRow("", self.generate_report_checkbox)
+        
+        layout.addWidget(report_group)
+        
+        # Thêm không gian linh hoạt
+        layout.addStretch(1)
     
-    def _calculate_dose(self):
-        """Execute dose calculation."""
-        if not self.plan or not self.ct_image:
-            QMessageBox.warning(self, "Missing Data", "Treatment plan or CT image is missing")
+    def update_beam_models(self):
+        """Cập nhật danh sách mô hình chùm tia từ processor."""
+        self.beam_model_combo.clear()
+        
+        # Tải lại các mô hình
+        self.beam_processor.load_beam_models()
+        
+        # Lấy danh sách năng lượng
+        energies = self.beam_processor.get_available_energies()
+        
+        if energies:
+            for energy in sorted(energies):
+                self.beam_model_combo.addItem(f"TrueBeam {energy}")
+        else:
+            self.beam_model_combo.addItem("Không có mô hình nào")
+    
+    def update_model_info(self, index):
+        """Cập nhật thông tin mô hình khi chọn mô hình khác."""
+        if index < 0 or self.beam_model_combo.count() == 0:
+            self.energy_label.setText("")
+            self.beam_type_label.setText("")
             return
         
-        # Collect parameters
-        params = {
-            "heterogeneity_correction": self.heterogeneity_checkbox.isChecked(),
-            "grid_size": self.grid_size_spin.value(),
-            "threads": self.threads_spin.value(),
-            "calculate_individual_beams": self.individual_beams_checkbox.isChecked()
+        text = self.beam_model_combo.currentText()
+        
+        if "TrueBeam" in text:
+            energy = text.replace("TrueBeam ", "")
+            model = self.beam_processor.get_beam_model(energy)
+            
+            if model:
+                self.energy_label.setText(model.energy)
+                self.beam_type_label.setText(model.beam_type)
+            else:
+                self.energy_label.setText(energy)
+                self.beam_type_label.setText("Không xác định")
+        else:
+            self.energy_label.setText("")
+            self.beam_type_label.setText("")
+    
+    def show_beam_data_import_dialog(self):
+        """Hiển thị dialog nhập dữ liệu chùm tia."""
+        import_dialog = BeamDataImportDialog(self)
+        result = import_dialog.exec_()
+        
+        if result == QDialog.Accepted:
+            # Cập nhật lại danh sách mô hình
+            self.update_beam_models()
+    
+    def accept_calculation(self):
+        """Chấp nhận tính toán và phát tín hiệu."""
+        # Lấy thuật toán
+        button = self.algorithm_buttons.checkedButton()
+        if not button:
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn thuật toán tính toán liều.")
+            return
+        
+        algorithm_text = button.text()
+        algorithm = next((algo for algo in DoseCalculationAlgorithm if algo.value == algorithm_text), None)
+        
+        # Lấy kích thước lưới
+        grid_size_text = self.grid_size_combo.currentText()
+        grid_size = float(grid_size_text.split()[0])
+        
+        # Lấy mô hình chùm tia
+        beam_model_text = self.beam_model_combo.currentText()
+        beam_model = None
+        
+        if "TrueBeam" in beam_model_text:
+            energy = beam_model_text.replace("TrueBeam ", "")
+            beam_model = self.beam_processor.get_beam_model(energy)
+        
+        if not beam_model and "Không có mô hình nào" not in beam_model_text:
+            QMessageBox.warning(self, "Cảnh báo", "Không tìm thấy mô hình chùm tia đã chọn.")
+            return
+        
+        # Tạo dictionary tham số
+        parameters = {
+            "algorithm": algorithm,
+            "grid_size": grid_size,
+            "beam_model": beam_model,
+            "threads": self.threads_spinbox.value(),
+            "density_correction": self.density_correction_checkbox.isChecked(),
+            "use_gpu": self.use_gpu_checkbox.isChecked(),
+            "save_intermediate": self.save_intermediate_checkbox.isChecked(),
+            "generate_report": self.generate_report_checkbox.isChecked()
         }
         
-        if self.algorithm_combo.currentText() == "MONTE_CARLO":
-            params.update({
-                "num_histories": self.histories_spin.value(),
-                "statistical_uncertainty": self.uncertainty_spin.value(),
-                "use_gpu": self.use_gpu_checkbox.isChecked()
-            })
+        # Phát tín hiệu
+        self.algorithmSelected.emit(parameters)
         
-        # Disable UI during calculation
-        self._set_ui_enabled(False)
-        
-        # Create and start worker thread
-        self.worker = DoseCalculationWorker(self.calculator, self.plan, self.ct_image, params)
-        self.worker.progress_signal.connect(self.progress_bar.setValue)
-        self.worker.finished_signal.connect(self._calculation_finished)
-        self.worker.error_signal.connect(self._calculation_error)
-        self.worker.start()
-    
-    def _calculation_finished(self, dose_image):
-        """
-        Handle completion of dose calculation.
-        
-        Parameters
-        ----------
-        dose_image : Image
-            The calculated dose image
-        """
-        self.result_dose = dose_image
-        
-        # Save dose if requested
-        if self.save_dose_checkbox.isChecked():
-            # Ask for file location
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save Dose File", "", "DICOM Files (*.dcm);;All Files (*)"
-            )
-            if file_path:
-                try:
-                    # Save to file
-                    dose_image.save(file_path)
-                    logger.info(f"Dose saved to {file_path}")
-                except Exception as e:
-                    logger.error(f"Error saving dose: {str(e)}")
-                    QMessageBox.warning(self, "Save Error", f"Error saving dose: {str(e)}")
-        
-        # Show success message
-        QMessageBox.information(self, "Calculation Complete", 
-                               "Dose calculation completed successfully")
-        
-        # Re-enable UI
-        self._set_ui_enabled(True)
-    
-    def _calculation_error(self, error_message):
-        """
-        Handle error in dose calculation.
-        
-        Parameters
-        ----------
-        error_message : str
-            Error message
-        """
-        logger.error(f"Dose calculation error: {error_message}")
-        QMessageBox.critical(self, "Calculation Error", 
-                            f"Error during dose calculation:\n{error_message}")
-        
-        # Re-enable UI
-        self._set_ui_enabled(True)
-    
-    def _set_ui_enabled(self, enabled):
-        """
-        Enable or disable UI elements during calculation.
-        
-        Parameters
-        ----------
-        enabled : bool
-            Whether UI should be enabled
-        """
-        self.algorithm_combo.setEnabled(enabled)
-        self.machine_combo.setEnabled(enabled)
-        self.params_group.setEnabled(enabled)
-        self.mc_group.setEnabled(enabled)
-        self.calculate_button.setEnabled(enabled)
-        self.close_button.setEnabled(enabled) 
+        # Đóng dialog
+        self.accept() 

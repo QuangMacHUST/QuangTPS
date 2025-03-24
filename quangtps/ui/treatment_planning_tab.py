@@ -24,8 +24,8 @@ from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from quangtps.imaging.integrated_viewer import IntegratedViewer
 from quangtps.database.patient_db import PatientDatabase
 from quangtps.database.structure_db import StructureDatabase
-from quangtps.database.dose_db import DoseDatabase
-from quangtps.database.plan_db import PlanDatabase
+from quangtps.database.dose_db import DoseDB
+from quangtps.database.plan_db import PlanDB
 from quangtps.planning.treatment_planner import TreatmentPlanner
 from quangtps.planning.plan import Plan, PlanType, PlanStatus
 from quangtps.dicom.dicom_importer import DicomImporter
@@ -60,8 +60,8 @@ class TreatmentPlanningTab(QWidget):
         # Initialize databases
         self.patient_db = PatientDatabase()
         self.structure_db = StructureDatabase()
-        self.dose_db = DoseDatabase()
-        self.plan_db = PlanDatabase()
+        self.dose_db = DoseDB()
+        self.plan_db = PlanDB()
         
         # Initialize treatment planner
         self.current_patient_id = None

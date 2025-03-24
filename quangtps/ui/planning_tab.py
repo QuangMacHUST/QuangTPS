@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QTabWidget, QLineEdit, QScrollArea, QSplitter,
     QMessageBox, QGroupBox, QHeaderView, QCheckBox, QComboBox, QFileDialog,
     QDoubleSpinBox, QSpinBox, QRadioButton, QFrame, QApplication,
-    QFormLayout, QTextEdit, QDateEdit, QDialog, QButtonGroup
+    QFormLayout, QTextEdit, QDateEdit, QDialog, QButtonGroup, QProgressDialog
 )
 
 from quangtps.planning.plan import Plan, PlanStatus, PlanType
@@ -33,6 +33,13 @@ from quangtps.ui.dialogs.beam_dialog import BeamDialog
 from quangtps.planning.prescription import Prescription
 from quangtps.planning.optimization import OptimizationSettings
 from quangtps.treatment.beams.beam import Beam
+from quangtps.optimization.methods import MCOEngine, MCONavigator, MCOTrade, MCOMethod
+from quangtps.ui.mco_navigation_dialog import MCONavigationDialog
+from quangtps.optimization.objectives import ObjectiveCollection
+from quangtps.optimization import ConstraintCollection
+from quangtps.optimization.optimization_engine import OptimizationEngine, OptimizationParameters
+from quangtps.dose.dose_grid import DoseGrid
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +302,17 @@ class PlanningTab(QWidget):
         self.run_optimization_button = QPushButton("Chạy tối ưu hóa")
         self.run_optimization_button.clicked.connect(self._run_optimization)
         self.optimization_layout.addWidget(self.run_optimization_button, alignment=Qt.AlignRight)
+        
+        # Nút tối ưu đa tiêu chí
+        self.mco_button = QPushButton("Tối ưu Đa Tiêu Chí (MCO)")
+        self.mco_button.setToolTip("Khởi chạy tối ưu đa tiêu chí và khám phá mặt Pareto")
+        self.mco_button.clicked.connect(self.run_mco_optimization)
+        self.optimization_layout.addWidget(self.mco_button)
+        
+        # Thêm nút tối ưu hóa KBP
+        self.kbp_button = QPushButton("Tối ưu dựa trên kiến thức (KBP)")
+        self.kbp_button.clicked.connect(self.run_kbp_optimization)
+        self.optimization_layout.addWidget(self.kbp_button)
         
         # Thêm tab tối ưu hóa
         self.right_tabs.addTab(self.optimization_widget, "Tối ưu hóa")
@@ -914,10 +932,10 @@ class PlanningTab(QWidget):
         name = self.plan_name_field.text().strip()
         description = self.plan_description_field.toPlainText().strip()
         date = self.plan_date_field.date().toPyDate()
-        plan_type = self.plan_type_field.currentText()
+        plan_type = self.plan_intent_field.currentText()
         status = self.plan_status_field.currentText()
-        dose = self.plan_dose_field.text().strip()
-        fractions = self.plan_fractions_field.text().strip()
+        dose = self.prescribed_dose_field.text().strip()
+        fractions = self.fractions_field.text().strip()
         
         # Kiểm tra tên kế hoạch
         if not name:
@@ -1056,9 +1074,9 @@ class PlanningTab(QWidget):
             self.plan_date_field.setDate(date)
         
         # Thiết lập loại kế hoạch
-        index = self.plan_type_field.findText(self.current_plan.plan_type.value)
+        index = self.plan_intent_field.findText(self.current_plan.plan_type.value)
         if index >= 0:
-            self.plan_type_field.setCurrentIndex(index)
+            self.plan_intent_field.setCurrentIndex(index)
             
         # Thiết lập trạng thái
         index = self.plan_status_field.findText(self.current_plan.status.value)
@@ -1079,8 +1097,8 @@ class PlanningTab(QWidget):
             
         # Điền đơn thuốc
         if self.current_plan.prescription:
-            self.plan_dose_field.setText(str(self.current_plan.prescription.total_dose))
-            self.plan_fractions_field.setText(str(self.current_plan.prescription.fractions))
+            self.prescribed_dose_field.setText(str(self.current_plan.prescription.total_dose))
+            self.fractions_field.setText(str(self.current_plan.prescription.fractions))
             
         # Điền bảng chùm tia
         self._populate_beam_table()
@@ -1091,27 +1109,27 @@ class PlanningTab(QWidget):
     def _populate_beam_table(self):
         """Điền danh sách chùm tia vào bảng."""
         # Xóa dữ liệu cũ
-        self.beam_table.setRowCount(0)
+        self.beams_table.setRowCount(0)
         
         if not self.current_plan or not self.current_plan.beam_arrangement:
             return
         
         # Điền dữ liệu mới
         for i, beam in enumerate(self.current_plan.beam_arrangement.beams):
-            self.beam_table.insertRow(i)
+            self.beams_table.insertRow(i)
             
             # Thiết lập các cột
-            self.beam_table.setItem(i, 0, QTableWidgetItem(beam.name))
-            self.beam_table.setItem(i, 1, QTableWidgetItem(f"{beam.gantry_angle:.1f}°"))
-            self.beam_table.setItem(i, 2, QTableWidgetItem(f"{beam.couch_angle:.1f}°"))
-            self.beam_table.setItem(i, 3, QTableWidgetItem(f"{beam.collimator_angle:.1f}°"))
-            self.beam_table.setItem(i, 4, QTableWidgetItem(f"{beam.field_size_x:.1f} cm"))
-            self.beam_table.setItem(i, 5, QTableWidgetItem(f"{beam.field_size_y:.1f} cm"))
-            self.beam_table.setItem(i, 6, QTableWidgetItem(f"{beam.monitor_units:.1f}"))
-            self.beam_table.setItem(i, 7, QTableWidgetItem(beam.status))
+            self.beams_table.setItem(i, 0, QTableWidgetItem(beam.name))
+            self.beams_table.setItem(i, 1, QTableWidgetItem(f"{beam.gantry_angle:.1f}°"))
+            self.beams_table.setItem(i, 2, QTableWidgetItem(f"{beam.couch_angle:.1f}°"))
+            self.beams_table.setItem(i, 3, QTableWidgetItem(f"{beam.collimator_angle:.1f}°"))
+            self.beams_table.setItem(i, 4, QTableWidgetItem(f"{beam.field_size_x:.1f} cm"))
+            self.beams_table.setItem(i, 5, QTableWidgetItem(f"{beam.field_size_y:.1f} cm"))
+            self.beams_table.setItem(i, 6, QTableWidgetItem(f"{beam.monitor_units:.1f}"))
+            self.beams_table.setItem(i, 7, QTableWidgetItem(beam.status))
         
         # Điều chỉnh kích thước cột
-        self.beam_table.resizeColumnsToContents()
+        self.beams_table.resizeColumnsToContents()
 
     def _add_beam(self):
         """Thêm chùm tia mới vào kế hoạch."""
@@ -1161,7 +1179,7 @@ class PlanningTab(QWidget):
             return
             
         # Lấy chỉ số chùm tia được chọn
-        selected_row = self.beam_table.currentRow()
+        selected_row = self.beams_table.currentRow()
         if selected_row < 0 or selected_row >= len(self.current_plan.beam_arrangement.beams):
             return
             
@@ -1191,7 +1209,7 @@ class PlanningTab(QWidget):
             return
             
         # Lấy chỉ số chùm tia được chọn
-        selected_row = self.beam_table.currentRow()
+        selected_row = self.beams_table.currentRow()
         if selected_row < 0 or selected_row >= len(self.current_plan.beam_arrangement.beams):
             return
             
@@ -1253,10 +1271,10 @@ class PlanningTab(QWidget):
         name = self.plan_name_field.text().strip()
         description = self.plan_description_field.toPlainText().strip()
         date = self.plan_date_field.date().toPyDate()
-        plan_type = self.plan_type_field.currentText()
+        plan_type = self.plan_intent_field.currentText()
         status = self.plan_status_field.currentText()
-        dose = self.plan_dose_field.text().strip()
-        fractions = self.plan_fractions_field.text().strip()
+        dose = self.prescribed_dose_field.text().strip()
+        fractions = self.fractions_field.text().strip()
         
         # Kiểm tra tên kế hoạch
         if not name:
@@ -1383,115 +1401,44 @@ class PlanningTab(QWidget):
         msg.show()
         
         try:
-            # Thu thập mục tiêu và ràng buộc
-            from quangtps.optimization.objectives import ObjectiveCollection
-            from quangtps.optimization.constraints import ConstraintCollection
-            from quangtps.optimization.optimization_engine import OptimizationEngine, OptimizationParameters
+            # Tạo cơ sở Pareto
+            num_basis_points = 7  # Số điểm cơ sở
             
-            # Tạo các mục tiêu và ràng buộc từ kế hoạch
-            objectives = ObjectiveCollection()
-            constraints = ConstraintCollection()
+            # Cập nhật tiến trình
+            progress_dialog = QProgressDialog("Đang tạo cơ sở mặt Pareto...", "Hủy", 0, 100, self)
+            progress_dialog.setWindowTitle("Tối ưu hóa")
+            progress_dialog.setWindowModality(Qt.WindowModal)
+            progress_dialog.setValue(0)
+            progress_dialog.show()
             
-            # Thêm mục tiêu cho các cấu trúc đích
-            for target in plan.targets:
-                if target.prescription and target.prescription.dose > 0:
-                    objectives.add_uniform_dose(
-                        structure_id=target.structure_id,
-                        structure_name=target.name,
-                        target_dose=target.prescription.dose,
-                        weight=100.0
-                    )
-            
-            # Thêm ràng buộc liều cho các cấu trúc nguy cấp
-            for oar in plan.oars:
-                if oar.dose_constraints:
-                    for constraint in oar.dose_constraints:
-                        constraints.add_dose_volume_constraint(
-                            structure_id=oar.structure_id,
-                            structure_name=oar.name,
-                            dose_volume_type=constraint.type,
-                            dose_value=constraint.dose,
-                            volume_value=constraint.volume,
-                            priority=constraint.priority
-                        )
-            
-            # Tạo các tham số tối ưu hóa
-            parameters = OptimizationParameters(
-                max_iterations=100,
-                convergence_threshold=0.001,
-                step_size=0.1
-            )
-            
-            # Tạo động cơ tối ưu hóa
-            engine = OptimizationEngine(
-                objectives=objectives,
-                constraints=constraints,
-                parameters=parameters,
-                solver_name="gradient_descent"
-            )
-            
-            # Chuẩn bị dữ liệu ban đầu
-            from quangtps.dose.dose_grid import DoseGrid
-            import numpy as np
-            
-            # Tạo lưới liều ban đầu
-            dose_grid = DoseGrid.create_from_image(plan.image_series)
-            
-            # Tạo từ điển cấu trúc
-            structures = {}
-            for target in plan.targets:
-                structures[target.structure_id] = target.get_mask()
-            for oar in plan.oars:
-                structures[oar.structure_id] = oar.get_mask()
-                
-            # Thiết lập trạng thái ban đầu
-            engine.set_initial_state(
-                dose_grid=dose_grid,
-                structures=structures
-            )
-            
-            # Đăng ký callback để cập nhật giao diện
-            from quangtps.optimization.optimization_engine import OptimizationEvent
-            
-            def update_progress(context):
-                iteration = context.get('iteration', 0)
-                total = context.get('total_iterations', 100)
-                value = context.get('objective_value', 0)
-                msg.setText(f"Tối ưu hóa kế hoạch...\nLặp: {iteration}/{total}\nGiá trị: {value:.4f}")
+            # Cập nhật tiến trình
+            for i in range(1, 6):
+                progress_dialog.setValue(i * 20)
                 QApplication.processEvents()
                 
-            engine.register_callback(OptimizationEvent.ITERATION_COMPLETED, update_progress)
+                if progress_dialog.wasCanceled():
+                    raise InterruptedError("Người dùng đã hủy quá trình tạo cơ sở Pareto")
             
-            # Chạy tối ưu hóa
-            results = engine.optimize()
+            # Tạo cơ sở mặt Pareto
+            pareto_basis = self.run_mco_optimization()
             
-            # Cập nhật kế hoạch với kết quả
-            plan.optimization_results = results
-            
-            # Cập nhật liều tính toán
-            plan.calculated_dose = results.final_dose_grid
-            
-            # Cập nhật DVH
-            plan.update_dvh()
-            
-            # Cập nhật giao diện
-            self._update_plan(plan)
+            progress_dialog.setValue(100)
             
             # Hiển thị kết quả
             QMessageBox.information(
                 self,
                 "Tối ưu hóa hoàn tất",
                 f"Tối ưu hóa kế hoạch đã hoàn tất.\n\n"
-                f"Số lặp: {results.num_iterations}\n"
-                f"Thời gian: {results.elapsed_time:.2f} giây\n"
-                f"Cải thiện: {results.get_improvement_percentage():.2f}%"
+                f"Số lặp: {pareto_basis.num_iterations}\n"
+                f"Thời gian: {pareto_basis.elapsed_time:.2f} giây\n"
+                f"Cải thiện: {pareto_basis.get_improvement_percentage():.2f}%"
             )
             
             # Cập nhật kế hoạch
             self._update_plan()
             
             # Log
-            logger.info(f"Tối ưu hóa kế hoạch {plan.plan_name} hoàn tất sau {results.num_iterations} lần lặp")
+            logger.info(f"Tối ưu hóa kế hoạch {plan.plan_name} hoàn tất sau {pareto_basis.num_iterations} lần lặp")
             
         except Exception as e:
             # Xử lý lỗi
@@ -1521,3 +1468,174 @@ class PlanningTab(QWidget):
         # Thông báo
         self.statusBar().showMessage(f"Đã cập nhật hiển thị kế hoạch: {plan.plan_name}", 3000)
         logger.info(f"Đã cập nhật hiển thị kế hoạch: {plan.plan_name}")
+
+    def run_mco_optimization(self):
+        """Thực hiện tối ưu đa tiêu chí (MCO)."""
+        try:
+            QMessageBox.information(self, "Thông báo", 
+                "Tính năng MCO đang được phát triển và chưa sẵn sàng.")
+            return
+
+            # Phần code bên dưới sẽ bị bỏ qua
+            '''
+            if not self.current_plan:
+                QMessageBox.warning(self, "Cảnh báo", "Vui lòng tạo hoặc mở một kế hoạch trước khi tối ưu.")
+                return
+                
+            # Hiển thị hộp thoại tiến trình
+            progress_dialog = QProgressDialog("Đang chuẩn bị tối ưu đa tiêu chí...", "Hủy", 0, 100, self)
+            progress_dialog.setWindowTitle("Tối ưu hóa MCO")
+            progress_dialog.setWindowModality(Qt.WindowModal)
+            progress_dialog.show()
+            QApplication.processEvents()
+            
+            # Chuẩn bị các tiêu chí
+            progress_dialog.setValue(10)
+            QApplication.processEvents()
+            
+            # Kiểm tra số lượng mục tiêu
+            if len(self.objective_collection.objectives) < 2:
+                progress_dialog.close()
+                QMessageBox.warning(self, "Cảnh báo", "Cần ít nhất 2 hàm mục tiêu để thực hiện MCO.")
+                return
+            
+            # Thiết lập động cơ MCO
+            progress_dialog.setValue(30)
+            progress_dialog.setLabelText("Đang thiết lập động cơ MCO...")
+            QApplication.processEvents()
+            
+            mco_engine = MCOEngine()
+            
+            # Thêm các mục tiêu vào động cơ MCO
+            for objective in self.objective_collection.objectives:
+                mco_engine.add_objective(objective)
+            
+            # Thêm các ràng buộc vào động cơ MCO
+            progress_dialog.setValue(50)
+            progress_dialog.setLabelText("Đang thêm các ràng buộc vào MCO...")
+            QApplication.processEvents()
+            
+            for constraint in self.constraint_collection.constraints:
+                mco_engine.add_constraint(constraint)
+            
+            # Khởi tạo không gian Pareto
+            progress_dialog.setValue(70)
+            progress_dialog.setLabelText("Đang khởi tạo không gian Pareto...")
+            QApplication.processEvents()
+            
+            # Kiểm tra hủy
+            if progress_dialog.wasCanceled():
+                return
+            
+            progress_dialog.setValue(90)
+            QApplication.processEvents()
+            
+            # Hiển thị dialog điều hướng MCO
+            mco_dialog = MCONavigationDialog(mco_engine, self)
+            progress_dialog.close()
+            
+            # Xử lý khi người dùng chấp nhận một kế hoạch
+            mco_dialog.tradeAccepted.connect(self.accept_mco_trade)
+            
+            # Hiển thị dialog
+            mco_dialog.exec_()
+            '''
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Lỗi khi thực hiện tối ưu đa tiêu chí: {str(e)}")
+    
+    def accept_mco_trade(self, trade):
+        """Chấp nhận một thỏa hiệp từ MCO."""
+        try:
+            QMessageBox.information(self, "Thông báo", 
+                "Tính năng MCO đang được phát triển và chưa sẵn sàng.")
+            return
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Lỗi khi áp dụng thỏa hiệp MCO: {str(e)}")
+
+    def run_kbp_optimization(self):
+        """Thực hiện tối ưu hóa dựa trên kiến thức."""
+        # Kiểm tra xem có kế hoạch hiện tại không
+        current_plan = self._get_current_plan()
+        if not current_plan:
+            QMessageBox.warning(self, "Cảnh báo", "Bạn cần tạo kế hoạch trước khi tối ưu.")
+            return
+        
+        # Lấy liều kê đơn
+        try:
+            dose = float(self.prescribed_dose_field.text())
+            if dose <= 0:
+                QMessageBox.warning(self, "Cảnh báo", "Liều kê đơn không hợp lệ.")
+                return
+        except ValueError:
+            QMessageBox.warning(self, "Cảnh báo", "Liều kê đơn không hợp lệ.")
+            return
+        
+        try:
+            # Mở dialog KBP
+            from quangtps.ui.kbp_dialog import KBPDialog
+            
+            kbp_dialog = KBPDialog(
+                patient_id=current_plan["patient_id"],
+                structure_set_id=current_plan["structure_set_id"],
+                prescription_dose=dose,
+                parent=self
+            )
+            
+            # Kết nối tín hiệu
+            kbp_dialog.recommendationApplied.connect(self.apply_kbp_recommendation)
+            
+            # Hiển thị dialog
+            kbp_dialog.exec_()
+            
+        except ImportError as e:
+            QMessageBox.critical(self, "Lỗi", f"Module tối ưu hóa KBP không khả dụng: {str(e)}")
+            return
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Không thể mở dialog KBP: {str(e)}")
+            return
+
+    def apply_kbp_recommendation(self, recommendation, objectives, constraints):
+        """
+        Áp dụng đề xuất KBP vào kế hoạch.
+        
+        Args:
+            recommendation: Đề xuất KBP
+            objectives: Tập hợp mục tiêu tối ưu
+            constraints: Tập hợp ràng buộc
+        """
+        # Lấy kế hoạch hiện tại
+        current_plan = self._get_current_plan()
+        if not current_plan:
+            QMessageBox.warning(self, "Cảnh báo", "Không tìm thấy kế hoạch hiện tại.")
+            return
+        
+        try:
+            # Cập nhật kế hoạch với các mục tiêu và ràng buộc mới
+            self.plan_db.update_plan_optimization(
+                current_plan["id"],
+                objectives=objectives,
+                constraints=constraints
+            )
+            
+            # Cập nhật hiển thị
+            self._populate_plan_data()
+            
+            # Thông báo thành công
+            QMessageBox.information(
+                self, "Thành công", 
+                "Đã áp dụng các tham số tối ưu từ mô hình KBP vào kế hoạch."
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Không thể áp dụng đề xuất KBP: {str(e)}")
+            logger.exception("Error applying KBP recommendation")
+
+    def open_mco_navigator(self):
+        """Mở dialog điều hướng MCO."""
+        try:
+            QMessageBox.information(self, "Thông báo", 
+                "Tính năng MCO đang được phát triển và chưa sẵn sàng.")
+            return
+        except Exception as e:
+            logger.error(f"Lỗi khi mở điều hướng MCO: {str(e)}")
+            QMessageBox.critical(self, "Lỗi", f"Không thể mở điều hướng MCO: {str(e)}")

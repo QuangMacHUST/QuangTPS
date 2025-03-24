@@ -147,7 +147,7 @@ class PencilBeamAlgorithm:
             self._normalize_to_isocenter(dose_image, isocenter)
             
             return dose_image
-            
+        
         except Exception as e:
             error_msg = f"Error in Pencil Beam dose calculation: {str(e)}"
             logger.error(error_msg)

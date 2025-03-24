@@ -7,23 +7,49 @@ Các hàm mục tiêu này được sử dụng bởi các thuật toán tối �
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Protocol
 import logging
 from dataclasses import dataclass, field
 
-from quangtps.evaluation.dvh import calculate_dvh, calculate_dvh_metrics
+from quangtps.evaluation.dvh import calculate_dvh, calculate_dvh_metrics, calculate_dvh_from_dose_grid
 from quangtps.dose.dose_grid import DoseGrid
 from quangtps.core.constants import EPSILON
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class ObjectiveBase:
-    """Lớp cơ sở cho các hàm mục tiêu tối ưu hóa."""
+# ObjectiveBase là lớp cơ sở cho các hàm mục tiêu
+class ObjectiveBase(Protocol):
+    """Giao thức cơ sở cho tất cả các hàm mục tiêu."""
     structure_name: str
+    weight: float
+    is_enabled: bool
+    objective_type: str
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        ...
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        ...
+
+@dataclass
+class MinDose:
+    """Mục tiêu liều tối thiểu cho cấu trúc (thường dùng cho PTV)."""
+    structure_name: str
+    dose: float  # Liều mục tiêu, đơn vị Gy
     weight: float = 1.0
     is_enabled: bool = True
-    objective_type: str = "None"
+    objective_type: str = "MinDose"
     
     def __post_init__(self):
         """Xác thực các tham số sau khi khởi tạo."""
@@ -52,29 +78,6 @@ class ObjectiveBase:
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
-        Tính toán giá trị cost dựa trên phân bố liều và mặt nạ cấu trúc.
-        
-        Phương thức này cần được ghi đè trong các lớp con.
-        """
-        raise NotImplementedError("Phương thức này phải được triển khai trong lớp con")
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class MinDose(ObjectiveBase):
-    """Mục tiêu liều tối thiểu cho cấu trúc (thường dùng cho PTV)."""
-    dose: float  # Liều mục tiêu, đơn vị Gy
-    objective_type: str = "MinDose"
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
         Tính penalty cho các voxel trong cấu trúc có liều nhỏ hơn dose.
         
         Công thức: sum((dose - D_i)^2) cho các D_i < dose
@@ -93,12 +96,49 @@ class MinDose(ObjectiveBase):
             cost /= structure_mask.sum()
         
         return cost * self.weight
+        
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class MaxDose(ObjectiveBase):
+class MaxDose:
     """Mục tiêu liều tối đa cho cấu trúc (thường dùng cho OAR)."""
+    structure_name: str
     dose: float  # Liều giới hạn, đơn vị Gy
+    weight: float = 1.0
+    is_enabled: bool = True
     objective_type: str = "MaxDose"
+    
+    def __post_init__(self):
+        """Xác thực các tham số sau khi khởi tạo."""
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -120,12 +160,49 @@ class MaxDose(ObjectiveBase):
             cost /= structure_mask.sum()
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class UniformDose(ObjectiveBase):
+class UniformDose:
     """Mục tiêu liều đồng nhất cho cấu trúc (thường dùng cho PTV)."""
+    structure_name: str
     dose: float  # Liều mong muốn, đơn vị Gy
+    weight: float = 1.0
+    is_enabled: bool = True
     objective_type: str = "UniformDose"
+    
+    def __post_init__(self):
+        """Xác thực các tham số sau khi khởi tạo."""
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -147,12 +224,49 @@ class UniformDose(ObjectiveBase):
             cost /= structure_mask.sum()
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class MeanDose(ObjectiveBase):
+class MeanDose:
     """Mục tiêu giới hạn liều trung bình cho cấu trúc (thường dùng cho OAR)."""
+    structure_name: str
     dose: float  # Liều trung bình mục tiêu, đơn vị Gy
+    weight: float = 1.0
+    is_enabled: bool = True
     objective_type: str = "MeanDose"
+    
+    def __post_init__(self):
+        """Xác thực các tham số sau khi khởi tạo."""
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -171,23 +285,57 @@ class MeanDose(ObjectiveBase):
         cost = over_dose**2
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class DoseVolume(ObjectiveBase):
+class DoseVolume:
     """Mục tiêu giới hạn thể tích nhận liều mức nào đó (DVH constraint)."""
+    structure_name: str
     dose: float  # Liều đòi hỏi, đơn vị Gy
     volume_percent: float  # Phần trăm thể tích
+    weight: float = 1.0
+    is_enabled: bool = True
     direction: str = "upper"  # "upper" hoặc "lower"
     objective_type: str = "DoseVolume"
     
     def __post_init__(self):
         """Xác thực các tham số sau khi khởi tạo."""
-        super().__post_init__()
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+            
         if self.volume_percent < 0 or self.volume_percent > 100:
             raise ValueError(f"volume_percent phải nằm trong khoảng [0, 100], nhận được: {self.volume_percent}")
         
         if self.direction not in ["upper", "lower"]:
             raise ValueError(f"direction phải là 'upper' hoặc 'lower', nhận được: {self.direction}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -221,13 +369,50 @@ class DoseVolume(ObjectiveBase):
         cost = violation**2
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class ConformityIndex(ObjectiveBase):
+class ConformityIndex:
     """Mục tiêu tối ưu chỉ số đồng dạng (thường dùng cho PTV)."""
+    structure_name: str
     reference_dose: float  # Liều tham chiếu, thường là liều chỉ định, đơn vị Gy
+    weight: float = 1.0
+    is_enabled: bool = True
     target_ci: float = 1.0  # Chỉ số đồng dạng mục tiêu, thường là 1.0 (lý tưởng)
     objective_type: str = "ConformityIndex"
+    
+    def __post_init__(self):
+        """Xác thực các tham số sau khi khởi tạo."""
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -262,20 +447,54 @@ class ConformityIndex(ObjectiveBase):
         cost = (ci - self.target_ci)**2
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class HomogeneityIndex(ObjectiveBase):
+class HomogeneityIndex:
     """Mục tiêu tối ưu chỉ số đồng nhất (thường dùng cho PTV)."""
+    structure_name: str
     prescription_dose: float  # Liều chỉ định, đơn vị Gy
+    weight: float = 1.0
+    is_enabled: bool = True
     target_hi: float = 0.0  # Chỉ số đồng nhất mục tiêu, 0 là lý tưởng (hoàn toàn đồng nhất)
     method: str = "icru83"  # Phương pháp tính HI: "icru83" hoặc "d5_d95"
     objective_type: str = "HomogeneityIndex"
     
     def __post_init__(self):
         """Xác thực các tham số sau khi khởi tạo."""
-        super().__post_init__()
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+            
         if self.method not in ["icru83", "d5_d95"]:
             raise ValueError(f"method phải là 'icru83' hoặc 'd5_d95', nhận được: {self.method}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -311,20 +530,54 @@ class HomogeneityIndex(ObjectiveBase):
         cost = (hi - self.target_hi)**2
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class GradientIndex(ObjectiveBase):
+class GradientIndex:
     """Mục tiêu tối ưu chỉ số gradient (thường dùng cho SRS/SBRT)."""
+    structure_name: str
     reference_dose: float  # Liều tham chiếu cao, đơn vị Gy
+    weight: float = 1.0
+    is_enabled: bool = True
     low_dose: Optional[float] = None  # Liều thấp, đơn vị Gy, mặc định = reference_dose/2
     target_gi: float = 3.0  # Chỉ số gradient mục tiêu
     objective_type: str = "GradientIndex"
     
     def __post_init__(self):
         """Xác thực và hoàn thiện các tham số sau khi khởi tạo."""
-        super().__post_init__()
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+            
         if self.low_dose is None:
             self.low_dose = self.reference_dose / 2.0
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -353,20 +606,54 @@ class GradientIndex(ObjectiveBase):
         cost = (gi - self.target_gi)**2
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class EUDObjective(ObjectiveBase):
+class EUDObjective:
     """Mục tiêu dựa trên liều đồng nhất tương đương (EUD)."""
+    structure_name: str
     target_eud: float  # EUD mục tiêu, đơn vị Gy
     parameter_a: float  # Tham số a điều chỉnh độ nhạy (a > 0 cho PTV, a < 0 cho OAR)
+    weight: float = 1.0
+    is_enabled: bool = True
     direction: str = "upper"  # "upper" hoặc "lower"
     objective_type: str = "EUD"
     
     def __post_init__(self):
         """Xác thực các tham số sau khi khởi tạo."""
-        super().__post_init__()
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+            
         if self.direction not in ["upper", "lower"]:
             raise ValueError(f"direction phải là 'upper' hoặc 'lower', nhận được: {self.direction}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -403,14 +690,51 @@ class EUDObjective(ObjectiveBase):
         cost = violation**2
         
         return cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 @dataclass
-class FalloffObjective(ObjectiveBase):
+class FalloffObjective:
     """Mục tiêu kiểm soát gradient liều xung quanh cấu trúc đích (dose falloff)."""
+    structure_name: str
     high_dose: float  # Liều cao, thường là liều chỉ định, đơn vị Gy
     low_dose: float  # Liều thấp, đơn vị Gy
     falloff_distance: float  # Khoảng cách mong muốn (mm), liều giảm từ high_dose xuống low_dose
+    weight: float = 1.0
+    is_enabled: bool = True
     objective_type: str = "Falloff"
+    
+    def __post_init__(self):
+        """Xác thực các tham số sau khi khởi tạo."""
+        if self.weight < 0:
+            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
+    
+    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
+        """
+        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        
+        Args:
+            dose_grid: Phân bố liều hiện tại trong kế hoạch
+            structures: Dictionary chứa các mặt nạ cấu trúc
+            
+        Returns:
+            Giá trị của hàm mục tiêu (cost)
+        """
+        if not self.is_enabled:
+            return 0.0
+            
+        if self.structure_name not in structures:
+            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
+            return 0.0
+            
+        return self._calculate_cost(dose_grid, structures[self.structure_name])
     
     def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
         """
@@ -443,6 +767,15 @@ class FalloffObjective(ObjectiveBase):
         falloff_cost = vol_ratio * self.falloff_distance / 10.0
         
         return falloff_cost * self.weight
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Trả về thông tin mô tả về hàm mục tiêu."""
+        return {
+            "structure_name": self.structure_name,
+            "type": self.objective_type,
+            "weight": self.weight,
+            "is_enabled": self.is_enabled
+        }
 
 # Dictionary chứa tất cả các loại objective có sẵn để dễ dàng tạo mới
 OBJECTIVE_TYPES = {
@@ -458,7 +791,7 @@ OBJECTIVE_TYPES = {
     "Falloff": FalloffObjective
 }
 
-def create_objective(objective_type: str, **kwargs) -> ObjectiveBase:
+def create_objective(objective_type: str, **kwargs) -> Any:
     """
     Tạo đối tượng objective từ loại và tham số.
     
@@ -483,9 +816,9 @@ class ObjectiveCollection:
     
     def __init__(self):
         """Khởi tạo danh sách hàm mục tiêu trống."""
-        self.objectives: List[ObjectiveBase] = []
+        self.objectives: List[Any] = []
     
-    def add_objective(self, objective: ObjectiveBase) -> None:
+    def add_objective(self, objective: Any) -> None:
         """Thêm một hàm mục tiêu vào danh sách."""
         self.objectives.append(objective)
     

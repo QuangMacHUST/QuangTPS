@@ -52,16 +52,33 @@ class PACSClient:
         """Khởi tạo Application Entity."""
         self.ae = AE(ae_title=self.local_ae_title)
         
-        # Thêm context cho các hoạt động query/retrieve
-        self.ae.requested_contexts = QueryRetrievePresentationContexts
+        # Thêm context cho verification (ưu tiên quan trọng nhất)
+        self.ae.add_requested_context('1.2.840.10008.1.1')  # Verification Service Class UID
         
-        # Thêm context cho các hoạt động lưu trữ
-        self.ae.requested_contexts += StoragePresentationContexts
+        # Thêm context cho các hoạt động query/retrieve (ưu tiên cao)
+        # Thường sẽ có ít hơn 10 context
+        for context in QueryRetrievePresentationContexts:
+            try:
+                self.ae.add_requested_context(context)
+            except (ValueError, TypeError):
+                logger.warning(f"Không thể thêm context: {context}")
+                continue
         
-        # Thêm context cho verification
-        self.ae.add_requested_context(VerificationServiceClass)
+        # Thêm context cho các hoạt động lưu trữ phổ biến nhất
+        # Giới hạn ở 110 context để đảm bảo tổng số không vượt quá 128
+        most_common_storage_contexts = StoragePresentationContexts[:110]
+        for context in most_common_storage_contexts:
+            try:
+                self.ae.add_requested_context(context)
+            except ValueError:
+                # Nếu đã đạt giới hạn, dừng thêm context
+                logger.warning("Đã đạt giới hạn số lượng context")
+                break
+            except TypeError:
+                logger.warning(f"Không thể thêm context: {context}")
+                continue
         
-        logger.info(f"Initialized AE with title {self.local_ae_title}")
+        logger.info(f"Initialized AE with title {self.local_ae_title} and {len(self.ae.requested_contexts)} contexts")
     
     def verify_connection(self, host: str, port: int, ae_title: str, timeout: int = 5) -> bool:
         """
