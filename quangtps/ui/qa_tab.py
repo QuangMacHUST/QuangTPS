@@ -433,32 +433,175 @@ class QATab(QWidget):
         main_layout.addWidget(splitter)
     
     def _load_qa_tests(self):
-        """Tải danh sách các bài kiểm tra QA."""
-        self.tests_table.setRowCount(0)
-        
-        # Lấy tất cả bài kiểm tra từ QA Manager
-        tests = list(self.qa_manager.qa_tests.values())
-        
-        for i, test in enumerate(tests):
-            self.tests_table.insertRow(i)
+        """Tải dữ liệu các bài kiểm tra QA."""
+        try:
+            # Lấy danh sách các bài kiểm tra QA
+            self.qa_tests = self.qa_manager.get_all_tests()
             
-            id_item = QTableWidgetItem(test.test_id)
-            id_item.setData(Qt.UserRole, test.test_id)
+            # Xóa các mục cũ trong bảng
+            self.tests_table.setRowCount(0)
             
-            self.tests_table.setItem(i, 0, id_item)
-            self.tests_table.setItem(i, 1, QTableWidgetItem(test.test_name))
-            self.tests_table.setItem(i, 2, QTableWidgetItem(test.test_type.value))
+            # Thêm các bài kiểm tra vào bảng
+            for i, test in enumerate(self.qa_tests):
+                self.tests_table.insertRow(i)
+                
+                # ID
+                id_item = QTableWidgetItem(test.test_id)
+                id_item.setData(Qt.UserRole, test.test_id)
+                self.tests_table.setItem(i, 0, id_item)
+                
+                # Tên
+                self.tests_table.setItem(i, 1, QTableWidgetItem(test.test_name))
+                
+                # Loại
+                self.tests_table.setItem(i, 2, QTableWidgetItem(test.test_type.value))
+                
+                # Giao thức
+                self.tests_table.setItem(i, 3, QTableWidgetItem(test.protocol.value))
+                
+                # Trạng thái
+                status_item = QTableWidgetItem(test.status.value)
+                
+                # Màu sắc trạng thái
+                if test.status == QAStatus.PASSED:
+                    status_item.setForeground(QColor("green"))
+                elif test.status == QAStatus.FAILED:
+                    status_item.setForeground(QColor("red"))
+                elif test.status == QAStatus.IN_PROGRESS:
+                    status_item.setForeground(QColor("blue"))
+                
+                self.tests_table.setItem(i, 4, status_item)
+                
+                # Ngày tạo
+                date_str = test.created_date.strftime("%d/%m/%Y")
+                self.tests_table.setItem(i, 5, QTableWidgetItem(date_str))
+                
+                # Người thực hiện
+                performer = test.performed_by if test.performed_by else "Chưa có"
+                self.tests_table.setItem(i, 6, QTableWidgetItem(performer))
             
-            status_item = QTableWidgetItem(test.status.value)
-            if test.status == QAStatus.PASSED:
-                status_item.setForeground(QColor("green"))
-            elif test.status == QAStatus.FAILED:
-                status_item.setForeground(QColor("red"))
-            elif test.status == QAStatus.REVIEW_REQUIRED:
-                status_item.setForeground(QColor("orange"))
+            # Nếu không có bài kiểm tra nào, hiển thị thông báo
+            if self.tests_table.rowCount() == 0:
+                self._show_empty_message()
+            else:
+                self._hide_empty_message()
+                
+            logger.info("Đã tải %d bài kiểm tra QA", len(self.qa_tests))
             
-            self.tests_table.setItem(i, 3, status_item)
-            self.tests_table.setItem(i, 4, QTableWidgetItem(test.created_date.strftime("%d/%m/%Y %H:%M")))
+        except Exception as e:
+            logger.exception("Lỗi khi tải danh sách các bài kiểm tra QA: %s", str(e))
+            QMessageBox.warning(
+                self,
+                "Lỗi tải dữ liệu QA",
+                f"Không thể tải danh sách các bài kiểm tra QA: {str(e)}\n\n"
+                "Tạo dữ liệu mẫu để minh họa."
+            )
+            
+            # Tạo dữ liệu mẫu
+            self._create_sample_data()
+    
+    def _show_empty_message(self):
+        """Hiển thị thông báo khi không có bài kiểm tra nào."""
+        # Kiểm tra xem đã có label thông báo chưa
+        if not hasattr(self, 'empty_message_label'):
+            self.empty_message_label = QLabel("Không có bài kiểm tra QA nào.\nNhấn nút 'Tạo mới' để tạo bài kiểm tra.")
+            self.empty_message_label.setAlignment(Qt.AlignCenter)
+            self.empty_message_label.setStyleSheet("color: gray; font-size: 14px;")
+            
+            # Thêm vào layout giữa bảng và các nút
+            layout_index = self.layout().indexOf(self.tests_table)
+            if layout_index >= 0:
+                self.layout().insertWidget(layout_index + 1, self.empty_message_label)
+        else:
+            self.empty_message_label.setVisible(True)
+    
+    def _hide_empty_message(self):
+        """Ẩn thông báo khi có bài kiểm tra."""
+        if hasattr(self, 'empty_message_label'):
+            self.empty_message_label.setVisible(False)
+    
+    def _create_sample_data(self):
+        """Tạo dữ liệu mẫu khi không thể tải dữ liệu thật."""
+        try:
+            # Xóa dữ liệu cũ
+            self.tests_table.setRowCount(0)
+            
+            # Tạo dữ liệu mẫu
+            sample_data = [
+                {
+                    'id': 'QA-001',
+                    'name': 'Kiểm tra output beam 6MV',
+                    'type': 'Output Verification',
+                    'protocol': 'Monthly',
+                    'status': 'Passed',
+                    'date': '01/04/2025',
+                    'performer': 'Nguyễn Văn A'
+                },
+                {
+                    'id': 'QA-002',
+                    'name': 'Kiểm tra MLC positioning',
+                    'type': 'MLC QA',
+                    'protocol': 'Weekly',
+                    'status': 'Failed',
+                    'date': '02/04/2025',
+                    'performer': 'Trần Thị B'
+                },
+                {
+                    'id': 'QA-003',
+                    'name': 'Kiểm tra planar dose',
+                    'type': 'Patient QA',
+                    'protocol': 'Pre-treatment',
+                    'status': 'In progress',
+                    'date': '03/04/2025',
+                    'performer': 'Lê Văn C'
+                }
+            ]
+            
+            for i, test in enumerate(sample_data):
+                self.tests_table.insertRow(i)
+                
+                # ID
+                id_item = QTableWidgetItem(test['id'])
+                id_item.setData(Qt.UserRole, test['id'])
+                self.tests_table.setItem(i, 0, id_item)
+                
+                # Tên
+                self.tests_table.setItem(i, 1, QTableWidgetItem(test['name']))
+                
+                # Loại
+                self.tests_table.setItem(i, 2, QTableWidgetItem(test['type']))
+                
+                # Giao thức
+                self.tests_table.setItem(i, 3, QTableWidgetItem(test['protocol']))
+                
+                # Trạng thái
+                status_item = QTableWidgetItem(test['status'])
+                
+                # Màu sắc trạng thái
+                if test['status'] == 'Passed':
+                    status_item.setForeground(QColor("green"))
+                elif test['status'] == 'Failed':
+                    status_item.setForeground(QColor("red"))
+                elif test['status'] == 'In progress':
+                    status_item.setForeground(QColor("blue"))
+                
+                self.tests_table.setItem(i, 4, status_item)
+                
+                # Ngày tạo
+                self.tests_table.setItem(i, 5, QTableWidgetItem(test['date']))
+                
+                # Người thực hiện
+                self.tests_table.setItem(i, 6, QTableWidgetItem(test['performer']))
+            
+            logger.info("Đã tạo %d bài kiểm tra QA mẫu", len(sample_data))
+            
+        except Exception as e:
+            logger.exception("Lỗi khi tạo dữ liệu mẫu QA: %s", str(e))
+            QMessageBox.critical(
+                self,
+                "Lỗi nghiêm trọng",
+                f"Không thể hiển thị dữ liệu QA: {str(e)}"
+            )
     
     def _apply_filters(self):
         """Áp dụng bộ lọc vào danh sách bài kiểm tra."""

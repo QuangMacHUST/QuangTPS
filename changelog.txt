@@ -164,3 +164,63 @@
 - Thêm phương thức `get_beam_models()` để lấy mô hình theo loại
 - Quản lý dữ liệu chùm tia và mô hình chùm tia trong hệ thống
 - Hỗ trợ tải, lưu và quản lý mô hình chùm tia 
+
+## [2025-03-31]
+
+### Cải thiện xử lý lỗi và trải nghiệm người dùng
+- Thêm xử lý lỗi cho cấu trúc cơ sở dữ liệu trong quangtps/ui/patient_browser.py:
+  - Hiển thị thông báo hướng dẫn người dùng khi gặp lỗi "table patients has no column named dob"
+  - Đề xuất cách khắc phục bằng cách chạy script update_database.py
+- Cải thiện phương thức _display_current_series trong quangtps/ui/imaging_tab.py:
+  - Thêm xử lý trường hợp self.current_series.image không tồn tại
+  - Tự động tải dữ liệu hình ảnh nếu chưa được tải
+  - Thông báo rõ ràng cho người dùng khi không thể tải dữ liệu hình ảnh
+- Sửa lỗi trong lớp DicomSeries để đảm bảo thuộc tính image luôn được khởi tạo
+
+### Cải thiện cấu trúc cơ sở dữ liệu
+- Cập nhật script update_database.py để xử lý sự không nhất quán giữa các trường dob và birth_date:
+  - Tự động phát hiện và chuyển đổi schema giữa hai phiên bản
+  - Thêm thông báo chi tiết về thay đổi được thực hiện
+  - Đảm bảo dữ liệu được bảo toàn khi cập nhật schema 
+
+## [2025-04-01]
+
+### Cải thiện hiệu suất và ghi log
+- Tối ưu hóa cách xử lý DICOM trong quangtps/dicom/pacs_client.py:
+  - Giảm số lượng cảnh báo gây nhiễu bằng cách gộp nhóm các thông báo lỗi
+  - Thay thế các log cấp warning bằng các log cấp debug khi thích hợp
+  - Thêm tóm tắt về số lượng contexts thành công/thất bại thay vì ghi log từng lỗi
+  - Cải thiện trải nghiệm người dùng bằng cách làm sạch output console
+- Điều chỉnh mức độ chi tiết của log trong toàn bộ ứng dụng
+  - Đảm bảo các thông báo quan trọng vẫn được hiển thị
+  - Chuyển các chi tiết kỹ thuật sang mức độ DEBUG
+
+### Sửa lỗi và cải thiện trải nghiệm người dùng
+- Sửa lỗi trong ImagingTab khi hiển thị series DICOM:
+  - Thêm kiểm tra thuộc tính image trong DicomSeries
+  - Tự động tải dữ liệu hình ảnh nếu cần
+  - Ghi log và hiển thị thông báo lỗi hữu ích cho người dùng
+- Thêm xử lý ngoại lệ chi tiết cho lỗi cấu trúc cơ sở dữ liệu:
+  - Phát hiện và hướng dẫn khắc phục lỗi "table patients has no column named dob"
+  - Gợi ý người dùng chạy script update_database.py để tự động sửa chữa 
+
+## 2025-04-02
+- Cải thiện xử lý lỗi và trải nghiệm người dùng toàn hệ thống:
+  - Thêm mô-đun xử lý lỗi chi tiết cho Tab Liều Lượng (DoseTab) trong `quangtps/ui/dose_tab.py`:
+    - Quản lý ngoại lệ khi tải dữ liệu liều
+    - Tự động tạo dữ liệu mẫu khi dữ liệu chính không thể được tải
+    - Thống nhất tên thuộc tính của các widget để đảm bảo tính nhất quán
+    - Sửa lỗi layout bị xóa bằng cách cải thiện cấu trúc widget và quản lý vòng đời tốt hơn
+  - Bổ sung xử lý lỗi mạnh mẽ cho Tab Điều Trị (TreatmentTab) trong `quangtps/ui/treatment_tab.py`:
+    - Thêm dữ liệu mẫu chất lượng cao cho lịch trình điều trị
+    - Tạo cơ chế dự phòng cho trường hợp tải dữ liệu thất bại
+    - Tích hợp hệ thống ghi log chi tiết cho việc phát hiện lỗi
+  - Nâng cấp Tab Đảm bảo Chất lượng (QATab) trong `quangtps/ui/qa_tab.py`:
+    - Bổ sung thông báo trống khi không có dữ liệu QA
+    - Thêm khả năng tạo dữ liệu mẫu cho trường hợp lỗi kết nối cơ sở dữ liệu
+    - Cải thiện giao diện hiển thị bảng QA với màu sắc trạng thái
+    - Tăng cường xử lý ngoại lệ khi tải và hiển thị dữ liệu
+  - Hoàn thiện UI ở tất cả các tab với trải nghiệm người dùng nhất quán
+    - Nâng cao các thông báo lỗi với hướng dẫn khắc phục rõ ràng
+    - Đảm bảo giao diện luôn hiển thị thông tin hữu ích ngay cả khi có lỗi xảy ra
+    - Thêm dữ liệu mẫu cho mục đích minh họa và kiểm tra 

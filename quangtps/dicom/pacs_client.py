@@ -57,27 +57,64 @@ class PACSClient:
         
         # Thêm context cho các hoạt động query/retrieve (ưu tiên cao)
         # Thường sẽ có ít hơn 10 context
+        successful_contexts = 0
+        failed_contexts = 0
         for context in QueryRetrievePresentationContexts:
             try:
                 self.ae.add_requested_context(context)
+                successful_contexts += 1
             except (ValueError, TypeError):
-                logger.warning(f"Không thể thêm context: {context}")
+                failed_contexts += 1
                 continue
         
         # Thêm context cho các hoạt động lưu trữ phổ biến nhất
         # Giới hạn ở 110 context để đảm bảo tổng số không vượt quá 128
         most_common_storage_contexts = StoragePresentationContexts[:110]
+        storage_successful = 0
+        storage_failed = 0
         for context in most_common_storage_contexts:
             try:
                 self.ae.add_requested_context(context)
+                storage_successful += 1
             except ValueError:
                 # Nếu đã đạt giới hạn, dừng thêm context
                 logger.warning("Đã đạt giới hạn số lượng context")
                 break
             except TypeError:
-                logger.warning(f"Không thể thêm context: {context}")
+                storage_failed += 1
                 continue
         
+        # Thử thêm các SOP class cụ thể cần thiết cho xạ trị
+        rt_contexts = [
+            '1.2.840.10008.5.1.4.1.1.481.1',  # RT Image Storage
+            '1.2.840.10008.5.1.4.1.1.481.2',  # RT Dose Storage
+            '1.2.840.10008.5.1.4.1.1.481.3',  # RT Structure Set Storage
+            '1.2.840.10008.5.1.4.1.1.481.4',  # RT Beams Treatment Record Storage
+            '1.2.840.10008.5.1.4.1.1.481.5',  # RT Plan Storage
+            '1.2.840.10008.5.1.4.1.1.481.6',  # RT Brachy Treatment Record Storage
+            '1.2.840.10008.5.1.4.1.1.481.7',  # RT Treatment Summary Record Storage
+            '1.2.840.10008.5.1.4.1.1.481.8',  # RT Ion Plan Storage
+            '1.2.840.10008.5.1.4.1.1.481.9',  # RT Ion Beams Treatment Record Storage
+        ]
+        
+        rt_successful = 0
+        rt_failed = 0
+        for context in rt_contexts:
+            try:
+                self.ae.add_requested_context(context)
+                rt_successful += 1
+                logger.debug(f"Added RT context: {context}")
+            except Exception as e:
+                rt_failed += 1
+        
+        # Ghi log tổng kết
+        if failed_contexts > 0:
+            logger.debug(f"Không thể thêm {failed_contexts} context QR")
+        if storage_failed > 0:
+            logger.debug(f"Không thể thêm {storage_failed} context lưu trữ DICOM")
+        if rt_failed > 0:
+            logger.debug(f"Không thể thêm {rt_failed} context RT DICOM")
+
         logger.info(f"Initialized AE with title {self.local_ae_title} and {len(self.ae.requested_contexts)} contexts")
     
     def verify_connection(self, host: str, port: int, ae_title: str, timeout: int = 5) -> bool:

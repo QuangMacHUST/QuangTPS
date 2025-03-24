@@ -278,24 +278,25 @@ class PatientBrowser(QWidget):
     
     def _create_new_patient(self):
         """Tạo bệnh nhân mới."""
-        dialog = PatientDialog(self)
-        result = dialog.exec_()
-        
-        if result == QDialog.Accepted:
-            patient_data = dialog.get_patient_data()
-            try:
+        try:
+            # Đoạn mã tạo bệnh nhân mới ở đây
+            patient_dialog = PatientDialog(self)
+            if patient_dialog.exec_() == QDialog.Accepted:
+                # Lấy thông tin bệnh nhân từ dialog
+                new_patient_data = patient_dialog.get_patient_data()
+                
                 # Tạo bệnh nhân mới
                 patient_id = self.patient_db.create_patient(
-                    name=patient_data["name"],
-                    birth_date=patient_data["birth_date"],
-                    gender=patient_data["gender"],
-                    metadata=patient_data["metadata"]
+                    name=new_patient_data["name"],
+                    birth_date=new_patient_data["birth_date"],
+                    gender=new_patient_data["gender"],
+                    metadata=new_patient_data["metadata"]
                 )
                 
                 QMessageBox.information(
                     self,
                     "Thành công",
-                    f"Đã tạo bệnh nhân mới: {patient_data['name']}"
+                    f"Đã tạo bệnh nhân mới: {new_patient_data['name']}"
                 )
                 
                 # Làm mới danh sách
@@ -304,8 +305,21 @@ class PatientBrowser(QWidget):
                 # Chọn bệnh nhân mới tạo
                 self.select_patient(patient_id)
                 
-            except Exception as e:
-                logger.error("Lỗi khi tạo bệnh nhân mới: %s", str(e))
+        except Exception as e:
+            logger.error("Lỗi khi tạo bệnh nhân mới: %s", str(e))
+            
+            # Kiểm tra lỗi cụ thể 
+            error_msg = str(e)
+            if "table patients has no column named dob" in error_msg:
+                QMessageBox.critical(
+                    self,
+                    "Lỗi cấu trúc cơ sở dữ liệu",
+                    "Cơ sở dữ liệu thiếu cột 'dob' cho bảng patients.\n\n"
+                    "Để khắc phục, vui lòng chạy lệnh sau:\n"
+                    "python scripts/update_database.py\n\n"
+                    "Lệnh này sẽ cập nhật cấu trúc cơ sở dữ liệu để phù hợp với phiên bản hiện tại."
+                )
+            else:
                 QMessageBox.critical(
                     self,
                     "Lỗi",

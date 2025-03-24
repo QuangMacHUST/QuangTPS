@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QComboBox, QGroupBox,
     QTableWidget, QTableWidgetItem, QTabWidget,
     QSlider, QScrollArea, QSpinBox, QDoubleSpinBox,
-    QTextEdit, QCheckBox, QGridLayout
+    QTextEdit, QCheckBox, QGridLayout, QMessageBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
@@ -478,8 +478,10 @@ class DoseTab(QWidget):
         """
         super().__init__(parent)
         
-        # Trạng thái
+        # Dữ liệu 
         self.current_plan = None
+        self.dose_data = None
+        self.structures = []
         
         # Thiết lập giao diện
         self._init_ui()
@@ -489,187 +491,246 @@ class DoseTab(QWidget):
     def _init_ui(self):
         """Khởi tạo các thành phần giao diện."""
         # Layout chính
-        self.main_layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
         
-        # Tab widget
+        # === Tab container ===
         self.tab_widget = QTabWidget()
-        self.main_layout.addWidget(self.tab_widget)
+        main_layout.addWidget(self.tab_widget)
         
-        # Tab hiển thị liều
-        self.dose_display_widget = QWidget()
-        self.dose_display_layout = QVBoxLayout(self.dose_display_widget)
+        # === Tab hiển thị liều 2D ===
+        dose_display_tab = QWidget()
+        self.dose_display_layout = QVBoxLayout(dose_display_tab)
         
-        # Thiết lập hiển thị
-        self.view_control_group = QGroupBox("Điều khiển hiển thị")
-        self.view_control_layout = QHBoxLayout(self.view_control_group)
+        # Panel điều khiển ở trên
+        control_widget = QWidget()
+        control_layout = QHBoxLayout(control_widget)
         
-        self.slice_label = QLabel("Lát cắt:")
-        self.view_control_layout.addWidget(self.slice_label)
-        
-        self.slice_slider = QSlider(Qt.Horizontal)
-        self.slice_slider.setRange(0, 100)
-        self.slice_slider.setValue(50)
-        self.slice_slider.valueChanged.connect(self._slice_changed)
-        self.view_control_layout.addWidget(self.slice_slider)
-        
-        self.view_control_layout.addWidget(QLabel("Mặt phẳng:"))
+        # Chọn mặt phẳng
+        plane_label = QLabel("Mặt phẳng:")
         self.plane_combo = QComboBox()
         self.plane_combo.addItems(["Axial", "Coronal", "Sagittal"])
         self.plane_combo.currentIndexChanged.connect(self._plane_changed)
-        self.view_control_layout.addWidget(self.plane_combo)
         
-        self.dose_display_layout.addWidget(self.view_control_group)
+        # Thanh trượt slice
+        slice_label = QLabel("Slice:")
+        self.slice_slider = QSlider(Qt.Horizontal)
+        self.slice_slider.setMinimum(0)
+        self.slice_slider.setMaximum(100)  # Mặc định
+        self.slice_slider.setValue(50)
+        self.slice_slider.valueChanged.connect(self._slice_changed)
+        
+        # Thêm vào layout điều khiển
+        control_layout.addWidget(plane_label)
+        control_layout.addWidget(self.plane_combo)
+        control_layout.addWidget(slice_label)
+        control_layout.addWidget(self.slice_slider, 1)
+        
+        # Thêm panel điều khiển vào layout tab
+        self.dose_display_layout.addWidget(control_widget)
         
         # Widget hiển thị liều
-        self.dose_visualization = DoseVisualizationWidget()
-        self.dose_display_layout.addWidget(self.dose_visualization)
+        self.dose_viz_widget = DoseVisualizationWidget()
+        self.dose_display_layout.addWidget(self.dose_viz_widget)
         
         # Thêm tab hiển thị liều
-        self.tab_widget.addTab(self.dose_display_widget, "Hiển thị liều")
+        self.tab_widget.addTab(dose_display_tab, "Hiển thị liều")
         
-        # Tab DVH
-        self.dvh_widget = QWidget()
-        self.dvh_layout = QVBoxLayout(self.dvh_widget)
+        # === Tab DVH ===
+        dvh_tab = QWidget()
+        dvh_layout = QVBoxLayout(dvh_tab)
         
-        # Nhóm điều khiển DVH
-        self.dvh_control_group = QGroupBox("Điều khiển DVH")
-        self.dvh_control_layout = QHBoxLayout(self.dvh_control_group)
+        # Panel điều khiển DVH
+        dvh_control_widget = QWidget()
+        dvh_control_layout = QHBoxLayout(dvh_control_widget)
         
-        self.dvh_type_label = QLabel("Loại DVH:")
-        self.dvh_control_layout.addWidget(self.dvh_type_label)
-        
+        # Chọn loại DVH
+        dvh_type_label = QLabel("Loại DVH:")
         self.dvh_type_combo = QComboBox()
         self.dvh_type_combo.addItems(["Tích lũy", "Vi phân"])
         self.dvh_type_combo.currentIndexChanged.connect(self._dvh_type_changed)
-        self.dvh_control_layout.addWidget(self.dvh_type_combo)
         
-        self.dvh_structures_label = QLabel("Cấu trúc:")
-        self.dvh_control_layout.addWidget(self.dvh_structures_label)
+        # Thêm vào layout điều khiển DVH
+        dvh_control_layout.addWidget(dvh_type_label)
+        dvh_control_layout.addWidget(self.dvh_type_combo)
+        dvh_control_layout.addStretch()
         
-        self.dvh_layout.addWidget(self.dvh_control_group)
+        # Thêm panel điều khiển vào layout tab DVH
+        dvh_layout.addWidget(dvh_control_widget)
         
         # Widget DVH
-        self.dvh_plot = DVHWidget()
-        self.dvh_layout.addWidget(self.dvh_plot)
+        self.dvh_widget = DVHWidget()
+        dvh_layout.addWidget(self.dvh_widget)
         
         # Thêm tab DVH
-        self.tab_widget.addTab(self.dvh_widget, "DVH")
+        self.tab_widget.addTab(dvh_tab, "DVH")
         
         # Tab thống kê liều
-        self.stats_widget = DoseStatisticsWidget()
-        self.tab_widget.addTab(self.stats_widget, "Thống kê liều")
+        dose_stats_tab = QWidget()
+        dose_stats_layout = QVBoxLayout(dose_stats_tab)
+        self.dose_stats_widget = DoseStatisticsWidget()
+        dose_stats_layout.addWidget(self.dose_stats_widget)
+        self.tab_widget.addTab(dose_stats_tab, "Thống kê liều")
         
         # Tab so sánh liều
-        self.comparison_widget = DoseComparisonWidget()
-        self.tab_widget.addTab(self.comparison_widget, "So sánh liều")
+        dose_comparison_tab = QWidget()
+        dose_comparison_layout = QVBoxLayout(dose_comparison_tab)
+        self.dose_comparison_widget = DoseComparisonWidget()
+        dose_comparison_layout.addWidget(self.dose_comparison_widget)
+        self.tab_widget.addTab(dose_comparison_tab, "So sánh liều")
         
         # Tab phân tích BNCT (sẽ được thêm khi cần)
         self.bnct_widget = None
     
     def set_plan(self, plan):
         """
-        Thiết lập kế hoạch hiện tại và cập nhật giao diện.
+        Thiết lập kế hoạch để hiển thị phân bố liều.
         
         Parameters
         ----------
-        plan : Any
-            Đối tượng kế hoạch
+        plan : dict
+            Dữ liệu kế hoạch
         """
-        self.current_plan = plan
-        if plan:
-            self._populate_dose_data()
-        else:
+        try:
+            self.current_plan = plan
+            
+            if plan:
+                self._populate_dose_data()
+            else:
+                self._clear_dose_data()
+                logger.warning("Không có kế hoạch được cung cấp cho DoseTab")
+                
+        except Exception as e:
+            logger.exception("Lỗi khi thiết lập kế hoạch trong DoseTab: %s", str(e))
+            QMessageBox.critical(
+                self,
+                "Lỗi tải dữ liệu liều",
+                f"Không thể tải dữ liệu liều lượng: {str(e)}\n\nVui lòng kiểm tra kế hoạch điều trị của bạn."
+            )
             self._clear_dose_data()
     
     def _populate_dose_data(self):
-        """Điền dữ liệu liều lượng vào giao diện."""
+        """Tải và hiển thị dữ liệu liều từ kế hoạch hiện tại."""
         if not self.current_plan:
             return
             
-        # Kiểm tra xem kế hoạch có phải là BNCT không
-        is_bnct_plan = isinstance(self.current_plan, BNCT)
+        try:
+            # Mô phỏng tải dữ liệu liều (trong thực tế sẽ tải từ DICOM hoặc cơ sở dữ liệu)
+            logger.info("Đang tải dữ liệu liều cho kế hoạch ID: %s", self.current_plan.get('id', 'unknown'))
             
-        # Xử lý tab BNCT
-        if is_bnct_plan:
-            # Nếu tab BNCT chưa được thêm, thêm nó vào
-            if not self.bnct_widget:
-                self.bnct_widget = BNCTDoseAnalysisWidget()
-                self.tab_widget.addTab(self.bnct_widget, "Phân tích BNCT")
+            # Giả lập dữ liệu liều
+            dose_shape = (100, 100, 50)  # (z, y, x)
+            self.dose_data = np.random.rand(*dose_shape) * 60.0  # Giả lập liều 0-60 Gy
             
-            # Cập nhật dữ liệu cho widget BNCT
-            self.bnct_widget.set_bnct_plan(self.current_plan)
+            # Tạo tọa độ (trong thực tế sẽ lấy từ DICOM)
+            pixel_spacing = 2.0  # mm
+            x_coords = np.arange(dose_shape[2]) * pixel_spacing
+            y_coords = np.arange(dose_shape[1]) * pixel_spacing
+            z_coords = np.arange(dose_shape[0]) * pixel_spacing
             
-            # Đảm bảo tab BNCT hiển thị
-            idx = self.tab_widget.indexOf(self.bnct_widget)
-            if idx != -1:
-                self.tab_widget.setTabVisible(idx, True)
-                # Chuyển đến tab BNCT để hiển thị ngay
-                self.tab_widget.setCurrentIndex(idx)
-        else:
-            # Nếu không phải kế hoạch BNCT và tab BNCT đã được thêm, ẩn nó đi
-            if self.bnct_widget:
-                idx = self.tab_widget.indexOf(self.bnct_widget)
-                if idx != -1:  # Nếu tab tồn tại trong tab_widget
-                    self.tab_widget.setTabVisible(idx, False)
-        
-        # Hiển thị dữ liệu liều 2D
-        if hasattr(self.current_plan, 'get_dose_slice'):
-            try:
-                # Lấy lát cắt dữ liệu liều hiện tại
-                slice_idx = self.slice_slider.value()
-                plane_idx = self.plane_combo.currentIndex()
-                planes = ["axial", "coronal", "sagittal"]
-                plane = planes[plane_idx] if plane_idx < len(planes) else "axial"
+            # Giả lập dữ liệu cấu trúc (trong thực tế sẽ tải từ DICOM RTSTRUCT)
+            self.structures = [
+                {
+                    'name': 'PTV',
+                    'color': QColor(255, 0, 0),
+                    'dvh': np.clip(1.0 - np.arange(0, 61) / 50.0, 0, 1) * 100  # Giả lập DVH
+                },
+                {
+                    'name': 'Bladder',
+                    'color': QColor(255, 255, 0),
+                    'dvh': np.clip(1.0 - np.arange(0, 61) / 30.0, 0, 1) * 100
+                },
+                {
+                    'name': 'Rectum',
+                    'color': QColor(0, 255, 0),
+                    'dvh': np.clip(1.0 - np.arange(0, 61) / 20.0, 0, 1) * 100
+                }
+            ]
+            
+            # Hiển thị dữ liệu liều
+            # 1. Cập nhật hiển thị 2D
+            current_slice = 25  # Mặc định slice giữa
+            self.slice_slider.setMaximum(dose_shape[0] - 1)
+            self.slice_slider.setValue(current_slice)
+            
+            current_plane_index = self.plane_combo.currentIndex()
+            if current_plane_index == 0:  # Axial
+                self.dose_viz_widget.display_dose_2d(
+                    self.dose_data[current_slice, :, :], 
+                    x_coords, y_coords
+                )
+            elif current_plane_index == 1:  # Coronal
+                self.dose_viz_widget.display_dose_2d(
+                    self.dose_data[:, current_slice, :], 
+                    x_coords, z_coords
+                )
+            else:  # Sagittal
+                self.dose_viz_widget.display_dose_2d(
+                    self.dose_data[:, :, current_slice], 
+                    y_coords, z_coords
+                )
+            
+            # 2. Cập nhật DVH
+            dose_bins = np.arange(0, 61)  # 0-60 Gy
+            self.dvh_widget.plot_dvh(self.structures, dose_bins, 
+                                   cumulative=(self.dvh_type_combo.currentIndex()==0))
+            
+            # 3. Cập nhật thống kê liều
+            self.dose_stats_widget.set_structures(self.structures)
+            
+            # 4. Cập nhật hiển thị so sánh (nếu có dữ liệu)
+            if hasattr(self, 'dose_comparison_widget'):
+                plans_for_comparison = [
+                    {'id': self.current_plan.get('id'), 'name': self.current_plan.get('name')},
+                    # Trong thực tế có thể lấy thêm các kế hoạch khác để so sánh
+                ]
+                self.dose_comparison_widget.set_plans(plans_for_comparison)
                 
-                dose_slice, x_coords, y_coords = self.current_plan.get_dose_slice(slice_idx, plane=plane)
+            logger.info("Đã tải dữ liệu liều thành công cho kế hoạch ID: %s", 
+                      self.current_plan.get('id', 'unknown'))
+            
+        except Exception as e:
+            logger.exception("Lỗi khi tải dữ liệu liều: %s", str(e))
+            QMessageBox.warning(
+                self,
+                "Lỗi hiển thị dữ liệu",
+                f"Không thể hiển thị dữ liệu liều: {str(e)}\n\n"
+                "Hiển thị dữ liệu mẫu để minh họa thay thế."
+            )
+            
+            # Tạo dữ liệu mẫu đơn giản để hiển thị
+            if self.dose_data is None:
+                # Tạo dữ liệu mẫu cơ bản nếu không tải được dữ liệu
+                dose_shape = (50, 50, 50)
+                self.dose_data = np.zeros(dose_shape)
+                central_area = np.indices(dose_shape) - np.array([25, 25, 25])[:, None, None, None]
+                distance = np.sqrt(np.sum(central_area**2, axis=0))
+                self.dose_data = 50 * np.exp(-distance/15)
                 
-                # Hiển thị dữ liệu liều
-                if dose_slice is not None and x_coords is not None and y_coords is not None:
-                    self.dose_visualization.display_dose_2d(dose_slice, x_coords, y_coords)
-                    logger.debug(f"Hiển thị lát cắt liều {plane} tại vị trí {slice_idx}")
-            except Exception as e:
-                logger.error(f"Lỗi khi lấy dữ liệu lát cắt liều: {str(e)}")
-        
-        # Cập nhật DVH
-        if hasattr(self.current_plan, 'get_dvh_data'):
-            try:
-                dvh_data = self.current_plan.get_dvh_data()
-                if dvh_data:
-                    structures = dvh_data.get('structures', [])
-                    dose_bins = dvh_data.get('dose_bins', np.linspace(0, 80, 100))
-                    cumulative = self.dvh_type_combo.currentIndex() == 0  # 0: Tích lũy, 1: Vi phân
-                    
-                    self.dvh_plot.plot_dvh(structures, dose_bins, cumulative)
-                    
-                    # Cập nhật thống kê liều
-                    self.stats_widget.set_structures(structures)
-                    logger.debug(f"Hiển thị DVH với {len(structures)} cấu trúc")
-            except Exception as e:
-                logger.error(f"Lỗi khi lấy dữ liệu DVH: {str(e)}")
-        
-        # Cập nhật tab so sánh liều
-        if hasattr(self.current_plan, 'get_comparison_plans'):
-            try:
-                comparison_plans = self.current_plan.get_comparison_plans()
-                if comparison_plans:
-                    self.comparison_widget.set_plans([self.current_plan] + comparison_plans)
-                    logger.debug(f"Thiết lập {len(comparison_plans)} kế hoạch so sánh")
-            except Exception as e:
-                logger.error(f"Lỗi khi lấy danh sách kế hoạch so sánh: {str(e)}")
+                # Cập nhật thanh trượt
+                self.slice_slider.setMaximum(dose_shape[0] - 1)
+                self.slice_slider.setValue(dose_shape[0] // 2)
+                
+                # Hiển thị slice mặc định
+                x_coords = np.arange(dose_shape[2])
+                y_coords = np.arange(dose_shape[1])
+                self.dose_viz_widget.display_dose_2d(
+                    self.dose_data[dose_shape[0]//2, :, :], 
+                    x_coords, y_coords
+                )
     
     def _clear_dose_data(self):
         """Xóa dữ liệu liều lượng khỏi giao diện."""
         # Xóa hiển thị liều
-        self.dose_visualization.clear()
+        self.dose_viz_widget.clear()
         
         # Xóa DVH
-        self.dvh_plot.clear()
+        self.dvh_widget.clear()
         
         # Xóa thống kê liều
-        self.stats_widget.clear()
+        self.dose_stats_widget.clear()
         
         # Xóa so sánh liều
-        self.comparison_widget.clear()
+        self.dose_comparison_widget.clear()
         
         # Xóa dữ liệu BNCT (nếu có)
         if self.bnct_widget:

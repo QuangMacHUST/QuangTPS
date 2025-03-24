@@ -562,6 +562,21 @@ class ImagingTab(QWidget):
         if not self.current_series:
             return
         
+        # Đảm bảo rằng dữ liệu hình ảnh đã được tải
+        if not hasattr(self.current_series, 'image') or self.current_series.image is None:
+            # Nếu image không có sẵn, thử tải dữ liệu hình ảnh
+            if hasattr(self.current_series, 'image_data') and self.current_series.image_data is not None:
+                self.current_series.image = self.current_series.image_data
+            else:
+                # Thử tải dữ liệu hình ảnh
+                self.current_series.load_image_data()
+                
+            # Kiểm tra lại sau khi tải
+            if not hasattr(self.current_series, 'image') or self.current_series.image is None:
+                logger.error("Không thể hiển thị series: không có dữ liệu hình ảnh")
+                QMessageBox.warning(self, "Lỗi hiển thị", "Không thể hiển thị series: không có dữ liệu hình ảnh")
+                return
+        
         # Thiết lập dữ liệu hình ảnh cho ImageViewer
         self.image_viewer.load_image(self.current_series.image)
         

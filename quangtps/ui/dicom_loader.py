@@ -71,6 +71,7 @@ class DicomSeries:
         
         # Dữ liệu hình ảnh
         self.image_data = None  # Dữ liệu 3D
+        self.image = None  # Đối tượng hình ảnh để hiển thị
         self.image_position = None  # Vị trí voxel đầu tiên
         self.image_orientation = None  # Hướng của hình ảnh
         self.pixel_spacing = None  # Khoảng cách giữa các pixel
@@ -190,6 +191,9 @@ class DicomSeries:
             # Chuyển đổi sang numpy array
             self.image_data = sitk.GetArrayFromImage(image)
             
+            # Gán thuộc tính image cho hiển thị
+            self.image = self.image_data
+            
             # Lưu metadata
             self.pixel_spacing = image.GetSpacing()[:2]  # (x, y)
             self.slice_thickness = image.GetSpacing()[2]
@@ -229,31 +233,39 @@ class DicomSeries:
                 slices = sorted(slices, key=lambda s: s.SliceLocation)
             else:
                 # Nếu không có thông tin vị trí, sắp xếp theo InstanceNumber
-                slices = sorted(slices, key=lambda s: s.InstanceNumber)
+                if hasattr(slices[0], 'InstanceNumber'):
+                    slices = sorted(slices, key=lambda s: s.InstanceNumber)
+            
+            # Đảm bảo tất cả các lát cắt có cùng kích thước và loại pixel
+            if len(slices) > 1:
+                if slices[0].Rows != slices[1].Rows or slices[0].Columns != slices[1].Columns:
+                    logger.error("Kích thước lát cắt không đồng nhất")
+                    return False
+            
+            # Tạo mảng 3D từ các lát cắt
+            img_shape = (len(slices), slices[0].Rows, slices[0].Columns)
+            self.image_data = np.zeros(img_shape, dtype=np.float32)
+            
+            # Chuyển đổi từ các slice thành mảng 3D
+            for i, slice in enumerate(slices):
+                pixel_array = slice.pixel_array.astype(np.float32)
                 
-            # Trích xuất dữ liệu pixel từ các lát cắt
-            img_shape = list(slices[0].pixel_array.shape)
-            img_shape.insert(0, len(slices))  # Thêm chiềm z
+                # Áp dụng rescale slope và intercept nếu có
+                if hasattr(slice, 'RescaleSlope') and hasattr(slice, 'RescaleIntercept'):
+                    pixel_array = pixel_array * slice.RescaleSlope + slice.RescaleIntercept
+                
+                self.image_data[i, :, :] = pixel_array
             
-            self.image_data = np.zeros(img_shape, dtype=slices[0].pixel_array.dtype)
+            # Gán thuộc tính image cho hiển thị
+            self.image = self.image_data
             
-            # Gán dữ liệu từ từng lát cắt
-            for i, s in enumerate(slices):
-                self.image_data[i, :, :] = s.pixel_array
-            
-            # Lưu metadata
+            # Lưu thông tin pixel spacing và slice thickness
             if hasattr(slices[0], 'PixelSpacing'):
                 self.pixel_spacing = slices[0].PixelSpacing
             
             if hasattr(slices[0], 'SliceThickness'):
                 self.slice_thickness = slices[0].SliceThickness
             
-            if hasattr(slices[0], 'ImagePositionPatient'):
-                self.image_position = slices[0].ImagePositionPatient
-            
-            if hasattr(slices[0], 'ImageOrientationPatient'):
-                self.image_orientation = slices[0].ImageOrientationPatient
-
             # Lưu base_directory (thư mục gốc của series)
             self.base_directory = os.path.dirname(self.files[0]) if self.files else ""
             

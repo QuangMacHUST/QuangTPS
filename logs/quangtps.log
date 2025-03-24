@@ -4784,3 +4784,2635 @@ Transfer Syntax(es):
 2025-03-25 04:27:28 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
 2025-03-25 04:27:30 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
 2025-03-25 04:27:30 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 04:28:56 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 04:28:58 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 04:28:58 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Repository Query
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Retrieve Without Bulk Data - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Computed Radiography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated PDF Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated CDA Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated STL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated OBJ Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated MTL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced XA Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Radiofluoroscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced XRF Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Positron Emission Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray 3D Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray 3D Craniofacial Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Breast Tomosynthesis Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced PET Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Nuclear Medicine Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ultrasound Multi-frame Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Parametric Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: MR Spectroscopy Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced MR Color Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Physician Intent Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Segment Annotation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Radiation Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Robotic-Arm Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Dose Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Robotic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Radiation Set Delivery Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Treatment Preparation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced Continuous RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Patient Position Acquisition Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Structure Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Brachy Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Treatment Summary Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Ion Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Ion Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ultrasound Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced US Volume Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: 1.2.840.10008.5.1.4.1.1.6.3
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Raw Data Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spatial Fiducials Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Deformable Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tractography Results Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Real World Value Mapping Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Scan Mesh Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Scan Point Cloud Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Single Bit Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Byte Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Word Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame True Color Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Slide-Coordinates Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Photography 8 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Photography 16 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Stereometric Relationship Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography Stereographic Projection Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography 3D Coordinates Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography En Face Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography B-scan Volume Analysis Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Whole Slide Microscopy Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Dermoscopic Photography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Lensometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Autorefraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Keratometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Subjective Refraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Visual Acuity Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spectacle Prescription Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Axial Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Intraocular Lens Calculations Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Macular Grid Thickness and Volume Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Visual Field Static Perimetry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Thickness Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Corneal Topography Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Basic Text SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Comprehensive SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Comprehensive 3D SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Extensible SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Mammography CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Chest CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Radiopharmaceutical Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Colon CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Implantation Plan SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Acquisition Context SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Simplified Adult Echo SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Patient Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: 12-lead ECG Waveform Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:28:58 [INFO] quangtps.dicom.pacs_client (pacs_client.py:101): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 04:28:58 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 04:28:58 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 04:28:58 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 04:28:58 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 04:28:59 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-25 04:28:59 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 04:29:00 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:29:00 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 04:29:03 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:29:09 [ERROR] quangtps.database.db_connector (db_connector.py:289): Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+2025-03-25 04:29:09 [ERROR] quangtps.database.patient_db (patient_db.py:301): Lỗi khi chèn bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:09 [ERROR] quangtps.database.patient_db (patient_db.py:308): Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:09 [ERROR] quangtps.ui.patient_browser (patient_browser.py:308): Lỗi khi tạo bệnh nhân mới: Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:23 [ERROR] quangtps.database.db_connector (db_connector.py:289): Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+2025-03-25 04:29:23 [ERROR] quangtps.database.patient_db (patient_db.py:301): Lỗi khi chèn bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:23 [ERROR] quangtps.database.patient_db (patient_db.py:308): Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:23 [ERROR] quangtps.ui.patient_browser (patient_browser.py:308): Lỗi khi tạo bệnh nhân mới: Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:53 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 566, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DicomSeries' object has no attribute 'image'
+2025-03-25 04:29:55 [ERROR] quangtps.database.db_connector (db_connector.py:289): Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+2025-03-25 04:29:55 [ERROR] quangtps.database.patient_db (patient_db.py:301): Lỗi khi chèn bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:55 [ERROR] quangtps.database.patient_db (patient_db.py:308): Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:29:55 [ERROR] quangtps.ui.patient_browser (patient_browser.py:308): Lỗi khi tạo bệnh nhân mới: Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:30:07 [ERROR] quangtps.database.db_connector (db_connector.py:289): Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+2025-03-25 04:30:07 [ERROR] quangtps.database.patient_db (patient_db.py:301): Lỗi khi chèn bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:30:07 [ERROR] quangtps.database.patient_db (patient_db.py:308): Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:30:07 [ERROR] quangtps.ui.patient_tab (patient_tab.py:789): Lỗi khi tạo bệnh nhân mới: Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 295, in create_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table patients has no column named dob
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 769, in _create_new_patient
+    patient_id = self.patient_db.create_patient(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 309, in create_patient
+    raise DatabaseError("Lỗi khi tạo bệnh nhân: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi khi tạo bệnh nhân: Lỗi thực thi truy vấn: table patients has no column named dob
+2025-03-25 04:42:14 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 04:42:16 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 04:42:16 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Repository Query
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Retrieve Without Bulk Data - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Computed Radiography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated PDF Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated CDA Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated STL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated OBJ Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated MTL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced XA Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Radiofluoroscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced XRF Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Positron Emission Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray 3D Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray 3D Craniofacial Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Breast Tomosynthesis Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced PET Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Nuclear Medicine Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ultrasound Multi-frame Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Parametric Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: MR Spectroscopy Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced MR Color Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Physician Intent Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Segment Annotation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Radiation Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Robotic-Arm Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Dose Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Robotic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Radiation Set Delivery Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Treatment Preparation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced Continuous RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Patient Position Acquisition Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Structure Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Brachy Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Treatment Summary Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Ion Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Ion Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ultrasound Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced US Volume Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: 1.2.840.10008.5.1.4.1.1.6.3
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Raw Data Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spatial Fiducials Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Deformable Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tractography Results Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Real World Value Mapping Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Scan Mesh Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Scan Point Cloud Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Single Bit Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Byte Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Word Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame True Color Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Slide-Coordinates Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Photography 8 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Photography 16 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Stereometric Relationship Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography Stereographic Projection Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography 3D Coordinates Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography En Face Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography B-scan Volume Analysis Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Whole Slide Microscopy Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Dermoscopic Photography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Lensometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Autorefraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Keratometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Subjective Refraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Visual Acuity Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spectacle Prescription Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Axial Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Intraocular Lens Calculations Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Macular Grid Thickness and Volume Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Visual Field Static Perimetry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Thickness Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Corneal Topography Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Basic Text SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Comprehensive SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Comprehensive 3D SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Extensible SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Mammography CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Chest CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Radiopharmaceutical Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Colon CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Implantation Plan SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Acquisition Context SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Simplified Adult Echo SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Patient Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: 12-lead ECG Waveform Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:42:16 [INFO] quangtps.dicom.pacs_client (pacs_client.py:101): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 04:42:16 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 04:42:16 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 04:42:16 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 04:42:16 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 04:42:16 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-25 04:42:16 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 04:42:18 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:42:18 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 04:42:37 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 6a18111f-577e-4b4a-8ecd-30ad8de79000
+2025-03-25 04:42:37 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6a18111f-577e-4b4a-8ecd-30ad8de79000
+2025-03-25 04:42:42 [ERROR] quangtps.ui.patient_tab (patient_tab.py:455): Lỗi khi thiết lập bệnh nhân 6a18111f-577e-4b4a-8ecd-30ad8de79000: PatientTab._populate_medical_history() missing 1 required positional argument: 'history_data'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 438, in set_patient
+    self._populate_medical_history()
+TypeError: PatientTab._populate_medical_history() missing 1 required positional argument: 'history_data'
+2025-03-25 04:42:42 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: 6a18111f-577e-4b4a-8ecd-30ad8de79000
+2025-03-25 04:43:09 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 04:43:40 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 04:46:35 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 04:46:37 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 04:46:37 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Repository Query
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:64): Không thể thêm context: Abstract Syntax: Composite Instance Retrieve Without Bulk Data - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Computed Radiography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated PDF Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated CDA Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated STL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated OBJ Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Encapsulated MTL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced XA Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Radiofluoroscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced XRF Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Positron Emission Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray 3D Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray 3D Craniofacial Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Breast Tomosynthesis Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced PET Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Nuclear Medicine Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ultrasound Multi-frame Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Parametric Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: MR Spectroscopy Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced MR Color Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Physician Intent Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Segment Annotation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Radiation Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Robotic-Arm Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Dose Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Robotic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Radiation Set Delivery Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Treatment Preparation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced Continuous RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Patient Position Acquisition Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Structure Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Brachy Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Treatment Summary Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Ion Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: RT Ion Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ultrasound Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced US Volume Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: 1.2.840.10008.5.1.4.1.1.6.3
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Raw Data Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spatial Fiducials Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Deformable Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Tractography Results Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Real World Value Mapping Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Scan Mesh Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Surface Scan Point Cloud Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Single Bit Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Byte Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Word Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Multi-frame True Color Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Slide-Coordinates Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Video Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Photography 8 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Photography 16 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Stereometric Relationship Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography Stereographic Projection Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography 3D Coordinates Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography En Face Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography B-scan Volume Analysis Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: VL Whole Slide Microscopy Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Dermoscopic Photography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Lensometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Autorefraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Keratometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Subjective Refraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Visual Acuity Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Spectacle Prescription Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Axial Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Intraocular Lens Calculations Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Macular Grid Thickness and Volume Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Visual Field Static Perimetry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Ophthalmic Thickness Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Corneal Topography Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Basic Text SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Comprehensive SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Comprehensive 3D SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Extensible SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Mammography CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Chest CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Radiopharmaceutical Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Colon CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Implantation Plan SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Acquisition Context SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Simplified Adult Echo SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Patient Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: Enhanced X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [WARNING] quangtps.dicom.pacs_client (pacs_client.py:78): Không thể thêm context: Abstract Syntax: 12-lead ECG Waveform Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 04:46:37 [INFO] quangtps.dicom.pacs_client (pacs_client.py:101): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 04:46:37 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 04:46:37 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 04:46:37 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 04:46:37 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 04:46:37 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-25 04:46:37 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 04:46:39 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:46:39 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 04:46:42 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 8e9d659e-9135-49c0-b978-54baf6d35e50
+2025-03-25 04:46:42 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 8e9d659e-9135-49c0-b978-54baf6d35e50
+2025-03-25 04:47:56 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 04:47:58 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 04:47:58 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:47:58 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 04:47:58 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 04:47:58 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 04:47:58 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 04:47:58 [INFO] quangtps.ui.dose_tab (dose_tab.py:487): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 04:47:59 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:598): Khởi tạo tab điều trị hoàn tất
+2025-03-25 04:47:59 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 04:48:00 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:48:00 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 04:48:10 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: adf344c7-a8fd-4b80-ab7f-8c0bf208f32f
+2025-03-25 04:48:10 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: adf344c7-a8fd-4b80-ab7f-8c0bf208f32f
+2025-03-25 04:48:12 [ERROR] quangtps.ui.patient_tab (patient_tab.py:455): Lỗi khi thiết lập bệnh nhân adf344c7-a8fd-4b80-ab7f-8c0bf208f32f: PatientTab._populate_medical_history() missing 1 required positional argument: 'history_data'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 438, in set_patient
+    self._populate_medical_history()
+TypeError: PatientTab._populate_medical_history() missing 1 required positional argument: 'history_data'
+2025-03-25 04:48:12 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: adf344c7-a8fd-4b80-ab7f-8c0bf208f32f
+2025-03-25 04:48:20 [ERROR] quangtps.database.patient_db (patient_db.py:580): Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+2025-03-25 04:48:20 [ERROR] quangtps.ui.patient_tab (patient_tab.py:1200): Lỗi khi tìm kiếm bệnh nhân: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 1167, in _search_patients
+    patients = self.patient_db.search_patients(search_query)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 581, in search_patients
+    raise DatabaseError(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}") from e
+quangtps.core.exceptions.DatabaseError: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+2025-03-25 04:48:41 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 04:49:18 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 04:49:38 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 04:58:00 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 04:58:02 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 04:58:02 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:58:02 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 04:58:02 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 04:58:02 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 04:58:02 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 04:58:56 [CRITICAL] __main__ (__main__.py:226): Lỗi khởi động cửa sổ chính: wrapped C/C++ object of type QVBoxLayout has been deleted
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 217, in show_main_window
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 95, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 156, in _init_ui
+    self.dose_tab = DoseTab(self)
+                    ^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\dose_tab.py", line 487, in __init__
+    self._init_ui()
+  File "E:\hoctap\QuangTPS\quangtps\ui\dose_tab.py", line 555, in _init_ui
+    self.dvh_layout.addWidget(self.dvh_widget)
+RuntimeError: wrapped C/C++ object of type QVBoxLayout has been deleted
+2025-03-25 04:59:54 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 04:59:55 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 04:59:55 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 04:59:55 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 04:59:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 04:59:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 04:59:56 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 04:59:56 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 04:59:56 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 04:59:56 [ERROR] quangtps.ui.qa_tab (qa_tab.py:492): Lỗi khi tải danh sách các bài kiểm tra QA: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\qa_tab.py", line 439, in _load_qa_tests
+    self.qa_tests = self.qa_manager.get_all_tests()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+2025-03-25 04:59:56 [ERROR] quangtps.ui.qa_tab (qa_tab.py:492): Lỗi khi tải danh sách các bài kiểm tra QA: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\qa_tab.py", line 439, in _load_qa_tests
+    self.qa_tests = self.qa_manager.get_all_tests()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+2025-03-25 05:00:43 [INFO] quangtps.ui.qa_tab (qa_tab.py:596): Đã tạo 3 bài kiểm tra QA mẫu
+2025-03-25 05:00:43 [INFO] quangtps.ui.qa_tab (qa_tab.py:596): Đã tạo 3 bài kiểm tra QA mẫu
+2025-03-25 05:00:43 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 05:00:45 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 05:00:45 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 05:00:56 [ERROR] quangtps.database.patient_db (patient_db.py:580): Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+2025-03-25 05:00:56 [ERROR] quangtps.ui.patient_tab (patient_tab.py:1200): Lỗi khi tìm kiếm bệnh nhân: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 1167, in _search_patients
+    patients = self.patient_db.search_patients(search_query)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 581, in search_patients
+    raise DatabaseError(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}") from e
+quangtps.core.exceptions.DatabaseError: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+2025-03-25 05:01:03 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:07 [ERROR] quangtps.ui.patient_tab (patient_tab.py:455): Lỗi khi thiết lập bệnh nhân a26d843a-31b4-48dd-98b5-bf9e775640b5: PatientTab._populate_medical_history() missing 1 required positional argument: 'history_data'
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 438, in set_patient
+    self._populate_medical_history()
+TypeError: PatientTab._populate_medical_history() missing 1 required positional argument: 'history_data'
+2025-03-25 05:01:07 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:15 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:15 [INFO] quangtps.database.patient_db (patient_db.py:425): Đã cập nhật thông tin bệnh nhân a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:15 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:16 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 05:01:16 [WARNING] quangtps.ui.patient_browser (patient_browser.py:133): Không thể tải kế hoạch cho bệnh nhân a26d843a-31b4-48dd-98b5-bf9e775640b5: 'PatientDatabase' object has no attribute 'get_patient_plans'
+2025-03-25 05:01:16 [INFO] quangtps.ui.patient_tab (patient_tab.py:671): Đã cập nhật thông tin bệnh nhân: a26d843a-31b4-48dd-98b5-bf9e775640b5
+2025-03-25 05:01:20 [ERROR] quangtps.database.patient_db (patient_db.py:580): Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+2025-03-25 05:01:20 [ERROR] quangtps.ui.patient_tab (patient_tab.py:1200): Lỗi khi tìm kiếm bệnh nhân: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 1167, in _search_patients
+    patients = self.patient_db.search_patients(search_query)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 581, in search_patients
+    raise DatabaseError(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}") from e
+quangtps.core.exceptions.DatabaseError: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+2025-03-25 05:01:22 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 05:01:22 [WARNING] quangtps.ui.patient_browser (patient_browser.py:133): Không thể tải kế hoạch cho bệnh nhân a26d843a-31b4-48dd-98b5-bf9e775640b5: 'PatientDatabase' object has no attribute 'get_patient_plans'
+2025-03-25 05:01:24 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 0b0a90f4-a53b-4270-8fa6-b96cd80906f0
+2025-03-25 05:01:25 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 2 bệnh nhân
+2025-03-25 05:01:25 [WARNING] quangtps.ui.patient_browser (patient_browser.py:133): Không thể tải kế hoạch cho bệnh nhân 0b0a90f4-a53b-4270-8fa6-b96cd80906f0: 'PatientDatabase' object has no attribute 'get_patient_plans'
+2025-03-25 05:01:25 [WARNING] quangtps.ui.patient_browser (patient_browser.py:133): Không thể tải kế hoạch cho bệnh nhân a26d843a-31b4-48dd-98b5-bf9e775640b5: 'PatientDatabase' object has no attribute 'get_patient_plans'
