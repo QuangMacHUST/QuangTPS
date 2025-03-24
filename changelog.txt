@@ -18,4 +18,34 @@
 ### Cài đặt công cụ
 - Cài đặt autopep8 để tự động định dạng mã nguồn
 
+## Ngày 25/11/2024
+
+### Thêm biểu tượng cho UI
+1. Tạo các biểu tượng SVG cho giao diện:
+   - app_icon.svg - Biểu tượng chính của ứng dụng
+   - patient.svg - Biểu tượng quản lý bệnh nhân
+   - planning.svg - Biểu tượng lập kế hoạch
+   - dose.svg - Biểu tượng tính toán liều
+   - treatment.svg - Biểu tượng điều trị
+   - qa.svg - Biểu tượng QA
+   - report.svg - Biểu tượng báo cáo
+
+2. Cập nhật MainWindow để sử dụng các biểu tượng mới
+
+### Phát triển mô hình dữ liệu
+1. Phát triển các lớp cơ sở:
+   - Patient - Lưu trữ thông tin bệnh nhân
+   - BeamParameters - Thông số chùm tia
+   - Beam - Mô hình chùm tia điều trị
+   - Plan - Kế hoạch điều trị
+
+### Môi trường
+1. Tạo script thiết lập môi trường:
+   - setup.py - Script thiết lập cơ bản
+   - setup_environment.py - Script thiết lập đầy đủ
+
+### Sửa lỗi
+1. Sửa lỗi trong `quangtps/ui/main_window.py`:
+   - Thêm ICON_DIR để chuẩn hóa đường dẫn biểu tượng
+
 ### Thay đổi tiếp theo sẽ được thêm vào đây... 

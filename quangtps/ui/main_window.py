@@ -17,34 +17,53 @@ from typing import Dict, List, Any, Optional
 # Enable faulthandler to debug crashes
 faulthandler.enable()
 
-from PyQt5.QtWidgets import (
-    QMainWindow, QApplication, QWidget, QTabWidget, QVBoxLayout,
-    QHBoxLayout, QLabel, QPushButton, QAction, QFileDialog,
-    QMessageBox, QDockWidget, QTreeView, QSplitter, QToolBar,
-    QStatusBar, QProgressBar, QDialog, QToolButton, QMenu, QSizePolicy
-)
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QIcon, QFont, QPixmap
+# Import PyQt5
+try:
+    from PyQt5 import QtWidgets, QtCore, QtGui
+    from PyQt5.QtWidgets import (
+        QMainWindow, QApplication, QWidget, QTabWidget, QVBoxLayout,
+        QHBoxLayout, QLabel, QPushButton, QAction, QFileDialog,
+        QMessageBox, QDockWidget, QTreeView, QSplitter, QToolBar,
+        QStatusBar, QProgressBar, QDialog, QToolButton, QMenu, QSizePolicy
+    )
+    from PyQt5.QtCore import Qt, QSize
+    from PyQt5.QtGui import QIcon, QFont, QPixmap
+except ImportError as e:
+    print(f"Lỗi import PyQt5: {e}")
+    print("Vui lòng cài đặt PyQt5 bằng lệnh: pip install PyQt5")
+    sys.exit(1)
 
-from quangtps.ui.patient_tab import PatientTab
-from quangtps.ui.planning_tab import PlanningTab
-from quangtps.ui.dose_tab import DoseTab
-from quangtps.ui.treatment_tab import TreatmentTab
-from quangtps.ui.qa_tab import QATab
-from quangtps.ui.reporting_tab import ReportingTab
-from quangtps.ui.patient_browser import PatientBrowser
-from quangtps.ui.structure_view import StructureView
-from quangtps.ui.image_viewer import ImageViewer
-from quangtps.ui.imaging_tab import ImagingTab
-from quangtps.ui.workflow_panel import WorkflowManager
-from quangtps.ui.plan_evaluation import PlanEvaluationWidget
-from quangtps.ui.dicom_loader import DicomLoaderWidget
-from quangtps.database.patient_db import PatientDatabase
-from quangtps.ui.treatment_planning_tab import TreatmentPlanningTab
-from quangtps.ui.dose_calculation_dialog import DoseCalculationDialog
+# Import các module nội bộ
+try:
+    from quangtps.ui.patient_tab import PatientTab
+    from quangtps.ui.planning_tab import PlanningTab
+    from quangtps.ui.dose_tab import DoseTab
+    from quangtps.ui.treatment_tab import TreatmentTab
+    from quangtps.ui.qa_tab import QATab
+    from quangtps.ui.reporting_tab import ReportingTab
+    from quangtps.ui.patient_browser import PatientBrowser
+    from quangtps.ui.structure_view import StructureView
+    from quangtps.ui.image_viewer import ImageViewer
+    from quangtps.ui.imaging_tab import ImagingTab
+    from quangtps.ui.workflow_panel import WorkflowManager
+    from quangtps.ui.plan_evaluation import PlanEvaluationWidget
+    from quangtps.ui.dicom_loader import DicomLoaderWidget
+    from quangtps.database.patient_db import PatientDatabase
+    from quangtps.ui.treatment_planning_tab import TreatmentPlanningTab
+    from quangtps.ui.dose_calculation_dialog import DoseCalculationDialog
+except ImportError as e:
+    print(f"Lỗi import module nội bộ: {e}")
+    print("Vui lòng kiểm tra cài đặt và cấu trúc thư mục quangtps")
 
 logger = logging.getLogger(__name__)
 
+# Đường dẫn đến thư mục biểu tượng
+ICON_DIR = os.path.join(os.path.dirname(__file__), "icons", "new_icons")
+
+# Đảm bảo thư mục biểu tượng tồn tại
+if not os.path.exists(ICON_DIR):
+    os.makedirs(ICON_DIR, exist_ok=True)
+    logger.warning(f"Đã tạo thư mục biểu tượng: {ICON_DIR}")
 
 class MainWindow(QMainWindow):
     """
@@ -69,7 +88,7 @@ class MainWindow(QMainWindow):
         
         # Thiết lập cửa sổ
         self.setWindowTitle("QuangTPS - Hệ thống lập kế hoạch xạ trị mở")
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "app_icon.svg")))
+        self.setWindowIcon(QIcon(os.path.join(ICON_DIR, "app_icon.svg")))
         self.setMinimumSize(1200, 800)
         
         # Khởi tạo giao diện
@@ -176,18 +195,18 @@ class MainWindow(QMainWindow):
         
         # Thêm các chức năng chính
         functions = [
-            ("Hình ảnh", "imaging", "new_icons/imaging.svg", "Quản lý và xem hình ảnh", self._show_imaging_tab),
-            ("Vẽ cấu trúc", "contouring", "new_icons/contouring.svg", "Vẽ và quản lý cấu trúc giải phẫu", self._show_contouring_tab),
-            ("Lập kế hoạch", "planning", "new_icons/planning.svg", "Lập kế hoạch xạ trị", self._show_planning_tab),
-            ("Tính liều", "dose", "new_icons/dose.svg", "Tính toán và phân tích liều", self._show_dose_tab),
-            ("Đánh giá", "evaluation", "new_icons/evaluate.svg", "Đánh giá kế hoạch", self._show_evaluation_tab),
-            ("Điều trị", "treatment", "new_icons/treatment.svg", "Quản lý điều trị", self._show_treatment_tab),
-            ("QA", "qa", "new_icons/qa.svg", "Đảm bảo chất lượng", self._show_qa_tab),
-            ("Báo cáo", "reporting", "new_icons/report.svg", "Tạo báo cáo", self._show_reporting_tab)
+            ("Hình ảnh", "imaging", "imaging.svg", "Quản lý và xem hình ảnh", self._show_imaging_tab),
+            ("Vẽ cấu trúc", "contouring", "contouring.svg", "Vẽ và quản lý cấu trúc giải phẫu", self._show_contouring_tab),
+            ("Lập kế hoạch", "planning", "planning.svg", "Lập kế hoạch xạ trị", self._show_planning_tab),
+            ("Tính liều", "dose", "dose.svg", "Tính toán và phân tích liều", self._show_dose_tab),
+            ("Đánh giá", "evaluation", "evaluate.svg", "Đánh giá kế hoạch", self._show_evaluation_tab),
+            ("Điều trị", "treatment", "treatment.svg", "Quản lý điều trị", self._show_treatment_tab),
+            ("QA", "qa", "qa.svg", "Đảm bảo chất lượng", self._show_qa_tab),
+            ("Báo cáo", "reporting", "report.svg", "Tạo báo cáo", self._show_reporting_tab)
         ]
         
         for text, name, icon, tooltip, callback in functions:
-            action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", icon)), text, self)
+            action = QAction(QIcon(os.path.join(ICON_DIR, icon)), text, self)
             action.setToolTip(tooltip)
             action.triggered.connect(callback)
             self.function_toolbar.addAction(action)

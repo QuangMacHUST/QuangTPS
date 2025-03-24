@@ -29,6 +29,7 @@ from PyQt5.QtGui import QFont, QPixmap
 from quangtps.database.patient_db import PatientDatabase
 from quangtps.dicom.dicom_importer import DicomImporter
 from quangtps.dicom.dicom_exporter import DicomExporter
+from quangtps.core.patient import Patient
 
 logger = logging.getLogger(__name__)
 
@@ -126,38 +127,38 @@ class NewPatientDialog(QDialog):
 class PatientTab(QWidget):
     """
     Tab hiển thị và chỉnh sửa thông tin bệnh nhân.
-
+    
     Tab này bao gồm các phần thông tin cá nhân, lịch sử bệnh,
     kết quả khám lâm sàng, hình ảnh y tế, và các dữ liệu khác
     liên quan đến bệnh nhân.
     """
-
+    
     # Tín hiệu để thông báo khi cập nhật dữ liệu bệnh nhân
-    patient_updated = pyqtSignal(object)
+    patient_updated = pyqtSignal(str)  # patient_id
     patient_created = pyqtSignal(str)
-
+    
     def __init__(self, parent=None):
         """
         Khởi tạo tab thông tin bệnh nhân.
-
+        
         Parameters
         ----------
         parent : QWidget, optional
             Widget cha
         """
         super().__init__(parent)
-
+        
         # Trạng thái
         self.current_patient = None
         self.patient_db = PatientDatabase()
         self.dicom_importer = DicomImporter()
         self.dicom_exporter = DicomExporter()
-
+        
         # Thiết lập giao diện
         self._init_ui()
-
+        
         logger.info("Khởi tạo tab thông tin bệnh nhân hoàn tất")
-
+    
     def _init_ui(self):
         """Khởi tạo giao diện tab bệnh nhân"""
         layout = QVBoxLayout(self)
@@ -376,15 +377,15 @@ class PatientTab(QWidget):
         self.stacked_widget.addTab(self.medical_data_tab, "Dữ liệu y tế")
 
         layout.addWidget(self.stacked_widget)
-
+        
         # Vô hiệu hóa các widget khi không có bệnh nhân được chọn
         self._toggle_edit_mode(False)
-
+        
         # Kết nối tín hiệu
         self.name_edit.textChanged.connect(self._on_patient_data_changed)
-
+        
         logger.info("Khởi tạo giao diện tab bệnh nhân hoàn tất")
-
+    
     def _toggle_edit_mode(self, enabled: bool):
         """
         Bật/tắt chế độ chỉnh sửa thông tin bệnh nhân.
@@ -404,17 +405,17 @@ class PatientTab(QWidget):
         self.edit_button.setEnabled(not enabled)
         self.save_button.setEnabled(enabled)
         self.cancel_button.setEnabled(enabled)
-
+    
     def _on_patient_data_changed(self):
         """Xử lý khi dữ liệu bệnh nhân thay đổi."""
         # Đổi tiêu đề tab để hiển thị trạng thái chưa lưu
         if self.current_patient and not self.windowTitle().endswith("*"):
             self.setWindowTitle(f"{self.windowTitle()} *")
-
+    
     def set_patient(self, patient_id: str):
         """
         Thiết lập bệnh nhân hiện tại và hiển thị thông tin.
-
+        
         Parameters
         ----------
         patient_id : str
@@ -428,7 +429,7 @@ class PatientTab(QWidget):
                 QMessageBox.warning(
                     self, "Cảnh báo", f"Không tìm thấy bệnh nhân với ID: {patient_id}")
                 return
-
+            
             # Lưu bệnh nhân hiện tại
             self.current_patient = patient_data
 
@@ -453,14 +454,14 @@ class PatientTab(QWidget):
                 self, "Lỗi", f"Không thể hiển thị thông tin bệnh nhân: {str(e)}")
             logger.error(
                 f"Lỗi khi thiết lập bệnh nhân {patient_id}: {str(e)}", exc_info=True)
-
+    
     def _clear_patient_data(self):
         """
         Xóa dữ liệu bệnh nhân hiện tại và đặt lại giao diện.
         """
         # Đặt lại trạng thái
         self.current_patient = None
-
+        
         # Xóa dữ liệu trên giao diện
         self.name_edit.clear()
         self.name_edit.setReadOnly(True)
@@ -489,16 +490,16 @@ class PatientTab(QWidget):
         self.history_table.setRowCount(0)
         self.studies_table.setRowCount(0)
         self.series_table.setRowCount(0)
-
+        
         logger.info("Đã xóa dữ liệu bệnh nhân khỏi giao diện")
-
+    
     def _populate_patient_data(self):
         """
         Hiển thị thông tin bệnh nhân lên giao diện.
         """
         if not self.current_patient:
             return
-
+        
         try:
             # Lấy dữ liệu từ đối tượng bệnh nhân hiện tại
             patient = self.current_patient
@@ -552,28 +553,28 @@ class PatientTab(QWidget):
                 f"Lỗi khi hiển thị thông tin bệnh nhân: {str(e)}", exc_info=True)
             QMessageBox.critical(
                 self, "Lỗi", f"Không thể hiển thị thông tin bệnh nhân: {str(e)}")
-
+    
     def _populate_medical_history(self, history_data: List[Dict]):
         """Điền dữ liệu vào bảng lịch sử y tế."""
         self.history_table.setRowCount(0)
-
+        
         if not history_data:
             return
-
+        
         for entry in history_data:
             row_position = self.history_table.rowCount()
             self.history_table.insertRow(row_position)
-
+            
             date_item = QTableWidgetItem(entry.get("date", ""))
             type_item = QTableWidgetItem(entry.get("type", ""))
             desc_item = QTableWidgetItem(entry.get("description", ""))
             doctor_item = QTableWidgetItem(entry.get("doctor", ""))
-
+            
             self.history_table.setItem(row_position, 0, date_item)
             self.history_table.setItem(row_position, 1, type_item)
             self.history_table.setItem(row_position, 2, desc_item)
             self.history_table.setItem(row_position, 3, doctor_item)
-
+    
     def _populate_medical_images(self, images_data: List[Dict]):
         """Điền dữ liệu hình ảnh y tế."""
         # Xóa tất cả widget con hiện tại
@@ -581,33 +582,33 @@ class PatientTab(QWidget):
             item = self.images_list_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-
+        
         if not images_data:
             return
-
+        
         for image_data in images_data:
             # Tạo widget hiển thị hình ảnh
             image_widget = QWidget()
             image_layout = QVBoxLayout(image_widget)
-
+            
             # Label hiển thị hình ảnh
             image_label = QLabel()
             image_label.setFixedSize(150, 150)
             image_label.setScaledContents(True)
-
+            
             # TODO: Cần cải thiện cách hiển thị hình ảnh thực tế
             # Hiện tại chỉ hiển thị icon mẫu
             image_label.setPixmap(QPixmap(":/icons/image.png"))
-
+            
             # Label hiển thị thông tin hình ảnh
             info_label = QLabel(
                 f"{image_data.get('type', 'Không rõ')} - {image_data.get('date', '')}")
-
+            
             image_layout.addWidget(image_label)
             image_layout.addWidget(info_label)
-
+            
             self.images_list_layout.addWidget(image_widget)
-
+    
     def _save_patient_info(self):
         """
         Lưu thông tin bệnh nhân vào cơ sở dữ liệu.
@@ -616,7 +617,7 @@ class PatientTab(QWidget):
             QMessageBox.warning(
                 self, "Cảnh báo", "Không có bệnh nhân nào được chọn")
             return
-
+        
         try:
             # Lấy dữ liệu từ giao diện
             name = self.name_edit.text().strip()
@@ -626,7 +627,7 @@ class PatientTab(QWidget):
                     self, "Cảnh báo", "Vui lòng nhập tên bệnh nhân")
                 self.name_edit.setFocus()
                 return
-
+            
             birth_date = self.birth_date_edit.date().toString("yyyy-MM-dd")
             gender_map = {"Nam": "male", "Nữ": "female", "Khác": "other"}
             gender = gender_map[self.gender_combo.currentText()]
@@ -648,7 +649,7 @@ class PatientTab(QWidget):
                 gender=gender,
                 metadata=metadata
             )
-
+            
             if success:
                 # Cập nhật thông tin bệnh nhân hiện tại
                 updated_patient = self.patient_db.get_patient(
@@ -664,7 +665,7 @@ class PatientTab(QWidget):
                     self, "Thành công", "Đã lưu thông tin bệnh nhân")
 
                 # Kích hoạt tín hiệu cập nhật
-                self.patient_updated.emit(self.current_patient)
+                self.patient_updated.emit(self.current_patient['id'])
 
                 # Ghi log
                 logger.info(
@@ -672,17 +673,17 @@ class PatientTab(QWidget):
             else:
                 QMessageBox.critical(
                     self, "Lỗi", "Không thể cập nhật thông tin bệnh nhân")
-
+            
         except Exception as e:
             logger.error(
                 f"Lỗi khi lưu thông tin bệnh nhân: {str(e)}", exc_info=True)
             QMessageBox.critical(
                 self, "Lỗi", f"Không thể lưu thông tin bệnh nhân: {str(e)}")
-
+    
     def _get_medical_history_data(self) -> List[Dict]:
         """Lấy dữ liệu từ bảng lịch sử y tế."""
         history_data = []
-
+        
         for row in range(self.history_table.rowCount()):
             entry = {
                 "date": self.history_table.item(row, 0).text() if self.history_table.item(row, 0) else "",
@@ -691,9 +692,9 @@ class PatientTab(QWidget):
                 "doctor": self.history_table.item(row, 3).text() if self.history_table.item(row, 3) else ""
             }
             history_data.append(entry)
-
+        
         return history_data
-
+    
     def _get_medical_images_data(self) -> List[Dict]:
         """Lấy dữ liệu hình ảnh y tế."""
         # TODO: Triển khai việc lấy dữ liệu từ các widget hình ảnh
@@ -701,12 +702,12 @@ class PatientTab(QWidget):
         if self.current_patient and isinstance(self.current_patient.get("metadata"), dict):
             return self.current_patient.get("metadata", {}).get("medical_images", [])
         return []
-
+    
     def _add_medical_history(self):
         """Thêm mục mới vào lịch sử y tế."""
         row_position = self.history_table.rowCount()
         self.history_table.insertRow(row_position)
-
+        
         # Thiết lập mục mặc định cho hàng mới
         current_date = datetime.now().strftime("%Y-%m-%d")
         self.history_table.setItem(
@@ -714,48 +715,48 @@ class PatientTab(QWidget):
         self.history_table.setItem(row_position, 1, QTableWidgetItem("Khám"))
         self.history_table.setItem(row_position, 2, QTableWidgetItem(""))
         self.history_table.setItem(row_position, 3, QTableWidgetItem(""))
-
+        
         # Kích hoạt chế độ chỉnh sửa cho ô mô tả
         self.history_table.editItem(self.history_table.item(row_position, 2))
-
+        
         # Đánh dấu là có thay đổi chưa lưu
         self._on_patient_data_changed()
-
+    
     def _add_medical_image(self):
         """Thêm hình ảnh mới."""
         # Mở hộp thoại chọn tệp tin
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Chọn hình ảnh", "", "Image Files (*.png *.jpg *.jpeg *.bmp)"
         )
-
+        
         if not file_path:
             return
-
+        
         # Tạo widget hiển thị hình ảnh
         image_widget = QWidget()
         image_layout = QVBoxLayout(image_widget)
-
+        
         # Label hiển thị hình ảnh
         image_label = QLabel()
         image_label.setFixedSize(150, 150)
         image_label.setScaledContents(True)
-
+        
         # Tải hình ảnh
         pixmap = QPixmap(file_path)
         image_label.setPixmap(pixmap)
-
+        
         # Label hiển thị thông tin hình ảnh
         current_date = datetime.now().strftime("%Y-%m-%d")
         info_label = QLabel(f"Hình ảnh - {current_date}")
-
+        
         image_layout.addWidget(image_label)
         image_layout.addWidget(info_label)
-
+        
         self.images_list_layout.addWidget(image_widget)
-
+        
         # Đánh dấu là có thay đổi chưa lưu
         self._on_patient_data_changed()
-
+    
     def _create_new_patient(self):
         """Tạo một bệnh nhân mới."""
         try:
@@ -765,7 +766,7 @@ class PatientTab(QWidget):
                 patient_data = dialog.get_patient_data()
 
                 # Lưu bệnh nhân vào cơ sở dữ liệu
-                patient_id = self.patient_db.create_patient(
+            patient_id = self.patient_db.create_patient(
                     name=patient_data['name'],
                     birth_date=patient_data['birth_date'],
                     gender=patient_data['gender'],
@@ -773,11 +774,11 @@ class PatientTab(QWidget):
                 )
 
                 # Cập nhật tab với bệnh nhân mới
-                self.set_patient(patient_id)
-
+            self.set_patient(patient_id)
+            
                 # Phát tín hiệu cho biết bệnh nhân mới đã được tạo
-                self.patient_created.emit(patient_id)
-
+            self.patient_created.emit(patient_id)
+            
                 QMessageBox.information(
                     self, 
                     "Thành công", 
@@ -792,15 +793,15 @@ class PatientTab(QWidget):
                 "Lỗi", 
                 f"Không thể tạo bệnh nhân mới: {str(e)}"
             )
-
+    
     def _delete_current_patient(self):
         """Xóa bệnh nhân hiện tại."""
         if not self.current_patient:
             return
-
+        
         patient_id = self.current_patient.get("id")
         patient_name = self.current_patient.get("name")
-
+        
         # Hiển thị hộp thoại xác nhận
         reply = QMessageBox.question(
             self, 
@@ -809,25 +810,25 @@ class PatientTab(QWidget):
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-
+        
         if reply != QMessageBox.Yes:
             return
-
+        
         try:
             # Xóa bệnh nhân khỏi cơ sở dữ liệu
             success = self.patient_db.delete_patient(patient_id)
-
+            
             if not success:
                 raise ValueError(
                     f"Không thể xóa bệnh nhân với ID: {patient_id}")
-
+            
             # Xóa dữ liệu khỏi giao diện
             self._clear_patient_data()
             self._toggle_edit_mode(False)
-
+            
             # Phát tín hiệu thông báo đã xóa (có thể phát với patient_id=None)
-            self.patient_updated.emit({"id": None})
-
+            self.patient_updated.emit(patient_id)
+            
             QMessageBox.information(
                 self, "Thành công", f"Đã xóa bệnh nhân '{patient_name}' thành công")
             logger.info(f"Đã xóa bệnh nhân: {patient_id}")

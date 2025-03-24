@@ -5,7 +5,8 @@ Quản lý cơ sở dữ liệu bệnh nhân.
 import json
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, date
+from typing import List, Optional
 
 from quangtps.core.exceptions import DatabaseError
 from quangtps.database.db_connector import DBConnector
@@ -217,6 +218,44 @@ class PatientDatabase:
         Khởi tạo đối tượng PatientDatabase.
         """
         self.db = DBConnector()
+        self._create_tables()
+
+    def _create_tables(self):
+        """Tạo các bảng cần thiết"""
+        with self.db.connection() as conn:
+            cursor = conn.cursor()
+            
+            # Bảng bệnh nhân
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS patients (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    dob TEXT NOT NULL,
+                    gender TEXT NOT NULL,
+                    address TEXT,
+                    phone TEXT,
+                    email TEXT,
+                    diagnosis TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Bảng lịch sử khám
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS patient_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    patient_id TEXT NOT NULL,
+                    visit_date TEXT NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (patient_id) REFERENCES patients (id)
+                        ON DELETE CASCADE
+                )
+            """)
+            
+            conn.commit()
 
     def create_patient(self, name, birth_date=None, gender=None, metadata=None):
         """
@@ -248,7 +287,7 @@ class PatientDatabase:
             # Thử chèn với created_date trước
             try:
                 query = '''
-                    INSERT INTO patients (id, name, birth_date, gender, created_at, updated_at, metadata)
+                    INSERT INTO patients (id, name, dob, gender, created_at, updated_at, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 '''
                 
@@ -355,7 +394,7 @@ class PatientDatabase:
                 params.append(name)
             
             if birth_date is not None:
-                set_clauses.append("birth_date = ?")
+                set_clauses.append("dob = ?")
                 params.append(birth_date)
             
             if gender is not None:
@@ -491,7 +530,7 @@ class PatientDatabase:
                     params.append(query['gender'])
                 
                 if 'birth_date' in query and query['birth_date']:
-                    where_clauses.append("birth_date = ?")
+                    where_clauses.append("dob = ?")
                     params.append(query['birth_date'])
                 
                 # Tìm kiếm trong metadata (cần xử lý đặc biệt)
@@ -564,7 +603,7 @@ class PatientDatabase:
                 params.append("%" + name + "%")
             
             if birth_date:
-                conditions.append("birth_date = ?")
+                conditions.append("dob = ?")
                 params.append(birth_date)
             
             if gender:
@@ -854,3 +893,33 @@ class PatientDatabase:
         except Exception as e:
             logger.error(f"Lỗi khi thêm nghiên cứu: {str(e)}", exc_info=True)
             raise DatabaseError(f"Lỗi khi thêm nghiên cứu: {str(e)}") from e
+
+    def add_history(self, patient_id: str, description: str) -> None:
+        """Thêm lịch sử khám cho bệnh nhân"""
+        with self.db.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO patient_history (
+                    patient_id, visit_date, description
+                ) VALUES (?, CURRENT_DATE, ?)
+            """, (patient_id, description))
+            conn.commit()
+    
+    def get_history(self, patient_id: str) -> List[dict]:
+        """Lấy lịch sử khám của bệnh nhân"""
+        with self.db.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT visit_date, description
+                FROM patient_history
+                WHERE patient_id = ?
+                ORDER BY visit_date DESC
+            """, (patient_id,))
+            
+            return [
+                {
+                    "visit_date": date.fromisoformat(row[0]),
+                    "description": row[1]
+                }
+                for row in cursor.fetchall()
+            ]

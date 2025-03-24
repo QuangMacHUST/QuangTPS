@@ -101,7 +101,7 @@ class BeamDelivery:
     def deliver_control_point(self, control_point_index: int):
         """
         Thực hiện điều trị tại một control point cụ thể.
-
+        
         Parameters
         ----------
         control_point_index : int
@@ -164,7 +164,7 @@ class BeamDelivery:
     def pause_delivery(self, reason: str = ""):
         """
         Tạm dừng quá trình thực hiện điều trị.
-
+        
         Parameters
         ----------
         reason : str, optional
@@ -238,7 +238,7 @@ class BeamDelivery:
     def abort_delivery(self, reason: str):
         """
         Dừng hẳn quá trình thực hiện điều trị.
-
+        
         Parameters
         ----------
         reason : str
@@ -295,7 +295,7 @@ class TreatmentSession:
     def __init__(self, patient_id: str, plan_id: str, fraction_number: int = 1):
         """
         Khởi tạo buổi điều trị.
-
+        
         Parameters
         ----------
         patient_id : str
@@ -358,7 +358,7 @@ class TreatmentSession:
     def setup_patient(self, setup_details: Dict[str, Any]):
         """
         Ghi nhận thông tin thiết lập bệnh nhân.
-
+        
         Parameters
         ----------
         setup_details : Dict[str, Any]
@@ -453,7 +453,7 @@ class TreatmentSession:
     def pause_session(self, reason: str = ""):
         """
         Tạm dừng buổi điều trị.
-
+        
         Parameters
         ----------
         reason : str, optional
@@ -580,7 +580,7 @@ class TreatmentSession:
     def get_session_record(self) -> Dict[str, Any]:
         """
         Lấy bản ghi về buổi điều trị.
-
+        
         Returns
         -------
         Dict[str, Any]
@@ -633,7 +633,7 @@ class TreatmentFraction:
     def __init__(self, fraction_number: int, plan_id: str, scheduled_date=None):
         """
         Khởi tạo đối tượng TreatmentFraction.
-
+        
         Parameters
         ----------
         fraction_number : int
@@ -739,7 +739,7 @@ class TreatmentFraction:
         if data.get('verified_at'):
             fraction.verified_at = datetime.datetime.fromisoformat(
                 data['verified_at'])
-
+        
         return fraction
 
 
@@ -751,7 +751,7 @@ class TreatmentCourse:
     def __init__(self, course_id: str, plan_id: str, name: str = None, fractionation_scheme=None):
         """
         Khởi tạo đối tượng TreatmentCourse.
-
+        
         Parameters
         ----------
         course_id : str
@@ -794,7 +794,7 @@ class TreatmentCourse:
     def schedule_fractions(self, start_date, days_of_week=None):
         """
         Lập lịch cho các phân liều.
-
+        
         Parameters
         ----------
         start_date : datetime.date
@@ -803,7 +803,7 @@ class TreatmentCourse:
             Danh sách các ngày trong tuần để điều trị (0=Monday, 6=Sunday), by default None
         """
         import datetime
-
+        
         self.start_date = start_date
         current_date = start_date
 
@@ -821,7 +821,7 @@ class TreatmentCourse:
 
             # Chuyển sang ngày tiếp theo
             current_date += datetime.timedelta(days=1)
-
+        
     def assign_machine(self, machine_id: str):
         """Gán máy điều trị cho chuỗi điều trị."""
         self.machine_id = machine_id
@@ -849,14 +849,14 @@ class TreatmentCourse:
             fraction.mark_completed(**kwargs)
         elif status == FractionStatus.PARTIAL:
             fraction.mark_partial(kwargs.get('completion_percentage', 0), kwargs.get('reason', ''))
-        elif status == FractionStatus.MISSED:
+                elif status == FractionStatus.MISSED:
             fraction.mark_missed(kwargs.get('reason', ''))
             
         # Kiểm tra nếu tất cả phân liều đã hoàn thành
         self._check_course_completion()
         
-        return True
-
+                return True
+        
     def _check_course_completion(self):
         """Kiểm tra và cập nhật trạng thái chuỗi điều trị."""
         # Nếu chuỗi điều trị đã hoàn thành thì bỏ qua
@@ -1009,7 +1009,7 @@ class TreatmentDeliveryManager:
             ID của kế hoạch điều trị
         fraction_number : int, optional
             Số thứ tự phân liều, nếu None thì sẽ tự động tính toán
-
+        
         Returns
         -------
         Optional[str]
@@ -1068,7 +1068,7 @@ class TreatmentDeliveryManager:
         ----------
         session_id : str
             ID của phiên điều trị
-
+        
         Returns
         -------
         Optional[TreatmentSession]
@@ -1084,7 +1084,7 @@ class TreatmentDeliveryManager:
         ----------
         plan_id : str
             ID của kế hoạch điều trị
-
+        
         Returns
         -------
         List[Dict[str, Any]]
@@ -1104,7 +1104,7 @@ class TreatmentDeliveryManager:
         ----------
         session_id : str
             ID của phiên điều trị
-
+        
         Returns
         -------
         bool
@@ -1145,7 +1145,7 @@ class TreatmentDeliveryManager:
             ID của phiên điều trị
         reason : str
             Lý do hủy bỏ
-
+        
         Returns
         -------
         bool
@@ -1179,12 +1179,12 @@ class TreatmentDeliveryManager:
     def get_session_record(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
         Lấy bản ghi về một phiên điều trị.
-
+        
         Parameters
         ----------
         session_id : str
             ID của phiên điều trị
-
+            
         Returns
         -------
         Optional[Dict[str, Any]]
