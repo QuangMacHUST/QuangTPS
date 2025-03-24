@@ -1,0 +1,9 @@
+2025-03-24 23:02:32,967 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-24 23:02:32
+2025-03-24 23:02:32,967 - __main__ - INFO - Thư mục gốc: E:\hoctap\QuangTPS
+2025-03-24 23:02:32,967 - __main__ - INFO - File log: E:\hoctap\QuangTPS\logs\quangtps_20250324_230232.log
+2025-03-24 23:02:37,413 - __main__ - ERROR - Thư viện scikit-image chưa được cài đặt
+2025-03-24 23:02:37,416 - __main__ - ERROR - Thư viện dicompyler-core chưa được cài đặt
+2025-03-24 23:02:37,416 - __main__ - ERROR - Thiếu các thư viện: scikit-image, dicompyler-core
+2025-03-24 23:02:37,417 - __main__ - ERROR - Vui lòng cài đặt các thư viện còn thiếu bằng lệnh:
+2025-03-24 23:02:37,418 - __main__ - ERROR - pip install scikit-image dicompyler-core
+2025-03-24 23:02:37,418 - __main__ - ERROR - Không thể khởi động QuangTPS do thiếu thư viện

@@ -87,22 +87,23 @@ def check_dependencies():
     """Kiểm tra các thư viện phụ thuộc."""
     logger = logging.getLogger(__name__)
     
-    required_packages = [
-        "numpy",
-        "scipy",
-        "pandas",
-        "pydicom",
-        "PyQt5",
-        "matplotlib",
-        "scikit-image",
-        "dicompyler-core"
-    ]
+    # Dictionary ánh xạ tên gói với tên module
+    package_to_module = {
+        "numpy": "numpy",
+        "scipy": "scipy",
+        "pandas": "pandas",
+        "pydicom": "pydicom",
+        "PyQt5": "PyQt5",
+        "matplotlib": "matplotlib",
+        "scikit-image": "skimage",
+        "dicompyler-core": "dicompylercore"
+    }
     
     missing_packages = []
     
-    for package in required_packages:
+    for package, module in package_to_module.items():
         try:
-            __import__(package)
+            __import__(module)
             logger.debug(f"Thư viện {package} đã được cài đặt")
         except ImportError:
             logger.error(f"Thư viện {package} chưa được cài đặt")
@@ -124,6 +125,7 @@ def show_splash_screen():
     
     # Tạo ứng dụng QApplication
     app = QApplication(sys.argv)
+    splash = None
     
     # Đường dẫn đến file splash screen
     splash_path = os.path.join(
@@ -146,26 +148,24 @@ def show_splash_screen():
             "splash.png"
         )
     
-    # Nếu không tìm thấy file splash screen, thoát
-    if not os.path.exists(splash_path):
-        return app
-    
-    # Tạo splash screen
-    splash_pixmap = QPixmap(splash_path)
-    splash = QSplashScreen(splash_pixmap)
-    
-    # Thiết lập văn bản
-    splash.showMessage(
-        "Đang khởi động QuangTPS...",
-        Qt.AlignBottom | Qt.AlignCenter,
-        Qt.white
-    )
-    
-    # Hiển thị splash screen
-    splash.show()
-    
-    # Đảm bảo splash screen hiển thị
-    app.processEvents()
+    # Tạo splash screen nếu tìm thấy file
+    if os.path.exists(splash_path):
+        # Tạo splash screen
+        splash_pixmap = QPixmap(splash_path)
+        splash = QSplashScreen(splash_pixmap)
+        
+        # Thiết lập văn bản
+        splash.showMessage(
+            "Đang khởi động QuangTPS...",
+            Qt.AlignBottom | Qt.AlignCenter,
+            Qt.white
+        )
+        
+        # Hiển thị splash screen
+        splash.show()
+        
+        # Đảm bảo splash screen hiển thị
+        app.processEvents()
     
     return app, splash
 
@@ -244,7 +244,9 @@ def start_application(app, splash, args):
         logger.info("Ứng dụng đã khởi động thành công")
         
     except Exception as e:
-        logger.error(f"Lỗi khi khởi động ứng dụng: {str(e)}")
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Lỗi khi khởi động ứng dụng: {str(e)}\n{error_traceback}")
         if splash:
             splash.close()
         

@@ -28,7 +28,7 @@ from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 logger = logging.getLogger(__name__)
 
 
-class DeliveryStatus(str, Enum):
+class DeliveryStatus:
     """Enum cho trạng thái của quá trình thực hiện điều trị."""
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"

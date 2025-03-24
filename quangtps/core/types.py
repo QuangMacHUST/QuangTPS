@@ -8,6 +8,7 @@ for all modules.
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Union, Any
+from enum import Enum
 import SimpleITK as sitk
 import numpy as np
 
@@ -274,3 +275,12 @@ class BeamParameters:
             'bolus_thickness': self.bolus_thickness,
             'additional_parameters': self.additional_parameters
         }
+
+
+class BeamEnergyType(Enum):
+    """Loại năng lượng của chùm tia"""
+    PHOTON = "photon"
+    ELECTRON = "electron"
+    PROTON = "proton"
+    OTHER = "other"
+

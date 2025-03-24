@@ -129,3 +129,10 @@ class TreatmentDeliveryError(QuangTPSError):
         message_with_type = message
         if delivery_type:
             message_with_type = f"{message} for delivery type '{delivery_type}'"
+class DataImportError(QuangTPSError):
+    """Lỗi khi nhập dữ liệu"""
+    def __init__(self, message="Data import error", data_type=None):
+        self.data_type = data_type
+        message_with_type = message
+        if data_type:
+            message_with_type = f"{message} for data type '{data_type}'"

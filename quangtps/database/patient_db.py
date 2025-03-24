@@ -222,40 +222,41 @@ class PatientDatabase:
 
     def _create_tables(self):
         """Tạo các bảng cần thiết"""
-        with self.db.connection() as conn:
-            cursor = conn.cursor()
-            
-            # Bảng bệnh nhân
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS patients (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    dob TEXT NOT NULL,
-                    gender TEXT NOT NULL,
-                    address TEXT,
-                    phone TEXT,
-                    email TEXT,
-                    diagnosis TEXT,
-                    notes TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Bảng lịch sử khám
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS patient_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    patient_id TEXT NOT NULL,
-                    visit_date TEXT NOT NULL,
-                    description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (patient_id) REFERENCES patients (id)
-                        ON DELETE CASCADE
-                )
-            """)
-            
-            conn.commit()
+        # Lấy kết nối từ DBConnector
+        conn = self.db.connection()
+        cursor = conn.cursor()
+        
+        # Bảng bệnh nhân
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS patients (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                dob TEXT NOT NULL,
+                gender TEXT NOT NULL,
+                address TEXT,
+                phone TEXT,
+                email TEXT,
+                diagnosis TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Bảng lịch sử khám
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS patient_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id TEXT NOT NULL,
+                visit_date TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+                    ON DELETE CASCADE
+            )
+        """)
+        
+        conn.commit()
 
     def create_patient(self, name, birth_date=None, gender=None, metadata=None):
         """

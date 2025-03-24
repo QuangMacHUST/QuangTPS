@@ -1,0 +1,23 @@
+2025-03-25 01:45:54,516 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-25 01:45:54
+2025-03-25 01:45:54,517 - __main__ - INFO - Thư mục gốc: E:\hoctap\QuangTPS
+2025-03-25 01:45:54,517 - __main__ - INFO - File log: E:\hoctap\QuangTPS\logs\quangtps_20250325_014554.log
+2025-03-25 01:45:58,132 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-25 01:46:07,135 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-25 01:46:07,189 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-25 01:46:07,230 - root - WARNING - PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.
+2025-03-25 01:46:08,344 - quangtps.database.db_connector - INFO - Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 01:46:08,347 - __main__ - ERROR - Lỗi khi khởi động ứng dụng: function takes exactly 1 argument (0 given)
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\scripts\run_quangtps.py", line 230, in start_application
+    main_window = MainWindow()
+                  ^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 87, in __init__
+    self.patient_db = PatientDatabase()
+                      ^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 221, in __init__
+    self._create_tables()
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 226, in _create_tables
+    conn = self.db.connection()
+           ^^^^^^^^^^^^^^^^^^^^
+TypeError: function takes exactly 1 argument (0 given)
+

@@ -1,0 +1,23 @@
+2025-03-25 01:22:11,760 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-25 01:22:11
+2025-03-25 01:22:11,761 - __main__ - INFO - Thư mục gốc: E:\hoctap\QuangTPS
+2025-03-25 01:22:11,761 - __main__ - INFO - File log: E:\hoctap\QuangTPS\logs\quangtps_20250325_012211.log
+2025-03-25 01:22:15,585 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-25 01:22:25,036 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-25 01:22:25,160 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-25 01:22:25,230 - __main__ - ERROR - Lỗi khi khởi động ứng dụng: name 'Enum' is not defined
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\scripts\run_quangtps.py", line 227, in start_application
+    from quangtps.ui.main_window import MainWindow
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 39, in <module>
+    from quangtps.ui.planning_tab import PlanningTab
+  File "E:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 37, in <module>
+    from quangtps.ui.mco_navigation_dialog import MCONavigationDialog
+  File "E:\hoctap\QuangTPS\quangtps\ui\mco_navigation_dialog.py", line 30, in <module>
+    from quangtps.dose.dose_visualization import DoseColorwash
+  File "E:\hoctap\QuangTPS\quangtps\dose\dose_visualization.py", line 19, in <module>
+    from quangtps.core.types import DoseGrid
+  File "E:\hoctap\QuangTPS\quangtps\core\types.py", line 277, in <module>
+    class BeamEnergyType(Enum):
+                         ^^^^
+NameError: name 'Enum' is not defined
+

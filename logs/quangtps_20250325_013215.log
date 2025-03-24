@@ -1,0 +1,24 @@
+2025-03-25 01:32:15,611 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-25 01:32:15
+2025-03-25 01:32:15,611 - __main__ - INFO - Thư mục gốc: E:\hoctap\QuangTPS
+2025-03-25 01:32:15,611 - __main__ - INFO - File log: E:\hoctap\QuangTPS\logs\quangtps_20250325_013215.log
+2025-03-25 01:32:19,195 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-25 01:32:28,258 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-25 01:32:28,312 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-25 01:32:28,368 - root - WARNING - PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.
+2025-03-25 01:32:29,480 - __main__ - ERROR - Lỗi khi khởi động ứng dụng: 'break' outside loop (monte_carlo.py, line 659)
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\scripts\run_quangtps.py", line 227, in start_application
+    from quangtps.ui.main_window import MainWindow
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 53, in <module>
+    from quangtps.ui.dose_calculation_dialog import DoseCalculationDialog
+  File "E:\hoctap\QuangTPS\quangtps\ui\dose_calculation_dialog.py", line 24, in <module>
+    from quangtps.dose.dose_calculator import DoseCalculator
+  File "E:\hoctap\QuangTPS\quangtps\dose\dose_calculator.py", line 11, in <module>
+    from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
+  File "E:\hoctap\QuangTPS\quangtps\dose\algorithms\__init__.py", line 10, in <module>
+    from quangtps.dose.algorithms.monte_carlo import MonteCarloAlgorithm
+  File "E:\hoctap\QuangTPS\quangtps\dose\algorithms\monte_carlo.py", line 659
+    break
+    ^^^^^
+SyntaxError: 'break' outside loop
+

@@ -49,3 +49,25 @@
    - Thêm ICON_DIR để chuẩn hóa đường dẫn biểu tượng
 
 ### Thay đổi tiếp theo sẽ được thêm vào đây... 
+
+## [2025-03-24]
+### Fixed
+- Sửa lỗi encoding tiếng Việt trong logging bằng cách thêm tham số encoding='utf-8' cho FileHandler
+- Đảm bảo cài đặt các gói phụ thuộc cần thiết: scikit-image và dicompyler-core
+- Sửa lỗi kiểm tra gói phụ thuộc trong run_quangtps.py: ánh xạ tên gói với tên module chính xác (scikit-image → skimage, dicompyler-core → dicompylercore)
+- Sửa lỗi trong hàm show_splash_screen(): đảm bảo luôn trả về cùng một kiểu dữ liệu (app, splash) trong mọi trường hợp
+- Cải thiện chẩn đoán lỗi: thêm traceback đầy đủ trong log khi khởi động ứng dụng gặp lỗi 
+
+## [2025-03-26]
+### Fixed
+- Sửa lỗi định dạng (indentation) trong file quangtps/treatment/treatment_delivery.py, hàm update_fraction_status() để đảm bảo tính nhất quán của mã nguồn
+- Đảm bảo mã nguồn tuân thủ PEP 8 để tránh lỗi indentation và cải thiện khả năng đọc
+- Sửa lỗi thiếu import trong quangtps/core/types.py: thêm `from enum import Enum` để sử dụng Enum class
+- Sửa lỗi trong quangtps/treatment/treatment_delivery.py: chuyển class DeliveryStatus thành lớp kế thừa đúng từ Enum để phù hợp với thiết kế chung của codebase
+- Sửa lỗi indentation trong quangtps/dose/algorithms/monte_carlo.py: khắc phục lỗi thụt lề không đúng trong phần else
+- Sửa lỗi 'break' outside loop trong quangtps/dose/algorithms/monte_carlo.py: đặt câu lệnh break trong phạm vi vòng lặp hoặc thay thế bằng pass
+- Thêm hàm connection() thiếu trong quangtps/database/db_connector.py để trả về kết nối đến cơ sở dữ liệu
+- Cải thiện hàm connection() bằng cách triển khai context manager để có thể sử dụng với câu lệnh with
+- Sửa hàm _create_tables() trong PatientDatabase để sử dụng trực tiếp kết nối từ DBConnector thay vì sử dụng with statement
+- Thống nhất việc sử dụng biến self.conn thay vì self.connection trong DBConnector để tránh nhầm lẫn
+- Thêm các hàm callback thiếu trong quangtps/imaging/volume_renderer.py: _preset_changed(), _opacity_changed(), _window_level_changed() và các hàm liên quan 

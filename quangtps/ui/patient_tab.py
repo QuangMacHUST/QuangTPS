@@ -766,7 +766,7 @@ class PatientTab(QWidget):
                 patient_data = dialog.get_patient_data()
 
                 # Lưu bệnh nhân vào cơ sở dữ liệu
-            patient_id = self.patient_db.create_patient(
+                patient_id = self.patient_db.create_patient(
                     name=patient_data['name'],
                     birth_date=patient_data['birth_date'],
                     gender=patient_data['gender'],
@@ -774,11 +774,11 @@ class PatientTab(QWidget):
                 )
 
                 # Cập nhật tab với bệnh nhân mới
-            self.set_patient(patient_id)
-            
+                self.set_patient(patient_id)
+                
                 # Phát tín hiệu cho biết bệnh nhân mới đã được tạo
-            self.patient_created.emit(patient_id)
-            
+                self.patient_created.emit(patient_id)
+                
                 QMessageBox.information(
                     self, 
                     "Thành công", 

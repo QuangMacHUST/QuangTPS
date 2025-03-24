@@ -227,3 +227,50 @@ class VolumeRenderingWidget(QWidget):
         self.interactor = self.render_window.GetInteractor()
         self.interactor.SetInteractorStyle(vtk.vtkInteractorStyleTrackballCamera())
         self.interactor.Initialize()
+
+    def _preset_changed(self, index):
+        """Xử lý khi thay đổi preset hiển thị khối."""
+        preset_name = self.preset_combo.currentText()
+        if preset_name in self.presets and self.volume_property is not None:
+            # Áp dụng preset
+            self.apply_preset(preset_name)
+            self._update_render()
+    
+    def _opacity_changed(self, value):
+        """Xử lý khi thay đổi độ trong suốt."""
+        if self.volume_property is not None:
+            opacity = value / 100.0
+            # Cập nhật hàm opacity
+            self._update_opacity(opacity)
+            self._update_render()
+    
+    def _window_level_changed(self, value):
+        """Xử lý khi thay đổi mức cửa sổ."""
+        if self.volume_property is not None:
+            self.window_level = value
+            self._update_transfer_function()
+            self._update_render()
+    
+    def _window_width_changed(self, value):
+        """Xử lý khi thay đổi độ rộng cửa sổ."""
+        if self.volume_property is not None:
+            self.window_width = value
+            self._update_transfer_function()
+            self._update_render()
+    
+    def _update_render(self):
+        """Cập nhật hiển thị."""
+        if self.renderer:
+            self.render_window.Render()
+    
+    def _update_opacity(self, opacity):
+        """Cập nhật độ trong suốt cho volume rendering."""
+        pass  # Sẽ triển khai sau
+    
+    def _update_transfer_function(self):
+        """Cập nhật hàm chuyển đổi dựa trên window level và width."""
+        pass  # Sẽ triển khai sau
+    
+    def apply_preset(self, preset_name):
+        """Áp dụng preset được chọn."""
+        pass  # Sẽ triển khai sau

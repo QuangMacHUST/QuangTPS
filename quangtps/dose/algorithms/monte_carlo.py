@@ -73,7 +73,7 @@ class MonteCarloAlgorithm:
             self.energy_spectrum = self.beam_model.get_parameter(
                 "energy_spectrum")
             logger.info("Loaded energy spectrum from beam model")
-                else:
+        else:
             logger.warning(
                 "Beam model does not contain energy spectrum, using default")
 
@@ -166,7 +166,7 @@ class MonteCarloAlgorithm:
 
         try:
             # Start timing
-        start_time = time.time()
+            start_time = time.time()
             logger.info(
                 f"Starting Monte Carlo calculation for beam: {beam.name}")
             logger.info(f"Using {self.parameters['num_histories']} histories with " 
@@ -192,7 +192,7 @@ class MonteCarloAlgorithm:
                 energy_spectrum = self.beam_model.get_parameter("energy_spectrum")
                 energies = energy_spectrum.dimension_values[0]
                 probabilities = energy_spectrum.value_grid
-        else:
+            else:
                 # Default energy spectrum if not available
                 energy_mean = float(beam.energy.replace("MV", "").replace("X", ""))
                 energies, probabilities = self._create_default_spectrum(energy_mean)
@@ -654,9 +654,9 @@ class MonteCarloAlgorithm:
                         # Apply rotation
                         direction = cos_theta * v1 + sin_theta * \
                             cos_phi * v2 + sin_theta * sin_phi * v3
-                else:
-                    # Particle left the grid
-                    break
+                    else:
+                        # Particle left the grid
+                        break
 
         # Calculate uncertainty grid
         uncertainty_grid = np.sqrt(

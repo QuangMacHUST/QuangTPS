@@ -1,0 +1,24 @@
+2025-03-24 23:08:13,822 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-24 23:08:13
+2025-03-24 23:08:13,822 - __main__ - INFO - Thư mục gốc: E:\hoctap\QuangTPS
+2025-03-24 23:08:13,823 - __main__ - INFO - File log: E:\hoctap\QuangTPS\logs\quangtps_20250324_230813.log
+2025-03-24 23:08:17,322 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-24 23:08:43,087 - __main__ - ERROR - Lỗi khi khởi động ứng dụng: unexpected indent (treatment_delivery.py, line 852)
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\scripts\run_quangtps.py", line 227, in start_application
+    from quangtps.ui.main_window import MainWindow
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 39, in <module>
+    from quangtps.ui.planning_tab import PlanningTab
+  File "E:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 29, in <module>
+    from quangtps.planning.plan import Plan, PlanStatus, PlanType
+  File "E:\hoctap\QuangTPS\quangtps\planning\__init__.py", line 9, in <module>
+    from quangtps.planning.plan import (
+  File "E:\hoctap\QuangTPS\quangtps\planning\plan.py", line 17, in <module>
+    from quangtps.treatment.beams.beam import Beam
+  File "E:\hoctap\QuangTPS\quangtps\treatment\__init__.py", line 12, in <module>
+    from quangtps.treatment.treatment_manager import TreatmentManager
+  File "E:\hoctap\QuangTPS\quangtps\treatment\treatment_manager.py", line 27, in <module>
+    from quangtps.treatment.treatment_delivery import TreatmentCourse, TreatmentStatus, FractionStatus, TreatmentFraction
+  File "E:\hoctap\QuangTPS\quangtps\treatment\treatment_delivery.py", line 852
+    elif status == FractionStatus.MISSED:
+IndentationError: unexpected indent
+

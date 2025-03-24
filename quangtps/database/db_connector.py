@@ -45,7 +45,7 @@ class DBConnector:
             self.config = Config.get_instance()
             self.db_dir = os.path.join(self.config.data_dir, 'database')
             self.db_path = os.path.join(self.db_dir, 'quangtps.db')
-            self.connection = None
+            self.conn = None
             
             # Thực hiện thiết lập thực tế
             self._setup_database()
@@ -64,20 +64,26 @@ class DBConnector:
         """Kết nối đến cơ sở dữ liệu SQLite"""
         try:
             # Gán giá trị cho thuộc tính đã được khởi tạo trong __init__
-            if not self.connection:
-                self.connection = sqlite3.connect(self.db_path)
-                self.connection.row_factory = sqlite3.Row
+            if not self.conn:
+                self.conn = sqlite3.connect(self.db_path)
+                self.conn.row_factory = sqlite3.Row
                 logger.info("Đã kết nối đến cơ sở dữ liệu: %s", self.db_path)
         except Exception as e:
             logger.error("Lỗi kết nối cơ sở dữ liệu: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi kết nối cơ sở dữ liệu: %s" % str(e)) from e
     
     def _disconnect(self):
-        """Đóng kết nối cơ sở dữ liệu"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-            logger.info("Đã ngắt kết nối cơ sở dữ liệu")
+        """Ngắt kết nối đến cơ sở dữ liệu."""
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
+            self.conn = None
+            logger.debug("Đã ngắt kết nối cơ sở dữ liệu")
+    
+    def connection(self):
+        """Trả về kết nối đến cơ sở dữ liệu."""
+        if not self.conn:
+            self._connect()
+        return self.conn
     
     def _create_tables(self):
         """
@@ -262,10 +268,10 @@ class DBConnector:
         Returns:
             list/dict: Kết quả của câu truy vấn
         """
-        if not self.connection:
+        if not self.conn:
             self._connect()
             
-        cursor = self.connection.cursor()
+        cursor = self.conn.cursor()
         try:
             if params:
                 cursor.execute(query, params)
@@ -279,7 +285,7 @@ class DBConnector:
                 result = cursor.fetchone()
                 return result
         except Exception as e:
-            self.connection.rollback()
+            self.conn.rollback()
             logger.error("Lỗi thực thi truy vấn: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
             
