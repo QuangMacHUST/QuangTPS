@@ -71,3 +71,98 @@
 - Sửa hàm _create_tables() trong PatientDatabase để sử dụng trực tiếp kết nối từ DBConnector thay vì sử dụng with statement
 - Thống nhất việc sử dụng biến self.conn thay vì self.connection trong DBConnector để tránh nhầm lẫn
 - Thêm các hàm callback thiếu trong quangtps/imaging/volume_renderer.py: _preset_changed(), _opacity_changed(), _window_level_changed() và các hàm liên quan 
+
+## [2025-03-27]
+### Added
+- Hoàn thiện VolumeRenderingWidget trong quangtps/imaging/volume_renderer.py:
+  - Cài đặt đầy đủ các callback cho UI kiểm soát hiển thị volume rendering 3D
+  - Thêm chức năng chụp ảnh hiển thị 3D
+  - Thêm phương thức load_volume_data để tải và hiển thị dữ liệu hình ảnh 3D
+  - Thêm phương thức add_contour để hiển thị cấu trúc giải phẫu trong không gian 3D
+  - Hoàn thiện việc áp dụng các preset hiển thị cho CT và MRI
+
+- Bổ sung tính năng xử lý dữ liệu chùm tia từ TrueBeam:
+  - Thêm module quangtps/treatment/beams/truebeam_data_processor.py để phân tích và xử lý dữ liệu từ file Excel
+  - Phát triển dialog giao diện người dùng quangtps/ui/dialogs/beam_data_input_dialog.py để nhập dữ liệu chùm tia
+  - Thêm script scripts/process_truebeam_data.py để xử lý dữ liệu TrueBeam từ dòng lệnh
+  - Thêm script scripts/import_truebeam_data.py để import dữ liệu TrueBeam vào hệ thống
+  - Cập nhật dialog tính toán liều quangtps/ui/dose_calculation_dialog.py để hỗ trợ các mô hình chùm tia từ TrueBeam
+
+### Changed
+- Cải thiện dialog tính toán liều:
+  - Thêm tab mô hình chùm tia để quản lý các mô hình sẵn có
+  - Thêm nút để tải mô hình chùm tia mới trực tiếp từ giao diện
+  - Cải thiện hiển thị thông tin về các mô hình chùm tia đã được import vào hệ thống 
+
+## [2025-03-28]
+### Fixed
+- Cải thiện xử lý tiếng Việt trong hệ thống logging:
+  - Cập nhật scripts/run_quangtps.py để xử lý lỗi encoding tiếng Việt trong console
+  - Cập nhật quangtps/core/logging.py để cải thiện xử lý tiếng Việt trong cả console và file log
+  - Thêm xử lý ngoại lệ chi tiết trong các hàm thiết lập logging để tránh crash ứng dụng
+  - Xóa handlers hiện có trước khi thêm handlers mới để tránh trùng lặp log
+
+- Cải thiện cơ chế báo lỗi và xử lý sự cố:
+  - Cập nhật hàm start_application trong scripts/run_quangtps.py để hiển thị thông báo lỗi chi tiết hơn
+  - Thêm thông tin chi tiết về lỗi (traceback) trong log để dễ dàng gỡ rối
+  - Bổ sung cơ chế backup trong xử lý logging để đảm bảo ứng dụng vẫn hoạt động ngay cả khi có lỗi xảy ra với logging
+
+- Sửa các vấn đề khác:
+  - Đảm bảo hàm show_splash_screen luôn trả về cùng kiểu dữ liệu (app, splash) trong mọi trường hợp
+  - Thêm QMessageBox.detailedText để hiển thị thông tin lỗi chi tiết khi ứng dụng gặp sự cố
+
+## [2025-03-29]
+### Fixed
+- Sửa lỗi linter và import PyQt5:
+  - Cập nhật toàn bộ import PyQt5 trong scripts/run_quangtps.py để sử dụng cú pháp nhất quán
+  - Thêm xử lý lỗi ImportError khi không thể import PyQt5
+  - Đồng bộ việc sử dụng các module QtCore, QtWidgets, QtGui thay vì import từng class riêng lẻ
+
+- Cải thiện triệt để hỗ trợ tiếng Việt:
+  - Tạo hàm setup_utf8_console() để cấu hình UTF-8 cho hệ thống một cách đầy đủ
+  - Đặt các biến môi trường PYTHONIOENCODING và PYTHONUTF8 để đảm bảo mã hóa đúng
+  - Thử thiết lập locale Vietnamese nếu có trên hệ thống Windows
+  - Đảm bảo file log sử dụng encoding UTF-8
+
+## [2025-03-30]
+### Added
+- Triển khai lớp BeamDataManager trong quangtps/dose/beam_data_processor.py:
+  - Lớp quản lý dữ liệu chùm tia và mô hình chùm tia cho các thuật toán tính liều
+  - Hỗ trợ tải, lưu và quản lý các mô hình chùm tia cho các năng lượng và máy xạ trị khác nhau
+  - Tích hợp với hệ thống cấu hình để lưu trữ dữ liệu
+
+### Fixed
+- Sửa lỗi thiếu phương thức get_beam_models trong BeamDataManager:
+  - Bổ sung phương thức để lấy danh sách mô hình chùm tia theo loại chùm tia
+  - Đảm bảo tương thích với giao diện DoseCalculationDialog
+  - Cải thiện ghi log thông tin về các mô hình được tìm thấy
+
+## [2025-03-28]
+### Fixed
+- Cải thiện xử lý tiếng Việt trong hệ thống logging:
+  - Cập nhật scripts/run_quangtps.py để xử lý lỗi encoding tiếng Việt trong console
+  - Cập nhật quangtps/core/logging.py để cải thiện xử lý tiếng Việt trong cả console và file log
+  - Thêm xử lý ngoại lệ chi tiết trong các hàm thiết lập logging để tránh crash ứng dụng
+  - Xóa handlers hiện có trước khi thêm handlers mới để tránh trùng lặp log
+
+- Cải thiện cơ chế báo lỗi và xử lý sự cố:
+  - Cập nhật hàm start_application trong scripts/run_quangtps.py để hiển thị thông báo lỗi chi tiết hơn
+  - Thêm thông tin chi tiết về lỗi (traceback) trong log để dễ dàng gỡ rối
+  - Bổ sung cơ chế backup trong xử lý logging để đảm bảo ứng dụng vẫn hoạt động ngay cả khi có lỗi xảy ra với logging
+
+- Sửa các vấn đề khác:
+  - Đảm bảo hàm show_splash_screen luôn trả về cùng kiểu dữ liệu (app, splash) trong mọi trường hợp
+  - Thêm QMessageBox.detailedText để hiển thị thông tin lỗi chi tiết khi ứng dụng gặp sự cố
+
+## [2025-03-29]
+### Fixed
+- Sửa lỗi linter và import PyQt5:
+  - Cập nhật toàn bộ import PyQt5 trong scripts/run_quangtps.py để sử dụng cú pháp nhất quán
+  - Thêm xử lý lỗi ImportError khi không thể import PyQt5
+  - Đồng bộ việc sử dụng các module QtCore, QtWidgets, QtGui thay vì import từng class riêng lẻ
+
+- Cải thiện triệt để hỗ trợ tiếng Việt:
+  - Tạo hàm setup_utf8_console() để cấu hình UTF-8 cho hệ thống một cách đầy đủ
+  - Đặt các biến môi trường PYTHONIOENCODING và PYTHONUTF8 để đảm bảo mã hóa đúng
+  - Thử thiết lập locale Vietnamese nếu có trên hệ thống Windows
+  - Đảm bảo file log sử dụng encoding UTF-8 

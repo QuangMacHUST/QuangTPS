@@ -103,3 +103,34 @@ def get_logs_dir() -> str:
     logs_dir = os.path.join(get_app_data_dir(), "logs")
     os.makedirs(logs_dir, exist_ok=True)
     return logs_dir
+
+
+def get_project_root() -> str:
+    """
+    Lấy đường dẫn đến thư mục gốc của dự án.
+    
+    Returns
+    -------
+    str
+        Đường dẫn đến thư mục gốc của dự án
+    """
+    # Xác định thư mục gốc của dự án
+    # Module này nằm trong quangtps/common, nên cần đi lên 2 cấp
+    file_path = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(file_path)))
+    return project_root
+
+
+def get_beam_data_dir() -> str:
+    """
+    Lấy đường dẫn đến thư mục lưu trữ dữ liệu chùm tia.
+    
+    Returns
+    -------
+    str
+        Đường dẫn đến thư mục lưu trữ dữ liệu chùm tia
+    """
+    # Dữ liệu chùm tia được lưu trữ trong thư mục data/beam_data
+    beam_data_dir = os.path.join(get_project_root(), "data", "beam_data")
+    os.makedirs(beam_data_dir, exist_ok=True)
+    return beam_data_dir

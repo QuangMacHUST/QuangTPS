@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 try:
     import vtk
     from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+    from vtk.util import numpy_support
     VTK_AVAILABLE = True
 except ImportError:
     VTK_AVAILABLE = False
@@ -265,12 +266,417 @@ class VolumeRenderingWidget(QWidget):
     
     def _update_opacity(self, opacity):
         """Cập nhật độ trong suốt cho volume rendering."""
-        pass  # Sẽ triển khai sau
+        if not self.volume_property:
+            return
+            
+        # Lấy hàm opacity hiện tại
+        opacity_transfer_function = self.volume_property.GetScalarOpacity()
+        
+        # Điều chỉnh điểm kiểm soát
+        points = []
+        for i in range(opacity_transfer_function.GetSize()):
+            val = opacity_transfer_function.GetValue(i)
+            pos = opacity_transfer_function.GetPoint(i)[0]
+            # Điều chỉnh giá trị opacity mới dựa trên opactiy tổng thể
+            new_val = val * opacity
+            points.append((pos, new_val))
+        
+        # Xóa tất cả điểm hiện tại
+        opacity_transfer_function.RemoveAllPoints()
+        
+        # Thêm lại các điểm với giá trị opacity mới
+        for pos, val in points:
+            opacity_transfer_function.AddPoint(pos, val)
     
     def _update_transfer_function(self):
         """Cập nhật hàm chuyển đổi dựa trên window level và width."""
-        pass  # Sẽ triển khai sau
+        if not self.volume_property or not hasattr(self, 'window_level') or not hasattr(self, 'window_width'):
+            return
+            
+        # Tính toán range dựa trên window level và width
+        min_val = self.window_level - self.window_width / 2
+        max_val = self.window_level + self.window_width / 2
+        
+        # Lấy color transfer function
+        color_function = self.volume_property.GetRGBTransferFunction()
+        
+        # Xóa tất cả điểm
+        color_function.RemoveAllPoints()
+        
+        # Thêm các điểm màu mới dựa trên range mới
+        color_function.AddRGBPoint(min_val, 0.0, 0.0, 0.0)  # Đen cho giá trị nhỏ nhất
+        color_function.AddRGBPoint((min_val + max_val) / 2, 0.5, 0.5, 0.5)  # Xám cho giá trị trung bình
+        color_function.AddRGBPoint(max_val, 1.0, 1.0, 1.0)  # Trắng cho giá trị lớn nhất
     
     def apply_preset(self, preset_name):
         """Áp dụng preset được chọn."""
-        pass  # Sẽ triển khai sau
+        if preset_name not in self.presets or not self.volume_property:
+            return
+            
+        preset = self.presets[preset_name]
+        
+        # Cập nhật window level và width từ preset
+        if "window" in preset:
+            self.window_level = preset["window"][0]
+            self.window_width = preset["window"][1]
+            
+            # Cập nhật giá trị trên UI
+            self.window_level_spin.blockSignals(True)
+            self.window_level_spin.setValue(self.window_level)
+            self.window_level_spin.blockSignals(False)
+            
+            self.window_width_spin.blockSignals(True)
+            self.window_width_spin.setValue(self.window_width)
+            self.window_width_spin.blockSignals(False)
+        
+        # Cập nhật color function
+        if "color" in preset:
+            color_function = self.volume_property.GetRGBTransferFunction()
+            color_function.RemoveAllPoints()
+            
+            # Thêm các điểm màu từ preset
+            min_val = self.window_level - self.window_width / 2
+            max_val = self.window_level + self.window_width / 2
+            range_size = max_val - min_val
+            
+            for point in preset["color"]:
+                relative_pos, r, g, b = point
+                absolute_pos = min_val + relative_pos * range_size
+                color_function.AddRGBPoint(absolute_pos, r, g, b)
+        
+        # Cập nhật opacity function
+        if "opacity" in preset:
+            opacity_function = self.volume_property.GetScalarOpacity()
+            opacity_function.RemoveAllPoints()
+            
+            # Thêm các điểm opacity từ preset
+            for point in preset["opacity"]:
+                relative_pos, opacity = point
+                absolute_pos = min_val + relative_pos * range_size
+                opacity_function.AddPoint(absolute_pos, opacity)
+        
+        # Cập nhật hiển thị
+        self._update_render()
+
+    def _contour_opacity_changed(self, value):
+        """Xử lý khi thay đổi độ trong suốt của contour."""
+        if not self.contour_actors:
+            return
+            
+        opacity = value / 100.0
+        selected = self.contour_list.currentText()
+        
+        if selected == "Tất cả":
+            # Áp dụng cho tất cả các contour
+            for actor in self.contour_actors.values():
+                actor.GetProperty().SetOpacity(opacity)
+        else:
+            # Áp dụng cho contour được chọn
+            if selected in self.contour_actors:
+                self.contour_actors[selected].GetProperty().SetOpacity(opacity)
+                
+        self._update_render()
+    
+    def _contour_color_picker(self):
+        """Mở hộp thoại chọn màu cho contour."""
+        selected = self.contour_list.currentText()
+        if selected == "Tất cả" or selected not in self.contour_actors:
+            return
+            
+        # Lấy màu hiện tại
+        current_color = self.contour_actors[selected].GetProperty().GetColor()
+        initial_color = QColor(
+            int(current_color[0] * 255),
+            int(current_color[1] * 255),
+            int(current_color[2] * 255)
+        )
+        
+        # Mở hộp thoại chọn màu
+        color = QColorDialog.getColor(initial_color, self, f"Chọn màu cho {selected}")
+        
+        if color.isValid():
+            # Áp dụng màu mới
+            self.contour_actors[selected].GetProperty().SetColor(
+                color.red() / 255.0,
+                color.green() / 255.0,
+                color.blue() / 255.0
+            )
+            self._update_render()
+    
+    def _reset_view(self):
+        """Đặt lại góc nhìn về trạng thái ban đầu."""
+        if self.renderer:
+            self.renderer.ResetCamera()
+            self._update_render()
+    
+    def _capture_view(self):
+        """Chụp ảnh hiện tại của cảnh 3D."""
+        if not self.render_window:
+            return
+            
+        # Tạo đối tượng chụp ảnh
+        window_to_image_filter = vtk.vtkWindowToImageFilter()
+        window_to_image_filter.SetInput(self.render_window)
+        window_to_image_filter.SetInputBufferTypeToRGB()
+        window_to_image_filter.ReadFrontBufferOff()
+        window_to_image_filter.Update()
+        
+        # Lưu ảnh dưới dạng PNG
+        import tempfile
+        import os
+        from PyQt5.QtWidgets import QFileDialog
+        
+        # Mở hộp thoại lưu file
+        default_path = os.path.join(tempfile.gettempdir(), "quangtps_volume_render.png")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Lưu ảnh", default_path, "PNG Files (*.png);;JPEG Files (*.jpg)"
+        )
+        
+        if file_path:
+            # Xác định định dạng dựa trên phần mở rộng
+            if file_path.lower().endswith(".jpg") or file_path.lower().endswith(".jpeg"):
+                writer = vtk.vtkJPEGWriter()
+            else:
+                writer = vtk.vtkPNGWriter()
+                if not file_path.lower().endswith(".png"):
+                    file_path += ".png"
+            
+            writer.SetFileName(file_path)
+            writer.SetInputConnection(window_to_image_filter.GetOutputPort())
+            writer.Write()
+            
+            logger.info(f"Đã lưu ảnh hiển thị 3D vào: {file_path}")
+
+    def load_volume_data(self, image, window_level=None, window_width=None, preset=None):
+        """
+        Tải dữ liệu hình ảnh và hiển thị trong cửa sổ 3D.
+        
+        Parameters
+        ----------
+        image : Image hoặc ndarray
+            Dữ liệu hình ảnh cần hiển thị
+        window_level : int, optional
+            Mức cửa sổ để hiển thị
+        window_width : int, optional
+            Độ rộng cửa sổ để hiển thị
+        preset : str, optional
+            Preset hiển thị mặc định
+        """
+        if not VTK_AVAILABLE or not self.renderer:
+            logger.error("VTK không khả dụng hoặc renderer chưa được khởi tạo")
+            return False
+            
+        try:
+            # Xử lý dữ liệu đầu vào
+            if hasattr(image, 'data') and hasattr(image, 'spacing') and hasattr(image, 'origin'):
+                # Nếu là đối tượng Image
+                data = image.data
+                self.spacing = image.spacing
+                self.origin = image.origin
+                direction = image.direction if hasattr(image, 'direction') else None
+            else:
+                # Nếu là ndarray
+                data = image
+                
+            # Tạo VTK image data
+            vtk_data = vtk.vtkImageData()
+            vtk_data.SetDimensions(data.shape[2], data.shape[1], data.shape[0])
+            vtk_data.SetSpacing(self.spacing)
+            vtk_data.SetOrigin(self.origin)
+            
+            # Set direction matrix if available
+            if direction is not None:
+                if hasattr(vtk_data, 'SetDirectionMatrix'):
+                    matrix = vtk.vtkMatrix4x4()
+                    for i in range(3):
+                        for j in range(3):
+                            matrix.SetElement(i, j, direction[i, j])
+                    vtk_data.SetDirectionMatrix(matrix)
+            
+            # Chuyển đổi dữ liệu numpy thành VTK
+            flat_data = data.ravel(order='F').astype('float32')
+            vtk_array = numpy_support.numpy_to_vtk(flat_data, deep=True)
+            
+            # Gán dữ liệu vào VTK image
+            vtk_data.GetPointData().SetScalars(vtk_array)
+            
+            # Lưu trữ data
+            self.image_data = vtk_data
+            
+            # Tạo volume mapper
+            volume_mapper = vtk.vtkGPUVolumeRayCastMapper()
+            volume_mapper.SetInputData(vtk_data)
+            
+            # Tạo volume property
+            self.volume_property = vtk.vtkVolumeProperty()
+            self.volume_property.ShadeOn()
+            self.volume_property.SetInterpolationTypeToLinear()
+            
+            # Tạo color và opacity transfer functions
+            color_function = vtk.vtkColorTransferFunction()
+            opacity_function = vtk.vtkPiecewiseFunction()
+            
+            # Áp dụng preset mặc định nếu có
+            if preset and preset in self.presets:
+                self.preset_combo.setCurrentText(preset)
+            else:
+                # Áp dụng preset mặc định dựa trên dữ liệu
+                # Nếu data có giá trị trong khoảng HU của CT, sử dụng preset CT
+                if data.min() < -500 and data.max() > 500:
+                    self.preset_combo.setCurrentText("CT-Soft Tissue")
+                else:
+                    self.preset_combo.setCurrentText("MRI")
+            
+            # Thiết lập window level và width
+            if window_level is not None and window_width is not None:
+                self.window_level = window_level
+                self.window_width = window_width
+                
+                self.window_level_spin.blockSignals(True)
+                self.window_level_spin.setValue(window_level)
+                self.window_level_spin.blockSignals(False)
+                
+                self.window_width_spin.blockSignals(True)
+                self.window_width_spin.setValue(window_width)
+                self.window_width_spin.blockSignals(False)
+            else:
+                # Tự động tính window level và width dựa trên histogram
+                p5 = np.percentile(data, 5)
+                p95 = np.percentile(data, 95)
+                
+                self.window_level = int((p5 + p95) / 2)
+                self.window_width = int(p95 - p5)
+                
+                self.window_level_spin.blockSignals(True)
+                self.window_level_spin.setValue(self.window_level)
+                self.window_level_spin.blockSignals(False)
+                
+                self.window_width_spin.blockSignals(True)
+                self.window_width_spin.setValue(self.window_width)
+                self.window_width_spin.blockSignals(False)
+            
+            # Áp dụng preset từ combobox
+            self.apply_preset(self.preset_combo.currentText())
+            
+            # Thiết lập volume property
+            self.volume_property.SetColor(color_function)
+            self.volume_property.SetScalarOpacity(opacity_function)
+            
+            # Tạo volume actor
+            volume = vtk.vtkVolume()
+            volume.SetMapper(volume_mapper)
+            volume.SetProperty(self.volume_property)
+            
+            # Xóa actor cũ nếu có
+            if self.volume_actor:
+                self.renderer.RemoveVolume(self.volume_actor)
+                
+            # Gán actor mới
+            self.volume_actor = volume
+            self.renderer.AddVolume(self.volume_actor)
+            
+            # Reset camera
+            self.renderer.ResetCamera()
+            self.render_window.Render()
+            
+            logger.info("Đã tải dữ liệu hình ảnh 3D vào VolumeRenderingWidget")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tải dữ liệu hình ảnh 3D: {str(e)}", exc_info=True)
+            return False
+            
+    def add_contour(self, name, contour_data, color=None):
+        """
+        Thêm contour vào cảnh 3D.
+        
+        Parameters
+        ----------
+        name : str
+            Tên của contour
+        contour_data : vtkPolyData hoặc list of points
+            Dữ liệu của contour
+        color : tuple, optional
+            Màu RGB, giá trị từ 0 đến 1
+        
+        Returns
+        -------
+        bool
+            True nếu thành công, False nếu thất bại
+        """
+        if not VTK_AVAILABLE or not self.renderer:
+            logger.error("VTK không khả dụng hoặc renderer chưa được khởi tạo")
+            return False
+            
+        try:
+            # Tạo polydata nếu đầu vào là list of points
+            if not isinstance(contour_data, vtk.vtkPolyData):
+                # Tạo polydata từ điểm
+                points = vtk.vtkPoints()
+                for i, point in enumerate(contour_data):
+                    points.InsertPoint(i, point)
+                    
+                # Tạo cell array
+                cells = vtk.vtkCellArray()
+                for i in range(len(contour_data) - 1):
+                    line = vtk.vtkLine()
+                    line.GetPointIds().SetId(0, i)
+                    line.GetPointIds().SetId(1, i + 1)
+                    cells.InsertNextCell(line)
+                
+                # Tạo line từ điểm cuối đến điểm đầu
+                if len(contour_data) > 2:
+                    line = vtk.vtkLine()
+                    line.GetPointIds().SetId(0, len(contour_data) - 1)
+                    line.GetPointIds().SetId(1, 0)
+                    cells.InsertNextCell(line)
+                
+                # Tạo polydata
+                polydata = vtk.vtkPolyData()
+                polydata.SetPoints(points)
+                polydata.SetLines(cells)
+            else:
+                polydata = contour_data
+            
+            # Xác định màu
+            if color is None:
+                # Sử dụng màu mặc định cho contour
+                if name in self.contour_default_colors:
+                    color = self.contour_default_colors[name]
+                else:
+                    # Tạo màu ngẫu nhiên
+                    import random
+                    color = (random.random(), random.random(), random.random())
+            
+            # Tạo mapper
+            mapper = vtk.vtkPolyDataMapper()
+            mapper.SetInputData(polydata)
+            
+            # Tạo actor
+            actor = vtk.vtkActor()
+            actor.SetMapper(mapper)
+            actor.GetProperty().SetColor(color)
+            actor.GetProperty().SetOpacity(0.7)  # Độ trong suốt mặc định
+            
+            # Xóa actor cũ nếu có
+            if name in self.contour_actors:
+                self.renderer.RemoveActor(self.contour_actors[name])
+                
+            # Gán actor mới
+            self.contour_actors[name] = actor
+            self.renderer.AddActor(actor)
+            
+            # Thêm tên vào combobox nếu chưa có
+            items = [self.contour_list.itemText(i) for i in range(self.contour_list.count())]
+            if name not in items[1:]:  # Bỏ qua "Tất cả"
+                self.contour_list.addItem(name)
+            
+            # Render lại
+            self.render_window.Render()
+            
+            logger.info(f"Đã thêm contour '{name}' vào cảnh 3D")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi thêm contour: {str(e)}", exc_info=True)
+            return False

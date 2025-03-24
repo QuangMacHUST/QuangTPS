@@ -1,0 +1,756 @@
+2025-03-25 03:20:47,133 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-25 03:20:47
+2025-03-25 03:20:47,134 - __main__ - INFO - Thư mục gốc: E:\hoctap\QuangTPS
+2025-03-25 03:20:47,134 - __main__ - INFO - File log: E:\hoctap\QuangTPS\logs\quangtps_20250325_032047.log
+2025-03-25 03:20:50,714 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-25 03:21:00,632 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-25 03:21:00,694 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-25 03:21:00,744 - root - WARNING - PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.
+2025-03-25 03:21:03,158 - quangtps.database.db_connector - INFO - Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 03:21:03,574 - quangtps.database.patient_db - INFO - Đã lấy danh sách 0 bệnh nhân
+2025-03-25 03:21:03,603 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Repository Query
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,604 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,604 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,604 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,605 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,606 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,606 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Study Root Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,606 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - FIND
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,606 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,606 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient/Study Only Query/Retrieve Information Model - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,608 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - MOVE
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,608 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Composite Instance Root Retrieve - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,608 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Composite Instance Retrieve Without Bulk Data - GET
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,609 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Computed Radiography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,609 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Encapsulated PDF Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,609 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Encapsulated CDA Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,610 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Encapsulated STL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,610 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Encapsulated OBJ Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,611 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Encapsulated MTL Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,611 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: X-Ray Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,611 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced XA Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,611 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: X-Ray Radiofluoroscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,612 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced XRF Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,612 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Positron Emission Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,612 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: X-Ray 3D Angiographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,612 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: X-Ray 3D Craniofacial Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,613 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Breast Tomosynthesis Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,613 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced PET Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,613 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,613 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced CT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,613 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Nuclear Medicine Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,615 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ultrasound Multi-frame Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,615 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Parametric Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,616 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,617 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced MR Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,617 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: MR Spectroscopy Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,617 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced MR Color Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,618 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,618 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Physician Intent Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,618 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Segment Annotation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,619 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Radiation Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,619 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,619 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,619 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Robotic-Arm Radiation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,620 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Tomotherapeutic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,620 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: C-Arm Photon-Electron Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,620 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Dose Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,621 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Robotic Radiation Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,621 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Radiation Set Delivery Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,622 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Treatment Preparation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,622 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,623 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced Continuous RT Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,623 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Patient Position Acquisition Instruction Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,623 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Structure Set Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,623 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,623 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,623 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Brachy Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,625 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Treatment Summary Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,625 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Ion Plan Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,625 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: RT Ion Beams Treatment Record Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,626 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ultrasound Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,626 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced US Volume Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,626 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: 1.2.840.10008.5.1.4.1.1.6.3
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,626 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Raw Data Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,627 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,627 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Spatial Fiducials Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,627 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Deformable Spatial Registration Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,628 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,628 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Surface Segmentation Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,629 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Tractography Results Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,630 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Real World Value Mapping Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,631 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Surface Scan Mesh Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,631 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Surface Scan Point Cloud Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,631 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,632 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Multi-frame Single Bit Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,632 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Byte Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,632 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Multi-frame Grayscale Word Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,632 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Multi-frame True Color Secondary Capture Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,633 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: VL Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,633 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Video Endoscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,633 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: VL Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,633 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Video Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,634 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: VL Slide-Coordinates Microscopic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,634 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: VL Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,634 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Video Photographic Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Photography 8 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Photography 16 Bit Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Stereometric Relationship Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Tomography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography Stereographic Projection Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Wide Field Ophthalmic Photography 3D Coordinates Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography En Face Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Optical Coherence Tomography B-scan Volume Analysis Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: VL Whole Slide Microscopy Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Dermoscopic Photography Image Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Lensometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Autorefraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Keratometry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Subjective Refraction Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Visual Acuity Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Spectacle Prescription Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Axial Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,635 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Intraocular Lens Calculations Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,642 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Macular Grid Thickness and Volume Report Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,642 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Visual Field Static Perimetry Measurements Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,643 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Ophthalmic Thickness Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,643 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Corneal Topography Map Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,644 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Basic Text SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,644 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,644 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Comprehensive SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,645 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Comprehensive 3D SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,645 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Extensible SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,645 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Mammography CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,646 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Chest CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,646 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,646 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Radiopharmaceutical Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,646 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Colon CAD SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,647 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Implantation Plan SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,647 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Acquisition Context SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,647 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Simplified Adult Echo SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,647 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Patient Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,648 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: Enhanced X-Ray Radiation Dose SR Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,648 - quangtps.dicom.pacs_client - WARNING - Không thể thêm context: Abstract Syntax: 12-lead ECG Waveform Storage
+Transfer Syntax(es):
+    =Implicit VR Little Endian
+    =Explicit VR Little Endian
+    =Deflated Explicit VR Little Endian
+    =Explicit VR Big Endian
+2025-03-25 03:21:03,648 - quangtps.dicom.pacs_client - INFO - Initialized AE with title QUANGTPS and 1 contexts
+2025-03-25 03:21:03,672 - quangtps.ui.patient_tab - INFO - Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 03:21:03,672 - quangtps.ui.patient_tab - INFO - Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 03:21:03,703 - quangtps.ui.planning_tab - INFO - Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 03:21:03,928 - quangtps.ui.dose_tab - INFO - Khởi tạo tab liều lượng hoàn tất
+2025-03-25 03:21:04,179 - quangtps.ui.treatment_tab - INFO - Khởi tạo tab điều trị hoàn tất
+2025-03-25 03:21:04,199 - quangtps.ui.reporting_tab - INFO - Khởi tạo tab báo cáo hoàn tất
+2025-03-25 03:21:05,757 - quangtps.database.patient_db - INFO - Đã lấy danh sách 0 bệnh nhân
+2025-03-25 03:21:05,810 - quangtps.ui.main_window - INFO - Khởi tạo cửa sổ chính QuangTPS hoàn tất

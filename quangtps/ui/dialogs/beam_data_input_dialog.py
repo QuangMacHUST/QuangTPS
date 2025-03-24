@@ -2,572 +2,464 @@
 # -*- coding: utf-8 -*-
 
 """
-Module dialog nhập dữ liệu chùm tia TrueBeam.
+Dialog nhập dữ liệu chùm tia cho QuangTPS.
 
-Module này cung cấp giao diện người dùng để nhập và xử lý dữ liệu chùm tia
-từ máy gia tốc TrueBeam.
+Dialog này cho phép người dùng nhập dữ liệu chùm tia từ các file Excel của TrueBeam
+và chuyển đổi thành mô hình chùm tia để sử dụng trong QuangTPS.
 """
 
 import os
-import sys
 import logging
 import threading
-from typing import List, Dict, Any, Optional, Callable
+from pathlib import Path
+from typing import List, Dict, Optional, Any, Tuple
 
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-                          QLineEdit, QComboBox, QFileDialog, QProgressBar, 
-                          QTextEdit, QGroupBox, QCheckBox, QMessageBox, QListWidget,
-                          QListWidgetItem, QAbstractItemView, QGridLayout)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+    QLineEdit, QFileDialog, QProgressBar, QListWidget,
+    QComboBox, QGridLayout, QGroupBox, QCheckBox, QMessageBox,
+    QTableWidget, QTableWidgetItem, QHeaderView
+)
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QThread, QSize
+from PyQt5.QtGui import QFont
 
-from quangtps.core.exceptions import DataImportError
-from quangtps.core.types import BeamEnergyType
-from quangtps.treatment.beams.beam_data_importer import TrueBeamDataReader
-from quangtps.treatment.beams.beam_data_processor import BeamDataProcessor
-from quangtps.ui.widgets.helpers import center_dialog, set_icon
+from quangtps.treatment.beams.truebeam_data_processor import TrueBeamDataProcessor
+from quangtps.dose.beam_data_processor import BeamModel
+from quangtps.core.config import Config
+from quangtps.common.paths import get_beam_data_dir
 
 logger = logging.getLogger(__name__)
 
-class BeamDataImportWorker(QThread):
-    """Thread worker để nhập dữ liệu chùm tia trong nền."""
-    progress_updated = pyqtSignal(int, str)
-    finished_signal = pyqtSignal(dict, str)
-    error_signal = pyqtSignal(str)
-    
-    def __init__(self, source_dir: str, energies: List[str]):
-        """
-        Khởi tạo worker với thư mục nguồn và danh sách năng lượng.
-        
-        Args:
-            source_dir (str): Thư mục chứa dữ liệu TrueBeam.
-            energies (List[str]): Danh sách các năng lượng cần nhập.
-        """
-        super().__init__()
-        self.source_dir = source_dir
-        self.energies = energies
-        self.cancelled = False
-    
-    def run(self):
-        """Thực thi nhập dữ liệu chùm tia."""
-        try:
-            # Tạo đối tượng TrueBeamDataReader
-            reader = TrueBeamDataReader(self.source_dir)
-            
-            # Quét thư mục dữ liệu
-            reader.scan_data_directory()
-            
-            # Nếu không chỉ định năng lượng, sử dụng tất cả các năng lượng có sẵn
-            if not self.energies:
-                self.energies = reader.available_energies
-            
-            # Nhập dữ liệu cho từng năng lượng
-            result = {}
-            total_energies = len(self.energies)
-            
-            for i, energy in enumerate(self.energies):
-                if self.cancelled:
-                    self.progress_updated.emit(100, "Đã hủy.")
-                    return
-                
-                self.progress_updated.emit(
-                    int((i / total_energies) * 100),
-                    f"Đang nhập dữ liệu cho năng lượng {energy}..."
-                )
-                
-                try:
-                    # Nhập dữ liệu chùm tia
-                    beam_data = reader.import_beam_data(energy)
-                    
-                    # Xuất sang JSON
-                    json_file = reader.export_to_json(energy)
-                    
-                    result[energy] = json_file
-                    
-                    self.progress_updated.emit(
-                        int(((i + 1) / total_energies) * 100),
-                        f"Đã nhập xong năng lượng {energy}"
-                    )
-                except Exception as e:
-                    self.progress_updated.emit(
-                        int(((i + 1) / total_energies) * 100),
-                        f"Lỗi khi nhập dữ liệu {energy}: {str(e)}"
-                    )
-            
-            # Gửi tín hiệu hoàn thành
-            self.finished_signal.emit(result, "Đã hoàn thành nhập dữ liệu chùm tia.")
-            
-        except Exception as e:
-            self.error_signal.emit(f"Lỗi khi nhập dữ liệu chùm tia: {str(e)}")
-    
-    def cancel(self):
-        """Hủy quá trình nhập dữ liệu."""
-        self.cancelled = True
 
-class BeamDataProcessWorker(QThread):
-    """Thread worker để xử lý dữ liệu chùm tia trong nền."""
-    progress_updated = pyqtSignal(int, str)
-    finished_signal = pyqtSignal(dict, str)
-    error_signal = pyqtSignal(str)
+class ProcessThread(QThread):
+    """Thread để xử lý dữ liệu chùm tia."""
     
-    def __init__(self, data_dir: str, energies: List[str]):
+    update_signal = pyqtSignal(int, str)  # (tiến độ, thông báo)
+    finished_signal = pyqtSignal(bool, str, object)  # (thành công, thông báo, kết quả)
+    
+    def __init__(self, file_path: str):
         """
-        Khởi tạo worker với thư mục dữ liệu và danh sách năng lượng.
+        Khởi tạo thread xử lý.
         
-        Args:
-            data_dir (str): Thư mục chứa dữ liệu chùm tia.
-            energies (List[str]): Danh sách các năng lượng cần xử lý.
+        Parameters
+        ----------
+        file_path : str
+            Đường dẫn đến file Excel
         """
         super().__init__()
-        self.data_dir = data_dir
-        self.energies = energies
-        self.cancelled = False
-    
+        self.file_path = file_path
+        self.processor = TrueBeamDataProcessor()
+        
     def run(self):
-        """Thực thi xử lý dữ liệu chùm tia."""
+        """Chạy xử lý trong thread riêng."""
         try:
-            # Tạo đối tượng BeamDataProcessor
-            processor = BeamDataProcessor(self.data_dir)
+            # Cập nhật trạng thái
+            self.update_signal.emit(10, "Đang đọc file Excel...")
             
-            # Nếu không chỉ định năng lượng, sử dụng tất cả các năng lượng có sẵn
-            if not self.energies:
-                self.energies = processor.get_available_energies()
+            # Đọc file Excel
+            success = self.processor.read_excel_file(self.file_path)
             
-            # Xử lý dữ liệu cho từng năng lượng
-            result = {}
-            total_energies = len(self.energies)
-            
-            for i, energy in enumerate(self.energies):
-                if self.cancelled:
-                    self.progress_updated.emit(100, "Đã hủy.")
-                    return
+            if not success:
+                self.finished_signal.emit(False, "Không thể đọc file Excel.", None)
+                return
                 
-                self.progress_updated.emit(
-                    int((i / total_energies) * 100),
-                    f"Đang xử lý dữ liệu cho năng lượng {energy}..."
-                )
-                
-                try:
-                    # Tải mô hình chùm tia
-                    model = processor.load_beam_model(energy)
-                    
-                    # Xuất mô hình
-                    model_file = processor.export_beam_model(energy)
-                    
-                    result[energy] = model_file
-                    
-                    self.progress_updated.emit(
-                        int(((i + 1) / total_energies) * 100),
-                        f"Đã xử lý xong năng lượng {energy}"
-                    )
-                except Exception as e:
-                    self.progress_updated.emit(
-                        int(((i + 1) / total_energies) * 100),
-                        f"Lỗi khi xử lý dữ liệu {energy}: {str(e)}"
-                    )
+            # Cập nhật trạng thái
+            self.update_signal.emit(50, "Đang tạo mô hình chùm tia...")
             
-            # Gửi tín hiệu hoàn thành
-            self.finished_signal.emit(result, "Đã hoàn thành xử lý dữ liệu chùm tia.")
+            # Tạo mô hình chùm tia
+            beam_model = self.processor.create_beam_model()
+            
+            if beam_model is None:
+                self.finished_signal.emit(False, "Không thể tạo mô hình chùm tia.", None)
+                return
+                
+            # Hoàn thành
+            self.update_signal.emit(100, "Hoàn thành xử lý.")
+            self.finished_signal.emit(True, "Đã tạo mô hình chùm tia thành công.", beam_model)
             
         except Exception as e:
-            self.error_signal.emit(f"Lỗi khi xử lý dữ liệu chùm tia: {str(e)}")
-    
-    def cancel(self):
-        """Hủy quá trình xử lý dữ liệu."""
-        self.cancelled = True
+            logger.error(f"Lỗi khi xử lý dữ liệu chùm tia: {str(e)}", exc_info=True)
+            self.finished_signal.emit(False, f"Lỗi khi xử lý: {str(e)}", None)
+
 
 class BeamDataInputDialog(QDialog):
-    """
-    Dialog nhập dữ liệu chùm tia TrueBeam.
-    
-    Dialog này cho phép người dùng chọn thư mục chứa dữ liệu chùm tia TrueBeam,
-    xem các năng lượng có sẵn, và nhập dữ liệu vào hệ thống.
-    """
+    """Dialog nhập dữ liệu chùm tia từ TrueBeam."""
     
     def __init__(self, parent=None):
         """
-        Khởi tạo dialog nhập dữ liệu chùm tia.
+        Khởi tạo dialog.
         
-        Args:
-            parent: Widget cha của dialog.
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Widget cha
         """
         super().__init__(parent)
-        
         self.setWindowTitle("Nhập dữ liệu chùm tia TrueBeam")
-        self.setMinimumWidth(600)
-        self.setMinimumHeight(500)
+        self.setMinimumSize(800, 600)
         
-        set_icon(self)
+        self.config = Config.get_instance()
+        self.beam_model = None
+        self.thread = None
         
-        # Các biến thành viên
-        self.source_dir = ""
-        self.data_dir = self._get_default_data_dir()
-        self.available_energies = []
-        self.selected_energies = []
-        
-        self.import_worker = None
-        self.process_worker = None
-        
-        # Tạo UI
         self._init_ui()
         
-        # Căn giữa dialog
-        center_dialog(self)
-    
     def _init_ui(self):
         """Khởi tạo giao diện người dùng."""
         # Layout chính
-        main_layout = QVBoxLayout()
-        self.setLayout(main_layout)
+        main_layout = QVBoxLayout(self)
         
-        # Phần chọn thư mục nguồn
-        source_group = QGroupBox("Thư mục nguồn")
-        source_layout = QHBoxLayout()
-        source_group.setLayout(source_layout)
+        # Phần chọn thư mục
+        folder_group = QGroupBox("Thư mục dữ liệu")
+        folder_layout = QHBoxLayout(folder_group)
         
-        self.source_edit = QLineEdit()
-        self.source_edit.setReadOnly(True)
-        self.source_edit.setPlaceholderText("Chọn thư mục chứa dữ liệu TrueBeam...")
+        self.folder_edit = QLineEdit()
+        self.folder_edit.setReadOnly(True)
+        self.folder_edit.setPlaceholderText("Chọn thư mục chứa dữ liệu TrueBeam...")
         
-        browse_button = QPushButton("Duyệt...")
-        browse_button.clicked.connect(self._browse_source_dir)
+        self.browse_btn = QPushButton("Duyệt...")
+        self.browse_btn.clicked.connect(self._browse_folder)
         
-        scan_button = QPushButton("Quét")
-        scan_button.clicked.connect(self._scan_source_dir)
+        self.scan_btn = QPushButton("Quét")
+        self.scan_btn.clicked.connect(self._scan_folder)
+        self.scan_btn.setEnabled(False)
         
-        source_layout.addWidget(self.source_edit)
-        source_layout.addWidget(browse_button)
-        source_layout.addWidget(scan_button)
+        folder_layout.addWidget(self.folder_edit)
+        folder_layout.addWidget(self.browse_btn)
+        folder_layout.addWidget(self.scan_btn)
         
-        main_layout.addWidget(source_group)
+        # Phần danh sách file
+        files_group = QGroupBox("File dữ liệu")
+        files_layout = QVBoxLayout(files_group)
         
-        # Phần danh sách năng lượng
-        energy_group = QGroupBox("Năng lượng có sẵn")
-        energy_layout = QVBoxLayout()
-        energy_group.setLayout(energy_layout)
+        self.files_list = QListWidget()
+        self.files_list.setAlternatingRowColors(True)
+        self.files_list.itemSelectionChanged.connect(self._file_selected)
         
-        self.energy_list = QListWidget()
-        self.energy_list.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.energy_list.itemSelectionChanged.connect(self._update_selected_energies)
+        files_layout.addWidget(self.files_list)
         
-        self.select_all_button = QPushButton("Chọn tất cả")
-        self.select_all_button.clicked.connect(self._select_all_energies)
+        # Phần lọc năng lượng
+        energy_group = QGroupBox("Năng lượng")
+        energy_layout = QVBoxLayout(energy_group)
         
-        self.clear_selection_button = QPushButton("Bỏ chọn tất cả")
-        self.clear_selection_button.clicked.connect(self._clear_energy_selection)
+        self.energy_combo = QComboBox()
+        self.energy_combo.addItem("Tất cả")
+        self.energy_combo.currentIndexChanged.connect(self._filter_energy)
         
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.select_all_button)
-        button_layout.addWidget(self.clear_selection_button)
+        energy_layout.addWidget(self.energy_combo)
         
-        energy_layout.addWidget(self.energy_list)
-        energy_layout.addLayout(button_layout)
+        # Phần thông tin
+        info_group = QGroupBox("Thông tin")
+        info_layout = QGridLayout(info_group)
         
-        main_layout.addWidget(energy_group)
+        self.beam_type_label = QLabel("Loại chùm tia:")
+        self.beam_type_value = QLabel("")
         
-        # Phần trạng thái và tiến trình
-        status_group = QGroupBox("Trạng thái")
-        status_layout = QVBoxLayout()
-        status_group.setLayout(status_layout)
+        self.energy_label = QLabel("Năng lượng:")
+        self.energy_value = QLabel("")
+        
+        self.has_pdd_label = QLabel("Dữ liệu PDD:")
+        self.has_pdd_value = QLabel("")
+        
+        self.has_profile_label = QLabel("Dữ liệu Profile:")
+        self.has_profile_value = QLabel("")
+        
+        self.has_output_label = QLabel("Output Factor:")
+        self.has_output_value = QLabel("")
+        
+        info_layout.addWidget(self.beam_type_label, 0, 0)
+        info_layout.addWidget(self.beam_type_value, 0, 1)
+        info_layout.addWidget(self.energy_label, 1, 0)
+        info_layout.addWidget(self.energy_value, 1, 1)
+        info_layout.addWidget(self.has_pdd_label, 2, 0)
+        info_layout.addWidget(self.has_pdd_value, 2, 1)
+        info_layout.addWidget(self.has_profile_label, 3, 0)
+        info_layout.addWidget(self.has_profile_value, 3, 1)
+        info_layout.addWidget(self.has_output_label, 4, 0)
+        info_layout.addWidget(self.has_output_value, 4, 1)
+        
+        # Phần tiến trình
+        progress_group = QGroupBox("Tiến trình")
+        progress_layout = QVBoxLayout(progress_group)
         
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         
-        self.status_label = QLabel("Sẵn sàng.")
+        self.status_label = QLabel("Chưa xử lý")
         
-        status_layout.addWidget(self.progress_bar)
-        status_layout.addWidget(self.status_label)
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.status_label)
         
-        main_layout.addWidget(status_group)
+        # Phần nút điều khiển
+        button_layout = QHBoxLayout()
         
-        # Phần log
-        log_group = QGroupBox("Log")
-        log_layout = QVBoxLayout()
-        log_group.setLayout(log_layout)
+        self.process_btn = QPushButton("Xử lý")
+        self.process_btn.clicked.connect(self._process_file)
+        self.process_btn.setEnabled(False)
         
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
+        self.save_btn = QPushButton("Lưu mô hình")
+        self.save_btn.clicked.connect(self._save_model)
+        self.save_btn.setEnabled(False)
         
-        log_layout.addWidget(self.log_text)
+        self.close_btn = QPushButton("Đóng")
+        self.close_btn.clicked.connect(self.reject)
         
-        main_layout.addWidget(log_group)
+        button_layout.addWidget(self.process_btn)
+        button_layout.addWidget(self.save_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(self.close_btn)
         
-        # Các nút hành động
-        action_layout = QHBoxLayout()
+        # Layout bên trái và phải
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(files_group, 2)
         
-        self.import_button = QPushButton("Nhập dữ liệu")
-        self.import_button.clicked.connect(self._import_data)
-        self.import_button.setEnabled(False)
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(energy_group)
+        right_layout.addWidget(info_group, 1)
+        top_layout.addLayout(right_layout, 1)
         
-        self.process_button = QPushButton("Xử lý dữ liệu")
-        self.process_button.clicked.connect(self._process_data)
-        self.process_button.setEnabled(False)
+        # Thêm vào layout chính
+        main_layout.addWidget(folder_group)
+        main_layout.addLayout(top_layout, 3)
+        main_layout.addWidget(progress_group)
+        main_layout.addLayout(button_layout)
         
-        self.cancel_button = QPushButton("Hủy")
-        self.cancel_button.clicked.connect(self._cancel_operation)
-        self.cancel_button.setEnabled(False)
+        # Thiết lập ban đầu
+        self._reset_ui()
         
-        close_button = QPushButton("Đóng")
-        close_button.clicked.connect(self.close)
+    def _reset_ui(self):
+        """Thiết lập lại trạng thái UI."""
+        self.folder_edit.clear()
+        self.files_list.clear()
+        self.energy_combo.clear()
+        self.energy_combo.addItem("Tất cả")
         
-        action_layout.addWidget(self.import_button)
-        action_layout.addWidget(self.process_button)
-        action_layout.addWidget(self.cancel_button)
-        action_layout.addWidget(close_button)
+        self.beam_type_value.setText("")
+        self.energy_value.setText("")
+        self.has_pdd_value.setText("")
+        self.has_profile_value.setText("")
+        self.has_output_value.setText("")
         
-        main_layout.addLayout(action_layout)
-    
-    def _get_default_data_dir(self) -> str:
-        """Lấy thư mục dữ liệu mặc định."""
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        return os.path.join(base_dir, "data", "beam_data")
-    
-    def _browse_source_dir(self):
-        """Duyệt thư mục nguồn."""
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "Chọn thư mục chứa dữ liệu TrueBeam",
-            "", QFileDialog.ShowDirsOnly
+        self.progress_bar.setValue(0)
+        self.status_label.setText("Chưa xử lý")
+        
+        self.scan_btn.setEnabled(False)
+        self.process_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+        
+    def _browse_folder(self):
+        """Mở hộp thoại chọn thư mục."""
+        folder = QFileDialog.getExistingDirectory(
+            self, "Chọn thư mục dữ liệu TrueBeam", 
+            self.config.get_last_used_dir('beam_data_dir', os.path.expanduser("~"))
         )
         
-        if dir_path:
-            self.source_dir = dir_path
-            self.source_edit.setText(dir_path)
+        if folder:
+            self.folder_edit.setText(folder)
+            self.config.set_last_used_dir('beam_data_dir', folder)
+            self.scan_btn.setEnabled(True)
+            self._scan_folder()
             
-            # Tự động quét sau khi chọn
-            self._scan_source_dir()
-    
-    def _scan_source_dir(self):
-        """Quét thư mục nguồn để tìm dữ liệu chùm tia."""
-        # Kiểm tra xem đã chọn thư mục chưa
-        if not self.source_dir:
-            QMessageBox.warning(
-                self, "Cảnh báo", "Vui lòng chọn thư mục chứa dữ liệu TrueBeam."
-            )
+    def _scan_folder(self):
+        """Quét thư mục để tìm các file Excel."""
+        folder = self.folder_edit.text()
+        if not folder or not os.path.isdir(folder):
             return
-        
-        # Cập nhật trạng thái
-        self.status_label.setText("Đang quét thư mục dữ liệu...")
-        self.progress_bar.setValue(0)
-        self.log_text.clear()
-        
-        # Tạo đối tượng TrueBeamDataReader
-        reader = TrueBeamDataReader(self.source_dir)
-        
-        try:
-            # Quét thư mục dữ liệu
-            excel_files = reader.scan_data_directory()
             
-            # Cập nhật danh sách năng lượng
-            self.available_energies = reader.available_energies
-            self._update_energy_list()
-            
-            # Cập nhật trạng thái
-            if excel_files:
-                self.status_label.setText(f"Tìm thấy {len(excel_files)} file Excel và {len(self.available_energies)} năng lượng.")
-                self.log_text.append(f"Các file Excel đã tìm thấy:")
-                for file_path in excel_files:
-                    self.log_text.append(f"  - {os.path.basename(file_path)}")
+        # Xóa danh sách cũ
+        self.files_list.clear()
+        self.energy_combo.clear()
+        self.energy_combo.addItem("Tất cả")
+        
+        # Tìm tất cả các file Excel trong thư mục
+        excel_files = []
+        energy_set = set()
+        
+        for file in os.listdir(folder):
+            if file.endswith(('.xlsx', '.xls')) and not file.startswith('~$'):
+                file_path = os.path.join(folder, file)
                 
-                self.log_text.append("\nCác năng lượng có sẵn:")
-                for energy in self.available_energies:
-                    self.log_text.append(f"  - {energy}")
+                # Xác định loại năng lượng từ tên file
+                processor = TrueBeamDataProcessor()
+                beam_type, energy = processor._determine_beam_type_from_filename(file_path)
                 
-                # Kích hoạt nút nhập dữ liệu
-                self.import_button.setEnabled(True)
-            else:
-                self.status_label.setText("Không tìm thấy file Excel nào trong thư mục.")
-                self.log_text.append("Không tìm thấy file Excel nào trong thư mục.")
+                # Thêm vào danh sách
+                excel_files.append((file, file_path, beam_type, energy))
                 
-                # Vô hiệu hóa nút nhập dữ liệu
-                self.import_button.setEnabled(False)
-            
-            # Cập nhật giá trị tiến trình
-            self.progress_bar.setValue(100)
-            
-        except Exception as e:
-            self.status_label.setText(f"Lỗi khi quét thư mục: {str(e)}")
-            self.log_text.append(f"Lỗi khi quét thư mục: {str(e)}")
-    
-    def _update_energy_list(self):
-        """Cập nhật danh sách năng lượng trong UI."""
-        self.energy_list.clear()
+                # Thêm vào tập năng lượng
+                if energy != "Unknown":
+                    energy_set.add(energy)
         
-        for energy in self.available_energies:
-            item = QListWidgetItem(energy)
-            self.energy_list.addItem(item)
-    
-    def _update_selected_energies(self):
-        """Cập nhật danh sách các năng lượng đã chọn."""
-        self.selected_energies = [item.text() for item in self.energy_list.selectedItems()]
-    
-    def _select_all_energies(self):
-        """Chọn tất cả các năng lượng."""
-        for i in range(self.energy_list.count()):
-            self.energy_list.item(i).setSelected(True)
-    
-    def _clear_energy_selection(self):
-        """Bỏ chọn tất cả các năng lượng."""
-        for i in range(self.energy_list.count()):
-            self.energy_list.item(i).setSelected(False)
-    
-    def _import_data(self):
-        """Nhập dữ liệu chùm tia."""
-        # Kiểm tra xem đã chọn năng lượng chưa
-        if not self.selected_energies:
-            reply = QMessageBox.question(
-                self, "Xác nhận",
-                "Bạn chưa chọn năng lượng nào. Bạn có muốn nhập tất cả các năng lượng có sẵn?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
+        # Sắp xếp file theo năng lượng
+        excel_files.sort(key=lambda x: x[3])
+        
+        # Thêm vào danh sách
+        for file, file_path, beam_type, energy in excel_files:
+            item = f"{file} ({energy})"
+            self.files_list.addItem(item)
+            # Lưu đường dẫn đầy đủ vào userData
+            self.files_list.item(self.files_list.count() - 1).setData(Qt.UserRole, file_path)
+        
+        # Thêm vào combobox năng lượng
+        for energy in sorted(energy_set):
+            self.energy_combo.addItem(energy)
             
-            if reply == QMessageBox.Yes:
-                self._select_all_energies()
-                self._update_selected_energies()
+        # Cập nhật UI
+        if self.files_list.count() > 0:
+            self.files_list.setCurrentRow(0)
+            
+    def _file_selected(self):
+        """Xử lý khi chọn file từ danh sách."""
+        if not self.files_list.currentItem():
+            self.process_btn.setEnabled(False)
+            return
+            
+        # Lấy đường dẫn file
+        file_path = self.files_list.currentItem().data(Qt.UserRole)
+        
+        if file_path and os.path.exists(file_path):
+            # Hiển thị thông tin file
+            processor = TrueBeamDataProcessor()
+            beam_type, energy = processor._determine_beam_type_from_filename(file_path)
+            
+            self.beam_type_value.setText(beam_type)
+            self.energy_value.setText(energy)
+            
+            # Các thông tin khác sẽ được hiển thị sau khi xử lý
+            self.has_pdd_value.setText("Chưa xác định")
+            self.has_profile_value.setText("Chưa xác định")
+            self.has_output_value.setText("Chưa xác định")
+            
+            # Cho phép xử lý
+            self.process_btn.setEnabled(True)
+            
+    def _filter_energy(self):
+        """Lọc danh sách file theo năng lượng."""
+        selected_energy = self.energy_combo.currentText()
+        
+        for i in range(self.files_list.count()):
+            item = self.files_list.item(i)
+            if selected_energy == "Tất cả" or selected_energy in item.text():
+                item.setHidden(False)
             else:
-                return
-        
-        # Cập nhật trạng thái
-        self.status_label.setText("Đang chuẩn bị nhập dữ liệu...")
-        self.progress_bar.setValue(0)
-        self.log_text.clear()
-        
-        # Vô hiệu hóa các nút
-        self.import_button.setEnabled(False)
-        self.process_button.setEnabled(False)
-        self.cancel_button.setEnabled(True)
-        
-        # Tạo worker để nhập dữ liệu trong nền
-        self.import_worker = BeamDataImportWorker(self.source_dir, self.selected_energies)
-        
-        # Kết nối các tín hiệu
-        self.import_worker.progress_updated.connect(self._update_progress)
-        self.import_worker.finished_signal.connect(self._import_completed)
-        self.import_worker.error_signal.connect(self._handle_error)
-        
-        # Bắt đầu worker
-        self.import_worker.start()
-    
-    def _process_data(self):
-        """Xử lý dữ liệu chùm tia."""
-        # Kiểm tra xem đã chọn năng lượng chưa
-        if not self.selected_energies:
-            reply = QMessageBox.question(
-                self, "Xác nhận",
-                "Bạn chưa chọn năng lượng nào. Bạn có muốn xử lý tất cả các năng lượng có sẵn?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
+                item.setHidden(True)
+                
+    def _process_file(self):
+        """Xử lý file đã chọn."""
+        if not self.files_list.currentItem():
+            return
             
-            if reply == QMessageBox.Yes:
-                self._select_all_energies()
-                self._update_selected_energies()
-            else:
-                return
+        # Lấy đường dẫn file
+        file_path = self.files_list.currentItem().data(Qt.UserRole)
         
-        # Cập nhật trạng thái
-        self.status_label.setText("Đang chuẩn bị xử lý dữ liệu...")
-        self.progress_bar.setValue(0)
-        self.log_text.clear()
+        if not file_path or not os.path.exists(file_path):
+            return
+            
+        # Vô hiệu hóa UI trong khi xử lý
+        self._set_processing_ui(True)
         
-        # Vô hiệu hóa các nút
-        self.import_button.setEnabled(False)
-        self.process_button.setEnabled(False)
-        self.cancel_button.setEnabled(True)
+        # Tạo và chạy thread xử lý
+        self.thread = ProcessThread(file_path)
+        self.thread.update_signal.connect(self._update_progress)
+        self.thread.finished_signal.connect(self._process_completed)
+        self.thread.start()
         
-        # Tạo worker để xử lý dữ liệu trong nền
-        self.process_worker = BeamDataProcessWorker(self.data_dir, self.selected_energies)
-        
-        # Kết nối các tín hiệu
-        self.process_worker.progress_updated.connect(self._update_progress)
-        self.process_worker.finished_signal.connect(self._process_completed)
-        self.process_worker.error_signal.connect(self._handle_error)
-        
-        # Bắt đầu worker
-        self.process_worker.start()
-    
-    def _cancel_operation(self):
-        """Hủy hoạt động hiện tại."""
-        if self.import_worker and self.import_worker.isRunning():
-            self.import_worker.cancel()
-        
-        if self.process_worker and self.process_worker.isRunning():
-            self.process_worker.cancel()
-        
-        self.status_label.setText("Đang hủy...")
-    
-    @pyqtSlot(int, str)
-    def _update_progress(self, progress: int, status: str):
-        """Cập nhật tiến trình và trạng thái."""
+    def _update_progress(self, progress: int, message: str):
+        """Cập nhật tiến trình xử lý."""
         self.progress_bar.setValue(progress)
-        self.status_label.setText(status)
-        self.log_text.append(status)
-    
-    @pyqtSlot(dict, str)
-    def _import_completed(self, result: Dict[str, str], status: str):
-        """Xử lý khi nhập dữ liệu hoàn thành."""
-        # Cập nhật trạng thái
-        self.status_label.setText(status)
-        self.log_text.append("\n" + status)
+        self.status_label.setText(message)
         
-        # Hiển thị kết quả
-        if result:
-            self.log_text.append("\nKết quả nhập dữ liệu:")
-            for energy, file_path in result.items():
-                self.log_text.append(f"  - {energy}: {file_path}")
+    def _process_completed(self, success: bool, message: str, beam_model: Optional[BeamModel]):
+        """Xử lý khi hoàn thành."""
+        self._set_processing_ui(False)
         
-        # Kích hoạt nút xử lý dữ liệu
-        self.process_button.setEnabled(True)
+        if success and beam_model:
+            self.beam_model = beam_model
+            self.save_btn.setEnabled(True)
+            
+            # Cập nhật thông tin
+            self.has_pdd_value.setText("Có" if any("pdd" in param for param in beam_model.parameters) else "Không")
+            self.has_profile_value.setText("Có" if any("profile" in param for param in beam_model.parameters) else "Không")
+            self.has_output_value.setText("Có" if any("output" in param for param in beam_model.parameters) else "Không")
+            
+            # Hiển thị thông báo thành công
+            QMessageBox.information(self, "Thành công", f"Đã xử lý thành công dữ liệu chùm tia {beam_model.energy}.")
+            
+        else:
+            # Hiển thị thông báo lỗi
+            QMessageBox.warning(self, "Lỗi", message)
+            
+    def _set_processing_ui(self, is_processing: bool):
+        """Thiết lập trạng thái UI khi đang xử lý."""
+        self.browse_btn.setEnabled(not is_processing)
+        self.scan_btn.setEnabled(not is_processing and self.folder_edit.text())
+        self.process_btn.setEnabled(not is_processing and self.files_list.currentItem())
+        self.save_btn.setEnabled(not is_processing and self.beam_model is not None)
+        self.close_btn.setEnabled(not is_processing)
+        self.files_list.setEnabled(not is_processing)
+        self.energy_combo.setEnabled(not is_processing)
         
-        # Kích hoạt lại nút nhập dữ liệu
-        self.import_button.setEnabled(True)
+    def _save_model(self):
+        """Lưu mô hình chùm tia."""
+        if not self.beam_model:
+            return
+            
+        # Mở hộp thoại lưu file
+        beam_data_dir = get_beam_data_dir()
+        beam_type_dir = os.path.join(beam_data_dir, self.beam_model.beam_type.lower())
         
-        # Vô hiệu hóa nút hủy
-        self.cancel_button.setEnabled(False)
-    
-    @pyqtSlot(dict, str)
-    def _process_completed(self, result: Dict[str, str], status: str):
-        """Xử lý khi xử lý dữ liệu hoàn thành."""
-        # Cập nhật trạng thái
-        self.status_label.setText(status)
-        self.log_text.append("\n" + status)
+        # Tạo thư mục nếu chưa tồn tại
+        os.makedirs(beam_type_dir, exist_ok=True)
         
-        # Hiển thị kết quả
-        if result:
-            self.log_text.append("\nKết quả xử lý dữ liệu:")
-            for energy, file_path in result.items():
-                self.log_text.append(f"  - {energy}: {file_path}")
+        # Đề xuất tên file
+        default_name = f"truebeam_{self.beam_model.energy.lower().replace(' ', '_')}.json"
+        default_path = os.path.join(beam_type_dir, default_name)
         
-        # Kích hoạt lại các nút
-        self.import_button.setEnabled(True)
-        self.process_button.setEnabled(True)
-        
-        # Vô hiệu hóa nút hủy
-        self.cancel_button.setEnabled(False)
-        
-        # Hiển thị thông báo thành công
-        QMessageBox.information(
-            self, "Hoàn thành",
-            f"Đã hoàn thành xử lý dữ liệu cho {len(result)} năng lượng."
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Lưu mô hình chùm tia", 
+            default_path, 
+            "JSON Files (*.json)"
         )
-    
-    @pyqtSlot(str)
-    def _handle_error(self, error_message: str):
-        """Xử lý lỗi."""
-        # Cập nhật trạng thái
-        self.status_label.setText("Đã xảy ra lỗi.")
-        self.log_text.append("\nLỗi: " + error_message)
         
-        # Kích hoạt lại các nút
-        self.import_button.setEnabled(True)
-        self.process_button.setEnabled(True)
+        if file_path:
+            # Lưu mô hình
+            try:
+                self.beam_model.save_to_file(file_path)
+                QMessageBox.information(
+                    self, "Thành công", 
+                    f"Đã lưu mô hình chùm tia vào:\n{file_path}"
+                )
+                
+                # Đóng dialog
+                self.accept()
+                
+            except Exception as e:
+                logger.error(f"Lỗi khi lưu mô hình: {str(e)}", exc_info=True)
+                QMessageBox.warning(
+                    self, "Lỗi", 
+                    f"Không thể lưu mô hình: {str(e)}"
+                )
+                
+    @staticmethod
+    def get_beam_model(parent=None) -> Optional[BeamModel]:
+        """
+        Hiển thị dialog và trả về mô hình chùm tia.
         
-        # Vô hiệu hóa nút hủy
-        self.cancel_button.setEnabled(False)
-        
-        # Hiển thị thông báo lỗi
-        QMessageBox.critical(
-            self, "Lỗi",
-            f"Đã xảy ra lỗi: {error_message}"
-        )
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Widget cha
+            
+        Returns
+        -------
+        Optional[BeamModel]
+            Mô hình chùm tia, hoặc None nếu người dùng hủy
+        """
+        dialog = BeamDataInputDialog(parent)
+        if dialog.exec_() == QDialog.Accepted and dialog.beam_model:
+            return dialog.beam_model
+        return None
 
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication

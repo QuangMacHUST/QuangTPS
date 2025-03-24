@@ -14,11 +14,21 @@ import logging
 import numpy as np
 import scipy.interpolate as interp
 from typing import Dict, List, Tuple, Any, Optional, Union
+from enum import Enum, auto
 
 from quangtps.core.exceptions import DataProcessingError
 from quangtps.dose.dose_grid import DoseGrid
+from quangtps.core.config import Config
 
 logger = logging.getLogger(__name__)
+
+class BeamDataType(Enum):
+    """Enum định nghĩa các loại dữ liệu chùm tia."""
+    PDD = auto()
+    PROFILE = auto()
+    FFF_PROFILE = auto()
+    OUTPUT_FACTOR = auto()
+    WEDGE_FACTOR = auto()
 
 class BeamModelParameter:
     """
@@ -257,6 +267,18 @@ class BeamModel:
             Giá trị metadata
         """
         self.metadata[key] = value
+    
+    def set_source_file(self, file_path: str):
+        """
+        Thiết lập thông tin về file nguồn dữ liệu.
+        
+        Parameters
+        ----------
+        file_path : str
+            Đường dẫn đến file nguồn dữ liệu
+        """
+        self.set_metadata("source_file", file_path)
+        self.set_metadata("source_file_name", os.path.basename(file_path))
     
     def get_metadata(self, key: str, default: Any = None) -> Any:
         """
@@ -961,3 +983,289 @@ class BeamDataProcessor:
         #     ...
         
         return dose_grid 
+
+class BeamDataManager:
+    """
+    Quản lý dữ liệu chùm tia và mô hình chùm tia trong hệ thống.
+    
+    Lớp này quản lý việc lưu trữ, tải và quản lý các mô hình chùm tia cho các
+    năng lượng và máy xạ trị khác nhau.
+    """
+    
+    def __init__(self, data_dir: Optional[str] = None):
+        """
+        Khởi tạo quản lý dữ liệu chùm tia.
+        
+        Parameters
+        ----------
+        data_dir : str, optional
+            Thư mục chứa dữ liệu chùm tia. Nếu None, sẽ sử dụng thư mục mặc định
+            từ cấu hình hệ thống.
+        """
+        config = Config.get_instance()
+        self.data_dir = data_dir if data_dir else config.beam_data_dir
+        self.beam_models = {}
+        self.load_available_models()
+    
+    def load_available_models(self):
+        """Tải danh sách mô hình chùm tia có sẵn."""
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir, exist_ok=True)
+            logger.info(f"Tạo thư mục dữ liệu chùm tia: {self.data_dir}")
+            return
+        
+        # Quét thư mục để tìm các file mô hình
+        model_files = []
+        for root, _, files in os.walk(self.data_dir):
+            for file in files:
+                if file.endswith('.json'):
+                    model_files.append(os.path.join(root, file))
+        
+        # Tải thông tin về mỗi mô hình
+        for model_file in model_files:
+            try:
+                with open(model_file, 'r', encoding='utf-8') as f:
+                    model_info = json.load(f)
+                
+                if 'name' in model_info and 'energy' in model_info:
+                    model_key = f"{model_info['name']}_{model_info['energy']}"
+                    self.beam_models[model_key] = {
+                        'path': model_file,
+                        'info': model_info
+                    }
+                    logger.debug(f"Đã tìm thấy mô hình chùm tia: {model_key}")
+            except Exception as e:
+                logger.warning(f"Không thể tải thông tin mô hình từ {model_file}: {str(e)}")
+        
+        logger.info(f"Đã tải thông tin về {len(self.beam_models)} mô hình chùm tia")
+    
+    def get_available_models(self) -> List[Dict[str, Any]]:
+        """
+        Lấy danh sách các mô hình chùm tia có sẵn.
+        
+        Returns
+        -------
+        List[Dict[str, Any]]
+            Danh sách thông tin về các mô hình chùm tia có sẵn
+        """
+        return [model['info'] for model in self.beam_models.values()]
+    
+    def get_model_by_energy(self, energy: str) -> Optional[BeamModel]:
+        """
+        Lấy mô hình chùm tia theo năng lượng.
+        
+        Parameters
+        ----------
+        energy : str
+            Năng lượng chùm tia (ví dụ: "6MV", "10FFF")
+            
+        Returns
+        -------
+        Optional[BeamModel]
+            Mô hình chùm tia nếu tìm thấy, None nếu không
+        """
+        # Tìm mô hình phù hợp với năng lượng
+        for model_key, model_data in self.beam_models.items():
+            if energy.lower() in model_key.lower():
+                try:
+                    return self.load_model(model_data['path'])
+                except Exception as e:
+                    logger.error(f"Không thể tải mô hình {model_key}: {str(e)}")
+        
+        logger.warning(f"Không tìm thấy mô hình cho năng lượng {energy}")
+        return None
+    
+    def load_model(self, model_path: str) -> BeamModel:
+        """
+        Tải mô hình chùm tia từ file.
+        
+        Parameters
+        ----------
+        model_path : str
+            Đường dẫn đến file mô hình
+            
+        Returns
+        -------
+        BeamModel
+            Mô hình chùm tia đã tải
+        """
+        try:
+            with open(model_path, 'r', encoding='utf-8') as f:
+                model_data = json.load(f)
+            
+            # Tạo mô hình cơ bản
+            beam_model = BeamModel(
+                name=model_data['name'],
+                energy=model_data['energy'],
+                beam_type=model_data.get('beam_type', 'PHOTON')
+            )
+            
+            # Tải các tham số
+            if 'parameters' in model_data:
+                for param_name, param_data in model_data['parameters'].items():
+                    # Kiểm tra đủ thông tin cần thiết
+                    if all(key in param_data for key in ['value_grid', 'dimensions', 'units', 'dimension_values']):
+                        # Chuyển đổi dữ liệu từ JSON về numpy arrays
+                        value_grid = np.array(param_data['value_grid'])
+                        dimension_values = [np.array(v) for v in param_data['dimension_values']]
+                        
+                        # Tạo tham số
+                        param = BeamModelParameter(
+                            name=param_name,
+                            value_grid=value_grid,
+                            dimensions=param_data['dimensions'],
+                            units=param_data['units'],
+                            dimension_values=dimension_values,
+                            interpolation_method=param_data.get('interpolation_method', 'linear')
+                        )
+                        
+                        # Thêm vào mô hình
+                        beam_model.add_parameter(param)
+            
+            # Tải metadata
+            if 'metadata' in model_data:
+                beam_model.metadata = model_data['metadata']
+            
+            logger.info(f"Đã tải mô hình chùm tia {beam_model.name} ({beam_model.energy})")
+            return beam_model
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tải mô hình từ {model_path}: {str(e)}")
+            raise DataProcessingError(f"Không thể tải mô hình chùm tia: {str(e)}")
+    
+    def save_model(self, beam_model: BeamModel) -> str:
+        """
+        Lưu mô hình chùm tia vào file.
+        
+        Parameters
+        ----------
+        beam_model : BeamModel
+            Mô hình chùm tia cần lưu
+            
+        Returns
+        -------
+        str
+            Đường dẫn đến file đã lưu
+        """
+        # Tạo thư mục con cho máy xạ trị
+        machine_dir = os.path.join(self.data_dir, beam_model.name)
+        os.makedirs(machine_dir, exist_ok=True)
+        
+        # Tạo tên file từ tên mô hình và năng lượng
+        safe_energy = beam_model.energy.replace(" ", "_")
+        file_name = f"{beam_model.name}_{safe_energy}.json"
+        file_path = os.path.join(machine_dir, file_name)
+        
+        # Chuẩn bị dữ liệu để lưu
+        model_data = {
+            'name': beam_model.name,
+            'energy': beam_model.energy,
+            'beam_type': beam_model.beam_type,
+            'metadata': beam_model.metadata,
+            'parameters': {}
+        }
+        
+        # Chuyển đổi các tham số
+        for param_name, param in beam_model.parameters.items():
+            model_data['parameters'][param_name] = {
+                'value_grid': param.value_grid.tolist(),
+                'dimensions': param.dimensions,
+                'units': param.units,
+                'dimension_values': [v.tolist() for v in param.dimension_values],
+                'interpolation_method': param.interpolation_method
+            }
+        
+        # Lưu vào file
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(model_data, f, indent=2)
+            
+            # Cập nhật danh sách mô hình
+            model_key = f"{beam_model.name}_{beam_model.energy}"
+            self.beam_models[model_key] = {
+                'path': file_path,
+                'info': {
+                    'name': beam_model.name,
+                    'energy': beam_model.energy,
+                    'beam_type': beam_model.beam_type
+                }
+            }
+            
+            logger.info(f"Đã lưu mô hình chùm tia vào {file_path}")
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu mô hình vào {file_path}: {str(e)}")
+            raise DataProcessingError(f"Không thể lưu mô hình chùm tia: {str(e)}")
+    
+    def delete_model(self, model_name: str, energy: str) -> bool:
+        """
+        Xóa mô hình chùm tia.
+        
+        Parameters
+        ----------
+        model_name : str
+            Tên mô hình
+        energy : str
+            Năng lượng chùm tia
+            
+        Returns
+        -------
+        bool
+            True nếu xóa thành công, False nếu không
+        """
+        model_key = f"{model_name}_{energy}"
+        
+        if model_key in self.beam_models:
+            file_path = self.beam_models[model_key]['path']
+            
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                
+                # Xóa khỏi danh sách
+                del self.beam_models[model_key]
+                logger.info(f"Đã xóa mô hình chùm tia {model_key}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Lỗi khi xóa mô hình {model_key}: {str(e)}")
+        
+        logger.warning(f"Không tìm thấy mô hình {model_key} để xóa")
+        return False
+    
+    def get_beam_models(self, beam_type: str) -> List[BeamModel]:
+        """
+        Lấy danh sách mô hình chùm tia theo loại chùm tia.
+        
+        Parameters
+        ----------
+        beam_type : str
+            Loại chùm tia (ví dụ: 'PHOTON', 'ELECTRON')
+            
+        Returns
+        -------
+        List[BeamModel]
+            Danh sách các mô hình chùm tia thuộc loại chỉ định
+        """
+        models = []
+        
+        for model_key, model_data in self.beam_models.items():
+            try:
+                # Tải thông tin tóm tắt từ model_data['info']
+                info = model_data['info']
+                
+                # Kiểm tra loại chùm tia
+                if 'beam_type' in info and info['beam_type'] == beam_type:
+                    # Tải mô hình đầy đủ
+                    model = self.load_model(model_data['path'])
+                    models.append(model)
+                elif 'beam_type' not in info and beam_type == 'PHOTON':
+                    # Mặc định là photon nếu không chỉ định
+                    model = self.load_model(model_data['path'])
+                    models.append(model)
+            except Exception as e:
+                logger.warning(f"Không thể tải mô hình {model_key}: {str(e)}")
+        
+        logger.info(f"Đã tìm thấy {len(models)} mô hình cho loại chùm tia {beam_type}")
+        return models 

@@ -10,14 +10,17 @@ calculation using various algorithms.
 
 import os
 import logging
+import threading
+from typing import List, Dict, Optional, Tuple, Any
 import numpy as np
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QGroupBox, QFormLayout, QSpinBox, QDoubleSpinBox,
     QCheckBox, QProgressBar, QFileDialog, QMessageBox, QTabWidget,
-    QWidget, QButtonGroup, QGridLayout, QFrame, QSizePolicy
+    QWidget, QButtonGroup, QGridLayout, QFrame, QSizePolicy, QTreeWidget,
+    QTreeWidgetItem, QLineEdit, QRadioButton
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QIcon
 
 from quangtps.core.exceptions import DoseCalculationError
@@ -31,103 +34,64 @@ from quangtps.core.constants import DoseCalculationAlgorithm
 from quangtps.core.config import Config
 from quangtps.treatment.beams.truebeam_data_processor import TrueBeamDataProcessor
 from quangtps.ui.dialogs.beam_data_import_dialog import BeamDataImportDialog
+from quangtps.dose.beam_data_processor import BeamModel, BeamDataManager
+from quangtps.core.types import BeamEnergyType
+from quangtps.common.paths import get_beam_data_dir
+from quangtps.ui.dialogs.beam_data_input_dialog import BeamDataInputDialog
 
 logger = logging.getLogger(__name__)
 
-class DoseCalculationWorker(QThread):
-    """
-    Worker thread for dose calculation to prevent UI freezing.
-    """
+class CalculationThread(QThread):
+    """Thread để tính toán liều."""
     
-    progress_signal = pyqtSignal(int)
-    finished_signal = pyqtSignal(object)
-    error_signal = pyqtSignal(str)
+    update_signal = pyqtSignal(int, str)  # (tiến độ, thông báo)
+    finished_signal = pyqtSignal(bool, str, object)  # (thành công, thông báo, kết quả)
     
-    def __init__(self, calculator, plan, ct_image, params):
+    def __init__(self, calculator: DoseCalculator, plan: Plan, algorithm: str, parameters: Dict[str, Any]):
         """
-        Initialize the worker.
+        Khởi tạo thread tính toán.
         
         Parameters
         ----------
         calculator : DoseCalculator
-            The dose calculator object
-        plan : TreatmentPlan
-            The treatment plan to calculate dose for
-        ct_image : Image
-            The CT image for dose calculation
-        params : dict
-            Additional parameters for the calculation
+            Đối tượng tính toán liều
+        plan : Plan
+            Kế hoạch điều trị
+        algorithm : str
+            Thuật toán tính toán liều
+        parameters : Dict[str, Any]
+            Các tham số cho thuật toán
         """
         super().__init__()
         self.calculator = calculator
         self.plan = plan
-        self.ct_image = ct_image
-        self.params = params
-    
+        self.algorithm = algorithm
+        self.parameters = parameters
+        
     def run(self):
-        """Run the dose calculation."""
+        """Chạy tính toán trong thread riêng."""
         try:
-            # Set algorithm-specific parameters
-            algorithm = self.calculator.algorithm
-            for param_name, value in self.params.items():
-                if hasattr(algorithm, f"set_{param_name}"):
-                    getattr(algorithm, f"set_{param_name}")(value)
-                elif hasattr(algorithm, "set_parameter"):
-                    algorithm.set_parameter(param_name, value)
+            # Cập nhật trạng thái
+            self.update_signal.emit(10, "Đang chuẩn bị dữ liệu...")
             
-            # Report progress for preparation
-            self.progress_signal.emit(5)
-            
-            # Calculate dose for each beam
-            num_beams = len(self.plan.beams)
-            beam_progress_step = 90 / max(1, num_beams)
-            
-            # If calculating for individual beams
-            if self.params.get("calculate_individual_beams", False):
-                beam_doses = []
-                for i, beam in enumerate(self.plan.beams):
-                    # Calculate dose for single beam
-                    beam_dose = self.calculator.calculate_dose_for_beam(beam, self.ct_image)
-                    beam_doses.append(beam_dose)
-                    
-                    # Update progress
-                    progress = 5 + int((i + 1) * beam_progress_step)
-                    self.progress_signal.emit(progress)
+            # Thiết lập thuật toán và tham số
+            self.calculator.set_algorithm(self.algorithm)
+            for name, value in self.parameters.items():
+                self.calculator.set_parameter(name, value)
                 
-                # Sum beam doses to get total plan dose
-                total_dose = Image(
-                    data=np.zeros_like(beam_doses[0].data),
-                    spacing=beam_doses[0].spacing,
-                    origin=beam_doses[0].origin,
-                    direction=beam_doses[0].direction
-                )
-                
-                # Apply weights and sum
-                for i, beam_dose in enumerate(beam_doses):
-                    weight = self.plan.beams[i].weight
-                    total_dose.data += beam_dose.data * weight
-                
-                # Normalize if needed
-                if self.plan.normalization_value is not None:
-                    normalization_factor = self.plan.normalization_value / np.max(total_dose.data)
-                    total_dose.data *= normalization_factor
-            else:
-                # Calculate dose for entire plan directly
-                total_dose = self.calculator.calculate_dose_for_plan(self.plan, self.ct_image)
+            # Cập nhật trạng thái
+            self.update_signal.emit(20, "Đang tính toán liều...")
             
-            # Set final properties
-            total_dose.modality = "RTDOSE"
-            total_dose.description = f"Plan dose for {self.plan.name} calculated with {self.calculator.algorithm_name}"
+            # Tính toán liều
+            result = self.calculator.calculate_plan_dose(self.plan)
             
-            # Final progress
-            self.progress_signal.emit(100)
-            
-            # Emit result
-            self.finished_signal.emit(total_dose)
+            # Hoàn thành
+            self.update_signal.emit(100, "Đã hoàn thành tính toán.")
+            self.finished_signal.emit(True, "Đã tính toán liều thành công.", result)
             
         except Exception as e:
-            logger.error(f"Error in dose calculation: {str(e)}")
-            self.error_signal.emit(str(e))
+            logger.error(f"Lỗi khi tính toán liều: {str(e)}", exc_info=True)
+            self.finished_signal.emit(False, f"Lỗi khi tính toán: {str(e)}", None)
 
 class DoseCalculationDialog(QDialog):
     """
@@ -137,6 +101,8 @@ class DoseCalculationDialog(QDialog):
     # Tín hiệu khi người dùng chọn xong thuật toán và tham số
     algorithmSelected = pyqtSignal(dict)
     
+    dose_calculated = pyqtSignal(object)  # Phát tín hiệu khi tính toán hoàn thành
+
     def __init__(self, parent=None, plan=None, ct_image=None, config=None):
         """
         Initialize the dialog.
@@ -167,6 +133,12 @@ class DoseCalculationDialog(QDialog):
         # Khởi tạo processor để lấy thông tin mô hình chùm tia
         beam_model_dir = self.config.get_path('BEAM_MODEL_DIR')
         self.beam_processor = TrueBeamDataProcessor(beam_model_dir)
+        
+        self.thread = None
+        self.beam_data_manager = BeamDataManager()
+        
+        # Load các mô hình chùm tia
+        self.beam_models = self._load_beam_models()
         
         self._init_ui()
     
@@ -203,9 +175,10 @@ class DoseCalculationDialog(QDialog):
         # Buttons
         button_layout = QHBoxLayout()
         self.calculate_button = QPushButton("Tính toán")
-        self.calculate_button.clicked.connect(self.accept_calculation)
+        self.calculate_button.clicked.connect(self._start_calculation)
         self.cancel_button = QPushButton("Hủy")
-        self.cancel_button.clicked.connect(self.reject)
+        self.cancel_button.clicked.connect(self._cancel_calculation)
+        self.cancel_button.setEnabled(False)
         button_layout.addWidget(self.calculate_button)
         button_layout.addWidget(self.cancel_button)
         
@@ -380,15 +353,15 @@ class DoseCalculationDialog(QDialog):
     
     def show_beam_data_import_dialog(self):
         """Hiển thị dialog nhập dữ liệu chùm tia."""
-        import_dialog = BeamDataImportDialog(self)
+        import_dialog = BeamDataInputDialog(self)
         result = import_dialog.exec_()
         
         if result == QDialog.Accepted:
             # Cập nhật lại danh sách mô hình
             self.update_beam_models()
     
-    def accept_calculation(self):
-        """Chấp nhận tính toán và phát tín hiệu."""
+    def _start_calculation(self):
+        """Bắt đầu tính toán liều."""
         # Lấy thuật toán
         button = self.algorithm_buttons.checkedButton()
         if not button:
@@ -426,8 +399,121 @@ class DoseCalculationDialog(QDialog):
             "generate_report": self.generate_report_checkbox.isChecked()
         }
         
-        # Phát tín hiệu
-        self.algorithmSelected.emit(parameters)
+        # Vô hiệu hóa UI trong khi tính toán
+        self._set_calculating_ui(True)
         
-        # Đóng dialog
-        self.accept() 
+        # Tạo và chạy thread tính toán
+        self.thread = CalculationThread(self.calculator, self.plan, algorithm_text, parameters)
+        self.thread.update_signal.connect(self._update_progress)
+        self.thread.finished_signal.connect(self._calculation_completed)
+        self.thread.start()
+    
+    def _update_progress(self, progress: int, message: str):
+        """
+        Cập nhật tiến trình tính toán.
+        
+        Parameters
+        ----------
+        progress : int
+            Giá trị tiến trình (0-100)
+        message : str
+            Thông báo trạng thái
+        """
+        self.progress_bar.setValue(progress)
+        self.energy_label.setText(message)
+    
+    def _calculation_completed(self, success: bool, message: str, result: Any):
+        """
+        Xử lý khi hoàn thành tính toán.
+        
+        Parameters
+        ----------
+        success : bool
+            Thành công hay không
+        message : str
+            Thông báo
+        result : Any
+            Kết quả tính toán
+        """
+        self._set_calculating_ui(False)
+        
+        if success and result:
+            # Hiển thị thông báo thành công
+            QMessageBox.information(self, "Thành công", "Đã tính toán liều thành công.")
+            
+            # Phát tín hiệu với kết quả
+            self.dose_calculated.emit(result)
+            
+            # Đóng dialog
+            self.accept()
+            
+        else:
+            # Hiển thị thông báo lỗi
+            QMessageBox.warning(self, "Lỗi", f"Tính toán thất bại: {message}")
+    
+    def _cancel_calculation(self):
+        """Hủy tính toán đang chạy."""
+        if self.thread and self.thread.isRunning():
+            # Hủy thread
+            self.thread.terminate()
+            self.thread.wait()
+            
+            # Cập nhật UI
+            self._set_calculating_ui(False)
+            self.progress_bar.setValue(0)
+            self.energy_label.setText("Đã hủy tính toán")
+    
+    def _set_calculating_ui(self, is_calculating: bool):
+        """
+        Thiết lập trạng thái UI khi đang tính toán.
+        
+        Parameters
+        ----------
+        is_calculating : bool
+            True nếu đang tính toán, False nếu không
+        """
+        self.calculate_button.setEnabled(not is_calculating)
+        self.cancel_button.setEnabled(is_calculating)
+        
+        # Disable các tab và tham số
+        self.grid_size_combo.setEnabled(not is_calculating)
+        self.beam_model_combo.setEnabled(not is_calculating)
+        self.threads_spinbox.setEnabled(not is_calculating)
+        self.density_correction_checkbox.setEnabled(not is_calculating)
+        self.use_gpu_checkbox.setEnabled(not is_calculating)
+        self.save_intermediate_checkbox.setEnabled(not is_calculating)
+        self.generate_report_checkbox.setEnabled(not is_calculating)
+        
+        # Disable các tham số nâng cao
+        for i in range(self.threads_spinbox.layout().count()):
+            widget = self.threads_spinbox.layout().itemAt(i, QFormLayout.FieldRole).widget()
+            if widget:
+                widget.setEnabled(not is_calculating)
+
+    def _load_beam_models(self) -> Dict[str, List[BeamModel]]:
+        """
+        Tải các mô hình chùm tia.
+        
+        Returns
+        -------
+        Dict[str, List[BeamModel]]
+            Dictionary chứa các mô hình chùm tia, với khóa là loại chùm tia
+        """
+        beam_models = {}
+        
+        try:
+            # Lấy tất cả các mô hình từ BeamDataManager
+            for beam_type in BeamEnergyType:
+                beam_type_name = beam_type.value
+                beam_models[beam_type_name] = []
+                
+                # Tải các mô hình cho loại chùm tia này
+                models = self.beam_data_manager.get_beam_models(beam_type_name)
+                beam_models[beam_type_name].extend(models)
+                
+            logger.info(f"Đã tải {sum(len(models) for models in beam_models.values())} mô hình chùm tia")
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tải mô hình chùm tia: {str(e)}", exc_info=True)
+            
+        return beam_models 

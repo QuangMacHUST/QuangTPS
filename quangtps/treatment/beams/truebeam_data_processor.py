@@ -15,7 +15,9 @@ import re
 import glob
 import matplotlib.pyplot as plt
 from pathlib import Path
+from datetime import datetime
 
+from quangtps.common.paths import get_beam_data_dir
 from quangtps.core.exceptions import BeamDataError
 from quangtps.dose.beam_data_processor import BeamModelParameter, BeamModel
 from quangtps.core.config import ConfigManager
@@ -547,20 +549,25 @@ class TrueBeamDataProcessor:
     
     def __init__(self, output_dir: str = None):
         """
-        Khởi tạo processor.
+        Khởi tạo processor dữ liệu TrueBeam.
         
         Parameters
         ----------
         output_dir : str, optional
-            Thư mục đầu ra để lưu mô hình chùm tia, by default None
+            Thư mục đầu ra để lưu các mô hình chùm tia, mặc định là data/beam_data
         """
-        self.output_dir = output_dir
-        self.reader = TrueBeamDataReader()
+        self.output_dir = output_dir or get_beam_data_dir()
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        # Tạo thư mục models nếu chưa tồn tại
+        self.models_dir = os.path.join(self.output_dir, 'models')
+        os.makedirs(self.models_dir, exist_ok=True)
+        
+        # Lưu trữ các mô hình đã được tải
         self.beam_models = {}
         
-        # Nếu có thư mục đầu ra, tải mô hình sẵn có
-        if output_dir and os.path.exists(output_dir):
-            self.load_beam_models()
+        # Khởi tạo reader để đọc dữ liệu
+        self.reader = TrueBeamDataReader()
     
     def get_available_energies(self) -> List[str]:
         """
@@ -834,4 +841,286 @@ class TrueBeamDataProcessor:
             return output_path
             
         except Exception as e:
-            raise BeamDataError(f"Lỗi khi chuyển đổi mô hình chùm tia {energy_name}: {str(e)}") 
+            raise BeamDataError(f"Lỗi khi chuyển đổi mô hình chùm tia {energy_name}: {str(e)}")
+
+    def read_excel_file(self, file_path: str) -> bool:
+        """
+        Đọc dữ liệu từ file Excel của TrueBeam.
+        
+        Parameters
+        ----------
+        file_path : str
+            Đường dẫn đến file Excel cần đọc
+            
+        Returns
+        -------
+        bool
+            True nếu đọc thành công, False nếu thất bại
+        """
+        try:
+            import pandas as pd
+            
+            # Kiểm tra file tồn tại
+            if not os.path.exists(file_path):
+                logger.error(f"File không tồn tại: {file_path}")
+                return False
+                
+            # Lấy tên file để xác định loại chùm tia và năng lượng
+            beam_type, energy = self._determine_beam_type_from_filename(file_path)
+            
+            # Lưu thông tin cơ bản
+            self.current_file = file_path
+            self.current_energy = energy
+            self.current_beam_type = beam_type
+            
+            # Đọc dữ liệu từ các sheet
+            logger.info(f"Đọc file Excel: {file_path}")
+            
+            # Đọc sheet PDD data
+            try:
+                pdd_df = pd.read_excel(file_path, sheet_name='PDD', engine='openpyxl')
+                self.pdd_data = self._process_pdd_sheet(pdd_df)
+                logger.info(f"Đã đọc dữ liệu PDD: {len(self.pdd_data)} điểm dữ liệu")
+            except Exception as e:
+                logger.warning(f"Không thể đọc sheet PDD: {str(e)}")
+                self.pdd_data = {}
+                
+            # Đọc sheet Profile data
+            try:
+                profile_df = pd.read_excel(file_path, sheet_name='Profiles', engine='openpyxl')
+                self.profile_data = self._process_profile_sheet(profile_df)
+                logger.info(f"Đã đọc dữ liệu Profile: {len(self.profile_data)} profile")
+            except Exception as e:
+                logger.warning(f"Không thể đọc sheet Profiles: {str(e)}")
+                self.profile_data = {}
+                
+            # Đọc sheet Output factors
+            try:
+                output_df = pd.read_excel(file_path, sheet_name='Output Factors', engine='openpyxl')
+                self.output_factors = self._process_output_factors_sheet(output_df)
+                logger.info(f"Đã đọc dữ liệu Output Factors: {len(self.output_factors)} kích thước trường")
+            except Exception as e:
+                logger.warning(f"Không thể đọc sheet Output Factors: {str(e)}")
+                self.output_factors = {}
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi đọc file Excel: {str(e)}", exc_info=True)
+            return False
+            
+    def _process_pdd_sheet(self, df):
+        """Xử lý dữ liệu từ sheet PDD."""
+        pdd_data = {}
+        
+        try:
+            # Dùng hàng đầu tiên làm tên cột
+            if df.shape[0] < 2:
+                return pdd_data
+                
+            # Chuyển đổi DataFrame
+            for col in df.columns:
+                if 'field' in col.lower() or 'ssd' in col.lower() or 'depth' in col.lower():
+                    continue
+                    
+                # Lấy thông tin trường từ tên cột
+                # Ví dụ: "10x10" hoặc "10x10 SSD=100"
+                field_info = col.strip()
+                field_parts = field_info.split()
+                
+                field_size = field_parts[0] if field_parts else "Unknown"
+                ssd = 100.0  # Mặc định
+                
+                # Tìm SSD từ tên cột
+                for part in field_parts:
+                    if 'ssd=' in part.lower():
+                        try:
+                            ssd = float(part.lower().replace('ssd=', ''))
+                        except:
+                            pass
+                            
+                # Lấy dữ liệu depth và PDD
+                depths = df['Depth'].values if 'Depth' in df.columns else df.iloc[:, 0].values
+                pdds = df[col].values
+                
+                # Tạo dictionary dữ liệu PDD
+                pdd_values = {
+                    'depths': depths.tolist(),
+                    'values': pdds.tolist(),
+                    'ssd': ssd,
+                    'field_size': field_size
+                }
+                
+                # Thêm vào dictionary chính
+                key = f"{field_size}_SSD={ssd}"
+                pdd_data[key] = pdd_values
+                
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sheet PDD: {str(e)}", exc_info=True)
+            
+        return pdd_data
+            
+    def _process_profile_sheet(self, df):
+        """Xử lý dữ liệu từ sheet Profile."""
+        profile_data = {}
+        
+        try:
+            # Phân tích cấu trúc sheet
+            # Sheet có thể có nhiều profile, mỗi profile được đánh dấu bởi hàng tiêu đề
+            
+            current_profile = None
+            profile_meta = {}
+            profile_positions = []
+            profile_values = []
+            
+            for i, row in df.iterrows():
+                # Kiểm tra xem dòng này có phải là tiêu đề của profile mới không
+                if not pd.isna(row.iloc[0]) and 'field' in str(row.iloc[0]).lower():
+                    # Lưu profile trước đó nếu có
+                    if current_profile and profile_positions and profile_values:
+                        profile_data[current_profile] = {
+                            'meta': profile_meta,
+                            'positions': profile_positions,
+                            'values': profile_values
+                        }
+                        
+                    # Bắt đầu profile mới
+                    try:
+                        meta_text = str(row.iloc[0])
+                        meta_parts = meta_text.split(',')
+                        
+                        profile_meta = {}
+                        for part in meta_parts:
+                            if ':' in part:
+                                key, value = part.split(':', 1)
+                                profile_meta[key.strip().lower()] = value.strip()
+                        
+                        # Tạo tên profile từ meta
+                        field_size = profile_meta.get('field', 'Unknown')
+                        depth = profile_meta.get('depth', 'Unknown')
+                        axis = profile_meta.get('axis', 'Unknown')
+                        
+                        current_profile = f"{field_size}_D={depth}_{axis}"
+                        profile_positions = []
+                        profile_values = []
+                    except:
+                        current_profile = None
+                        
+                # Nếu đang trong profile, đọc dữ liệu
+                elif current_profile and not pd.isna(row.iloc[0]) and not pd.isna(row.iloc[1]):
+                    try:
+                        position = float(row.iloc[0])
+                        value = float(row.iloc[1])
+                        
+                        profile_positions.append(position)
+                        profile_values.append(value)
+                    except:
+                        pass
+            
+            # Lưu profile cuối cùng
+            if current_profile and profile_positions and profile_values:
+                profile_data[current_profile] = {
+                    'meta': profile_meta,
+                    'positions': profile_positions,
+                    'values': profile_values
+                }
+                
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sheet Profile: {str(e)}", exc_info=True)
+            
+        return profile_data
+            
+    def _process_output_factors_sheet(self, df):
+        """Xử lý dữ liệu từ sheet Output Factors."""
+        output_factors = {}
+        
+        try:
+            # Thường sheet Output Factors có cấu trúc ma trận
+            # Với hàng là kích thước X, cột là kích thước Y
+            
+            # Tìm các cột có dữ liệu
+            data_columns = [col for col in df.columns if isinstance(col, (int, float)) or 
+                            (isinstance(col, str) and col.replace('.', '', 1).isdigit())]
+            
+            # Chuyển thành float
+            data_columns = [float(col) if isinstance(col, str) else col for col in data_columns]
+            
+            # Đọc từng hàng
+            for i, row in df.iterrows():
+                try:
+                    # Kiểm tra hàng có dữ liệu không
+                    if pd.isna(row.iloc[0]) or not isinstance(row.iloc[0], (int, float)):
+                        continue
+                        
+                    x_size = float(row.iloc[0])
+                    
+                    for j, col in enumerate(data_columns):
+                        y_size = float(col)
+                        
+                        # Lấy giá trị output factor
+                        try:
+                            value = float(row.iloc[j+1])
+                            
+                            # Tạo key cho output factor
+                            if x_size == y_size:
+                                key = f"{x_size}x{y_size}"
+                            else:
+                                key = f"{x_size}x{y_size}"
+                                
+                            output_factors[key] = value
+                        except:
+                            pass
+                except:
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sheet Output Factors: {str(e)}", exc_info=True)
+            
+        return output_factors
+    
+    def create_beam_model(self) -> Optional[BeamModel]:
+        """
+        Tạo mô hình chùm tia từ dữ liệu đã đọc.
+        
+        Returns
+        -------
+        Optional[BeamModel]
+            Mô hình chùm tia, hoặc None nếu không có dữ liệu
+        """
+        if not hasattr(self, 'current_energy') or not self.current_energy:
+            logger.error("Chưa đọc dữ liệu từ file Excel")
+            return None
+            
+        try:
+            # Tạo mô hình chùm tia mới
+            model_name = f"TrueBeam_{self.current_energy}"
+            beam_model = BeamModel(model_name, self.current_energy, self.current_beam_type)
+            
+            # Thêm thông tin nguồn
+            beam_model.set_source_file(self.current_file)
+            
+            # Thêm dữ liệu PDD
+            for key, pdd_data in getattr(self, 'pdd_data', {}).items():
+                param_name = f"pdd_{key}"
+                beam_model.add_parameter(param_name, pdd_data)
+                
+            # Thêm dữ liệu Profile
+            for key, profile_data in getattr(self, 'profile_data', {}).items():
+                param_name = f"profile_{key}"
+                beam_model.add_parameter(param_name, profile_data)
+                
+            # Thêm Output Factors
+            beam_model.add_parameter("output_factors", getattr(self, 'output_factors', {}))
+            
+            # Lưu model
+            model_file = os.path.join(self.models_dir, f"{model_name}.json")
+            beam_model.save_to_file(model_file)
+            
+            # Lưu vào cache
+            self.beam_models[self.current_energy] = beam_model
+            
+            return beam_model
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo mô hình chùm tia: {str(e)}", exc_info=True)
+            return None 

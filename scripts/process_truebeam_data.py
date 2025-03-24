@@ -2,174 +2,241 @@
 # -*- coding: utf-8 -*-
 
 """
-Script xử lý dữ liệu TrueBeam và tạo mô hình chùm tia.
+Script để xử lý dữ liệu chùm tia TrueBeam từ dòng lệnh.
 
-Script này quét thư mục dữ liệu chùm tia, tìm các file Excel chứa dữ liệu TrueBeam,
-và tạo các mô hình chùm tia từ dữ liệu này.
+Script này cho phép nhập và xử lý dữ liệu chùm tia từ các file Excel của TrueBeam
+và chuyển đổi thành mô hình chùm tia để sử dụng trong QuangTPS.
+
+Sử dụng:
+    python process_truebeam_data.py --source <thư mục chứa file Excel> [--dest <thư mục đích>] [--energy <năng lượng>]
+
+Các tham số:
+    --source: Thư mục chứa file Excel của TrueBeam
+    --dest: Thư mục đích để lưu mô hình chùm tia (mặc định: data/beam_data)
+    --energy: Chỉ xử lý file có năng lượng này (mặc định: xử lý tất cả)
 """
 
 import os
 import sys
-import logging
 import argparse
+import logging
+import json
+import re
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Optional, Any, Tuple
 
-# Thêm thư mục cha vào sys.path
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+# Thêm thư mục gốc vào sys.path để import các module của QuangTPS
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import các module cần thiết
-try:
-    from quangtps.treatment.beams.beam_data_importer import TrueBeamDataReader, import_truebeam_data
-    from quangtps.treatment.beams.beam_data_processor import BeamDataProcessor
-except ImportError as e:
-    print(f"Lỗi: Không thể import module cần thiết: {e}")
-    sys.exit(1)
+from quangtps.treatment.beams.truebeam_data_processor import TrueBeamDataProcessor
+from quangtps.dose.beam_data_processor import BeamModel
+from quangtps.common.paths import get_beam_data_dir, get_project_root
+from quangtps.core.logging import setup_logger
 
-def setup_logging(verbose: bool = False):
-    """Thiết lập logging."""
-    log_level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('truebeam_processing.log')
-        ]
-    )
+# Thiết lập logging
+logger = logging.getLogger(__name__)
 
-def parse_arguments():
-    """Phân tích đối số dòng lệnh."""
-    parser = argparse.ArgumentParser(description='Xử lý dữ liệu TrueBeam và tạo mô hình chùm tia')
-    
-    parser.add_argument('--source', '-s', type=str, 
-                        help='Thư mục chứa dữ liệu TrueBeam dạng Excel')
-    
-    parser.add_argument('--dest', '-d', type=str,
-                        help='Thư mục đích để lưu dữ liệu đã xử lý')
-    
-    parser.add_argument('--energies', '-e', type=str,
-                        help='Danh sách năng lượng cần xử lý, cách nhau bởi dấu phẩy (ví dụ: 6MV,10FFF)')
-    
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help='Hiển thị thông tin debug chi tiết')
-    
-    return parser.parse_args()
+# Thêm console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+logger.setLevel(logging.INFO)
 
-def process_truebeam_data(source_dir: str = None, dest_dir: str = None, 
-                         energies: List[str] = None, verbose: bool = False) -> Dict[str, str]:
+
+def setup_argparse():
+    """Thiết lập parser tham số dòng lệnh."""
+    parser = argparse.ArgumentParser(description='Xử lý dữ liệu chùm tia TrueBeam từ file Excel.')
+    
+    parser.add_argument('--source', type=str, required=True,
+                        help='Thư mục chứa file Excel của TrueBeam')
+    
+    parser.add_argument('--dest', type=str, default=None,
+                        help='Thư mục đích để lưu mô hình chùm tia (mặc định: data/beam_data)')
+    
+    parser.add_argument('--energy', type=str, default=None,
+                        help='Chỉ xử lý file có năng lượng này (mặc định: xử lý tất cả)')
+    
+    parser.add_argument('--force', action='store_true',
+                        help='Ghi đè mô hình đã tồn tại')
+    
+    return parser
+
+
+def find_excel_files(source_dir: str, energy_filter: Optional[str] = None) -> List[Tuple[str, str, str]]:
     """
-    Xử lý dữ liệu TrueBeam và tạo mô hình chùm tia.
+    Tìm tất cả các file Excel trong thư mục và xác định năng lượng.
     
-    Args:
-        source_dir (str, optional): Thư mục chứa dữ liệu TrueBeam dạng Excel.
-        dest_dir (str, optional): Thư mục đích để lưu dữ liệu đã xử lý.
-        energies (List[str], optional): Danh sách năng lượng cần xử lý.
-        verbose (bool, optional): Hiển thị thông tin debug chi tiết.
+    Parameters
+    ----------
+    source_dir : str
+        Thư mục chứa file Excel
+    energy_filter : str, optional
+        Lọc theo năng lượng
         
-    Returns:
-        Dict[str, str]: Dictionary chứa {năng lượng: đường dẫn file mô hình}.
+    Returns
+    -------
+    List[Tuple[str, str, str]]
+        Danh sách các tuple (đường dẫn file, loại chùm tia, năng lượng)
     """
-    # Thiết lập logging
-    setup_logging(verbose)
-    logger = logging.getLogger(__name__)
+    if not os.path.isdir(source_dir):
+        logger.error(f"Thư mục không tồn tại: {source_dir}")
+        return []
+        
+    excel_files = []
+    processor = TrueBeamDataProcessor()  # Khởi tạo processor để phân tích tên file
     
-    # Xác định thư mục nguồn và đích
-    if source_dir is None:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        source_dir = os.path.join(base_dir, "data", "beam_data", "raw")
+    for file in os.listdir(source_dir):
+        if file.endswith(('.xlsx', '.xls')) and not file.startswith('~$') and not file.startswith('._'):
+            file_path = os.path.join(source_dir, file)
+            
+            # Xác định loại năng lượng từ tên file
+            beam_type, energy = processor._determine_beam_type_from_filename(file_path)
+            
+            # Lọc theo năng lượng nếu có
+            if energy_filter and energy_filter.lower() != energy.lower():
+                continue
+                
+            # Thêm vào danh sách
+            excel_files.append((file_path, beam_type, energy))
+            
+    # Sắp xếp file theo năng lượng
+    excel_files.sort(key=lambda x: x[2])
     
+    return excel_files
+
+
+def process_excel_file(file_path: str, processor: TrueBeamDataProcessor) -> Optional[BeamModel]:
+    """
+    Xử lý file Excel và tạo mô hình chùm tia.
+    
+    Parameters
+    ----------
+    file_path : str
+        Đường dẫn đến file Excel
+    processor : TrueBeamDataProcessor
+        Processor đã khởi tạo
+        
+    Returns
+    -------
+    Optional[BeamModel]
+        Mô hình chùm tia, hoặc None nếu không thể tạo
+    """
+    logger.info(f"Đang xử lý file: {file_path}")
+    
+    # Đọc file Excel
+    logger.info("Đang đọc dữ liệu...")
+    success = processor.read_excel_file(file_path)
+    
+    if not success:
+        logger.error("Không thể đọc file Excel.")
+        return None
+        
+    # Tạo mô hình chùm tia
+    logger.info("Đang tạo mô hình chùm tia...")
+    beam_model = processor.create_beam_model()
+    
+    if beam_model is None:
+        logger.error("Không thể tạo mô hình chùm tia.")
+        return None
+        
+    logger.info(f"Đã tạo mô hình chùm tia: {beam_model.name}")
+    
+    return beam_model
+
+
+def save_beam_model(beam_model: BeamModel, dest_dir: Optional[str] = None) -> str:
+    """
+    Lưu mô hình chùm tia vào file.
+    
+    Parameters
+    ----------
+    beam_model : BeamModel
+        Mô hình chùm tia
+    dest_dir : str, optional
+        Thư mục đích
+        
+    Returns
+    -------
+    str
+        Đường dẫn đến file đã lưu
+    """
+    # Xác định thư mục đích
     if dest_dir is None:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        dest_dir = os.path.join(base_dir, "data", "beam_data")
-    
-    # Tạo thư mục đích nếu chưa tồn tại
-    os.makedirs(dest_dir, exist_ok=True)
-    
-    logger.info(f"Thư mục nguồn: {source_dir}")
-    logger.info(f"Thư mục đích: {dest_dir}")
-    
-    # Tạo đối tượng TrueBeamDataReader để quét dữ liệu
-    reader = TrueBeamDataReader(source_dir)
-    excel_files = reader.scan_data_directory()
-    
-    if not excel_files:
-        logger.error(f"Không tìm thấy file Excel nào trong thư mục {source_dir}")
-        return {}
-    
-    # Lấy danh sách năng lượng có sẵn
-    available_energies = reader.available_energies
-    logger.info(f"Các năng lượng có sẵn: {available_energies}")
-    
-    # Nếu chỉ định năng lượng cụ thể, chỉ xử lý những năng lượng đó
-    if energies:
-        # Kiểm tra xem năng lượng có tồn tại không
-        for energy in energies:
-            if energy not in available_energies:
-                logger.warning(f"Năng lượng {energy} không có trong dữ liệu, sẽ bỏ qua")
-        
-        # Lọc các năng lượng tồn tại
-        process_energies = [e for e in energies if e in available_energies]
+        beam_data_dir = get_beam_data_dir()
     else:
-        process_energies = available_energies
+        beam_data_dir = dest_dir
+        
+    # Tạo thư mục models nếu chưa tồn tại
+    models_dir = os.path.join(beam_data_dir, 'models')
+    os.makedirs(models_dir, exist_ok=True)
     
-    if not process_energies:
-        logger.error("Không có năng lượng nào để xử lý")
-        return {}
+    # Tạo tên file
+    file_name = f"TrueBeam_{beam_model.energy.replace(' ', '_')}.json"
+    file_path = os.path.join(models_dir, file_name)
     
-    # Nhập dữ liệu TrueBeam và xuất sang JSON
-    logger.info(f"Đang nhập dữ liệu cho các năng lượng: {process_energies}")
-    json_files = import_truebeam_data(source_dir, process_energies)
+    # Lưu mô hình
+    beam_model.save_to_file(file_path)
+    logger.info(f"Đã lưu mô hình chùm tia vào: {file_path}")
     
-    # Tạo mô hình chùm tia từ dữ liệu JSON
-    processor = BeamDataProcessor(dest_dir)
-    model_files = {}
-    
-    for energy in process_energies:
-        try:
-            # Tải mô hình
-            model = processor.load_beam_model(energy)
-            
-            # Xuất mô hình
-            model_file = processor.export_beam_model(energy, dest_dir)
-            model_files[energy] = model_file
-            
-            logger.info(f"Đã tạo mô hình chùm tia cho năng lượng {energy}: {model_file}")
-        except Exception as e:
-            logger.error(f"Lỗi khi tạo mô hình chùm tia cho năng lượng {energy}: {str(e)}")
-    
-    return model_files
+    return file_path
+
 
 def main():
     """Hàm chính của script."""
-    # Phân tích đối số
-    args = parse_arguments()
+    # Thiết lập logging
+    log_dir = os.path.join(get_project_root(), 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    setup_logger(log_dir, level=logging.INFO)
     
-    # Chuyển đổi danh sách năng lượng từ chuỗi
-    energies = None
-    if args.energies:
-        energies = [e.strip() for e in args.energies.split(',')]
+    # Parse tham số dòng lệnh
+    parser = setup_argparse()
+    args = parser.parse_args()
     
-    # Xử lý dữ liệu
-    result = process_truebeam_data(
-        source_dir=args.source,
-        dest_dir=args.dest,
-        energies=energies,
-        verbose=args.verbose
-    )
+    # Xác định thư mục đích
+    dest_dir = args.dest or get_beam_data_dir()
+    os.makedirs(dest_dir, exist_ok=True)
     
-    # In kết quả
-    if result:
-        print("\nKết quả xử lý dữ liệu TrueBeam:")
-        for energy, model_file in result.items():
-            print(f"  {energy}: {model_file}")
-        print(f"\nĐã xử lý {len(result)} mô hình chùm tia.")
-        return 0
-    else:
-        print("\nKhông có mô hình chùm tia nào được tạo.")
+    # Khởi tạo processor
+    processor = TrueBeamDataProcessor(dest_dir)
+    
+    # Tìm các file Excel
+    logger.info(f"Đang tìm file Excel trong thư mục: {args.source}")
+    excel_files = find_excel_files(args.source, args.energy)
+    
+    if not excel_files:
+        logger.error("Không tìm thấy file Excel phù hợp.")
         return 1
+        
+    logger.info(f"Đã tìm thấy {len(excel_files)} file Excel phù hợp:")
+    for file_path, beam_type, energy in excel_files:
+        logger.info(f"  - {os.path.basename(file_path)}: {beam_type} {energy}")
+    
+    # Xử lý từng file
+    success_count = 0
+    
+    for file_path, beam_type, energy in excel_files:
+        logger.info(f"\n{'='*80}\nĐang xử lý file {os.path.basename(file_path)} ({energy})...")
+        
+        # Kiểm tra xem mô hình đã tồn tại chưa
+        model_file = os.path.join(dest_dir, 'models', f"TrueBeam_{energy.replace(' ', '_')}.json")
+        if os.path.exists(model_file) and not args.force:
+            logger.info(f"Mô hình đã tồn tại: {model_file}, bỏ qua. Sử dụng --force để ghi đè.")
+            continue
+        
+        # Xử lý file
+        beam_model = process_excel_file(file_path, processor)
+        
+        if beam_model:
+            # Lưu mô hình
+            save_path = save_beam_model(beam_model, dest_dir)
+            success_count += 1
+            
+    logger.info(f"\n{'='*80}\nĐã xử lý thành công {success_count}/{len(excel_files)} file.")
+    
+    return 0
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     sys.exit(main()) 

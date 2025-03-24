@@ -13,7 +13,18 @@ import sys
 import time
 import logging
 import argparse
+import traceback
 from pathlib import Path
+
+# Import các module PyQt5 cần thiết ở cấp độ toàn cục để tránh lỗi linter
+try:
+    from PyQt5.QtWidgets import QApplication, QSplashScreen, QMessageBox
+    from PyQt5.QtGui import QPixmap
+    from PyQt5.QtCore import Qt, QTimer
+    HAS_PYQT = True
+except ImportError:
+    print("CẢNH BÁO: Không thể import module PyQt5. Ứng dụng có thể không hoạt động đúng.")
+    HAS_PYQT = False
 
 def setup_environment():
     """Thiết lập môi trường chạy."""
@@ -59,8 +70,25 @@ def setup_logging(verbose=False):
     # Định dạng log
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     
+    # Thiết lập UTF-8 cho console
+    try:
+        # Sử dụng hàm setup_utf8_console từ module quangtps.core.logging nếu đã import được
+        from quangtps.core.logging import setup_utf8_console
+        setup_utf8_console()
+    except ImportError:
+        # Nếu chưa import được (ví dụ khi mới khởi động), sử dụng cài đặt cơ bản
+        if sys.platform == 'win32':
+            try:
+                import codecs
+                os.environ['PYTHONIOENCODING'] = 'utf-8'
+                os.environ['PYTHONUTF8'] = '1'
+                sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
+                sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
+            except Exception:
+                pass  # Bỏ qua nếu không thực hiện được
+    
     # Thiết lập logging cho console
-    console_handler = logging.StreamHandler()
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     console_handler.setFormatter(logging.Formatter(log_format))
     
@@ -72,6 +100,11 @@ def setup_logging(verbose=False):
     # Cấu hình root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
+    
+    # Xóa handler hiện có để tránh trùng lặp
+    if root_logger.handlers:
+        root_logger.handlers = []
+        
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
     
@@ -119,11 +152,10 @@ def check_dependencies():
 
 def show_splash_screen():
     """Hiển thị màn hình chào."""
-    from PyQt5.QtWidgets import QSplashScreen, QApplication
-    from PyQt5.QtGui import QPixmap
-    from PyQt5.QtCore import Qt, QTimer
-    
     # Tạo ứng dụng QApplication
+    if not HAS_PYQT:
+        return None, None
+        
     app = QApplication(sys.argv)
     splash = None
     
@@ -204,18 +236,21 @@ def main():
         return 1
     
     # Hiển thị splash screen nếu không ở chế độ console và không tắt splash screen
-    if not args.console and not args.no_splash:
+    if not args.console and not args.no_splash and HAS_PYQT:
         app, splash = show_splash_screen()
-        # Độ trễ để hiển thị splash screen
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(2000, lambda: start_application(app, splash, args))
+        if app is not None:
+            # Độ trễ để hiển thị splash screen
+            QTimer.singleShot(2000, lambda: start_application(app, splash, args))
+            # Bắt đầu vòng lặp sự kiện
+            return app.exec_()
     else:
-        from PyQt5.QtWidgets import QApplication
-        app = QApplication(sys.argv)
-        start_application(app, None, args)
-    
-    # Bắt đầu vòng lặp sự kiện
-    return app.exec_()
+        if HAS_PYQT:
+            app = QApplication(sys.argv)
+            start_application(app, None, args)
+            return app.exec_()
+        else:
+            logger.error("Không thể khởi động giao diện đồ họa do thiếu PyQt5")
+            return 1
 
 def start_application(app, splash, args):
     """Bắt đầu ứng dụng chính."""
@@ -244,22 +279,25 @@ def start_application(app, splash, args):
         logger.info("Ứng dụng đã khởi động thành công")
         
     except Exception as e:
-        import traceback
         error_traceback = traceback.format_exc()
-        logger.error(f"Lỗi khi khởi động ứng dụng: {str(e)}\n{error_traceback}")
-        if splash:
-            splash.close()
+        logger.error(f"Lỗi khi khởi động ứng dụng: {str(e)}")
+        logger.error(f"Chi tiết lỗi:\n{error_traceback}")
         
-        # Hiển thị thông báo lỗi
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.critical(
-            None,
-            "Lỗi khởi động",
-            f"Không thể khởi động QuangTPS: {str(e)}"
-        )
-        
-        # Thoát ứng dụng
-        app.quit()
+        # Hiển thị thông báo lỗi cho người dùng
+        try:
+            if HAS_PYQT:
+                error_msg = QMessageBox()
+                error_msg.setIcon(QMessageBox.Critical)
+                error_msg.setWindowTitle("Lỗi khởi động")
+                error_msg.setText("Không thể khởi động QuangTPS")
+                error_msg.setDetailedText(f"{str(e)}\n\n{error_traceback}")
+                error_msg.exec_()
+            else:
+                print(f"Lỗi nghiêm trọng: {str(e)}")
+                print(error_traceback)
+        except Exception:
+            print(f"Lỗi nghiêm trọng: {str(e)}")
+            print(error_traceback)
 
 if __name__ == "__main__":
     sys.exit(main()) 
