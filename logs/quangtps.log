@@ -7459,3 +7459,685 @@ AttributeError: 'TreatmentQAManager' object has no attribute 'get_all_tests'
 2025-03-25 08:19:17 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
 2025-03-25 08:19:17 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
 2025-03-25 08:22:27 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 08:22:29 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 08:22:29 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:22:29 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 08:22:29 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 08:22:29 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 08:22:29 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 08:22:30 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 08:22:30 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 08:22:30 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 08:22:30 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 08:22:30 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 08:22:31 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:22:32 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 08:22:57 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: f57de1c6-b16a-460a-b3ca-a7f80150b368
+2025-03-25 08:22:58 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 08:22:58 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: f57de1c6-b16a-460a-b3ca-a7f80150b368
+2025-03-25 08:22:58 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân f57de1c6-b16a-460a-b3ca-a7f80150b368
+2025-03-25 10:59:05 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 10:59:07 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 10:59:07 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 10:59:07 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 10:59:07 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 10:59:07 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 10:59:08 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 10:59:08 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 10:59:08 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 10:59:08 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 10:59:08 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 10:59:08 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 10:59:09 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 10:59:10 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 10:59:18 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 10:59:21 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: d64a0c27-9b6c-462c-844b-51ec0c7cd9a5
+2025-03-25 10:59:22 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 10:59:22 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d64a0c27-9b6c-462c-844b-51ec0c7cd9a5
+2025-03-25 10:59:22 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân d64a0c27-9b6c-462c-844b-51ec0c7cd9a5
+2025-03-25 10:59:52 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 10:59:54 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 10:59:54 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 10:59:54 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 10:59:54 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 10:59:54 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 10:59:54 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 10:59:54 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 10:59:54 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 10:59:54 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 10:59:54 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 10:59:55 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 10:59:56 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 10:59:56 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 11:00:07 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 9417f56b-c8f0-4e9d-8caa-b74a810f2bc0
+2025-03-25 11:00:08 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 11:00:08 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9417f56b-c8f0-4e9d-8caa-b74a810f2bc0
+2025-03-25 11:00:08 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân 9417f56b-c8f0-4e9d-8caa-b74a810f2bc0
+2025-03-25 11:00:13 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 11:00:15 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 11:00:15 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:00:15 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 11:00:15 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 11:00:15 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 11:00:15 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 11:00:16 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 11:00:16 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 11:00:16 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 11:00:16 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 11:00:16 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 11:00:17 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:00:17 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 11:00:20 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:00:23 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: d64042cc-c21f-45e9-a6d8-731f330611e2
+2025-03-25 11:00:24 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 11:00:24 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d64042cc-c21f-45e9-a6d8-731f330611e2
+2025-03-25 11:00:24 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân d64042cc-c21f-45e9-a6d8-731f330611e2
+2025-03-25 11:03:06 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 11:03:08 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 11:03:08 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:03:08 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 11:03:08 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 11:03:08 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 11:03:08 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 11:03:08 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 11:03:09 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 11:03:09 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 11:03:09 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 11:03:09 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 11:03:10 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:03:10 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 11:03:22 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:22 [INFO] quangtps.ui.patient_tab (patient_tab.py:497): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 11:03:22 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:22 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:22 [ERROR] quangtps.database.patient_db (patient_db.py:719): Lỗi khi lấy danh sách nghiên cứu: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 697, in get_patient_studies
+    for row in studies_data:
+               ^^^^^^^^^^^^
+TypeError: 'NoneType' object is not iterable
+2025-03-25 11:03:22 [ERROR] quangtps.ui.patient_tab (patient_tab.py:1026): Lỗi khi hiển thị dữ liệu y tế: Lỗi khi lấy danh sách nghiên cứu: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 697, in get_patient_studies
+    for row in studies_data:
+               ^^^^^^^^^^^^
+TypeError: 'NoneType' object is not iterable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 995, in _populate_medical_images
+    studies = self.patient_db.get_patient_studies(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 720, in get_patient_studies
+    raise DatabaseError(f"Lỗi khi lấy danh sách nghiên cứu: {str(e)}") from e
+quangtps.core.exceptions.DatabaseError: Lỗi khi lấy danh sách nghiên cứu: 'NoneType' object is not iterable
+2025-03-25 11:03:26 [INFO] quangtps.ui.patient_tab (patient_tab.py:453): Đã hiển thị thông tin bệnh nhân: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:26 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:33 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 11:03:33 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:33 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:36 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 4b04bb76-fb59-4af0-82a9-e5dbc331a09b
+2025-03-25 11:03:38 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 2 bệnh nhân
+2025-03-25 11:03:38 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:38 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân c026a8ab-5682-49ad-9ef0-cd34a3609767
+2025-03-25 11:03:38 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 4b04bb76-fb59-4af0-82a9-e5dbc331a09b
+2025-03-25 11:03:38 [INFO] quangtps.database.patient_db (patient_db.py:798): Không có kế hoạch nào cho bệnh nhân 4b04bb76-fb59-4af0-82a9-e5dbc331a09b
+2025-03-25 11:20:34 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 11:20:36 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 11:20:36 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:20:36 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 11:20:36 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 11:20:36 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 11:20:36 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 11:20:36 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 11:20:37 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 11:20:37 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 11:20:37 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 11:20:37 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 11:20:38 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 11:20:38 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 16:09:58 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 16:10:00 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 16:10:00 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:10:00 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 16:10:00 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 16:10:00 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 16:10:00 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 16:10:01 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 16:10:01 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 16:10:01 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:10:01 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:10:01 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 16:10:03 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:10:03 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 16:10:41 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:10:46 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 78a62eb1-d075-4f86-a0d2-7b97be3f0435
+2025-03-25 16:10:47 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 16:10:47 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 78a62eb1-d075-4f86-a0d2-7b97be3f0435
+2025-03-25 16:10:47 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 78a62eb1-d075-4f86-a0d2-7b97be3f0435
+2025-03-25 16:16:27 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 16:16:29 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 16:16:29 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:16:29 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 16:16:29 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 16:16:29 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 16:16:30 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 16:16:30 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 16:16:30 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 16:16:30 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:16:30 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:16:30 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 16:16:31 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:16:31 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 16:48:52 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 16:48:53 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 16:48:53 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:48:53 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 16:48:53 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 16:48:53 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 16:48:53 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 16:48:54 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 16:48:54 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 16:48:54 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:48:54 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:48:54 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 16:48:55 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:48:56 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 16:49:04 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 7641a006-c733-4272-93f5-4e3eb75b78c7
+2025-03-25 16:49:06 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 16:49:06 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 7641a006-c733-4272-93f5-4e3eb75b78c7
+2025-03-25 16:49:06 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 7641a006-c733-4272-93f5-4e3eb75b78c7
+2025-03-25 16:50:33 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 16:50:35 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 16:50:35 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:50:35 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 16:50:35 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 16:50:35 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 16:50:35 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 16:50:35 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 16:50:35 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 16:50:35 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:50:35 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:50:35 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 16:50:36 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 16:50:37 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 16:51:01 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: chimto
+2025-03-25 16:51:01 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:51:01 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:140): Đã tạo bệnh nhân mới: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:51:01 [INFO] quangtps.ui.patient_tab (patient_tab.py:408): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 16:51:01 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: chimto
+2025-03-25 16:51:03 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: chimto
+2025-03-25 16:51:03 [INFO] quangtps.ui.patient_tab (patient_tab.py:726): Đã tạo và hiển thị bệnh nhân mới với ID: chimto
+2025-03-25 16:51:07 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: a88ed634-a353-4aff-a06e-a5961287c4c3
+2025-03-25 16:51:07 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: 03703739-44d0-4af2-9a90-4ab8c9fc4c9b
+2025-03-25 16:51:07 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:140): Đã tạo bệnh nhân mới: 03703739-44d0-4af2-9a90-4ab8c9fc4c9b
+2025-03-25 16:51:07 [INFO] quangtps.ui.patient_tab (patient_tab.py:408): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 16:51:07 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: 3d442948-cd55-4a52-96f9-8844463b6773
+2025-03-25 16:51:14 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: 3d442948-cd55-4a52-96f9-8844463b6773
+2025-03-25 16:51:14 [INFO] quangtps.ui.patient_tab (patient_tab.py:726): Đã tạo và hiển thị bệnh nhân mới với ID: 3d442948-cd55-4a52-96f9-8844463b6773
+2025-03-25 16:51:18 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: df415bb4-acf0-42ed-a6ba-80afde59b760
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 3 bệnh nhân
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 03703739-44d0-4af2-9a90-4ab8c9fc4c9b
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 03703739-44d0-4af2-9a90-4ab8c9fc4c9b
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: df415bb4-acf0-42ed-a6ba-80afde59b760
+2025-03-25 16:51:19 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân df415bb4-acf0-42ed-a6ba-80afde59b760
+2025-03-25 16:55:54 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 16:55:56 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 16:55:56 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 16:55:56 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:55:56 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:55:56 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 16:55:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 16:55:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 16:55:56 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 16:55:56 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 16:55:56 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 16:55:56 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:55:56 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 16:55:56 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 16:55:57 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 1 bệnh nhân
+2025-03-25 16:55:58 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 16:56:17 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 16:56:17 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 16:56:17 [INFO] quangtps.ui.patient_tab (patient_tab.py:408): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 16:56:17 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: 13864627-2e35-4e3f-be32-64aaa797a1fa
+2025-03-25 16:56:20 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: 13864627-2e35-4e3f-be32-64aaa797a1fa
+2025-03-25 16:56:20 [INFO] quangtps.ui.patient_tab (patient_tab.py:726): Đã tạo và hiển thị bệnh nhân mới với ID: 13864627-2e35-4e3f-be32-64aaa797a1fa
+2025-03-25 16:56:27 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: b3fa1620-550a-4cd2-ae4f-ca45f69dccb0
+2025-03-25 16:56:27 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: b3fa1620-550a-4cd2-ae4f-ca45f69dccb0
+2025-03-25 16:56:27 [INFO] quangtps.ui.patient_tab (patient_tab.py:408): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 16:56:27 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: 09468a38-4642-4cdc-b125-29cfe1eb360e
+2025-03-25 16:56:31 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: 09468a38-4642-4cdc-b125-29cfe1eb360e
+2025-03-25 16:56:31 [INFO] quangtps.ui.patient_tab (patient_tab.py:726): Đã tạo và hiển thị bệnh nhân mới với ID: 09468a38-4642-4cdc-b125-29cfe1eb360e
+2025-03-25 16:56:41 [INFO] quangtps.database.patient_db (patient_db.py:304): Đã tạo bệnh nhân mới với ID: bebb7726-f854-437c-aacd-e29ff4e099cd
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b3fa1620-550a-4cd2-ae4f-ca45f69dccb0
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b3fa1620-550a-4cd2-ae4f-ca45f69dccb0
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: bebb7726-f854-437c-aacd-e29ff4e099cd
+2025-03-25 16:56:43 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân bebb7726-f854-437c-aacd-e29ff4e099cd
+2025-03-25 17:04:31 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:04:33 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 17:04:33 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 2 bệnh nhân
+2025-03-25 17:04:33 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:04:33 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:04:33 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:04:33 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:04:33 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 17:04:33 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 17:04:33 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 17:04:33 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 17:04:34 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 17:04:34 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 17:04:34 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:04:34 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:04:34 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 17:04:35 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 2 bệnh nhân
+2025-03-25 17:04:35 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 17:04:47 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:04:47 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:04:47 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:04:47 [WARNING] quangtps.database.patient_db (patient_db.py:330): Không tìm thấy bệnh nhân với ID: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:04:53 [INFO] quangtps.ui.patient_tab (patient_tab.py:762): Đã tạo và hiển thị bệnh nhân mới với ID: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:05:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:05:42 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: EM iu
+2025-03-25 17:05:42 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: EM iu
+2025-03-25 17:05:42 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:05:42 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:05:42 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:05:42 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân EM iu
+2025-03-25 17:05:42 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân EM iu
+2025-03-25 17:05:42 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: EM iu
+2025-03-25 17:05:42 [WARNING] quangtps.ui.patient_browser (patient_browser.py:175): Không tìm thấy bệnh nhân có ID: EM iu
+2025-03-25 17:05:42 [INFO] quangtps.ui.patient_tab (patient_tab.py:762): Đã tạo và hiển thị bệnh nhân mới với ID: EM iu
+2025-03-25 17:05:49 [ERROR] quangtps.database.patient_db (patient_db.py:580): Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+2025-03-25 17:05:49 [ERROR] quangtps.ui.patient_tab (patient_tab.py:1139): Lỗi khi tìm kiếm bệnh nhân: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 562, in search_patients
+    for row in results:
+               ^^^^^^^
+TypeError: 'NoneType' object is not iterable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 1106, in _search_patients
+    patients = self.patient_db.search_patients(search_query)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 581, in search_patients
+    raise DatabaseError(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}") from e
+quangtps.core.exceptions.DatabaseError: Lỗi khi tìm kiếm bệnh nhân: 'NoneType' object is not iterable
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 5 bệnh nhân
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân EM iu
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:06:02 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:06:47 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 17:08:55 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 17:09:18 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:09:18 [INFO] quangtps.database.patient_db (patient_db.py:425): Đã cập nhật thông tin bệnh nhân EM iu
+2025-03-25 17:09:18 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 5 bệnh nhân
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân EM iu
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:09:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:09:20 [INFO] quangtps.ui.patient_tab (patient_tab.py:659): Đã cập nhật thông tin bệnh nhân: EM iu
+2025-03-25 17:09:25 [INFO] quangtps.dicom.dicom_importer (dicom_importer.py:79): Importing DICOM files from directory: E:/hoctap/data/Data SRS/extra(11)/MEN18003/MEN18003CT
+2025-03-25 17:09:25 [INFO] quangtps.dicom.dicom_importer (dicom_importer.py:87): Imported 262 DICOM files from E:/hoctap/data/Data SRS/extra(11)/MEN18003/MEN18003CT
+2025-03-25 17:09:25 [INFO] quangtps.dicom.dicom_importer (dicom_importer.py:89): Found 262 CT datasets
+2025-03-25 17:09:26 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: EM iu
+2025-03-25 17:09:26 [ERROR] quangtps.database.db_connector (db_connector.py:289): Lỗi thực thi truy vấn: table studies has no column named id
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table studies has no column named id
+2025-03-25 17:09:26 [ERROR] quangtps.database.patient_db (patient_db.py:973): Lỗi khi thêm nghiên cứu: Lỗi thực thi truy vấn: table studies has no column named id
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 277, in execute_query
+    cursor.execute(query, params)
+sqlite3.OperationalError: table studies has no column named id
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\database\patient_db.py", line 919, in add_study_to_patient
+    self.db.execute_query(
+  File "E:\hoctap\QuangTPS\quangtps\database\db_connector.py", line 290, in execute_query
+    raise DatabaseError("Lỗi thực thi truy vấn: %s" % str(e)) from e
+quangtps.core.exceptions.DatabaseError: Lỗi thực thi truy vấn: table studies has no column named id
+2025-03-25 17:11:01 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:11:08 [CRITICAL] __main__ (__main__.py:226): Lỗi khởi động cửa sổ chính: name 'PatientDatabase' is not defined
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 217, in show_main_window
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 87, in __init__
+    self.patient_db = PatientDatabase()
+                      ^^^^^^^^^^^^^^^
+NameError: name 'PatientDatabase' is not defined
+2025-03-25 17:12:50 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:13:15 [CRITICAL] __main__ (__main__.py:226): Lỗi khởi động cửa sổ chính: name 'PatientDatabase' is not defined
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 217, in show_main_window
+    window = MainWindow(config)
+             ^^^^^^^^^^^^^^^^^^
+  File "E:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 87, in __init__
+    self.patient_db = PatientDatabase()
+                      ^^^^^^^^^^^^^^^
+NameError: name 'PatientDatabase' is not defined
+2025-03-25 17:18:27 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:18:29 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:18:29 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:18:29 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 17:18:30 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 17:18:30 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 17:18:30 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 17:18:30 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 17:18:30 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 17:18:30 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:18:30 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:18:30 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 17:18:32 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:18:32 [INFO] quangtps.ui.main_window (main_window.py:108): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:18:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:18:51 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: em iu
+2025-03-25 17:18:51 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: em iu
+2025-03-25 17:18:51 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:18:51 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:18:51 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:18:51 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:18:51 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:18:51 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: em iu
+2025-03-25 17:18:51 [WARNING] quangtps.ui.patient_browser (patient_browser.py:182): Không tìm thấy bệnh nhân có ID: em iu
+2025-03-25 17:18:51 [INFO] quangtps.ui.patient_tab (patient_tab.py:762): Đã tạo và hiển thị bệnh nhân mới với ID: em iu
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 5 bệnh nhân
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân em iu
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:18:54 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:18:55 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:18:55 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:18:55 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:18:55 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:18:55 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:18:55 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: em iu
+2025-03-25 17:18:55 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:18:59 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:19:01 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:19:01 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:19:01 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 17:19:01 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 17:19:01 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 17:19:01 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 17:19:01 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 17:19:01 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 17:19:01 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:19:01 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:19:01 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 17:19:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:19:02 [INFO] quangtps.database.patient_db (patient_db.py:425): Đã cập nhật thông tin bệnh nhân em iu
+2025-03-25 17:19:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:19:03 [INFO] quangtps.ui.main_window (main_window.py:108): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 5 bệnh nhân
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân em iu
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:19:03 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:19:03 [INFO] quangtps.ui.patient_tab (patient_tab.py:659): Đã cập nhật thông tin bệnh nhân: em iu
+2025-03-25 17:19:43 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 17:20:37 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:20:39 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:20:39 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:20:39 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 17:20:39 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 17:20:39 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 17:20:39 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 17:20:40 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 17:20:40 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 17:20:40 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:20:40 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:20:40 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 17:20:41 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:20:41 [INFO] quangtps.ui.main_window (main_window.py:108): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:20:46 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:20:59 [INFO] quangtps.database.patient_db (patient_db.py:1129): Đã thêm bệnh nhân mới: em iu
+2025-03-25 17:20:59 [INFO] quangtps.ui.patient_creation_dialog (patient_creation_dialog.py:133): Đã tạo bệnh nhân mới: em iu
+2025-03-25 17:20:59 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:20:59 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:20:59 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:20:59 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:20:59 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:20:59 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: em iu
+2025-03-25 17:20:59 [WARNING] quangtps.ui.patient_browser (patient_browser.py:182): Không tìm thấy bệnh nhân có ID: em iu
+2025-03-25 17:20:59 [INFO] quangtps.ui.patient_tab (patient_tab.py:762): Đã tạo và hiển thị bệnh nhân mới với ID: em iu
+2025-03-25 17:21:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:21:03 [INFO] quangtps.database.patient_db (patient_db.py:425): Đã cập nhật thông tin bệnh nhân em iu
+2025-03-25 17:21:03 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 5 bệnh nhân
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân em iu
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:21:04 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:21:04 [INFO] quangtps.ui.patient_tab (patient_tab.py:659): Đã cập nhật thông tin bệnh nhân: em iu
+2025-03-25 17:21:05 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:21:05 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:21:05 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:21:05 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:21:05 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân em iu
+2025-03-25 17:21:05 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: em iu
+2025-03-25 17:21:05 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: em iu
+2025-03-25 17:21:19 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:21:20 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:21:20 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:21:20 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 17:21:20 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 17:21:20 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 17:21:20 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 17:21:21 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 17:21:21 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 17:21:21 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:21:21 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:21:21 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 17:21:22 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:21:22 [INFO] quangtps.ui.main_window (main_window.py:108): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 17:21:32 [ERROR] quangtps.ui.imaging_tab (imaging_tab.py:558): Lỗi khi tải DICOM
+Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 554, in _on_load_dicom
+    self._display_current_series()
+  File "E:\hoctap\QuangTPS\quangtps\ui\imaging_tab.py", line 581, in _display_current_series
+    self.image_viewer.load_image(self.current_series.image)
+  File "E:\hoctap\QuangTPS\quangtps\ui\image_viewer.py", line 257, in load_image
+    if image and image.data is not None:
+       ^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-03-25 17:26:55 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 17:26:57 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:26:57 [INFO] quangtps.database.patient_db (patient_db.py:817): Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-25 17:26:57 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 17:26:57 [INFO] quangtps.ui.patient_tab (patient_tab.py:298): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 17:26:57 [INFO] quangtps.ui.patient_tab (patient_tab.py:71): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 17:26:57 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 17:26:57 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 17:26:58 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 17:26:58 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:26:58 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 17:26:58 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 17:26:59 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 4 bệnh nhân
+2025-03-25 17:26:59 [INFO] quangtps.ui.main_window (main_window.py:108): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 17:28:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:28:56 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:28:56 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:28:56 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:28:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:28:56 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:28:56 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:01 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:29:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:01 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:01 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:01 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:01 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:02 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:29:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:02 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:02 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:02 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:02 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:04 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:29:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:04 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:04 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:04 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:04 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-25 17:29:06 [INFO] quangtps.ui.patient_tab (patient_tab.py:444): Đã xóa dữ liệu bệnh nhân khỏi giao diện
+2025-03-25 17:29:06 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:06 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:06 [INFO] quangtps.database.patient_db (patient_db.py:697): Không có nghiên cứu nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:06 [INFO] quangtps.ui.patient_tab (patient_tab.py:552): Không có nghiên cứu nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:06 [INFO] quangtps.ui.patient_tab (patient_tab.py:400): Đã hiển thị thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-25 17:29:06 [INFO] quangtps.database.patient_db (patient_db.py:345): Đã lấy thông tin bệnh nhân: b9a63769-7813-4be1-b85e-7ded5e9f79f6

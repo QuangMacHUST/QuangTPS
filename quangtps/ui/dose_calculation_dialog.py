@@ -517,3 +517,110 @@ class DoseCalculationDialog(QDialog):
             logger.error(f"Lỗi khi tải mô hình chùm tia: {str(e)}", exc_info=True)
             
         return beam_models 
+
+    def _calculate_dose(self):
+        """Tính toán liều xạ trị."""
+        # Kiểm tra dữ liệu kế hoạch
+        if not self.plan_data:
+            QMessageBox.warning(
+                self, "Cảnh báo",
+                "Không có dữ liệu kế hoạch điều trị."
+            )
+            return
+        
+        # Lấy mô hình chùm tia đã chọn
+        beam_model_index = self.beam_model_combo.currentIndex()
+        beam_model_data = self.beam_model_combo.itemData(beam_model_index)
+        
+        if not beam_model_data:
+            QMessageBox.warning(
+                self, "Cảnh báo",
+                "Vui lòng chọn mô hình chùm tia hợp lệ."
+            )
+            return
+        
+        # Xác định thuật toán tính toán liều
+        algorithm = "PENCIL_BEAM"  # Mặc định
+        
+        if self.algo_collapsed_cone.isChecked():
+            algorithm = "COLLAPSED_CONE"
+        elif self.algo_monte_carlo.isChecked():
+            algorithm = "MONTE_CARLO"
+        
+        # Cập nhật trạng thái
+        self.status_label.setText("Đang tính toán liều...")
+        self.progress_bar.setValue(10)
+        
+        try:
+            # Lấy dữ liệu CT và các chùm tia
+            patient_ct = self.plan_data.get("ct_image")
+            structures = self.plan_data.get("structures", {})
+            beams = self.plan_data.get("beams", [])
+            
+            if not patient_ct:
+                raise ValueError("Không tìm thấy hình ảnh CT của bệnh nhân")
+            
+            if not beams:
+                raise ValueError("Không có chùm tia nào để tính toán")
+            
+            # Tạo bộ tính toán liều
+            from quangtps.dose.dose_calculator import DoseCalculator
+            calculator = DoseCalculator(algorithm)
+            
+            # Tải mô hình chùm tia
+            from quangtps.dose.beam_data_processor import BeamDataProcessor
+            processor = BeamDataProcessor()
+            beam_model = processor.load_beam_model(beam_model_data)
+            
+            # Áp dụng mô hình chùm tia cho các thuật toán
+            for beam in beams:
+                beam["beam_model"] = beam_model
+            
+            # Cập nhật trạng thái
+            self.status_label.setText("Đang thiết lập tham số tính toán...")
+            self.progress_bar.setValue(20)
+            
+            # Thiết lập tham số tính toán
+            grid_size = float(self.grid_size_combo.currentText().split()[0])
+            heterogeneity = self.heterogeneity_checkbox.isChecked()
+            threads = self.threads_spinbox.value()
+            
+            # Cấu hình thuật toán
+            calculator.set_parameter("grid_size", grid_size)
+            calculator.set_parameter("threads", threads)
+            
+            if algorithm == "COLLAPSED_CONE":
+                calculator.set_parameter("heterogeneity_correction", heterogeneity)
+                calculator.set_parameter("number_of_cones", 16)
+            elif algorithm == "PENCIL_BEAM":
+                calculator.set_parameter("tissue_air_ratio_correction", heterogeneity)
+                calculator.set_parameter("pencil_spacing", grid_size / 2)
+            elif algorithm == "MONTE_CARLO":
+                calculator.set_parameter("num_histories", 100000 * threads)
+                calculator.set_parameter("statistical_uncertainty", 5.0)
+            
+            # Cập nhật trạng thái
+            self.status_label.setText("Đang tính toán liều...")
+            self.progress_bar.setValue(30)
+            
+            # Tính toán liều
+            dose_result = calculator.calculate_dose_for_plan(beams, patient_ct)
+            
+            # Cập nhật trạng thái
+            self.progress_bar.setValue(100)
+            self.status_label.setText("Đã hoàn thành tính toán liều.")
+            
+            # Trả về kết quả và đóng dialog
+            self.plan_data["dose_result"] = dose_result
+            self.accept()
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi tính toán liều: {str(e)}")
+            QMessageBox.critical(
+                self, "Lỗi",
+                f"Đã xảy ra lỗi khi tính toán liều: {str(e)}"
+            )
+            
+            # Cập nhật trạng thái
+            self.status_label.setText("Đã xảy ra lỗi.")
+            self.progress_bar.setValue(0) 

@@ -13,18 +13,21 @@ import numpy as np
 import logging
 import time
 import json
+import random
 from typing import Dict, List, Tuple, Optional, Union, Any
 from concurrent.futures import ProcessPoolExecutor
 
-from quangtps.core.exceptions import DoseCalculationError
+from quangtps.core.exceptions import DoseCalculationError, ValidationError
 from quangtps.imaging.image import Image
 from quangtps.planning.beam import Beam
 from quangtps.dose.beam_data_processor import BeamModel, BeamModelParameter
+from quangtps.dose.algorithms.base import DoseCalculationAlgorithm, DoseCalculationResult
+from quangtps.dose.physics.terma import calculate_terma_from_beam
 
 logger = logging.getLogger(__name__)
 
 
-class MonteCarloAlgorithm:
+class MonteCarloAlgorithm(DoseCalculationAlgorithm):
     """
     Implementation of the Monte Carlo dose calculation algorithm.
 
@@ -46,15 +49,19 @@ class MonteCarloAlgorithm:
         """
         Initialize the Monte Carlo algorithm with default parameters.
         """
-        self.beam_model = None
-        self.parameters = self.DEFAULT_PARAMS.copy()
+        super().__init__("Monte Carlo")
+        self.version = "2.0"
+        
+        # Set default parameters
+        self.parameters.update(self.DEFAULT_PARAMS)
+        
         self.material_lookup = None  # Will store CT number to material conversion
         self.cross_section_data = None  # Will store material cross section data
 
         # Initialize random number generator
         self.rng = np.random.RandomState(seed=42)
 
-        logger.info("Initialized Monte Carlo algorithm")
+        logger.info(f"Initialized {self.name} algorithm version {self.version}")
 
     def set_beam_model(self, beam_model: BeamModel):
         """
@@ -138,55 +145,60 @@ class MonteCarloAlgorithm:
         except Exception as e:
             logger.error(f"Failed to load material lookup table: {str(e)}")
 
-    def calculate_beam_dose(self, beam: Beam, ct_image: Image) -> Image:
+    def calculate(self, ct_image: Image, beam: Beam) -> DoseCalculationResult:
         """
-        Calculate dose for a single beam using Monte Carlo simulation.
-
+        Calculate dose distribution using Monte Carlo algorithm.
+        
         Parameters
         ----------
-        beam : Beam
-            The beam to calculate dose for
         ct_image : Image
-            The CT image for dose calculation
-
+            CT image for dose calculation
+        beam : Beam
+            Treatment beam
+            
         Returns
         -------
-        Image
-            The calculated dose image
-
+        DoseCalculationResult
+            Calculated dose and metadata
+            
         Raises
         ------
         DoseCalculationError
             If dose calculation fails
+        ValidationError
+            If inputs are invalid
         """
-        if self.beam_model is None:
-            logger.error("No beam model set for dose calculation")
-            raise DoseCalculationError(
-                "No beam model set for dose calculation")
-
+        start_time = time.time()
+        
         try:
-            # Start timing
-            start_time = time.time()
-            logger.info(
-                f"Starting Monte Carlo calculation for beam: {beam.name}")
-            logger.info(f"Using {self.parameters['num_histories']} histories with " 
-                        f"{self.parameters['threads']} threads")
-
+            # Validate inputs
+            self.validate_inputs(ct_image, beam)
+            
+            # Get calculation parameters
+            num_histories = self.get_parameter('num_histories')
+            energy_cutoff = self.get_parameter('energy_cutoff')
+            statistical_uncertainty = self.get_parameter('statistical_uncertainty')
+            threads = self.get_parameter('threads')
+            use_gpu = self.get_parameter('use_gpu')
+            
+            logger.info(f"Starting Monte Carlo calculation for beam {beam.name}")
+            logger.info(f"Parameters: histories={num_histories}, threads={threads}, uncertainty={statistical_uncertainty}%")
+            
             # Convert CT to materials and densities
             materials, densities = self._convert_ct_to_materials(ct_image)
-
+            
             # Initialize dose and uncertainty grids
             dose_grid = np.zeros_like(ct_image.data, dtype=np.float32)
             uncertainty_grid = np.zeros_like(ct_image.data, dtype=np.float32)
-
+            
             # Get beam parameters
             source_position = beam.get_source_position()
             isocenter = beam.isocenter
             field_size = beam.field_size
             gantry_angle = beam.gantry_angle
             collimator_angle = beam.collimator_angle
-            couch_angle = beam.couch_angle
-
+            couch_angle = beam.couch_angle if hasattr(beam, 'couch_angle') else 0.0
+            
             # Get energy spectrum
             if self.beam_model.has_parameter("energy_spectrum"):
                 energy_spectrum = self.beam_model.get_parameter("energy_spectrum")
@@ -196,6 +208,59 @@ class MonteCarloAlgorithm:
                 # Default energy spectrum if not available
                 energy_mean = float(beam.energy.replace("MV", "").replace("X", ""))
                 energies, probabilities = self._create_default_spectrum(energy_mean)
+            
+            # Perform Monte Carlo simulation
+            dose_grid, uncertainty_grid = self._simulate_particles(
+                num_histories=num_histories,
+                grid_shape=ct_image.data.shape,
+                grid_spacing=ct_image.spacing,
+                grid_origin=ct_image.origin,
+                materials=materials,
+                densities=densities,
+                source_position=source_position,
+                isocenter=isocenter,
+                field_size=field_size,
+                gantry_angle=gantry_angle,
+                collimator_angle=collimator_angle,
+                couch_angle=couch_angle,
+                energies=energies,
+                energy_probabilities=probabilities
+            )
+            
+            # Validate results
+            self._validate_calculation_completed(dose_grid)
+            
+            # Create result object
+            calculation_time = time.time() - start_time
+            logger.info(f"Monte Carlo calculation completed in {calculation_time:.2f} seconds")
+            
+            dose_image = Image(
+                data=dose_grid,
+                spacing=ct_image.spacing,
+                origin=ct_image.origin,
+                direction=ct_image.direction,
+                modality="RTDOSE"
+            )
+            
+            result = DoseCalculationResult(
+                dose=dose_image,
+                algorithm_name=self.name,
+                calculation_time=calculation_time,
+                additional_data={
+                    'beam_name': beam.name,
+                    'uncertainty': uncertainty_grid,
+                    'parameters': self.get_parameters()
+                }
+            )
+            
+            return result
+            
+        except ValidationError as e:
+            logger.error(f"Validation error in {self.name} calculation: {str(e)}")
+            raise
+            
+        except Exception as e:
+            logger.error(f"Error in {self.name} calculation: {str(e)}")
 
             # Split calculation into chunks for parallelization
             num_histories = self.parameters["num_histories"]
@@ -736,3 +801,23 @@ class MonteCarloAlgorithm:
                 f"Normalized dose to isocenter. Original value: {iso_dose:.2f}")
         else:
             logger.warning("Zero dose at isocenter, cannot normalize")
+
+    def calculate_beam_dose(self, beam: Beam, ct_image: Image) -> Image:
+        """
+        Calculate dose for a single beam.
+        
+        Parameters
+        ----------
+        beam : Beam
+            The beam to calculate dose for
+        ct_image : Image
+            The CT image for dose calculation
+            
+        Returns
+        -------
+        Image
+            The calculated dose image
+        """
+        # Call the calculate method and return the dose image
+        result = self.calculate(ct_image, beam)
+        return result.dose

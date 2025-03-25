@@ -26,17 +26,46 @@ class Image:
     và cung cấp các phương thức để thao tác với dữ liệu hình ảnh.
     """
     
-    def __init__(self, data: Optional[np.ndarray] = None, metadata: Optional[Dict[str, Any]] = None):
+    def __init__(self, data: Optional[np.ndarray] = None, metadata: Optional[Dict[str, Any]] = None,
+                 spacing: Optional[Tuple[float, float, float]] = None,
+                 origin: Optional[Tuple[float, float, float]] = None,
+                 direction: Optional[Tuple[float, ...]] = None,
+                 modality: Optional[str] = None):
         """
         Khởi tạo đối tượng Image.
         
         Args:
             data: Mảng NumPy chứa dữ liệu hình ảnh
             metadata: Dictionary chứa các thông tin mô tả về hình ảnh
+            spacing: Khoảng cách giữa các pixel (x, y, z)
+            origin: Tọa độ gốc của hình ảnh
+            direction: Ma trận hướng của hình ảnh
+            modality: Loại hình ảnh (CT, MR, RTDOSE, vv.)
         """
         self.data = data
         self.metadata = metadata or {}
         self._sitk_image = None
+        
+        # Cập nhật metadata từ các tham số
+        if spacing is not None:
+            self.metadata.update({
+                'pixel_spacing_x': spacing[0],
+                'pixel_spacing_y': spacing[1],
+                'slice_thickness': spacing[2]
+            })
+            
+        if origin is not None:
+            self.metadata.update({
+                'origin_x': origin[0],
+                'origin_y': origin[1],
+                'origin_z': origin[2]
+            })
+            
+        if direction is not None:
+            self.metadata['direction'] = direction
+            
+        if modality is not None:
+            self.metadata['modality'] = modality
         
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -53,8 +82,11 @@ class Image:
         return None
     
     @property
-    def pixel_spacing(self) -> Tuple[float, float, float]:
-        """Trả về khoảng cách giữa các pixel trong hình ảnh (x, y, z)."""
+    def spacing(self) -> Tuple[float, float, float]:
+        """Trả về khoảng cách giữa các pixel trong hình ảnh (x, y, z).
+        Thuộc tính này tương đương với pixel_spacing nhưng với tên khác để tương thích với các
+        thuật toán tính toán liều.
+        """
         return (
             self.metadata.get('pixel_spacing_x', 1.0),
             self.metadata.get('pixel_spacing_y', 1.0),
@@ -89,6 +121,28 @@ class Image:
     def modality(self) -> str:
         """Trả về loại hình ảnh."""
         return self.metadata.get('modality', 'Unknown')
+    
+    @modality.setter
+    def modality(self, value: str):
+        """Đặt loại hình ảnh."""
+        self.metadata['modality'] = value
+    
+    @property
+    def pixel_spacing(self) -> Tuple[float, float, float]:
+        """Trả về khoảng cách giữa các pixel trong hình ảnh (x, y, z).
+        Thuộc tính này được giữ lại để đảm bảo tương thích với mã hiện có.
+        """
+        return self.spacing
+    
+    @property
+    def description(self) -> str:
+        """Trả về mô tả của hình ảnh."""
+        return self.metadata.get('description', '')
+    
+    @description.setter
+    def description(self, value: str):
+        """Đặt mô tả cho hình ảnh."""
+        self.metadata['description'] = value
     
     @classmethod
     def from_sitk(cls, sitk_image: sitk.Image) -> 'Image':
@@ -201,7 +255,7 @@ class Image:
         
         # Nếu không chỉ định spacing mới, sử dụng spacing hiện tại
         if new_spacing is None:
-            new_spacing = self.pixel_spacing
+            new_spacing = self.spacing
             
         # Nếu không chỉ định kích thước mới, tính toán dựa trên spacing
         if new_size is None:
@@ -363,3 +417,29 @@ class Image:
             normalized = np.zeros_like(clipped, dtype=np.uint8)
             
         return normalized
+    
+    def world_to_voxel(self, world_coord: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        """
+        Chuyển đổi tọa độ thế giới (world coordinates) thành tọa độ voxel.
+        
+        Parameters
+        ----------
+        world_coord : Tuple[float, float, float]
+            Tọa độ thế giới [x, y, z]
+            
+        Returns
+        -------
+        Tuple[float, float, float]
+            Tọa độ voxel [z, y, x] theo định dạng NumPy array
+        """
+        # Lấy vị trí gốc và khoảng cách
+        origin = self.origin
+        spacing = self.spacing
+        
+        # Tính toán vị trí voxel
+        voxel_x = (world_coord[0] - origin[0]) / spacing[0]
+        voxel_y = (world_coord[1] - origin[1]) / spacing[1]
+        voxel_z = (world_coord[2] - origin[2]) / spacing[2]
+        
+        # Trả về theo định dạng [z, y, x] cho NumPy array
+        return (voxel_z, voxel_y, voxel_x)

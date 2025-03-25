@@ -300,20 +300,20 @@ class DBConnector:
         Returns:
             int: ID của dòng vừa chèn
         """
-        if not self.connection:
+        if not self.conn:
             self._connect()
             
-        cursor = self.connection.cursor()
+        cursor = self.conn.cursor()
         try:
             if params:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
                 
-            self.connection.commit()
+            self.conn.commit()
             return cursor.lastrowid
         except Exception as e:
-            self.connection.rollback()
+            self.conn.rollback()
             logger.error("Lỗi chèn dữ liệu: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi chèn dữ liệu: %s" % str(e)) from e
             
@@ -328,20 +328,20 @@ class DBConnector:
         Returns:
             int: Số dòng bị ảnh hưởng
         """
-        if not self.connection:
+        if not self.conn:
             self._connect()
             
-        cursor = self.connection.cursor()
+        cursor = self.conn.cursor()
         try:
             if params:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
                 
-            self.connection.commit()
+            self.conn.commit()
             return cursor.rowcount
         except Exception as e:
-            self.connection.rollback()
+            self.conn.rollback()
             logger.error("Lỗi cập nhật dữ liệu: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi cập nhật dữ liệu: %s" % str(e)) from e
             
@@ -355,13 +355,13 @@ class DBConnector:
         Returns:
             bool: True nếu giao dịch thành công, False nếu thất bại
         """
-        if not self.connection:
+        if not self.conn:
             self._connect()
             
         # Đánh dấu điểm bắt đầu giao dịch
         try:
             # Thực thi từng câu lệnh trong giao dịch
-            cursor = self.connection.cursor()
+            cursor = self.conn.cursor()
             
             for query, params in queries:
                 if params:
@@ -370,18 +370,18 @@ class DBConnector:
                     cursor.execute(query)
                     
             # Commit giao dịch
-            self.connection.commit()
+            self.conn.commit()
             logger.info("Đã thực thi giao dịch thành công với %d câu lệnh", len(queries))
             return True
         except Exception as e:
             # Rollback nếu có lỗi
-            self.connection.rollback()
+            self.conn.rollback()
             logger.error("Lỗi thực thi giao dịch: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi thực thi giao dịch: %s" % str(e)) from e
             
     def close(self):
         """Đóng kết nối cơ sở dữ liệu"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
+        if self.conn:
+            self.conn.close()
+            self.conn = None
             logger.info("Đã đóng kết nối cơ sở dữ liệu")

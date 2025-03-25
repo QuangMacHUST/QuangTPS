@@ -22,11 +22,12 @@ from tqdm import tqdm
 
 from quangtps.optimization.kbp.model import KBPModel, KBPFeatures, ModelType
 from quangtps.database.patient_db import PatientDatabase
-from quangtps.database.plan_db import PlanDatabase
+from quangtps.database.plan_db import PlanDB
 from quangtps.database.structure_db import StructureDatabase
 from quangtps.core.exceptions import ModelError, TrainingError
 from quangtps.dose.dose_grid import DoseGrid
 from quangtps.evaluation.dvh import calculate_dvh
+from quangtps.imaging.image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class KBPDataCollector:
     def __init__(self):
         """Khởi tạo bộ thu thập dữ liệu KBP."""
         self.patient_db = PatientDatabase()
-        self.plan_db = PlanDatabase()
+        self.plan_db = PlanDB()
         self.structure_db = StructureDatabase()
     
     def collect_plan_data(

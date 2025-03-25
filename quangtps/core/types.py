@@ -8,9 +8,11 @@ for all modules.
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Union, Any
-from enum import Enum
+from enum import Enum, auto
 import SimpleITK as sitk
 import numpy as np
+import uuid
+from datetime import datetime
 
 
 @dataclass

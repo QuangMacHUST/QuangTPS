@@ -285,7 +285,7 @@ class PatientDatabase:
             # Chuyển đổi metadata thành JSON
             metadata_json = json.dumps(metadata) if metadata else "{}"
             
-            # Thử chèn với created_date trước
+            # Thực hiện chèn với cột dob
             try:
                 query = '''
                     INSERT INTO patients (id, name, dob, gender, created_at, updated_at, metadata)
@@ -690,7 +690,12 @@ class PatientDatabase:
             
             # Truy vấn danh sách nghiên cứu
             query = "SELECT * FROM studies WHERE patient_id = ? ORDER BY date DESC"
-            studies_data = self.db.execute_query(query, (patient_id,))
+            studies_data = self.db.execute_query(query, (patient_id,), fetchall=True)
+            
+            # Kiểm tra nếu không có kết quả
+            if not studies_data:
+                logger.info(f"Không có nghiên cứu nào cho bệnh nhân {patient_id}")
+                return []
             
             # Chuyển đổi kết quả thành danh sách dict
             studies = []
@@ -717,7 +722,9 @@ class PatientDatabase:
             
         except Exception as e:
             logger.error(f"Lỗi khi lấy danh sách nghiên cứu: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Lỗi khi lấy danh sách nghiên cứu: {str(e)}") from e
+            # Trả về danh sách rỗng thay vì ném ngoại lệ để tránh làm sập ứng dụng
+            logger.warning(f"Trả về danh sách rỗng do lỗi khi truy vấn studies")
+            return []
             
     def get_study_series(self, study_id):
         """
@@ -735,8 +742,13 @@ class PatientDatabase:
         try:
             # Truy vấn danh sách series
             query = "SELECT * FROM series WHERE study_id = ?"
-            series_data = self.db.execute_query(query, (study_id,))
+            series_data = self.db.execute_query(query, (study_id,), fetchall=True)
             
+            # Kiểm tra nếu không có kết quả
+            if not series_data:
+                logger.info(f"Không có series nào cho nghiên cứu {study_id}")
+                return []
+                
             # Chuyển đổi kết quả thành danh sách dict
             series_list = []
             for row in series_data:
@@ -753,8 +765,13 @@ class PatientDatabase:
                 
                 # Lấy danh sách file_paths
                 query = "SELECT file_path FROM files WHERE series_id = ?"
-                files_data = self.db.execute_query(query, (series_dict['id'],))
-                series_dict['file_paths'] = [row['file_path'] for row in files_data]
+                files_data = self.db.execute_query(query, (series_dict['id'],), fetchall=True)
+                
+                # Kiểm tra nếu không có file nào
+                if files_data:
+                    series_dict['file_paths'] = [row['file_path'] for row in files_data]
+                else:
+                    series_dict['file_paths'] = []
                 
                 series_list.append(series_dict)
                 
@@ -762,7 +779,9 @@ class PatientDatabase:
             
         except Exception as e:
             logger.error(f"Lỗi khi lấy danh sách series: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Lỗi khi lấy danh sách series: {str(e)}") from e
+            # Trả về danh sách rỗng thay vì ném ngoại lệ
+            logger.warning(f"Trả về danh sách rỗng do lỗi khi truy vấn series")
+            return []
 
     def get_patient_plans(self, patient_id: str):
         """
@@ -956,30 +975,160 @@ class PatientDatabase:
 
     def add_history(self, patient_id: str, description: str) -> None:
         """Thêm lịch sử khám cho bệnh nhân"""
-        with self.db.connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
+        try:
+            query = """
                 INSERT INTO patient_history (
                     patient_id, visit_date, description
                 ) VALUES (?, CURRENT_DATE, ?)
-            """, (patient_id, description))
-            conn.commit()
+            """
+            self.db.execute_query(query, (patient_id, description))
+            logger.info(f"Đã thêm lịch sử khám cho bệnh nhân {patient_id}")
+        except Exception as e:
+            logger.error(f"Lỗi khi thêm lịch sử khám: {str(e)}", exc_info=True)
+            raise DatabaseError(f"Lỗi khi thêm lịch sử khám: {str(e)}") from e
     
     def get_history(self, patient_id: str) -> List[dict]:
         """Lấy lịch sử khám của bệnh nhân"""
-        with self.db.connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
+        try:
+            query = """
                 SELECT visit_date, description
                 FROM patient_history
                 WHERE patient_id = ?
                 ORDER BY visit_date DESC
-            """, (patient_id,))
+            """
+            results = self.db.execute_query(query, (patient_id,), fetchall=True)
             
             return [
                 {
                     "visit_date": date.fromisoformat(row[0]),
                     "description": row[1]
                 }
-                for row in cursor.fetchall()
+                for row in results
             ]
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy lịch sử khám: {str(e)}", exc_info=True)
+            raise DatabaseError(f"Lỗi khi lấy lịch sử khám: {str(e)}") from e
+
+    def get_series_files(self, series_id):
+        """
+        Lấy danh sách file của một series.
+        
+        Args:
+            series_id (str): ID của series
+            
+        Returns:
+            list: Danh sách đường dẫn file
+            
+        Raises:
+            DatabaseError: Nếu có lỗi xảy ra khi truy vấn
+        """
+        try:
+            # Truy vấn danh sách file
+            query = "SELECT file_path FROM files WHERE series_id = ?"
+            results = self.db.execute_query(query, (series_id,), fetchall=True)
+            
+            if not results:
+                logger.info(f"Không có file nào cho series {series_id}")
+                return []
+                
+            # Chuyển đổi kết quả thành danh sách đường dẫn
+            file_paths = [row['file_path'] for row in results]
+            logger.debug(f"Đã lấy {len(file_paths)} file cho series {series_id}")
+            return file_paths
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy danh sách file của series: {str(e)}", exc_info=True)
+            # Trả về danh sách rỗng thay vì ném ngoại lệ
+            logger.warning(f"Trả về danh sách rỗng do lỗi khi truy vấn files")
+            return []
+
+    def patient_exists(self, patient_id):
+        """
+        Kiểm tra xem bệnh nhân có tồn tại không dựa trên ID.
+        
+        Args:
+            patient_id (str): ID của bệnh nhân cần kiểm tra
+            
+        Returns:
+            bool: True nếu bệnh nhân tồn tại, False nếu không tồn tại
+        """
+        try:
+            query = "SELECT COUNT(*) FROM patients WHERE id = ?"
+            result = self.db.execute_query(query, (patient_id,))
+            
+            # Kiểm tra kết quả
+            if result and result[0] > 0:
+                logger.debug(f"Bệnh nhân với ID {patient_id} đã tồn tại")
+                return True
+            
+            logger.debug(f"Bệnh nhân với ID {patient_id} chưa tồn tại")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi kiểm tra sự tồn tại của bệnh nhân: {str(e)}", exc_info=True)
+            # Trả về False để an toàn
+            return False
+    
+    def add_patient(self, patient_data):
+        """
+        Thêm một bệnh nhân mới vào cơ sở dữ liệu.
+        
+        Args:
+            patient_data (dict): Thông tin bệnh nhân
+            
+        Returns:
+            bool: True nếu thêm thành công, False nếu có lỗi
+        """
+        try:
+            # Kiểm tra dữ liệu đầu vào
+            required_fields = ['id', 'name']
+            for field in required_fields:
+                if field not in patient_data or not patient_data[field]:
+                    logger.error(f"Thiếu trường dữ liệu bắt buộc: {field}")
+                    return False
+            
+            # Kiểm tra xem bệnh nhân đã tồn tại chưa
+            if self.patient_exists(patient_data['id']):
+                logger.warning(f"Không thể thêm: Bệnh nhân đã tồn tại với ID: {patient_data['id']}")
+                return False
+            
+            # Chuẩn bị dữ liệu
+            patient_id = patient_data['id']
+            name = patient_data['name']
+            
+            # Ưu tiên trường dob nếu có, nếu không thì dùng birth_date
+            dob = None
+            if 'dob' in patient_data and patient_data['dob']:
+                dob = patient_data['dob']
+            elif 'birth_date' in patient_data and patient_data['birth_date']:
+                dob = patient_data['birth_date']
+            
+            # Lấy giới tính với giá trị mặc định 'unknown'
+            gender = patient_data.get('gender', 'unknown')
+            
+            # Lấy metadata
+            metadata = patient_data.get('metadata', {})
+            
+            # Thêm thời gian tạo và cập nhật
+            created_at = datetime.now().isoformat()
+            
+            # Chuyển đổi metadata thành JSON
+            metadata_json = json.dumps(metadata) if metadata else "{}"
+            
+            # Thực hiện chèn dữ liệu với cột dob
+            query = """
+                INSERT INTO patients (id, name, dob, gender, created_at, updated_at, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            self.db.execute_query(
+                query, 
+                (patient_id, name, dob, gender, created_at, created_at, metadata_json)
+            )
+            
+            logger.info(f"Đã thêm bệnh nhân mới: {patient_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi thêm bệnh nhân: {str(e)}", exc_info=True)
+            return False

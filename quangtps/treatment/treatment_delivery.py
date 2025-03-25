@@ -856,7 +856,7 @@ class TreatmentCourse:
         self._check_course_completion()
         
         return True
-    
+
     def _check_course_completion(self):
         """Kiểm tra và cập nhật trạng thái chuỗi điều trị."""
         # Nếu chuỗi điều trị đã hoàn thành thì bỏ qua

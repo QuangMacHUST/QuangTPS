@@ -277,3 +277,130 @@ def calculate_polyenergetic_terma(ct_data: np.ndarray,
     
     logger.info("Polyenergetic TERMA calculation completed.")
     return terma
+
+def calculate_terma_from_beam(ct_image, beam, beam_model):
+    """
+    Calculate TERMA from CT image, beam and beam model directly.
+    
+    This is an adapter function that extracts the required data from
+    higher-level objects and calls the base calculate_terma function.
+    
+    Parameters
+    ----------
+    ct_image : Image
+        CT image for dose calculation
+    beam : Beam
+        Treatment beam
+    beam_model : BeamModel
+        Beam model containing spectrum data
+        
+    Returns
+    -------
+    np.ndarray
+        TERMA distribution
+    """
+    logger.info(f"Calculating TERMA for beam {beam.name}...")
+    
+    # Extract CT data
+    ct_data = ct_image.data
+    
+    # Calculate density map from CT data
+    density_map = (ct_data + 1000) / 1000
+    density_map = np.clip(density_map, 0.001, None)  # Ensure positive values
+    
+    # Get spacing in mm
+    spacing = ct_image.spacing
+    
+    # Get beam spectrum
+    if hasattr(beam_model, 'get_spectrum'):
+        spectrum = beam_model.get_spectrum()
+    else:
+        # Create a generic spectrum if not available
+        energy = float(beam.energy.replace('MV', '').strip())
+        spectrum = {energy: 1.0}
+        logger.warning(f"Using monoenergetic spectrum for beam {beam.name} with energy {energy} MV")
+    
+    # Calculate primary fluence
+    fluence = _calculate_primary_fluence(beam, ct_data.shape, spacing)
+    
+    # Call base function
+    return calculate_terma(ct_data, density_map, fluence, spectrum, spacing)
+
+def _calculate_primary_fluence(beam, shape, spacing):
+    """
+    Calculate primary fluence for a beam.
+    
+    Parameters
+    ----------
+    beam : Beam
+        Treatment beam
+    shape : tuple
+        Shape of the output grid
+    spacing : tuple
+        Grid spacing (mm)
+        
+    Returns
+    -------
+    np.ndarray
+        Primary fluence grid
+    """
+    # Create empty fluence grid
+    fluence = np.zeros(shape, dtype=np.float32)
+    
+    # Get beam direction and isocenter
+    direction = beam.get_direction()
+    isocenter = beam.isocenter
+    
+    # Get field size and SAD
+    field_size = beam.field_size  # cm
+    sad = beam.sad if hasattr(beam, 'sad') else 1000.0  # mm
+    
+    # Create a simplified beam's eye view fluence at isocenter
+    i_iso, j_iso, k_iso = isocenter[0], isocenter[1], isocenter[2]
+    
+    # Convert to voxel coordinates
+    i_vox = int(i_iso / spacing[0])
+    j_vox = int(j_iso / spacing[1])
+    k_vox = int(k_iso / spacing[2])
+    
+    # Field size in voxels at isocenter
+    field_i = int(field_size[0] * 10 / spacing[0])  # convert cm to mm
+    field_j = int(field_size[1] * 10 / spacing[1])
+    
+    # Apply a uniform fluence in the field area, with inverse square law
+    nx, ny, nz = shape
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                # Convert to real-world coordinates
+                x = i * spacing[0]
+                y = j * spacing[1]
+                z = k * spacing[2]
+                
+                # Calculate distance from source
+                source_pos = [isocenter[0] - direction[0] * sad, 
+                             isocenter[1] - direction[1] * sad,
+                             isocenter[2] - direction[2] * sad]
+                
+                dx = x - source_pos[0]
+                dy = y - source_pos[1]
+                dz = z - source_pos[2]
+                dist = np.sqrt(dx*dx + dy*dy + dz*dz)
+                
+                # Skip if behind source
+                if np.dot([dx, dy, dz], direction) <= 0:
+                    continue
+                
+                # Project to beam's eye view at isocenter
+                # This is a simplified calculation
+                t = (isocenter[0] - source_pos[0]) / dx if dx != 0 else 0
+                bev_y = source_pos[1] + t * dy
+                bev_z = source_pos[2] + t * dz
+                
+                # Check if within field
+                if (abs(bev_y - isocenter[1]) <= field_size[0]/2*10 and
+                    abs(bev_z - isocenter[2]) <= field_size[1]/2*10):
+                    # Apply inverse square law
+                    fluence[i, j, k] = (sad / dist) ** 2
+    
+    return fluence

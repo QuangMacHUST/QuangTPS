@@ -58,6 +58,7 @@ def update_database_schema():
     conn = None
     try:
         conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
         # Check if patients table exists

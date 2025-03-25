@@ -83,37 +83,46 @@ class DoseEngine:
         self.calculation_results = None
     
     def _load_algorithm_implementations(self):
-        """Tải các lớp triển khai thuật toán từ module algorithms."""
+        """Tải các triển khai thuật toán tính toán liều."""
         try:
-            # Tìm tất cả các module trong thư mục algorithms
-            algorithms_dir = os.path.join(os.path.dirname(__file__), 'algorithms')
-            if not os.path.exists(algorithms_dir):
-                logger.warning(f"Algorithms directory not found: {algorithms_dir}")
-                return
+            # Tạo dictionary ánh xạ từ enum đến triển khai thuật toán
+            from quangtps.dose.algorithms.collapsed_cone import CollapsedConeAlgorithm
+            from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
+            from quangtps.dose.algorithms.monte_carlo import MonteCarloAlgorithm
             
-            for filename in os.listdir(algorithms_dir):
-                if filename.endswith('.py') and not filename.startswith('__'):
-                    module_name = filename[:-3]  # Remove .py extension
-                    try:
-                        # Import module
-                        module = importlib.import_module(f"quangtps.dose.algorithms.{module_name}")
-                        
-                        # Look for DoseCalculationImplementer subclasses
-                        for attr_name in dir(module):
-                            attr = getattr(module, attr_name)
-                            if (isinstance(attr, type) and 
-                                issubclass(attr, DoseCalculationImplementer) and 
-                                attr is not DoseCalculationImplementer):
-                                
-                                # Add to implementers dictionary
-                                implementer = attr()
-                                for algo in implementer.supported_algorithms():
-                                    self.algorithm_implementers[algo] = implementer
-                                logger.debug(f"Loaded algorithm implementer: {attr_name}")
-                    
-                    except Exception as e:
-                        logger.error(f"Error loading algorithm module {module_name}: {str(e)}")
-        
+            # Khởi tạo các instance của các thuật toán
+            self.algorithm_implementers = {
+                DoseCalculationAlgorithm.CCC: CollapsedConeAlgorithm(),
+                DoseCalculationAlgorithm.PENCIL_BEAM: PencilBeamAlgorithm(),
+                DoseCalculationAlgorithm.MONTE_CARLO: MonteCarloAlgorithm()
+            }
+            
+            # Thử tải các triển khai thuật toán khác nếu có
+            try:
+                from quangtps.dose.algorithms.aaa import AAAAlgorithm
+                self.algorithm_implementers[DoseCalculationAlgorithm.AAA] = AAAAlgorithm()
+            except ImportError:
+                logger.debug("AAA algorithm not available")
+                
+            try:
+                from quangtps.dose.algorithms.acuros import AcurosXBAlgorithm
+                self.algorithm_implementers[DoseCalculationAlgorithm.ACUROS] = AcurosXBAlgorithm()
+            except ImportError:
+                logger.debug("Acuros XB algorithm not available")
+                
+            try:
+                from quangtps.dose.algorithms.conv_superposition import ConvolutionSuperpositionAlgorithm
+                self.algorithm_implementers[DoseCalculationAlgorithm.CONV_SUPERPOSITION] = ConvolutionSuperpositionAlgorithm()
+            except ImportError:
+                logger.debug("Convolution Superposition algorithm not available")
+                
+            try:
+                from quangtps.dose.algorithms.gbbs import GBBSAlgorithm
+                self.algorithm_implementers[DoseCalculationAlgorithm.GBBS] = GBBSAlgorithm()
+            except ImportError:
+                logger.debug("GBBS algorithm not available")
+            
+            logger.info(f"Loaded {len(self.algorithm_implementers)} dose calculation algorithm implementers")
         except Exception as e:
             logger.error(f"Error loading algorithm implementations: {str(e)}")
     
@@ -195,74 +204,91 @@ class DoseEngine:
         """
         return self.calculation_parameters.copy()
     
-    def calculate_dose(self, 
-                      patient_ct: sitk.Image, 
-                      structures: Dict[str, np.ndarray], 
-                      beams: List[Dict[str, Any]], 
-                      prescription_dose: float = 2.0,
-                      fractions: int = 1,
-                      reference_grid: Optional[DoseGrid] = None,
-                      progress_callback=None) -> DoseGrid:
+    def calculate(self, 
+                 patient_ct: sitk.Image, 
+                 structures: Dict[str, np.ndarray],
+                 beams: List[Dict[str, Any]],
+                 reference_grid: Optional[DoseGrid] = None,
+                 parameters: Optional[Dict[str, Any]] = None) -> DoseGrid:
         """
-        Tính toán phân bố liều.
+        Thực hiện tính toán liều.
         
         Parameters:
-            patient_ct (sitk.Image): Hình ảnh CT của bệnh nhân
-            structures (dict): Dict các cấu trúc (key: tên cấu trúc, value: mask 3D)
-            beams (list): Danh sách các chùm tia
-            prescription_dose (float, optional): Liều kê đơn (Gy)
-            fractions (int, optional): Số phân liều
+            patient_ct (sitk.Image): Hình ảnh CT
+            structures (Dict[str, np.ndarray]): Dict các cấu trúc
+            beams (List[Dict[str, Any]]): Danh sách chùm tia
             reference_grid (DoseGrid, optional): Lưới liều tham chiếu
-            progress_callback (callable, optional): Hàm callback để báo tiến độ
-        
+            parameters (Dict[str, Any], optional): Tham số tính toán
+            
         Returns:
-            DoseGrid: Lưới liều sau khi tính toán
-        
+            DoseGrid: Phân bố liều tính toán
+            
         Raises:
             AlgorithmError: Nếu có lỗi trong quá trình tính toán
         """
         if self.algorithm_instance is None:
-            raise AlgorithmError("No algorithm implementation available")
+            raise AlgorithmError(f"No implementation available for algorithm: {self.algorithm.value}")
         
         try:
-            # Kiểm tra các tham số đầu vào
-            if patient_ct is None:
-                raise ValidationError("Patient CT is required")
+            # Chuyển đổi từ SimpleITK Image sang Image của QuangTPS
+            from quangtps.imaging.image import Image
+            from quangtps.planning.beam import Beam
             
-            if not beams:
-                raise ValidationError("At least one beam is required")
+            # Chuyển đổi patient_ct
+            numpy_data = sitk.GetArrayFromImage(patient_ct)
+            spacing = patient_ct.GetSpacing()
+            origin = patient_ct.GetOrigin()
+            direction = patient_ct.GetDirection()
             
-            # Chuẩn bị lưới liều
-            if reference_grid is None:
-                # Tạo lưới liều từ hình ảnh CT
-                reference_grid = DoseGrid.create_from_reference(patient_ct)
-            
-            # Thêm tham số cho thuật toán
-            calculation_params = self.calculation_parameters.copy()
-            calculation_params.update({
-                'prescription_dose': prescription_dose,
-                'fractions': fractions,
-                'progress_callback': progress_callback
-            })
-            
-            # Thực hiện tính toán liều
-            logger.info(f"Calculating dose using {self.algorithm.value} algorithm")
-            result = self.algorithm_instance.calculate(
-                patient_ct=patient_ct,
-                structures=structures,
-                beams=beams,
-                reference_grid=reference_grid,
-                parameters=calculation_params
+            ct_image = Image(
+                data=numpy_data,
+                spacing=spacing,
+                origin=origin,
+                direction=direction,
+                modality="CT"
             )
             
-            self.calculation_results = result
-            logger.info("Dose calculation completed successfully")
+            # Kết quả tổng hợp
+            dose_grid = np.zeros_like(numpy_data, dtype=np.float32)
             
-            return result
-        
+            # Tính liều cho từng chùm tia
+            for i, beam_data in enumerate(beams):
+                logger.info(f"Calculating beam {i+1}/{len(beams)}: {beam_data.get('name', f'Beam {i+1}')}")
+                
+                # Chuyển đổi dữ liệu chùm tia sang đối tượng Beam
+                beam = Beam.from_dict(beam_data)
+                
+                # Tính toán liều cho chùm tia
+                beam_dose = self.algorithm_instance.calculate(ct_image, beam)
+                
+                # Lấy dữ liệu liều và thêm vào tổng liều
+                if beam_dose and hasattr(beam_dose, 'dose') and beam_dose.dose is not None:
+                    # Áp dụng trọng số chùm tia
+                    weight = beam_data.get('weight', 1.0)
+                    
+                    if weight != 1.0:
+                        beam_dose.dose.data *= weight
+                    
+                    # Cộng vào tổng liều
+                    dose_grid += beam_dose.dose.data
+            
+            # Chuyển đổi kết quả thành DoseGrid
+            if reference_grid is None:
+                # Tạo lưới liều mới từ CT
+                result_grid = DoseGrid.create_from_data(
+                    dose_data=dose_grid,
+                    reference_image=patient_ct
+                )
+            else:
+                # Sử dụng lưới tham chiếu có sẵn
+                result_grid = reference_grid.copy()
+                result_grid.set_data(dose_grid)
+            
+            return result_grid
+            
         except Exception as e:
             logger.error(f"Error in dose calculation: {str(e)}")
-            raise AlgorithmError(f"Error in dose calculation: {str(e)}")
+            raise AlgorithmError(f"Error calculating dose with {self.algorithm.value}: {str(e)}")
     
     def get_results(self) -> Optional[DoseGrid]:
         """

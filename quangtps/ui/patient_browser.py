@@ -9,16 +9,23 @@ cùng với các kế hoạch điều trị liên quan.
 """
 
 import logging
+import os
+import json
+from datetime import datetime
 
 from PyQt5.QtCore import Qt, pyqtSignal, QDate
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTreeWidget,
     QTreeWidgetItem, QMenu, QAction, QMessageBox, QInputDialog, QLineEdit,
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QDateEdit, QTextEdit
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QDateEdit, QTextEdit,
+    QHeaderView, QSplitter, QGroupBox
 )
 from PyQt5.QtGui import QIcon, QColor
 
 from quangtps.database.patient_db import PatientDatabase
+from quangtps.database.plan_db import PlanDB
+from quangtps.core.patient import Patient
+from quangtps.ui.patient_creation_dialog import PatientCreationDialog
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +33,7 @@ class PatientBrowser(QWidget):
     """Widget để duyệt và quản lý bệnh nhân."""
     
     # Tín hiệu khi chọn bệnh nhân hoặc kế hoạch
-    patient_selected = pyqtSignal(dict)  # patient_data
+    patient_selected = pyqtSignal(str)  # patient_id
     plan_selected = pyqtSignal(str, str)  # patient_id, plan_id
     
     def __init__(self, parent=None):
@@ -279,31 +286,25 @@ class PatientBrowser(QWidget):
     def _create_new_patient(self):
         """Tạo bệnh nhân mới."""
         try:
-            # Đoạn mã tạo bệnh nhân mới ở đây
-            patient_dialog = PatientDialog(self)
-            if patient_dialog.exec_() == QDialog.Accepted:
+            # Sử dụng PatientCreationDialog thay vì PatientDialog để đồng nhất với PatientTab
+            dialog = PatientCreationDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
                 # Lấy thông tin bệnh nhân từ dialog
-                new_patient_data = patient_dialog.get_patient_data()
-                
-                # Tạo bệnh nhân mới
-                patient_id = self.patient_db.create_patient(
-                    name=new_patient_data["name"],
-                    birth_date=new_patient_data["birth_date"],
-                    gender=new_patient_data["gender"],
-                    metadata=new_patient_data["metadata"]
-                )
-                
-                QMessageBox.information(
-                    self,
-                    "Thành công",
-                    f"Đã tạo bệnh nhân mới: {new_patient_data['name']}"
-                )
+                patient_data = dialog.get_patient_data()
                 
                 # Làm mới danh sách
                 self._load_patients()
                 
                 # Chọn bệnh nhân mới tạo
-                self.select_patient(patient_id)
+                self.select_patient(patient_data["id"])
+                
+                QMessageBox.information(
+                    self,
+                    "Thành công",
+                    f"Đã tạo bệnh nhân mới: {patient_data['name']}"
+                )
+                
+                logger.info(f"Đã tạo bệnh nhân mới từ PatientBrowser: {patient_data['id']}")
                 
         except Exception as e:
             logger.error("Lỗi khi tạo bệnh nhân mới: %s", str(e))
@@ -328,7 +329,7 @@ class PatientBrowser(QWidget):
     
     def _edit_patient(self, patient_data):
         """Chỉnh sửa thông tin bệnh nhân."""
-        dialog = PatientDialog(self, patient_data)
+        dialog = PatientCreationDialog(self, patient_data)
         result = dialog.exec_()
         
         if result == QDialog.Accepted:
@@ -338,7 +339,7 @@ class PatientBrowser(QWidget):
                 self.patient_db.update_patient(
                     patient_id=patient_data.get('id'),
                     name=updated_data["name"],
-                    birth_date=updated_data["birth_date"],
+                    birth_date=updated_data["dob"],  # Sử dụng dob thay vì birth_date
                     gender=updated_data["gender"],
                     metadata=updated_data["metadata"]
                 )
@@ -453,132 +454,3 @@ class PatientBrowser(QWidget):
     def refresh(self):
         """Làm mới danh sách bệnh nhân."""
         self._load_patients()
-
-
-class PatientDialog(QDialog):
-    """Dialog để tạo/chỉnh sửa thông tin bệnh nhân."""
-    
-    def __init__(self, parent=None, patient=None):
-        """Khởi tạo dialog với thông tin bệnh nhân đã có (nếu có)."""
-        super().__init__(parent)
-        self.setWindowTitle("Thông tin bệnh nhân")
-        self.setMinimumWidth(400)
-        
-        self.patient = patient
-        self._init_ui()
-        
-        # Điền thông tin nếu đang chỉnh sửa
-        if patient:
-            self._populate_fields()
-    
-    def _init_ui(self):
-        """Khởi tạo giao diện dialog."""
-        layout = QVBoxLayout(self)
-        
-        # Form thông tin bệnh nhân
-        form_layout = QFormLayout()
-        
-        # Họ tên
-        self.name_field = QLineEdit()
-        form_layout.addRow("Họ và tên (*)", self.name_field)
-        
-        # Ngày sinh
-        self.dob_field = QDateEdit()
-        self.dob_field.setDisplayFormat("dd/MM/yyyy")
-        self.dob_field.setCalendarPopup(True)
-        self.dob_field.setDate(QDate.currentDate())
-        form_layout.addRow("Ngày sinh", self.dob_field)
-        
-        # Giới tính
-        self.gender_field = QComboBox()
-        self.gender_field.addItems(["Nam", "Nữ", "Khác"])
-        form_layout.addRow("Giới tính", self.gender_field)
-        
-        # Số điện thoại
-        self.phone_field = QLineEdit()
-        form_layout.addRow("Số điện thoại", self.phone_field)
-        
-        # Email
-        self.email_field = QLineEdit()
-        form_layout.addRow("Email", self.email_field)
-        
-        # Địa chỉ
-        self.address_field = QLineEdit()
-        form_layout.addRow("Địa chỉ", self.address_field)
-        
-        # Ghi chú
-        self.notes_field = QTextEdit()
-        self.notes_field.setMaximumHeight(100)
-        form_layout.addRow("Ghi chú", self.notes_field)
-        
-        layout.addLayout(form_layout)
-        
-        # Nút điều khiển
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-    
-    def _populate_fields(self):
-        """Điền thông tin bệnh nhân vào các trường."""
-        if not self.patient:
-            return
-            
-        self.name_field.setText(self.patient.get('name', ''))
-        
-        if self.patient.get('birth_date'):
-            try:
-                date = QDate.fromString(self.patient.get('birth_date'), "yyyy-MM-dd")
-                self.dob_field.setDate(date)
-            except (ValueError, TypeError) as e:
-                logger.warning("Không thể chuyển đổi ngày sinh: %s", str(e))
-        
-        gender = self.patient.get('gender', '')
-        if gender:
-            index = self.gender_field.findText(gender)
-            if index >= 0:
-                self.gender_field.setCurrentIndex(index)
-        
-        # Điền thông tin từ metadata nếu có
-        metadata = self.patient.get('metadata', {}) or {}
-        
-        self.phone_field.setText(metadata.get('phone', ''))
-        self.email_field.setText(metadata.get('email', ''))
-        self.address_field.setText(metadata.get('address', ''))
-        self.notes_field.setText(metadata.get('notes', ''))
-    
-    def get_patient_data(self):
-        """Lấy dữ liệu bệnh nhân từ dialog."""
-        # Chuyển đổi QDate thành string định dạng ISO
-        birth_date = self.dob_field.date().toString("yyyy-MM-dd")
-        
-        # Tạo metadata từ các trường bổ sung
-        metadata = {
-            'phone': self.phone_field.text(),
-            'email': self.email_field.text(),
-            'address': self.address_field.text(),
-            'notes': self.notes_field.toPlainText()
-        }
-        
-        # Trả về dữ liệu bệnh nhân
-        return {
-            "name": self.name_field.text(),
-            "birth_date": birth_date,
-            "gender": self.gender_field.currentText(),
-            "metadata": metadata
-        }
-    
-    def accept(self):
-        """Xác thực dữ liệu trước khi chấp nhận dialog."""
-        # Kiểm tra tên bệnh nhân đã được nhập chưa
-        if not self.name_field.text().strip():
-            QMessageBox.warning(
-                self,
-                "Dữ liệu không hợp lệ",
-                "Vui lòng nhập họ tên bệnh nhân"
-            )
-            return
-        
-        super().accept()

@@ -1,245 +1,55 @@
-# QuangTPS Changelog
+2025-04-15
+=========
 
-## Ngày 24/11/2024
+Sửa lỗi:
+- Sửa lỗi "The truth value of an array with more than one element is ambiguous" khi tải dữ liệu DICOM
+- Cải thiện việc kiểm tra mảng numpy trong quangtps/ui/image_display.py bằng cách thêm điều kiện kiểm tra phạm vi và kích thước
+- Sửa lỗi so sánh boolean với mảng trong quangtps/ui/base_contour_tool.py
+- Tăng cường kiểm tra biên trước khi truy cập chỉ số slice trong hiển thị dose data
 
-### Sửa lỗi
-1. Sửa lỗi trong `quangtps/dicom/pacs_client.py`:
-   - Thay thế `VerificationServiceClass.service_class` bằng UID trực tiếp '1.2.840.10008.1.1'
+Cải tiến:
+- Cải thiện độ ổn định khi tải dữ liệu DICOM và hiển thị hình ảnh
+- Cập nhật code để sử dụng phương pháp kiểm tra mảng numpy an toàn và hiệu quả
+- Nâng cao khả năng xử lý lỗi trong quá trình nhập và hiển thị dữ liệu DICOM
 
-2. Sửa lỗi trong `quangtps/ui/patient_tab.py`:
-   - Đổi `full_name_field` thành `name_edit` ở dòng kết nối tín hiệu vì biến full_name_field không tồn tại
+2025-04-14
+=========
 
-3. Sửa lỗi trong `quangtps/dose/algorithms/monte_carlo.py`:
-   - Sửa lỗi indentation trong phần tạo energy spectrum
+Sửa lỗi:
+- Sửa lỗi trong file main_window.py với import PatientDatabase
+- Cập nhật các tham chiếu từ PlanDatabase sang PlanDB trong toàn bộ hệ thống
+- Đảm bảo tính nhất quán trong việc sử dụng tên lớp PlanDB
+- Sửa lỗi import trong scripts/import_kbp_data.py và quangtps/optimization/kbp/trainer.py
+- Cải thiện khả năng khởi động ứng dụng mà không gặp lỗi import
+- Sửa lỗi "truth value of an array with more than one element is ambiguous" trong image_display.py
+- Sửa cách xử lý kiểm tra mảng numpy trong quangtps/ui/image_display.py
+- Cải thiện kiểm tra chỉ số lát cắt trong hàm xử lý liều lượng xạ trị
 
-4. Sửa lỗi trong `quangtps/treatment/treatment_delivery.py`:
-   - Sửa lỗi indentation trong hàm update_fraction_status
+Cải tiến:
+- Làm rõ cấu trúc dự án với việc đồng bộ tên lớp và tên file
+- Cập nhật đồng bộ tất cả các references đến lớp PlanDB
+- Nâng cao tính ổn định của hiển thị hình ảnh y tế với cách xử lý mảng numpy đúng cách
 
-### Cài đặt công cụ
-- Cài đặt autopep8 để tự động định dạng mã nguồn
+2025-03-25
+=========
 
-## Ngày 25/11/2024
+Sửa lỗi:
+- Sửa lỗi khi tìm kiếm bệnh nhân không tồn tại trong hệ thống
+- Cải thiện logic xử lý khi tạo bệnh nhân mới với UUID cụ thể
+- Sửa lỗi không đồng nhất giữa trường 'birth_date' và 'dob' trong cơ sở dữ liệu
+- Thêm chức năng hiển thị dialog tạo bệnh nhân khi tìm kiếm ID không tồn tại
+- Đồng bộ PatientDialog và PatientCreationDialog để tránh xung đột
+- Sửa lỗi "Invalid patient ID" khi tạo bệnh nhân từ thanh tìm kiếm
 
-### Thêm biểu tượng cho UI
-1. Tạo các biểu tượng SVG cho giao diện:
-   - app_icon.svg - Biểu tượng chính của ứng dụng
-   - patient.svg - Biểu tượng quản lý bệnh nhân
-   - planning.svg - Biểu tượng lập kế hoạch
-   - dose.svg - Biểu tượng tính toán liều
-   - treatment.svg - Biểu tượng điều trị
-   - qa.svg - Biểu tượng QA
-   - report.svg - Biểu tượng báo cáo
+Cải tiến:
+- Tối ưu hiệu suất tìm kiếm và lưu trữ bệnh nhân
+- Cải thiện trải nghiệm người dùng khi tạo bệnh nhân mới
+- Tạo script update_database.py để cập nhật cấu trúc cơ sở dữ liệu
+- Cập nhật PatientBrowser để sử dụng PatientCreationDialog thống nhất trong toàn hệ thống
+- Điều chỉnh dialog tạo bệnh nhân để hiển thị rõ ràng hơn
 
-2. Cập nhật MainWindow để sử dụng các biểu tượng mới
-
-### Phát triển mô hình dữ liệu
-1. Phát triển các lớp cơ sở:
-   - Patient - Lưu trữ thông tin bệnh nhân
-   - BeamParameters - Thông số chùm tia
-   - Beam - Mô hình chùm tia điều trị
-   - Plan - Kế hoạch điều trị
-
-### Môi trường
-1. Tạo script thiết lập môi trường:
-   - setup.py - Script thiết lập cơ bản
-   - setup_environment.py - Script thiết lập đầy đủ
-
-### Sửa lỗi
-1. Sửa lỗi trong `quangtps/ui/main_window.py`:
-   - Thêm ICON_DIR để chuẩn hóa đường dẫn biểu tượng
-
-### Thay đổi tiếp theo sẽ được thêm vào đây... 
-
-## [2025-03-24]
-### Fixed
-- Sửa lỗi encoding tiếng Việt trong logging bằng cách thêm tham số encoding='utf-8' cho FileHandler
-- Đảm bảo cài đặt các gói phụ thuộc cần thiết: scikit-image và dicompyler-core
-- Sửa lỗi kiểm tra gói phụ thuộc trong run_quangtps.py: ánh xạ tên gói với tên module chính xác (scikit-image → skimage, dicompyler-core → dicompylercore)
-- Sửa lỗi trong hàm show_splash_screen(): đảm bảo luôn trả về cùng một kiểu dữ liệu (app, splash) trong mọi trường hợp
-- Cải thiện chẩn đoán lỗi: thêm traceback đầy đủ trong log khi khởi động ứng dụng gặp lỗi 
-
-## [2025-03-26]
-### Fixed
-- Sửa lỗi định dạng (indentation) trong file quangtps/treatment/treatment_delivery.py, hàm update_fraction_status() để đảm bảo tính nhất quán của mã nguồn
-- Đảm bảo mã nguồn tuân thủ PEP 8 để tránh lỗi indentation và cải thiện khả năng đọc
-- Sửa lỗi thiếu import trong quangtps/core/types.py: thêm `from enum import Enum` để sử dụng Enum class
-- Sửa lỗi trong quangtps/treatment/treatment_delivery.py: chuyển class DeliveryStatus thành lớp kế thừa đúng từ Enum để phù hợp với thiết kế chung của codebase
-- Sửa lỗi indentation trong quangtps/dose/algorithms/monte_carlo.py: khắc phục lỗi thụt lề không đúng trong phần else
-- Sửa lỗi 'break' outside loop trong quangtps/dose/algorithms/monte_carlo.py: đặt câu lệnh break trong phạm vi vòng lặp hoặc thay thế bằng pass
-- Thêm hàm connection() thiếu trong quangtps/database/db_connector.py để trả về kết nối đến cơ sở dữ liệu
-- Cải thiện hàm connection() bằng cách triển khai context manager để có thể sử dụng với câu lệnh with
-- Sửa hàm _create_tables() trong PatientDatabase để sử dụng trực tiếp kết nối từ DBConnector thay vì sử dụng with statement
-- Thống nhất việc sử dụng biến self.conn thay vì self.connection trong DBConnector để tránh nhầm lẫn
-- Thêm các hàm callback thiếu trong quangtps/imaging/volume_renderer.py: _preset_changed(), _opacity_changed(), _window_level_changed() và các hàm liên quan 
-
-## [2025-03-27]
-### Added
-- Hoàn thiện VolumeRenderingWidget trong quangtps/imaging/volume_renderer.py:
-  - Cài đặt đầy đủ các callback cho UI kiểm soát hiển thị volume rendering 3D
-  - Thêm chức năng chụp ảnh hiển thị 3D
-  - Thêm phương thức load_volume_data để tải và hiển thị dữ liệu hình ảnh 3D
-  - Thêm phương thức add_contour để hiển thị cấu trúc giải phẫu trong không gian 3D
-  - Hoàn thiện việc áp dụng các preset hiển thị cho CT và MRI
-
-- Bổ sung tính năng xử lý dữ liệu chùm tia từ TrueBeam:
-  - Thêm module quangtps/treatment/beams/truebeam_data_processor.py để phân tích và xử lý dữ liệu từ file Excel
-  - Phát triển dialog giao diện người dùng quangtps/ui/dialogs/beam_data_input_dialog.py để nhập dữ liệu chùm tia
-  - Thêm script scripts/process_truebeam_data.py để xử lý dữ liệu TrueBeam từ dòng lệnh
-  - Thêm script scripts/import_truebeam_data.py để import dữ liệu TrueBeam vào hệ thống
-  - Cập nhật dialog tính toán liều quangtps/ui/dose_calculation_dialog.py để hỗ trợ các mô hình chùm tia từ TrueBeam
-
-### Changed
-- Cải thiện dialog tính toán liều:
-  - Thêm tab mô hình chùm tia để quản lý các mô hình sẵn có
-  - Thêm nút để tải mô hình chùm tia mới trực tiếp từ giao diện
-  - Cải thiện hiển thị thông tin về các mô hình chùm tia đã được import vào hệ thống 
-
-## [2025-03-28]
-### Fixed
-- Cải thiện xử lý tiếng Việt trong hệ thống logging:
-  - Cập nhật scripts/run_quangtps.py để xử lý lỗi encoding tiếng Việt trong console
-  - Cập nhật quangtps/core/logging.py để cải thiện xử lý tiếng Việt trong cả console và file log
-  - Thêm xử lý ngoại lệ chi tiết trong các hàm thiết lập logging để tránh crash ứng dụng
-  - Xóa handlers hiện có trước khi thêm handlers mới để tránh trùng lặp log
-
-- Cải thiện cơ chế báo lỗi và xử lý sự cố:
-  - Cập nhật hàm start_application trong scripts/run_quangtps.py để hiển thị thông báo lỗi chi tiết hơn
-  - Thêm thông tin chi tiết về lỗi (traceback) trong log để dễ dàng gỡ rối
-  - Bổ sung cơ chế backup trong xử lý logging để đảm bảo ứng dụng vẫn hoạt động ngay cả khi có lỗi xảy ra với logging
-
-- Sửa các vấn đề khác:
-  - Đảm bảo hàm show_splash_screen luôn trả về cùng kiểu dữ liệu (app, splash) trong mọi trường hợp
-  - Thêm QMessageBox.detailedText để hiển thị thông tin lỗi chi tiết khi ứng dụng gặp sự cố
-
-## [2025-03-29]
-### Fixed
-- Sửa lỗi linter và import PyQt5:
-  - Cập nhật toàn bộ import PyQt5 trong scripts/run_quangtps.py để sử dụng cú pháp nhất quán
-  - Thêm xử lý lỗi ImportError khi không thể import PyQt5
-  - Đồng bộ việc sử dụng các module QtCore, QtWidgets, QtGui thay vì import từng class riêng lẻ
-
-- Cải thiện triệt để hỗ trợ tiếng Việt:
-  - Tạo hàm setup_utf8_console() để cấu hình UTF-8 cho hệ thống một cách đầy đủ
-  - Đặt các biến môi trường PYTHONIOENCODING và PYTHONUTF8 để đảm bảo mã hóa đúng
-  - Thử thiết lập locale Vietnamese nếu có trên hệ thống Windows
-  - Đảm bảo file log sử dụng encoding UTF-8
-
-## [2025-03-30]
-### Added
-- Triển khai lớp BeamDataManager trong quangtps/dose/beam_data_processor.py:
-  - Lớp quản lý dữ liệu chùm tia và mô hình chùm tia cho các thuật toán tính liều
-  - Hỗ trợ tải, lưu và quản lý các mô hình chùm tia cho các năng lượng và máy xạ trị khác nhau
-  - Tích hợp với hệ thống cấu hình để lưu trữ dữ liệu
-
-### Fixed
-- Sửa lỗi thiếu phương thức get_beam_models trong BeamDataManager:
-  - Bổ sung phương thức để lấy danh sách mô hình chùm tia theo loại chùm tia
-  - Đảm bảo tương thích với giao diện DoseCalculationDialog
-  - Cải thiện ghi log thông tin về các mô hình được tìm thấy
-
-## [2025-03-25]
-
-### Triển khai hiệu chỉnh thêm và sửa lỗi
-- Cập nhật file setup.py để cài đặt ứng dụng ở chế độ development giúp Python tìm thấy module quangtps
-- Thêm báo cáo chẩn đoán hệ thống trong scripts/setup_environment.py để chẩn đoán vấn đề
-- Sửa lỗi QPixmap trong hàm show_splash_screen trong quangtps/__main__.py
-- Cải thiện xử lý locale cho tiếng Việt trên hệ thống Windows
-- Thêm phương pháp so sánh phiên bản của thư viện mà không phụ thuộc vào pkg_resources đã lỗi thời
-
-### Cải thiện khởi động ứng dụng
-- Cấu hình lại cách nhập các module PyQt5 để giảm lỗi linter 
-- Thêm phương thức tạo báo cáo chẩn đoán môi trường để hỗ trợ gỡ lỗi
-- Sửa lỗi không tìm thấy module quangtps bằng cách thêm thư mục gốc vào sys.path
-- Đảm bảo tạo splash screen ngay cả khi không có file splash.png
-
-### Cải thiện quản lý biểu tượng
-- Thêm tính năng tự động tạo splash.png nếu không tồn tại
-- Bổ sung sơ đồ màu gradient cho splash screen
-
-### Thêm tính năng chế độ debug
-- Thêm tùy chọn `--debug` khi khởi động
-- Tự động vô hiệu hóa splash screen trong chế độ debug
-
-### Triển khai BeamDataManager
-- Thêm phương thức `get_beam_models()` để lấy mô hình theo loại
-- Quản lý dữ liệu chùm tia và mô hình chùm tia trong hệ thống
-- Hỗ trợ tải, lưu và quản lý mô hình chùm tia 
-
-## [2025-03-31]
-
-### Cải thiện xử lý lỗi và trải nghiệm người dùng
-- Thêm xử lý lỗi cho cấu trúc cơ sở dữ liệu trong quangtps/ui/patient_browser.py:
-  - Hiển thị thông báo hướng dẫn người dùng khi gặp lỗi "table patients has no column named dob"
-  - Đề xuất cách khắc phục bằng cách chạy script update_database.py
-- Cải thiện phương thức _display_current_series trong quangtps/ui/imaging_tab.py:
-  - Thêm xử lý trường hợp self.current_series.image không tồn tại
-  - Tự động tải dữ liệu hình ảnh nếu chưa được tải
-  - Thông báo rõ ràng cho người dùng khi không thể tải dữ liệu hình ảnh
-- Sửa lỗi trong lớp DicomSeries để đảm bảo thuộc tính image luôn được khởi tạo
-
-### Cải thiện cấu trúc cơ sở dữ liệu
-- Cập nhật script update_database.py để xử lý sự không nhất quán giữa các trường dob và birth_date:
-  - Tự động phát hiện và chuyển đổi schema giữa hai phiên bản
-  - Thêm thông báo chi tiết về thay đổi được thực hiện
-  - Đảm bảo dữ liệu được bảo toàn khi cập nhật schema 
-
-## [2025-04-01]
-
-### Cải thiện hiệu suất và ghi log
-- Tối ưu hóa cách xử lý DICOM trong quangtps/dicom/pacs_client.py:
-  - Giảm số lượng cảnh báo gây nhiễu bằng cách gộp nhóm các thông báo lỗi
-  - Thay thế các log cấp warning bằng các log cấp debug khi thích hợp
-  - Thêm tóm tắt về số lượng contexts thành công/thất bại thay vì ghi log từng lỗi
-  - Cải thiện trải nghiệm người dùng bằng cách làm sạch output console
-- Điều chỉnh mức độ chi tiết của log trong toàn bộ ứng dụng
-  - Đảm bảo các thông báo quan trọng vẫn được hiển thị
-  - Chuyển các chi tiết kỹ thuật sang mức độ DEBUG
-
-### Sửa lỗi và cải thiện trải nghiệm người dùng
-- Sửa lỗi trong ImagingTab khi hiển thị series DICOM:
-  - Thêm kiểm tra thuộc tính image trong DicomSeries
-  - Tự động tải dữ liệu hình ảnh nếu cần
-  - Ghi log và hiển thị thông báo lỗi hữu ích cho người dùng
-- Thêm xử lý ngoại lệ chi tiết cho lỗi cấu trúc cơ sở dữ liệu:
-  - Phát hiện và hướng dẫn khắc phục lỗi "table patients has no column named dob"
-  - Gợi ý người dùng chạy script update_database.py để tự động sửa chữa 
-
-## 2025-04-02
-- Cải thiện xử lý lỗi và trải nghiệm người dùng toàn hệ thống:
-  - Thêm mô-đun xử lý lỗi chi tiết cho Tab Liều Lượng (DoseTab) trong `quangtps/ui/dose_tab.py`:
-    - Quản lý ngoại lệ khi tải dữ liệu liều
-    - Tự động tạo dữ liệu mẫu khi dữ liệu chính không thể được tải
-    - Thống nhất tên thuộc tính của các widget để đảm bảo tính nhất quán
-    - Sửa lỗi layout bị xóa bằng cách cải thiện cấu trúc widget và quản lý vòng đời tốt hơn
-  - Bổ sung xử lý lỗi mạnh mẽ cho Tab Điều Trị (TreatmentTab) trong `quangtps/ui/treatment_tab.py`:
-    - Thêm dữ liệu mẫu chất lượng cao cho lịch trình điều trị
-    - Tạo cơ chế dự phòng cho trường hợp tải dữ liệu thất bại
-    - Tích hợp hệ thống ghi log chi tiết cho việc phát hiện lỗi
-  - Nâng cấp Tab Đảm bảo Chất lượng (QATab) trong `quangtps/ui/qa_tab.py`:
-    - Bổ sung thông báo trống khi không có dữ liệu QA
-    - Thêm khả năng tạo dữ liệu mẫu cho trường hợp lỗi kết nối cơ sở dữ liệu
-    - Cải thiện giao diện hiển thị bảng QA với màu sắc trạng thái
-    - Tăng cường xử lý ngoại lệ khi tải và hiển thị dữ liệu
-  - Hoàn thiện UI ở tất cả các tab với trải nghiệm người dùng nhất quán
-    - Nâng cao các thông báo lỗi với hướng dẫn khắc phục rõ ràng
-    - Đảm bảo giao diện luôn hiển thị thông tin hữu ích ngay cả khi có lỗi xảy ra
-    - Thêm dữ liệu mẫu cho mục đích minh họa và kiểm tra
-
-## 2025-04-03
-- Sửa lỗi và hoàn thiện tính năng QA:
-  - Thêm phương thức `get_all_tests()` vào lớp `TreatmentQAManager` trong `quangtps/evaluation/qa/treatment_qa.py` để khắc phục lỗi:
-    - Sửa lỗi "TreatmentQAManager object has no attribute 'get_all_tests'" khi tải tab QA
-    - Cho phép QA Tab hiển thị đầy đủ danh sách các bài kiểm tra QA
-  - Đảm bảo xử lý nhất quán giữa giao diện và mô hình dữ liệu trong mô-đun QA 
-
-## 2025-04-04
-- Sửa lỗi và hoàn thiện chức năng quản lý bệnh nhân:
-  - Sửa lỗi trong `PatientTab._populate_medical_history()`: Thêm giá trị mặc định cho tham số `history_data` và tự động lấy dữ liệu từ bệnh nhân hiện tại
-  - Thêm phương thức `get_patient_plans()` vào lớp `PatientDatabase` để khắc phục lỗi "PatientDatabase object has no attribute 'get_patient_plans'" trong `quangtps/ui/patient_browser.py`
-  - Cải thiện xử lý lỗi khi tìm kiếm bệnh nhân để tránh trường hợp "NoneType object is not iterable"
-  - Tối ưu hóa các phương thức trong `PatientTab` để tăng tính ổn định khi làm việc với dữ liệu bệnh nhân không đầy đủ
-
-- Phát triển thêm tính năng và sửa lỗi trong hệ thống:
-  - Nâng cấp hiệu suất cơ sở dữ liệu bệnh nhân và kế hoạch để đảm bảo tính ổn định khi làm việc với tệp DICOM lớn
-  - Hoàn thiện các báo cáo kết quả điều trị với đồ thị mới và giao diện thân thiện với người dùng
-  - Cải thiện tính năng DVH (Biểu đồ Thể tích Liều lượng) với tính toán chính xác hơn 
+Nâng cao:
+- Hỗ trợ đồng thời cả hai trường 'birth_date' và 'dob' để đảm bảo tương thích ngược
+- Cải thiện việc xử lý lỗi và hiển thị thông báo chi tiết
+- Tự động tạo ID bệnh nhân khi cần thiết
+- Thêm khả năng tạo bệnh nhân mới với ID cụ thể khi tìm kiếm không thấy ID đó 

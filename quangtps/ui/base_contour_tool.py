@@ -495,7 +495,7 @@ class ContourCollection:
         
         for name, contour in self.contours.items():
             points = contour.get_slice(slice_idx)
-            if points:
+            if points is not None and len(points) > 0:
                 slice_contours[name] = points
         
         return slice_contours

@@ -49,6 +49,7 @@ try:
     from quangtps.ui.plan_evaluation import PlanEvaluationWidget
     from quangtps.ui.dicom_loader import DicomLoaderWidget
     from quangtps.database.patient_db import PatientDatabase
+    from quangtps.database.plan_db import PlanDB
     from quangtps.ui.treatment_planning_tab import TreatmentPlanningTab
     from quangtps.ui.dose_calculation_dialog import DoseCalculationDialog
 except ImportError as e:

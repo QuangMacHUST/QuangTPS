@@ -26,7 +26,7 @@ import glob
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from quangtps.database.patient_db import PatientDatabase
-from quangtps.database.plan_db import PlanDatabase
+from quangtps.database.plan_db import PlanDB
 from quangtps.database.structure_db import StructureDatabase
 from quangtps.database.dose_db import DoseDatabase
 from quangtps.database.db_connector import DBConnector
@@ -132,7 +132,7 @@ def import_dicom_data(input_dir, site, structure_mapping, recursive=False, dry_r
     """
     # Khởi tạo các đối tượng cơ sở dữ liệu
     patient_db = PatientDatabase()
-    plan_db = PlanDatabase()
+    plan_db = PlanDB()
     structure_db = StructureDatabase()
     dose_db = DoseDatabase()
     
@@ -388,7 +388,7 @@ def import_csv_data(input_file, site, structure_mapping, dry_run=False):
     
     # Khởi tạo các đối tượng cơ sở dữ liệu
     patient_db = PatientDatabase()
-    plan_db = PlanDatabase()
+    plan_db = PlanDB()
     
     patient_count = 0
     plan_count = 0
@@ -478,7 +478,7 @@ def import_json_data(input_file, site, structure_mapping, dry_run=False):
     
     # Khởi tạo các đối tượng cơ sở dữ liệu
     patient_db = PatientDatabase()
-    plan_db = PlanDatabase()
+    plan_db = PlanDB()
     structure_db = StructureDatabase()
     
     patient_count = 0

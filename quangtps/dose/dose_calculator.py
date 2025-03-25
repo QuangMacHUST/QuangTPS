@@ -39,11 +39,12 @@ class DoseCalculator:
         beam_model_dir : str, optional
             Directory containing beam models data
         """
+        self.algorithm_name = algorithm
         if algorithm not in self.ALGORITHMS:
             raise ValueError(f"Unsupported algorithm: {algorithm}. Supported algorithms: {list(self.ALGORITHMS.keys())}")
         
-        self.algorithm_name = algorithm
         self.algorithm = self.ALGORITHMS[algorithm]()
+        self.beam_models = {}  # Cache for beam models
         
         # Set up beam model directory
         if beam_model_dir is None:
@@ -68,21 +69,54 @@ class DoseCalculator:
             self.truebeam_manager = None
             logger.warning("Truebeam data directory not found. Truebeam models will not be available.")
     
-    def set_algorithm(self, algorithm: str):
+    def validate_inputs(self, plan: Plan, ct_image: Image) -> None:
         """
-        Change the dose calculation algorithm.
+        Validate inputs for dose calculation.
         
         Parameters
         ----------
-        algorithm : str
-            The dose calculation algorithm to use
+        plan : Plan
+            The treatment plan
+        ct_image : Image
+            The CT image
+            
+        Raises
+        ------
+        ValueError
+            If inputs are invalid
         """
-        if algorithm not in self.ALGORITHMS:
-            raise ValueError(f"Unsupported algorithm: {algorithm}. Supported algorithms: {list(self.ALGORITHMS.keys())}")
-        
-        self.algorithm_name = algorithm
-        self.algorithm = self.ALGORITHMS[algorithm]()
-        logger.info(f"Switched dose calculation algorithm to {algorithm}")
+        # Validate plan
+        if not plan:
+            raise ValueError("Plan cannot be None")
+            
+        if not plan.beams:
+            raise ValueError(f"Plan {plan.name} has no beams")
+            
+        # Validate CT image
+        if not ct_image:
+            raise ValueError("CT image cannot be None")
+            
+        if not ct_image.data.any():
+            raise ValueError("CT image has no data")
+            
+        # Check image dimensions
+        if len(ct_image.data.shape) != 3:
+            raise ValueError(f"CT image must be 3D, got shape {ct_image.data.shape}")
+            
+        # Check CT numbers are in valid range
+        if np.min(ct_image.data) < -1024 or np.max(ct_image.data) > 3071:
+            raise ValueError("CT numbers out of valid range [-1024, 3071]")
+            
+        # Validate each beam
+        for i, beam in enumerate(plan.beams):
+            if not beam.isocenter:
+                raise ValueError(f"Beam {i} ({beam.name}) has no isocenter")
+                
+            if not beam.gantry_angle and beam.gantry_angle != 0:
+                raise ValueError(f"Beam {i} ({beam.name}) has no gantry angle")
+                
+            if not beam.field_size or any(s <= 0 for s in beam.field_size):
+                raise ValueError(f"Beam {i} ({beam.name}) has invalid field size: {beam.field_size}")
     
     def calculate_dose_for_beam(self, beam: Beam, ct_image: Image) -> Image:
         """
@@ -138,22 +172,43 @@ class DoseCalculator:
         -------
         Image
             The calculated total dose image
+            
+        Raises
+        ------
+        DoseCalculationError
+            If dose calculation fails
         """
         try:
             logger.info(f"Calculating total dose for plan {plan.name} using {self.algorithm_name} algorithm")
             
-            if not plan.beams:
-                raise DoseCalculationError(f"No beams found in plan {plan.name}")
+            # Validate inputs
+            self.validate_inputs(plan, ct_image)
             
             # Calculate dose for each beam
             beam_doses = []
+            total_mu = sum(beam.monitor_units for beam in plan.beams if beam.monitor_units)
+            
             for i, beam in enumerate(plan.beams):
                 logger.info(f"Calculating dose for beam {i+1}/{len(plan.beams)}: {beam.name}")
-                beam_dose = self.calculate_dose_for_beam(beam, ct_image)
                 
-                # Apply beam weight
-                beam_dose.data *= beam.weight
-                beam_doses.append(beam_dose)
+                try:
+                    beam_dose = self.calculate_dose_for_beam(beam, ct_image)
+                    
+                    # Apply beam weight/MU
+                    if beam.monitor_units and total_mu > 0:
+                        weight = beam.monitor_units / total_mu
+                    else:
+                        weight = beam.weight if beam.weight else 1.0 / len(plan.beams)
+                        
+                    beam_dose.data *= weight
+                    beam_doses.append(beam_dose)
+                    
+                    logger.info(f"Completed beam {beam.name} with weight {weight:.3f}")
+                    
+                except Exception as e:
+                    error_msg = f"Failed to calculate dose for beam {beam.name}: {str(e)}"
+                    logger.error(error_msg)
+                    raise DoseCalculationError(error_msg, algorithm=self.algorithm_name) from e
             
             # Create total dose by summing all beam doses
             total_dose = Image(
@@ -177,12 +232,18 @@ class DoseCalculator:
                 total_dose.data *= normalization_factor
                 logger.info(f"Applied plan normalization factor: {normalization_factor:.4f}")
             
+            # Calculate and log dose statistics
+            min_dose = np.min(total_dose.data)
+            max_dose = np.max(total_dose.data)
+            mean_dose = np.mean(total_dose.data)
+            logger.info(f"Dose statistics - Min: {min_dose:.2f} Gy, Max: {max_dose:.2f} Gy, Mean: {mean_dose:.2f} Gy")
+            
             return total_dose
             
         except Exception as e:
             error_msg = f"Error calculating dose for plan {plan.name}: {str(e)}"
             logger.error(error_msg)
-            raise DoseCalculationError(error_msg) from e
+            raise DoseCalculationError(error_msg, algorithm=self.algorithm_name) from e
     
     def _get_beam_model(self, beam: Beam):
         """
@@ -248,4 +309,63 @@ class DoseCalculator:
                 "photon": self.truebeam_manager.get_available_energies()
             }
         
-        return available_models 
+        return available_models
+
+    def calculate_biological_metrics(self, physical_dose: Image, fractionation: int, 
+                                  alpha_beta: float = None) -> Dict[str, Image]:
+        """
+        Calculate biological dose metrics (BED, EQD2).
+        
+        Parameters
+        ----------
+        physical_dose : Image
+            Physical dose distribution
+        fractionation : int
+            Number of fractions
+        alpha_beta : float, optional
+            Alpha/beta ratio for tissue
+            
+        Returns
+        -------
+        Dict[str, Image]
+            Dictionary containing BED and EQD2 distributions
+        """
+        try:
+            if not alpha_beta:
+                logger.warning("No alpha/beta ratio provided, using default value of 10")
+                alpha_beta = 10.0
+                
+            # Calculate dose per fraction
+            dose_per_fraction = physical_dose.data / fractionation
+            
+            # Calculate BED
+            bed_data = physical_dose.data * (1 + dose_per_fraction / alpha_beta)
+            bed_image = Image(
+                data=bed_data,
+                spacing=physical_dose.spacing,
+                origin=physical_dose.origin,
+                direction=physical_dose.direction
+            )
+            bed_image.modality = "RTDOSE"
+            bed_image.description = f"BED distribution (α/β = {alpha_beta})"
+            
+            # Calculate EQD2
+            eqd2_data = physical_dose.data * ((dose_per_fraction + alpha_beta) / (2 + alpha_beta))
+            eqd2_image = Image(
+                data=eqd2_data,
+                spacing=physical_dose.spacing,
+                origin=physical_dose.origin,
+                direction=physical_dose.direction
+            )
+            eqd2_image.modality = "RTDOSE"
+            eqd2_image.description = f"EQD2 distribution (α/β = {alpha_beta})"
+            
+            return {
+                "BED": bed_image,
+                "EQD2": eqd2_image
+            }
+            
+        except Exception as e:
+            error_msg = f"Error calculating biological metrics: {str(e)}"
+            logger.error(error_msg)
+            raise DoseCalculationError(error_msg) from e 

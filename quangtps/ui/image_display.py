@@ -448,7 +448,7 @@ class ImageSliceWidget(QWidget):
                         
                         # Vẽ đường biên
                         path = QPainterPath()
-                        if points and len(points) > 0:
+                        if points is not None and len(points) > 0:
                             # Áp dụng zoom và pan cho các điểm contour
                             zoomed_points = []
                             for x, y in points:
@@ -481,28 +481,30 @@ class ImageSliceWidget(QWidget):
             painter = QPainter(pixmap)
             
             # Vẽ dữ liệu liều lượng cho lát cắt hiện tại
-            dose_slice = self.dose_data[self.slice_idx, :, :]
-            dose_min, dose_max = np.min(dose_slice), np.max(dose_slice)
-            dose_range = dose_max - dose_min
-            
-            # Áp dụng colormap
-            if dose_range > 0:
-                dose_normalized = (dose_slice - dose_min) / dose_range
-            else:
-                dose_normalized = np.zeros_like(dose_slice)
-            
-            # Vẽ dữ liệu liều lượng
-            for y in range(dose_slice.shape[0]):
-                for x in range(dose_slice.shape[1]):
-                    dose_value = dose_normalized[y, x]
-                    # Chuyển đổi sang giá trị int trước khi tạo QColor
-                    r = int(255 * dose_value)
-                    color = QColor(r, 0, 0)  # Màu đỏ cho liều lượng
-                    painter.setPen(QPen(color))
-                    # Chuyển tọa độ về kiểu int trước khi vẽ
-                    px = int(x * self.zoom_factor + self.pan_offset[0])
-                    py = int(y * self.zoom_factor + self.pan_offset[1])
-                    painter.drawPoint(px, py)
+            if self.slice_idx >= 0 and self.slice_idx < self.dose_data.shape[0]:
+                dose_slice = self.dose_data[self.slice_idx, :, :]
+                if dose_slice.size > 0 and dose_slice.ndim >= 2:
+                    dose_min, dose_max = np.min(dose_slice), np.max(dose_slice)
+                    dose_range = dose_max - dose_min
+                    
+                    # Áp dụng colormap
+                    if dose_range > 0:
+                        dose_normalized = (dose_slice - dose_min) / dose_range
+                    else:
+                        dose_normalized = np.zeros_like(dose_slice)
+                    
+                    # Vẽ dữ liệu liều lượng
+                    for y in range(dose_slice.shape[0]):
+                        for x in range(dose_slice.shape[1]):
+                            dose_value = dose_normalized[y, x]
+                            # Chuyển đổi sang giá trị int trước khi tạo QColor
+                            r = int(255 * dose_value)
+                            color = QColor(r, 0, 0)  # Màu đỏ cho liều lượng
+                            painter.setPen(QPen(color))
+                            # Chuyển tọa độ về kiểu int trước khi vẽ
+                            px = int(x * self.zoom_factor + self.pan_offset[0])
+                            py = int(y * self.zoom_factor + self.pan_offset[1])
+                            painter.drawPoint(px, py)
             
             painter.end()
         
