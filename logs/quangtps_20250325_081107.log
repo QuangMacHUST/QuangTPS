@@ -1,0 +1,25 @@
+2025-03-25 08:11:07,734 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-25 08:11:07
+2025-03-25 08:11:07,734 - __main__ - INFO - Thư mục gốc: e:\hoctap\QuangTPS
+2025-03-25 08:11:07,734 - __main__ - INFO - File log: e:\hoctap\QuangTPS\logs\quangtps_20250325_081107.log
+2025-03-25 08:11:11,422 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-25 08:11:18,125 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-25 08:11:18,167 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-25 08:11:18,203 - root - WARNING - PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.
+2025-03-25 08:11:19,084 - quangtps.database.db_connector - INFO - Đã kết nối đến cơ sở dữ liệu: e:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 08:11:19,084 - quangtps.database.patient_db - INFO - Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:11:19,097 - quangtps.dicom.pacs_client - INFO - Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 08:11:19,124 - quangtps.ui.patient_tab - INFO - Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 08:11:19,125 - quangtps.ui.patient_tab - INFO - Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 08:11:19,158 - quangtps.ui.planning_tab - INFO - Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 08:11:19,386 - quangtps.ui.dose_tab - INFO - Khởi tạo tab liều lượng hoàn tất
+2025-03-25 08:11:19,604 - quangtps.ui.treatment_tab - INFO - Khởi tạo tab điều trị hoàn tất
+2025-03-25 08:11:19,620 - quangtps.ui.qa_tab - ERROR - Lỗi khi tải danh sách các bài kiểm tra QA: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\quangtps\ui\qa_tab.py", line 439, in _load_qa_tests
+    self.qa_tests = self.qa_manager.get_all_tests()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+2025-03-25 08:11:23,384 - quangtps.ui.qa_tab - INFO - Đã tạo 3 bài kiểm tra QA mẫu
+2025-03-25 08:11:23,401 - quangtps.ui.reporting_tab - INFO - Khởi tạo tab báo cáo hoàn tất
+2025-03-25 08:11:24,406 - quangtps.database.patient_db - INFO - Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:11:24,454 - quangtps.ui.main_window - INFO - Khởi tạo cửa sổ chính QuangTPS hoàn tất

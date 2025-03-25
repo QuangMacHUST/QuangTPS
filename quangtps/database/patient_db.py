@@ -764,6 +764,65 @@ class PatientDatabase:
             logger.error(f"Lỗi khi lấy danh sách series: {str(e)}", exc_info=True)
             raise DatabaseError(f"Lỗi khi lấy danh sách series: {str(e)}") from e
 
+    def get_patient_plans(self, patient_id: str):
+        """
+        Lấy danh sách các kế hoạch điều trị của bệnh nhân.
+        
+        Parameters
+        ----------
+        patient_id : str
+            ID của bệnh nhân
+            
+        Returns
+        -------
+        list
+            Danh sách các kế hoạch điều trị
+            
+        Raises
+        ------
+        DatabaseError
+            Nếu có lỗi xảy ra trong quá trình lấy danh sách
+        """
+        try:
+            # Kiểm tra xem bệnh nhân có tồn tại không
+            patient = self.get_patient(patient_id)
+            if not patient:
+                logger.warning(f"Không tìm thấy bệnh nhân với ID: {patient_id}")
+                return []
+            
+            # Thử truy vấn danh sách kế hoạch từ bảng plans
+            query = "SELECT * FROM plans WHERE patient_id = ? ORDER BY created_at DESC"
+            results = self.db.execute_query(query, (patient_id,), fetchall=True)
+            
+            if not results:
+                logger.info(f"Không có kế hoạch nào cho bệnh nhân {patient_id}")
+                return []
+            
+            # Chuyển đổi kết quả thành danh sách dict
+            plans = []
+            for row in results:
+                plan_dict = dict(row)
+                
+                # Giải mã metadata từ JSON
+                if 'metadata' in plan_dict and plan_dict['metadata']:
+                    try:
+                        plan_dict['metadata'] = json.loads(plan_dict['metadata'])
+                    except json.JSONDecodeError:
+                        plan_dict['metadata'] = {}
+                else:
+                    plan_dict['metadata'] = {}
+                
+                plans.append(plan_dict)
+            
+            logger.info(f"Đã lấy {len(plans)} kế hoạch điều trị cho bệnh nhân {patient_id}")
+            return plans
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy danh sách kế hoạch điều trị: {str(e)}", exc_info=True)
+            # Trả về danh sách rỗng thay vì ném ngoại lệ để tránh làm hỏng giao diện người dùng
+            logger.warning(f"Trả về danh sách rỗng do lỗi khi truy vấn plans")
+            return []
+            
     def _delete_all_plans(self, patient_id):
         """
         Xóa tất cả các kế hoạch điều trị liên quan đến bệnh nhân.

@@ -7416,3 +7416,46 @@ quangtps.core.exceptions.DatabaseError: Lỗi khi tìm kiếm bệnh nhân: 'Non
 2025-03-25 05:01:25 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 2 bệnh nhân
 2025-03-25 05:01:25 [WARNING] quangtps.ui.patient_browser (patient_browser.py:133): Không thể tải kế hoạch cho bệnh nhân 0b0a90f4-a53b-4270-8fa6-b96cd80906f0: 'PatientDatabase' object has no attribute 'get_patient_plans'
 2025-03-25 05:01:25 [WARNING] quangtps.ui.patient_browser (patient_browser.py:133): Không thể tải kế hoạch cho bệnh nhân a26d843a-31b4-48dd-98b5-bf9e775640b5: 'PatientDatabase' object has no attribute 'get_patient_plans'
+2025-03-25 08:10:38 [ERROR] quangtps.ui.qa_tab (qa_tab.py:492): Lỗi khi tải danh sách các bài kiểm tra QA: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\quangtps\ui\qa_tab.py", line 439, in _load_qa_tests
+    self.qa_tests = self.qa_manager.get_all_tests()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+2025-03-25 08:10:45 [INFO] quangtps.ui.qa_tab (qa_tab.py:596): Đã tạo 3 bài kiểm tra QA mẫu
+2025-03-25 08:11:19 [ERROR] quangtps.ui.qa_tab (qa_tab.py:492): Lỗi khi tải danh sách các bài kiểm tra QA: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\quangtps\ui\qa_tab.py", line 439, in _load_qa_tests
+    self.qa_tests = self.qa_manager.get_all_tests()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TreatmentQAManager' object has no attribute 'get_all_tests'
+2025-03-25 08:11:23 [INFO] quangtps.ui.qa_tab (qa_tab.py:596): Đã tạo 3 bài kiểm tra QA mẫu
+2025-03-25 08:16:48 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 08:16:50 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 08:16:50 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:16:50 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 08:16:50 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 08:16:50 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 08:16:50 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 08:16:50 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 08:16:50 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 08:16:50 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 08:16:50 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 08:16:50 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 08:16:52 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:16:52 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 08:19:13 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...
+2025-03-25 08:19:15 [INFO] quangtps.database.db_connector (db_connector.py:70): Đã kết nối đến cơ sở dữ liệu: E:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-25 08:19:15 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:19:15 [INFO] quangtps.dicom.pacs_client (pacs_client.py:118): Initialized AE with title QUANGTPS and 10 contexts
+2025-03-25 08:19:15 [INFO] quangtps.ui.patient_tab (patient_tab.py:387): Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-25 08:19:15 [INFO] quangtps.ui.patient_tab (patient_tab.py:160): Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-25 08:19:15 [INFO] quangtps.ui.planning_tab (planning_tab.py:82): Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-25 08:19:15 [INFO] quangtps.ui.dose_tab (dose_tab.py:489): Khởi tạo tab liều lượng hoàn tất
+2025-03-25 08:19:16 [INFO] quangtps.ui.treatment_tab (treatment_tab.py:599): Khởi tạo tab điều trị hoàn tất
+2025-03-25 08:19:16 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 08:19:16 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-03-25 08:19:16 [INFO] quangtps.ui.reporting_tab (reporting_tab.py:552): Khởi tạo tab báo cáo hoàn tất
+2025-03-25 08:19:17 [INFO] quangtps.database.patient_db (patient_db.py:495): Đã lấy danh sách 0 bệnh nhân
+2025-03-25 08:19:17 [INFO] quangtps.ui.main_window (main_window.py:107): Khởi tạo cửa sổ chính QuangTPS hoàn tất
+2025-03-25 08:22:27 [INFO] __main__ (__main__.py:194): Khởi động QuangTPS...

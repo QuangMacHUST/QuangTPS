@@ -419,12 +419,15 @@ class PatientTab(QWidget):
         Parameters
         ----------
         patient_id : str
-            ID của bệnh nhân cần hiển thị
+            ID của bệnh nhân
         """
+        # Xóa dữ liệu bệnh nhân hiện tại
+        self._clear_patient_data()
+        
         try:
             # Lấy thông tin bệnh nhân
             patient_data = self.patient_db.get_patient(patient_id)
-
+            
             if not patient_data:
                 QMessageBox.warning(
                     self, "Cảnh báo", f"Không tìm thấy bệnh nhân với ID: {patient_id}")
@@ -554,12 +557,15 @@ class PatientTab(QWidget):
             QMessageBox.critical(
                 self, "Lỗi", f"Không thể hiển thị thông tin bệnh nhân: {str(e)}")
     
-    def _populate_medical_history(self, history_data: List[Dict]):
+    def _populate_medical_history(self, history_data: List[Dict] = None):
         """Điền dữ liệu vào bảng lịch sử y tế."""
         self.history_table.setRowCount(0)
         
         if not history_data:
-            return
+            history_data = []
+            # Thử lấy lịch sử y tế từ bệnh nhân hiện tại nếu có
+            if self.current_patient and 'medical_history' in self.current_patient:
+                history_data = self.current_patient.get('medical_history', [])
         
         for entry in history_data:
             row_position = self.history_table.rowCount()

@@ -493,12 +493,12 @@ class TreatmentQAManager:
     
     def get_machine_qa_tests(self, machine_id: str) -> List[TreatmentQATest]:
         """
-        Lấy danh sách các bài kiểm tra QA cho một máy xạ trị.
+        Lấy danh sách các bài kiểm tra QA cho một máy.
         
         Parameters
         ----------
         machine_id : str
-            ID của máy xạ trị
+            ID của máy
             
         Returns
         -------
@@ -507,6 +507,17 @@ class TreatmentQAManager:
         """
         test_ids = self.machine_qa_map.get(machine_id, [])
         return [self.qa_tests[test_id] for test_id in test_ids if test_id in self.qa_tests]
+    
+    def get_all_tests(self) -> List[TreatmentQATest]:
+        """
+        Lấy tất cả các bài kiểm tra QA.
+        
+        Returns
+        -------
+        List[TreatmentQATest]
+            Danh sách tất cả các bài kiểm tra QA
+        """
+        return list(self.qa_tests.values())
     
     def create_standard_qa_tests_for_plan(
         self,

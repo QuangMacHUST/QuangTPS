@@ -223,4 +223,23 @@
   - Hoàn thiện UI ở tất cả các tab với trải nghiệm người dùng nhất quán
     - Nâng cao các thông báo lỗi với hướng dẫn khắc phục rõ ràng
     - Đảm bảo giao diện luôn hiển thị thông tin hữu ích ngay cả khi có lỗi xảy ra
-    - Thêm dữ liệu mẫu cho mục đích minh họa và kiểm tra 
+    - Thêm dữ liệu mẫu cho mục đích minh họa và kiểm tra
+
+## 2025-04-03
+- Sửa lỗi và hoàn thiện tính năng QA:
+  - Thêm phương thức `get_all_tests()` vào lớp `TreatmentQAManager` trong `quangtps/evaluation/qa/treatment_qa.py` để khắc phục lỗi:
+    - Sửa lỗi "TreatmentQAManager object has no attribute 'get_all_tests'" khi tải tab QA
+    - Cho phép QA Tab hiển thị đầy đủ danh sách các bài kiểm tra QA
+  - Đảm bảo xử lý nhất quán giữa giao diện và mô hình dữ liệu trong mô-đun QA 
+
+## 2025-04-04
+- Sửa lỗi và hoàn thiện chức năng quản lý bệnh nhân:
+  - Sửa lỗi trong `PatientTab._populate_medical_history()`: Thêm giá trị mặc định cho tham số `history_data` và tự động lấy dữ liệu từ bệnh nhân hiện tại
+  - Thêm phương thức `get_patient_plans()` vào lớp `PatientDatabase` để khắc phục lỗi "PatientDatabase object has no attribute 'get_patient_plans'" trong `quangtps/ui/patient_browser.py`
+  - Cải thiện xử lý lỗi khi tìm kiếm bệnh nhân để tránh trường hợp "NoneType object is not iterable"
+  - Tối ưu hóa các phương thức trong `PatientTab` để tăng tính ổn định khi làm việc với dữ liệu bệnh nhân không đầy đủ
+
+- Phát triển thêm tính năng và sửa lỗi trong hệ thống:
+  - Nâng cấp hiệu suất cơ sở dữ liệu bệnh nhân và kế hoạch để đảm bảo tính ổn định khi làm việc với tệp DICOM lớn
+  - Hoàn thiện các báo cáo kết quả điều trị với đồ thị mới và giao diện thân thiện với người dùng
+  - Cải thiện tính năng DVH (Biểu đồ Thể tích Liều lượng) với tính toán chính xác hơn 
