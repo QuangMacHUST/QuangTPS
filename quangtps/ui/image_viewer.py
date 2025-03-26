@@ -254,17 +254,17 @@ class ImageViewer(QWidget):
         self.primary_image = image
         
         # Cập nhật thanh trượt lát cắt
-        if image and image.data is not None:
+        if image is not None and hasattr(image, 'data') and image.data is not None and image.data.size > 0:
             depth = image.data.shape[0]
             self.slice_slider.setRange(0, depth - 1)
             self.slice_slider.setValue(depth // 2)
             
             # Thiết lập cửa sổ mặc định dựa trên hình ảnh
-            if image.modality == "CT":
+            if hasattr(image, 'modality') and image.modality == "CT":
                 self._set_window(1500, 500)  # CT default
-            elif image.modality == "MR":
+            elif hasattr(image, 'modality') and image.modality == "MR":
                 self._set_window(1000, 500)  # MR default
-            elif image.modality == "PT":
+            elif hasattr(image, 'modality') and image.modality == "PT":
                 self._set_window(25000, 12500)  # PET default
             
             # Cập nhật hiển thị
@@ -418,7 +418,7 @@ class ImageViewer(QWidget):
         Args:
             value: Chỉ số lát cắt mới
         """
-        if not self.primary_image or self.primary_image.data is None:
+        if self.primary_image is None or not hasattr(self.primary_image, 'data') or self.primary_image.data is None or self.primary_image.data.size == 0:
             return
             
         # Cập nhật vị trí hiện tại
@@ -432,50 +432,71 @@ class ImageViewer(QWidget):
     
     def _update_displays(self):
         """Cập nhật tất cả các màn hình hiển thị."""
-        if not self.primary_image or self.primary_image.data is None:
+        if self.primary_image is None or not hasattr(self.primary_image, 'data') or self.primary_image.data is None or self.primary_image.data.size == 0:
             return
             
-        # Lấy dữ liệu hình ảnh và vị trí hiện tại
-        image_data = self.primary_image.data
-        x, y, z = self.current_position
-        
-        # Giới hạn vị trí trong phạm vi hình ảnh
-        z = min(max(0, z), image_data.shape[0] - 1)
-        x = min(max(0, x), image_data.shape[1] - 1)
-        y = min(max(0, y), image_data.shape[2] - 1)
-        
-        # Cập nhật vị trí hiện tại
-        self.current_position = [x, y, z]
-        
-        # Hiển thị lát cắt Axial (z)
-        axial_slice = image_data[z, :, :]
-        self.axial_view.set_image(axial_slice)
-        self.axial_view.set_crosshair(x, y)
-        
-        # Hiển thị lát cắt Sagittal (x)
-        if x < image_data.shape[1]:
-            sagittal_slice = image_data[:, x, :]
-            self.sagittal_view.set_image(np.flipud(sagittal_slice.T))
-            self.sagittal_view.set_crosshair(z, image_data.shape[2] - y - 1)
-        
-        # Hiển thị lát cắt Coronal (y)
-        if y < image_data.shape[2]:
-            coronal_slice = image_data[:, :, y]
-            self.coronal_view.set_image(np.flipud(coronal_slice.T))
-            self.coronal_view.set_crosshair(z, image_data.shape[1] - x - 1)
-        
-        # Hiển thị cấu trúc nếu có
-        if self.structure_set is not None:
-            # TODO: Hiển thị contour trên các lát cắt
-            pass
-        
-        # Hiển thị liều nếu có
-        if self.dose_grid is not None:
-            # TODO: Hiển thị phân bố liều
-            pass
-        
-        # Cập nhật cửa sổ
-        self._update_window_level()
+        try:
+            # Lấy dữ liệu hình ảnh và vị trí hiện tại
+            image_data = self.primary_image.data
+            x, y, z = self.current_position
+            
+            # Giới hạn vị trí trong phạm vi hình ảnh
+            if len(image_data.shape) >= 3:
+                z = min(max(0, z), image_data.shape[0] - 1)
+                if len(image_data.shape) > 1:
+                    y = min(max(0, y), image_data.shape[1] - 1)
+                    if len(image_data.shape) > 2:
+                        x = min(max(0, x), image_data.shape[2] - 1)
+            
+            # Cập nhật vị trí hiện tại sau khi giới hạn
+            self.current_position = [x, y, z]
+            
+            # Cập nhật giá trị của thanh trượt lát cắt
+            if self.slice_slider.value() != z:
+                self.slice_slider.blockSignals(True)
+                self.slice_slider.setValue(z)
+                self.slice_slider.blockSignals(False)
+                
+            # Lấy lát cắt hình ảnh
+            try:
+                if image_data.ndim >= 3:
+                    axial_slice = image_data[z, :, :] if z < image_data.shape[0] else None
+                    if image_data.shape[1] > 0 and image_data.shape[2] > 0:
+                        sagittal_slice = image_data[:, :, x] if x < image_data.shape[2] else None
+                        coronal_slice = image_data[:, y, :] if y < image_data.shape[1] else None
+                    else:
+                        sagittal_slice = None
+                        coronal_slice = None
+                elif image_data.ndim == 2:
+                    axial_slice = image_data
+                    sagittal_slice = None
+                    coronal_slice = None
+                else:
+                    axial_slice = None
+                    sagittal_slice = None
+                    coronal_slice = None
+            except IndexError:
+                logger.error(f"Lỗi chỉ số khi lấy lát cắt: z={z}, y={y}, x={x}, shape={image_data.shape}")
+                axial_slice = None
+                sagittal_slice = None
+                coronal_slice = None
+                
+            # Cập nhật hiển thị
+            if axial_slice is not None:
+                self.axial_view.set_image(axial_slice, plane="axial")
+            if sagittal_slice is not None:
+                self.sagittal_view.set_image(sagittal_slice, plane="sagittal")
+            if coronal_slice is not None:
+                self.coronal_view.set_image(coronal_slice, plane="coronal")
+                
+            # Cập nhật thông tin vị trí
+            value = image_data[z, y, x] if all(i < s for i, s in zip([z, y, x], image_data.shape)) else 0
+            self._update_position_info(x, y, value)
+                
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật hiển thị: {str(e)}")
+            import traceback
+            logger.debug(traceback.format_exc())
     
     def _update_position_info(self, x: int, y: int, value: float):
         """
@@ -491,7 +512,7 @@ class ImageViewer(QWidget):
     
     def _update_info_label(self):
         """Cập nhật nhãn thông tin với vị trí hiện tại."""
-        if not self.primary_image or self.primary_image.data is None:
+        if self.primary_image is None or not hasattr(self.primary_image, 'data') or self.primary_image.data is None:
             return
             
         x, y, z = self.current_position
@@ -519,7 +540,7 @@ class ImageViewer(QWidget):
         Returns:
             bool: True nếu sự kiện đã được xử lý, False nếu không
         """
-        if event.type() == QEvent.Wheel and self.primary_image and self.primary_image.data is not None:
+        if event.type() == QEvent.Wheel and self.primary_image is not None and hasattr(self.primary_image, 'data') and self.primary_image.data is not None:
             delta = event.angleDelta().y()
             step = 1 if delta < 0 else -1  # Đảo ngược hướng để phù hợp với thói quen cuộn
             

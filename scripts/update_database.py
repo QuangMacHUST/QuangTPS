@@ -2,165 +2,203 @@
 # -*- coding: utf-8 -*-
 
 """
-Update database script for QuangTPS.
-
-This script updates the database schema to handle changes in the application.
-It fixes issues like missing columns or table structure changes.
+Script to update the database schema for QuangTPS.
+This script ensures that the database has the necessary structure for
+the current version of the application.
 """
 
 import os
 import sys
-import logging
 import sqlite3
-import json
+import logging
+import argparse
+from datetime import datetime
 from pathlib import Path
 
-# Add parent directory to path to import quangtps modules
-script_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(script_dir)
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+# Add parent directory to path to allow imports
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
-from quangtps.core.logging import setup_logger
 from quangtps.database.db_connector import DBConnector
+from quangtps.core.config import Config
+from quangtps.core.logging import setup_logger, get_logger
 
-# Import setup function
-sys.path.append(script_dir)
-from setup_environment import create_directories
+def setup_logging():
+    """Set up logging configuration."""
+    setup_logger(level='INFO')
+    return get_logger(__name__)
 
-# Set up logger
-setup_logger()
-logger = logging.getLogger(__name__)
-
-def get_data_dir():
-    """Get the data directory"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(script_dir)
-    return os.path.join(root_dir, "data")
-
-def update_database_schema():
-    """Update the database schema to match the current application version."""
-    # Make sure environment is set up
-    print("Setting up environment...")
-    # Tạo thư mục
-    create_directories()
+def update_database_structure(logger):
+    """Update database schema to latest version."""
+    logger.info("Updating database structure...")
+    db = DBConnector.get_instance()
+    conn = db.connection()
     
-    # Get data directory where database is stored
-    data_dir = get_data_dir()
-    db_path = os.path.join(data_dir, 'database', 'quangtps.db')
-    print(f"Checking database at: {db_path}")
-    
-    if not os.path.exists(db_path):
-        logger.error(f"Database file not found at {db_path}")
-        print(f"Database file not found at {db_path}")
-        return False
-    
-    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        # Check if birth_date column exists
         cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(patients)")
+        columns = [column[1] for column in cursor.fetchall()]
         
-        # Check if patients table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='patients'")
-        if not cursor.fetchone():
-            logger.error("Patients table does not exist")
-            print("Patients table does not exist")
-            return False
+        # Add birth_date column if it doesn't exist
+        if 'birth_date' not in columns:
+            logger.info("Adding 'birth_date' column to patients table...")
+            cursor.execute("ALTER TABLE patients ADD COLUMN birth_date TEXT")
+            
+            # Update existing records to copy data from dob to birth_date
+            if 'dob' in columns:
+                logger.info("Copying data from 'dob' to 'birth_date'...")
+                cursor.execute("UPDATE patients SET birth_date = dob WHERE dob IS NOT NULL")
         
-        # Get current columns in patients table
-        cursor.execute(f"PRAGMA table_info(patients)")
-        columns = [col[1] for col in cursor.fetchall()]
-        print(f"Current table columns: {', '.join(columns)}")
-        
-        # Add missing columns with appropriate defaults
-        updates_performed = False
-        
-        # Check for metadata column
-        if 'metadata' not in columns:
-            logger.info("Adding metadata column to patients table")
-            cursor.execute("ALTER TABLE patients ADD COLUMN metadata TEXT DEFAULT '{}'")
-            updates_performed = True
-        
-        # Fix date of birth column
-        if 'birth_date' in columns and 'dob' not in columns:
-            logger.info("Renaming birth_date column to dob")
-            # SQLite doesn't directly support column rename, so we need to use a workaround
-            # Create temporary table
-            cursor.execute("CREATE TABLE patients_temp AS SELECT * FROM patients")
-            
-            # Drop old table
-            cursor.execute("DROP TABLE patients")
-            
-            # Create new table with correct schema
-            cursor.execute("""
-                CREATE TABLE patients (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    dob TEXT,
-                    gender TEXT,
-                    address TEXT,
-                    phone TEXT,
-                    email TEXT,
-                    diagnosis TEXT,
-                    notes TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    metadata TEXT DEFAULT '{}'
-                )
-            """)
-            
-            # Get columns from temp table
-            cursor.execute("PRAGMA table_info(patients_temp)")
-            temp_columns = [col[1] for col in cursor.fetchall()]
-            
-            # Map birth_date to dob if it exists
-            column_mapping = {col: col for col in temp_columns}
-            if 'birth_date' in temp_columns:
-                column_mapping['birth_date'] = 'dob'
-            
-            # Build column list for INSERT statement
-            source_cols = ', '.join(temp_columns)
-            target_cols = ', '.join([column_mapping[col] for col in temp_columns])
-            
-            # Copy data from temp table to new table
-            cursor.execute(f"INSERT INTO patients ({target_cols}) SELECT {source_cols} FROM patients_temp")
-            
-            # Drop temp table
-            cursor.execute("DROP TABLE patients_temp")
-            updates_performed = True
-        
-        # Create dob column if neither birth_date nor dob exists
-        if 'dob' not in columns and 'birth_date' not in columns:
-            logger.info("Adding dob column to patients table")
+        # Add dob column if it doesn't exist
+        if 'dob' not in columns:
+            logger.info("Adding 'dob' column to patients table...")
             cursor.execute("ALTER TABLE patients ADD COLUMN dob TEXT")
-            updates_performed = True
+            
+            # Update existing records to copy data from birth_date to dob
+            if 'birth_date' in columns:
+                logger.info("Copying data from 'birth_date' to 'dob'...")
+                cursor.execute("UPDATE patients SET dob = birth_date WHERE birth_date IS NOT NULL")
         
         # Commit changes
         conn.commit()
+        logger.info("Database structure successfully updated.")
         
-        if updates_performed:
-            logger.info("Database schema updated successfully")
-            print("Database schema updated successfully")
-        else:
-            logger.info("No database schema updates needed")
-            print("No database schema updates needed")
+        # Create update entry
+        update_note = {
+            "version": "1.0.1",
+            "timestamp": datetime.now().isoformat(),
+            "description": "Updated database to support both 'birth_date' and 'dob' fields for patient dates"
+        }
         
-        return True
-    
+        # Check if updates table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='database_updates'")
+        if not cursor.fetchone():
+            logger.info("Creating database_updates table...")
+            cursor.execute("""
+                CREATE TABLE database_updates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    version TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    description TEXT,
+                    applied BOOLEAN DEFAULT 1
+                )
+            """)
+        
+        # Add update record
+        cursor.execute(
+            "INSERT INTO database_updates (version, timestamp, description) VALUES (?, ?, ?)",
+            (update_note["version"], update_note["timestamp"], update_note["description"])
+        )
+        conn.commit()
+        
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error: {e}")
+        conn.rollback()
+        return False
     except Exception as e:
-        logger.error(f"Error updating database schema: {str(e)}", exc_info=True)
-        print(f"Error updating database schema: {str(e)}")
-        if conn:
-            conn.rollback()
+        logger.error(f"Error updating database: {e}", exc_info=True)
+        conn.rollback()
         return False
     
-    finally:
-        if conn:
-            conn.close()
+    return True
+
+def verify_database_updates(logger):
+    """Verify that database updates were applied correctly."""
+    logger.info("Verifying database updates...")
+    db = DBConnector.get_instance()
+    conn = db.connection()
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Verify both columns exist
+        cursor.execute("PRAGMA table_info(patients)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'birth_date' in columns and 'dob' in columns:
+            logger.info("Verification successful: both 'birth_date' and 'dob' columns exist.")
+            return True
+        else:
+            missing = []
+            if 'birth_date' not in columns:
+                missing.append('birth_date')
+            if 'dob' not in columns:
+                missing.append('dob')
+            logger.error(f"Verification failed: missing columns {', '.join(missing)}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error verifying database: {e}", exc_info=True)
+        return False
+
+def backup_database(logger, db_path):
+    """Create a backup of the database before making changes."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = f"{db_path}.backup_{timestamp}"
+    
+    try:
+        logger.info(f"Creating database backup: {backup_file}")
+        # Copy database file
+        with open(db_path, 'rb') as src, open(backup_file, 'wb') as dst:
+            dst.write(src.read())
+        logger.info("Backup created successfully.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create backup: {e}", exc_info=True)
+        return False
+
+def main():
+    """Main function to run the database update script."""
+    parser = argparse.ArgumentParser(description='Update QuangTPS database schema.')
+    parser.add_argument('--verify-only', action='store_true', help='Only verify the database schema without making changes')
+    parser.add_argument('--skip-backup', action='store_true', help='Skip database backup')
+    args = parser.parse_args()
+    
+    # Setup logging
+    logger = setup_logging()
+    logger.info("Starting database update process...")
+    
+    # Get database path
+    config = Config.get_instance()
+    db_dir = os.path.join(config.data_dir, 'database')
+    db_path = os.path.join(db_dir, 'quangtps.db')
+    
+    # Check if database exists
+    if not os.path.exists(db_path):
+        logger.error(f"Database file not found: {db_path}")
+        return 1
+    
+    # Verify only mode
+    if args.verify_only:
+        if verify_database_updates(logger):
+            logger.info("Database schema verification: PASSED")
+            return 0
+        else:
+            logger.error("Database schema verification: FAILED")
+            return 1
+    
+    # Create backup unless skipped
+    if not args.skip_backup:
+        if not backup_database(logger, db_path):
+            logger.error("Database backup failed, aborting update.")
+            return 1
+    
+    # Update database
+    if update_database_structure(logger):
+        logger.info("Database update completed successfully.")
+        
+        # Verify after update
+        if verify_database_updates(logger):
+            logger.info("Database verification after update: PASSED")
+            return 0
+        else:
+            logger.error("Database verification after update: FAILED")
+            return 1
+    else:
+        logger.error("Database update failed.")
+        return 1
 
 if __name__ == "__main__":
-    print("QuangTPS Database Update Tool")
-    print("----------------------------")
-    update_database_schema()
-    print("Database update completed.") 
+    sys.exit(main()) 

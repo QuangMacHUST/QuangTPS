@@ -274,23 +274,51 @@ class DoseDisplayWidget(QWidget):
     
     def set_slice_data(self, slice_index):
         """
-        Cập nhật dữ liệu lát cắt để hiển thị.
+        Thiết lập dữ liệu lát cắt cho hiển thị.
         
-        Args:
-            slice_index: Chỉ số lát cắt
+        Parameters
+        ----------
+        slice_index : int
+            Chỉ số lát cắt
         """
         if self.dose_data is None or self.anatomy_data is None:
             return
         
-        if slice_index >= 0 and slice_index < self.dose_data.shape[2]:
+        try:
+            # Kiểm tra độ hợp lệ của dữ liệu
+            if not isinstance(self.dose_data, np.ndarray) or self.dose_data.size == 0 or len(self.dose_data.shape) < 3:
+                logger.warning("Dữ liệu liều không hợp lệ")
+                return
+                
+            if not isinstance(self.anatomy_data, np.ndarray) or self.anatomy_data.size == 0 or len(self.anatomy_data.shape) < 3:
+                logger.warning("Dữ liệu giải phẫu không hợp lệ")
+                return
+            
+            # Kiểm tra slice_index có trong phạm vi hợp lệ hay không
+            if slice_index < 0 or slice_index >= self.dose_data.shape[2]:
+                logger.warning(f"Chỉ số lát cắt không hợp lệ: {slice_index}, phạm vi [0, {self.dose_data.shape[2]-1}]")
+                return
+                
+            # Kiểm tra xem chỉ số có vượt quá kích thước của dữ liệu giải phẫu không
+            if slice_index >= self.anatomy_data.shape[2]:
+                logger.warning(f"Chỉ số lát cắt vượt quá kích thước dữ liệu giải phẫu: {slice_index} >= {self.anatomy_data.shape[2]}")
+                return
+            
             # Lấy dữ liệu lát cắt
             dose_slice = self.dose_data[:, :, slice_index]
             anatomy_slice = self.anatomy_data[:, :, slice_index]
             
-            # Hiển thị dữ liệu
-            self.image_widget.set_background_data(anatomy_slice)
-            self.image_widget.set_dose_data(dose_slice)
-            self.image_widget.update_display()
+            # Kiểm tra kích thước lát cắt liều
+            if dose_slice.size > 0 and anatomy_slice.size > 0:
+                # Hiển thị dữ liệu
+                self.image_widget.set_background_data(anatomy_slice)
+                self.image_widget.set_dose_data(dose_slice)
+                self.image_widget.update_display()
+                
+        except Exception as e:
+            logger.error(f"Lỗi khi thiết lập dữ liệu lát cắt: {str(e)}")
+            import traceback
+            logger.debug(traceback.format_exc())
 
 
 class BiologicalModelWidget(QWidget):

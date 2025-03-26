@@ -1,3 +1,51 @@
+2025-04-17
+=========
+
+Sửa lỗi:
+- Sửa lỗi "The truth value of an array with more than one element is ambiguous" khi nhập và hiển thị ảnh DICOM/MRI
+- Cải thiện cách xử lý mảng NumPy trong quangtps/ui/image_viewer.py để tránh các lỗi boolean
+- Thêm kiểm tra hasattr() trong các phương thức xử lý hình ảnh để tránh lỗi AttributeError
+- Cải thiện kiểm tra ràng buộc khi truy cập vào thuộc tính của đối tượng hình ảnh
+- Tăng cường độ tin cậy của phương thức _load_with_pydicom và _load_with_sitk trong DicomLoader
+- Cải thiện phương thức get_slice để kiểm tra dữ liệu hình ảnh trước khi truy cập chỉ mục
+- Sửa lỗi khi hiển thị slice trong các phương thức _plane_changed và _slice_changed
+- Khắc phục sự cố "Unhandled Python exception" khi tải tập dữ liệu CT của bệnh nhân
+- Cải thiện phương thức _update_displays để xử lý đúng các trường hợp dữ liệu hình ảnh không đủ chiều
+- Sửa lỗi trong _display_current_series khi kiểm tra tính hợp lệ của dữ liệu hình ảnh
+- Nâng cao độ ổn định khi xử lý ảnh CT có lát cắt không đồng đều (non-uniform slices)
+
+Cải tiến:
+- Tăng cường độ ổn định của hệ thống khi xử lý dữ liệu hình ảnh đa dạng
+- Cải thiện cách kiểm tra null/None cho cả đối tượng và thuộc tính của chúng
+- Nâng cao khả năng phục hồi của ứng dụng khi gặp dữ liệu không hợp lệ
+- Tối ưu hóa quy trình nhập DICOM và hiển thị hình ảnh
+- Thêm thông báo lỗi chi tiết hơn với logging trong quá trình nhập DICOM
+- Cải thiện khả năng xử lý các tập dữ liệu DICOM không hoàn chỉnh hoặc bị lỗi
+- Thêm phần xử lý trung gian để loại bỏ các tệp DICOM không hợp lệ
+- Bổ sung các kiểm tra phạm vi chỉ số khi hiển thị slice trong các màn hình MPR
+- Tối ưu hóa _import_selected_series để kiểm tra đủ điều kiện trước khi lưu hình ảnh
+- Thêm truy vết lỗi chi tiết (traceback) khi xảy ra ngoại lệ trong các phương thức quan trọng
+- Cải thiện cấu trúc và tính rõ ràng của code trong các phương thức xử lý hình ảnh
+- Tăng độ chính xác của các thông báo lỗi với chi tiết cụ thể về nguyên nhân
+
+2025-04-16
+=========
+
+Sửa lỗi:
+- Cải thiện khả năng tương thích giữa các trường 'birth_date' và 'dob' trong cơ sở dữ liệu bệnh nhân
+- Sửa lỗi khi tìm kiếm bệnh nhân không tồn tại
+- Thêm chức năng tự động tạo bệnh nhân mới từ tìm kiếm khi ID không tồn tại
+
+Cải tiến:
+- Tạo script update_database.py để tự động cập nhật schema cơ sở dữ liệu
+- Thêm khả năng tạo bệnh nhân mới trong quá trình tìm kiếm
+- Nâng cao tính nhất quán dữ liệu bằng cách đồng bộ hóa các trường 'birth_date' và 'dob'
+- Lưu trữ bản sao lưu cơ sở dữ liệu tự động trước khi cập nhật schema
+
+Tính năng:
+- Thêm chức năng kiểm tra schema cơ sở dữ liệu với tùy chọn --verify-only trong update_database.py
+- Thêm hộp thoại xác nhận tạo bệnh nhân mới khi tìm kiếm không tìm thấy ID
+
 2025-04-15
 =========
 

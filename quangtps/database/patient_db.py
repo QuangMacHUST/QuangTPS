@@ -258,176 +258,187 @@ class PatientDatabase:
         
         conn.commit()
 
-    def create_patient(self, name, birth_date=None, gender=None, metadata=None):
+    def create_patient(self, patient_id=None, name=None, birth_date=None, gender=None, metadata=None):
         """
-        Tạo một bệnh nhân mới trong cơ sở dữ liệu.
+        Tạo bệnh nhân mới.
         
         Args:
-            name (str): Tên của bệnh nhân
-            birth_date (str or datetime, optional): Ngày sinh của bệnh nhân
-            gender (str, optional): Giới tính của bệnh nhân
-            metadata (dict, optional): Siêu dữ liệu bổ sung
+            patient_id (str, optional): ID bệnh nhân, tạo UUID mới nếu không cung cấp
+            name (str, optional): Tên bệnh nhân
+            birth_date (str, optional): Ngày sinh
+            gender (str, optional): Giới tính
+            metadata (dict, optional): Metadata bệnh nhân
             
         Returns:
-            str: ID của bệnh nhân mới tạo
-            
-        Raises:
-            DatabaseError: Nếu có lỗi xảy ra khi tạo bệnh nhân
+            str: ID của bệnh nhân mới tạo, hoặc None nếu có lỗi
         """
         try:
-            patient_id = str(uuid.uuid4())
-            created_at = datetime.now().isoformat()
+            # Tạo ID mới nếu chưa có
+            if not patient_id:
+                patient_id = str(uuid.uuid4())
             
-            # Xử lý ngày sinh nếu là đối tượng datetime
-            if birth_date and isinstance(birth_date, datetime):
-                birth_date = birth_date.strftime('%Y-%m-%d')
-                
+            # Kiểm tra xem bệnh nhân đã tồn tại chưa
+            if self.patient_exists(patient_id):
+                logger.warning(f"Không thể tạo: Bệnh nhân đã tồn tại với ID: {patient_id}")
+                return None
+            
+            # Chuẩn bị dữ liệu
+            name = name or "Chưa đặt tên"
+            current_time = datetime.now().isoformat()
+            
             # Chuyển đổi metadata thành JSON
             metadata_json = json.dumps(metadata) if metadata else "{}"
             
-            # Thực hiện chèn với cột dob
-            try:
-                query = '''
-                    INSERT INTO patients (id, name, dob, gender, created_at, updated_at, metadata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                '''
-                
-                self.db.execute_query(
-                    query, 
-                    (patient_id, name, birth_date, gender, created_at, created_at, metadata_json)
-                )
-            except Exception as insert_error:
-                # Nếu gặp lỗi, ghi log và raise lỗi
-                logger.error("Lỗi khi chèn bệnh nhân: %s", str(insert_error), exc_info=True)
-                raise
+            # Thêm bệnh nhân mới vào cơ sở dữ liệu
+            # Lưu birth_date vào cả hai trường dob và birth_date
+            query = """
+                INSERT INTO patients (id, name, dob, birth_date, gender, created_at, updated_at, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
             
-            logger.info("Đã tạo bệnh nhân mới với ID: %s", patient_id)
+            self.db.execute_query(
+                query, 
+                (patient_id, name, birth_date, birth_date, gender, current_time, current_time, metadata_json)
+            )
+            
+            logger.info(f"Đã tạo bệnh nhân mới: {patient_id}")
             return patient_id
             
         except Exception as e:
-            logger.error("Lỗi khi tạo bệnh nhân: %s", str(e), exc_info=True)
-            raise DatabaseError("Lỗi khi tạo bệnh nhân: %s" % str(e)) from e
-            
+            logger.error(f"Lỗi khi tạo bệnh nhân mới: {str(e)}", exc_info=True)
+            return None
+
     def get_patient(self, patient_id):
         """
-        Lấy thông tin của một bệnh nhân theo ID.
+        Lấy thông tin bệnh nhân theo ID.
         
         Args:
             patient_id (str): ID của bệnh nhân
             
         Returns:
-            dict: Thông tin của bệnh nhân hoặc None nếu không tìm thấy
-            
-        Raises:
-            DatabaseError: Nếu có lỗi xảy ra khi truy vấn
+            dict: Thông tin bệnh nhân hoặc None nếu không tìm thấy
         """
         try:
-            # Thực hiện truy vấn
-            query = "SELECT * FROM patients WHERE id = ?"
-            patient_data = self.db.execute_query(query, (patient_id,), fetchall=False)
+            query = """
+                SELECT id, name, dob, birth_date, gender, created_at, updated_at, metadata
+                FROM patients
+                WHERE id = ?
+            """
+            result = self.db.execute_query(query, (patient_id,), fetchall=False)
             
-            if not patient_data:
-                logger.warning("Không tìm thấy bệnh nhân với ID: %s", patient_id)
+            if not result:
+                logger.warning(f"Không tìm thấy bệnh nhân với ID: {patient_id}")
                 return None
             
-            # Chuyển đổi dữ liệu về dict
-            patient_dict = dict(patient_data)
+            # Chuyển đổi kết quả thành dict
+            patient = dict(result)
             
-            # Giải mã metadata từ JSON
-            if 'metadata' in patient_dict and patient_dict['metadata']:
+            # Xử lý trường hợp có cả birth_date và dob, ưu tiên dob
+            if 'dob' in patient and patient['dob']:
+                patient['birth_date'] = patient['dob']
+            elif 'birth_date' in patient and patient['birth_date']:
+                patient['dob'] = patient['birth_date']
+            
+            # Chuyển đổi metadata từ JSON nếu có
+            if 'metadata' in patient and patient['metadata']:
                 try:
-                    patient_dict['metadata'] = json.loads(patient_dict['metadata'])
-                except json.JSONDecodeError:
-                    patient_dict['metadata'] = {}
+                    patient['metadata'] = json.loads(patient['metadata'])
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.warning(f"Lỗi khi phân tích metadata của bệnh nhân {patient_id}: {str(e)}")
+                    patient['metadata'] = {}
             else:
-                patient_dict['metadata'] = {}
+                patient['metadata'] = {}
             
-            logger.info("Đã lấy thông tin bệnh nhân: %s", patient_id)
-            return patient_dict
+            return patient
             
         except Exception as e:
-            logger.error("Lỗi khi lấy thông tin bệnh nhân: %s", str(e), exc_info=True)
-            raise DatabaseError("Lỗi khi lấy thông tin bệnh nhân: %s" % str(e)) from e
+            logger.error(f"Lỗi khi lấy thông tin bệnh nhân: {str(e)}", exc_info=True)
+            raise DatabaseError(f"Lỗi khi lấy thông tin bệnh nhân: {str(e)}")
             
     def update_patient(self, patient_id, name=None, birth_date=None, gender=None, metadata=None):
         """
-        Cập nhật thông tin của một bệnh nhân.
+        Cập nhật thông tin bệnh nhân.
         
         Args:
             patient_id (str): ID của bệnh nhân
-            name (str, optional): Tên mới của bệnh nhân
-            birth_date (str, optional): Ngày sinh mới
-            gender (str, optional): Giới tính mới
-            metadata (dict, optional): Siêu dữ liệu mới
+            name (str, optional): Tên bệnh nhân
+            birth_date (str, optional): Ngày sinh
+            gender (str, optional): Giới tính
+            metadata (dict, optional): Metadata bệnh nhân
             
         Returns:
-            bool: True nếu cập nhật thành công, False nếu không tìm thấy bệnh nhân
-            
-        Raises:
-            DatabaseError: Nếu có lỗi xảy ra khi cập nhật
+            bool: True nếu cập nhật thành công, False nếu không
         """
         try:
-            # Lấy thông tin hiện tại của bệnh nhân
-            current_patient = self.get_patient(patient_id)
-            if not current_patient:
-                logger.warning("Không thể cập nhật: Bệnh nhân không tồn tại với ID: %s", patient_id)
+            # Kiểm tra xem bệnh nhân có tồn tại không
+            if not self.patient_exists(patient_id):
+                logger.warning(f"Không thể cập nhật: Bệnh nhân không tồn tại với ID: {patient_id}")
                 return False
             
-            # Chuẩn bị dữ liệu cập nhật
-            updated_at = datetime.now().isoformat()
+            # Đọc thông tin hiện tại để giữ lại các trường không cập nhật
+            current_patient = self.get_patient(patient_id)
+            if not current_patient:
+                return False
             
-            # Chuẩn bị metadata
-            if metadata is None:
-                # Sử dụng metadata hiện có
-                metadata_json = current_patient.get('metadata', {})
-                if isinstance(metadata_json, dict):
-                    metadata_json = json.dumps(metadata_json)
-            else:
-                # Sử dụng metadata mới
-                metadata_json = json.dumps(metadata)
-            
-            # Chuẩn bị các giá trị cập nhật
-            set_clauses = []
+            # Chuẩn bị các tham số cập nhật
+            update_fields = []
             params = []
             
             if name is not None:
-                set_clauses.append("name = ?")
+                update_fields.append("name = ?")
                 params.append(name)
             
             if birth_date is not None:
-                set_clauses.append("dob = ?")
+                # Cập nhật cả hai trường dob và birth_date
+                update_fields.append("dob = ?")
+                update_fields.append("birth_date = ?")
+                params.append(birth_date)
                 params.append(birth_date)
             
             if gender is not None:
-                set_clauses.append("gender = ?")
+                update_fields.append("gender = ?")
                 params.append(gender)
             
             if metadata is not None:
-                set_clauses.append("metadata = ?")
+                # Merge metadata hiện tại với metadata mới
+                current_metadata = current_patient.get('metadata', {}) or {}
+                
+                # Nếu metadata là dict, merge với current_metadata
+                if isinstance(metadata, dict):
+                    merged_metadata = {**current_metadata, **metadata}
+                else:
+                    # Nếu không phải dict, sử dụng trực tiếp
+                    merged_metadata = metadata
+                
+                # Chuyển đổi metadata thành JSON
+                metadata_json = json.dumps(merged_metadata)
+                update_fields.append("metadata = ?")
                 params.append(metadata_json)
             
-            # Thêm ngày cập nhật mới nhất
-            set_clauses.append("updated_at = ?")
-            params.append(updated_at)
+            # Cập nhật thời gian
+            update_fields.append("updated_at = ?")
+            params.append(datetime.now().isoformat())
             
-            # Nếu không có gì cần cập nhật, trả về True (coi như đã cập nhật)
-            if not set_clauses:
-                logger.info("Không có thông tin nào cần cập nhật cho bệnh nhân %s", patient_id)
+            # Nếu không có trường nào cần cập nhật, trả về True
+            if not update_fields:
                 return True
             
-            # Tạo câu truy vấn UPDATE
-            query = f"UPDATE patients SET {', '.join(set_clauses)} WHERE id = ?"
+            # Tạo và thực thi truy vấn cập nhật
+            update_query = f"UPDATE patients SET {', '.join(update_fields)} WHERE id = ?"
             params.append(patient_id)
             
-            # Thực hiện câu truy vấn
-            self.db.execute_query(query, tuple(params))
+            rows_affected = self.db.execute_update(update_query, tuple(params))
             
-            logger.info("Đã cập nhật thông tin bệnh nhân %s", patient_id)
-            return True
-            
+            if rows_affected > 0:
+                logger.info(f"Đã cập nhật bệnh nhân: {patient_id}")
+                return True
+            else:
+                logger.warning(f"Không thể cập nhật bệnh nhân: {patient_id}")
+                return False
+                
         except Exception as e:
-            logger.error("Lỗi khi cập nhật bệnh nhân: %s", str(e), exc_info=True)
-            raise DatabaseError("Lỗi khi cập nhật bệnh nhân: %s" % str(e)) from e
+            logger.error(f"Lỗi khi cập nhật bệnh nhân: {str(e)}", exc_info=True)
+            return False
             
     def delete_patient(self, patient_id):
         """

@@ -565,11 +565,18 @@ class ImagingTab(QWidget):
         # Đảm bảo rằng dữ liệu hình ảnh đã được tải
         if not hasattr(self.current_series, 'image') or self.current_series.image is None:
             # Nếu image không có sẵn, thử tải dữ liệu hình ảnh
-            if hasattr(self.current_series, 'image_data') and self.current_series.image_data is not None:
-                self.current_series.image = self.current_series.image_data
+            if hasattr(self.current_series, 'image_data') and self.current_series.image_data is not None and self.current_series.image_data.size > 0:
+                from quangtps.imaging.image import Image
+                self.current_series.image = Image()
+                self.current_series.image.data = self.current_series.image_data
+                self.current_series.image.modality = self.current_series.modality if hasattr(self.current_series, 'modality') and self.current_series.modality else "OT"
             else:
                 # Thử tải dữ liệu hình ảnh
-                self.current_series.load_image_data()
+                success = self.current_series.load_image_data()
+                if not success:
+                    logger.error("Không thể tải dữ liệu hình ảnh DICOM")
+                    QMessageBox.warning(self, "Lỗi tải", "Không thể tải dữ liệu hình ảnh DICOM")
+                    return
                 
             # Kiểm tra lại sau khi tải
             if not hasattr(self.current_series, 'image') or self.current_series.image is None:
@@ -577,11 +584,22 @@ class ImagingTab(QWidget):
                 QMessageBox.warning(self, "Lỗi hiển thị", "Không thể hiển thị series: không có dữ liệu hình ảnh")
                 return
         
-        # Thiết lập dữ liệu hình ảnh cho ImageViewer
-        self.image_viewer.load_image(self.current_series.image)
-        
-        # Cập nhật thông tin series
-        self._update_series_info()
+        try:
+            # Kiểm tra xem đối tượng hình ảnh có dữ liệu hợp lệ không
+            if not hasattr(self.current_series.image, 'data') or self.current_series.image.data is None or self.current_series.image.data.size == 0:
+                logger.error("Đối tượng hình ảnh không có dữ liệu hợp lệ")
+                QMessageBox.warning(self, "Lỗi hiển thị", "Đối tượng hình ảnh không có dữ liệu hợp lệ")
+                return
+            
+            # Thiết lập dữ liệu hình ảnh cho ImageViewer
+            self.image_viewer.load_image(self.current_series.image)
+            
+            # Cập nhật thông tin series
+            self._update_series_info()
+        except Exception as e:
+            logger.exception(f"Lỗi khi hiển thị series DICOM: {str(e)}")
+            QMessageBox.critical(self, "Lỗi hiển thị", f"Lỗi khi hiển thị series DICOM: {str(e)}")
+            return
     
     def _update_series_info(self):
         """Cập nhật thông tin series DICOM."""

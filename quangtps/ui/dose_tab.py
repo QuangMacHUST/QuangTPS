@@ -741,28 +741,126 @@ class DoseTab(QWidget):
     
     def _slice_changed(self, value):
         """
-        Xử lý sự kiện khi lát cắt thay đổi.
+        Xử lý khi người dùng thay đổi lát cắt hiển thị.
         
         Parameters
         ----------
         value : int
-            Giá trị lát cắt mới
+            Chỉ số lát cắt mới
         """
-        logger.debug(f"Lát cắt thay đổi: {value}")
-        # Cập nhật hiển thị dựa trên lát cắt mới - sẽ được triển khai khi có dữ liệu
+        if not self.current_dose or not hasattr(self.current_dose, 'data') or self.current_dose.data is None or self.current_dose.data.size == 0:
+            return
+            
+        try:
+            # Lấy dữ liệu mặt phẳng hiện tại
+            if self.current_plane == "Axial":
+                if value < 0 or value >= self.current_dose.data.shape[0]:
+                    logger.warning(f"Chỉ số lát cắt axial không hợp lệ: {value}")
+                    return
+                dose_slice = self.current_dose.data[value, :, :]
+                if self.current_image and hasattr(self.current_image, 'data') and self.current_image.data is not None:
+                    if value < self.current_image.data.shape[0]:
+                        image_slice = self.current_image.data[value, :, :]
+                    else:
+                        image_slice = None
+                else:
+                    image_slice = None
+                    
+            elif self.current_plane == "Coronal":
+                if self.current_dose.data.shape[1] <= 0:
+                    logger.warning("Không có dữ liệu cho mặt phẳng coronal")
+                    return
+                if value < 0 or value >= self.current_dose.data.shape[1]:
+                    logger.warning(f"Chỉ số lát cắt coronal không hợp lệ: {value}")
+                    return
+                dose_slice = self.current_dose.data[:, value, :]
+                if self.current_image and hasattr(self.current_image, 'data') and self.current_image.data is not None:
+                    if value < self.current_image.data.shape[1]:
+                        image_slice = self.current_image.data[:, value, :]
+                    else:
+                        image_slice = None
+                else:
+                    image_slice = None
+                    
+            elif self.current_plane == "Sagittal":
+                if self.current_dose.data.shape[2] <= 0:
+                    logger.warning("Không có dữ liệu cho mặt phẳng sagittal")
+                    return
+                if value < 0 or value >= self.current_dose.data.shape[2]:
+                    logger.warning(f"Chỉ số lát cắt sagittal không hợp lệ: {value}")
+                    return
+                dose_slice = self.current_dose.data[:, :, value]
+                if self.current_image and hasattr(self.current_image, 'data') and self.current_image.data is not None:
+                    if value < self.current_image.data.shape[2]:
+                        image_slice = self.current_image.data[:, :, value]
+                    else:
+                        image_slice = None
+                else:
+                    image_slice = None
+            else:
+                logger.warning(f"Mặt phẳng không hợp lệ: {self.current_plane}")
+                return
+                
+            # Hiển thị dữ liệu
+            if dose_slice is not None and dose_slice.size > 0:
+                # Hiển thị lát cắt liều
+                self.dose_viz_widget.display_dose_2d(dose_slice, None, None)
+                
+                # Cập nhật thông tin liều
+                self._update_dose_info(dose_slice)
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi thay đổi lát cắt: {str(e)}")
     
     def _plane_changed(self, index):
         """
-        Xử lý sự kiện khi mặt phẳng thay đổi.
+        Xử lý khi người dùng thay đổi mặt phẳng hiển thị.
         
         Parameters
         ----------
         index : int
             Chỉ số mặt phẳng mới
         """
-        plane = self.plane_combo.currentText()
-        logger.debug(f"Mặt phẳng thay đổi: {plane}")
-        # Cập nhật hiển thị dựa trên mặt phẳng mới - sẽ được triển khai khi có dữ liệu
+        if not self.current_dose or not hasattr(self.current_dose, 'data') or self.current_dose.data is None or self.current_dose.data.size == 0:
+            return
+            
+        try:
+            # Đặt mặt phẳng hiện tại
+            self.current_plane = self.plane_combo.currentText()
+            
+            # Cập nhật phạm vi thanh trượt dựa trên mặt phẳng
+            if self.current_plane == "Axial":
+                if self.current_dose.data.shape[0] > 0:
+                    self.slice_slider.setMinimum(0)
+                    self.slice_slider.setMaximum(self.current_dose.data.shape[0] - 1)
+                    self.slice_slider.setValue(self.current_dose.data.shape[0] // 2)
+                else:
+                    logger.warning("Không có dữ liệu cho mặt phẳng axial")
+                    return
+                    
+            elif self.current_plane == "Coronal":
+                if len(self.current_dose.data.shape) > 1 and self.current_dose.data.shape[1] > 0:
+                    self.slice_slider.setMinimum(0)
+                    self.slice_slider.setMaximum(self.current_dose.data.shape[1] - 1)
+                    self.slice_slider.setValue(self.current_dose.data.shape[1] // 2)
+                else:
+                    logger.warning("Không có dữ liệu cho mặt phẳng coronal")
+                    return
+                    
+            elif self.current_plane == "Sagittal":
+                if len(self.current_dose.data.shape) > 2 and self.current_dose.data.shape[2] > 0:
+                    self.slice_slider.setMinimum(0)
+                    self.slice_slider.setMaximum(self.current_dose.data.shape[2] - 1)
+                    self.slice_slider.setValue(self.current_dose.data.shape[2] // 2)
+                else:
+                    logger.warning("Không có dữ liệu cho mặt phẳng sagittal")
+                    return
+            
+            # Hiển thị lát cắt hiện tại
+            self._slice_changed(self.slice_slider.value())
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi thay đổi mặt phẳng: {str(e)}")
     
     def _dvh_type_changed(self, index):
         """

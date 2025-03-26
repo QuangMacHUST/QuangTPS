@@ -183,32 +183,100 @@ class DicomSeries:
             True nếu tải thành công, False nếu thất bại
         """
         try:
+            # Kiểm tra danh sách tệp
+            if not self.files:
+                logger.error("Không có tệp DICOM nào để tải")
+                return False
+            
+            # Kiểm tra các tệp tồn tại
+            valid_files = []
+            for file_path in self.files:
+                if os.path.exists(file_path):
+                    valid_files.append(file_path)
+                else:
+                    logger.warning(f"Tệp không tồn tại: {file_path}")
+                
+            if not valid_files:
+                logger.error("Không có tệp DICOM hợp lệ để tải")
+                return False
+            
             # Đọc chuỗi
             reader = sitk.ImageSeriesReader()
-            reader.SetFileNames(self.files)
-            image = reader.Execute()
+            reader.SetFileNames(valid_files)
+            
+            try:
+                image = reader.Execute()
+            except RuntimeError as e:
+                logger.error(f"SimpleITK không thể đọc chuỗi DICOM: {str(e)}")
+                return False
+            
+            # Kiểm tra xem hình ảnh có tồn tại và hợp lệ không
+            if image is None or image.GetSize()[0] == 0:
+                logger.error("SimpleITK trả về hình ảnh không hợp lệ")
+                return False
             
             # Chuyển đổi sang numpy array
-            self.image_data = sitk.GetArrayFromImage(image)
+            try:
+                self.image_data = sitk.GetArrayFromImage(image)
+            except Exception as e:
+                logger.error(f"Không thể chuyển đổi hình ảnh SimpleITK sang mảng NumPy: {str(e)}")
+                return False
             
-            # Gán thuộc tính image cho hiển thị
-            self.image = self.image_data
+            # Kiểm tra dữ liệu hình ảnh
+            if self.image_data is None or self.image_data.size == 0:
+                logger.error("Dữ liệu hình ảnh trống hoặc không hợp lệ")
+                return False
+            
+            # Tạo đối tượng Image từ dữ liệu hình ảnh
+            from quangtps.imaging.image import Image
+            self.image = Image()
+            self.image.data = self.image_data
+            self.image.modality = self.modality if hasattr(self, 'modality') and self.modality else "OT"
             
             # Lưu metadata
-            self.pixel_spacing = image.GetSpacing()[:2]  # (x, y)
-            self.slice_thickness = image.GetSpacing()[2]
-            
-            # Lưu thông tin vị trí và hướng
-            self.image_position = image.GetOrigin()
-            self.image_orientation = image.GetDirection()
+            try:
+                # Lưu thông tin pixel spacing và slice thickness
+                if image.GetDimension() >= 2:
+                    self.pixel_spacing = image.GetSpacing()[:2]  # (x, y)
+                    self.image.pixel_spacing = self.pixel_spacing
+                else:
+                    self.pixel_spacing = [1.0, 1.0]  # Giá trị mặc định
+                    self.image.pixel_spacing = self.pixel_spacing
+                    
+                if image.GetDimension() >= 3:
+                    self.slice_thickness = image.GetSpacing()[2]
+                    self.image.slice_thickness = self.slice_thickness
+                else:
+                    self.slice_thickness = 1.0  # Giá trị mặc định
+                    self.image.slice_thickness = self.slice_thickness
+                    
+                # Lưu thông tin vị trí và hướng
+                self.image_position = image.GetOrigin()
+                self.image_orientation = image.GetDirection()
+                self.image.origin = self.image_position
+                self.image.direction = self.image_orientation
+                
+                # Lưu metadata
+                if hasattr(self, 'metadata'):
+                    self.image.metadata = self.metadata
+            except Exception as e:
+                logger.warning(f"Lỗi khi đọc metadata: {str(e)}")
+                # Sử dụng giá trị mặc định
+                self.pixel_spacing = [1.0, 1.0]
+                self.slice_thickness = 1.0
+                self.image.pixel_spacing = self.pixel_spacing
+                self.image.slice_thickness = self.slice_thickness
             
             # Lưu base_directory (thư mục gốc của series)
-            self.base_directory = os.path.dirname(self.files[0]) if self.files else ""
+            self.base_directory = os.path.dirname(valid_files[0]) if valid_files else ""
             
+            logger.info(f"Đã tải thành công chuỗi DICOM với SimpleITK, kích thước {self.image_data.shape}")
             return True
         
         except Exception as e:
             logger.error(f"Lỗi khi tải dữ liệu với SimpleITK: {str(e)}")
+            self.image_data = None
+            self.image = None
             return False
     
     def _load_with_pydicom(self) -> bool:
@@ -222,19 +290,33 @@ class DicomSeries:
         """
         try:
             # Đọc tất cả các file DICOM
-            slices = [pydicom.dcmread(file) for file in self.files]
+            slices = []
+            for file in self.files:
+                try:
+                    dcm = pydicom.dcmread(file)
+                    slices.append(dcm)
+                except Exception as e:
+                    logger.warning(f"Không thể đọc tệp DICOM {file}: {str(e)}")
+            
+            if not slices:
+                logger.error("Không có tệp DICOM nào được đọc thành công")
+                return False
             
             # Sắp xếp các lát cắt theo vị trí
-            if hasattr(slices[0], 'ImagePositionPatient'):
-                # Sắp xếp theo vị trí dọc theo trục z (thường là vị trí thứ 3)
-                slices = sorted(slices, key=lambda s: s.ImagePositionPatient[2])
-            elif hasattr(slices[0], 'SliceLocation'):
-                # Sắp xếp theo vị trí lát cắt
-                slices = sorted(slices, key=lambda s: s.SliceLocation)
-            else:
-                # Nếu không có thông tin vị trí, sắp xếp theo InstanceNumber
-                if hasattr(slices[0], 'InstanceNumber'):
-                    slices = sorted(slices, key=lambda s: s.InstanceNumber)
+            try:
+                if hasattr(slices[0], 'ImagePositionPatient'):
+                    # Sắp xếp theo vị trí dọc theo trục z (thường là vị trí thứ 3)
+                    slices = sorted(slices, key=lambda s: s.ImagePositionPatient[2])
+                elif hasattr(slices[0], 'SliceLocation'):
+                    # Sắp xếp theo vị trí lát cắt
+                    slices = sorted(slices, key=lambda s: s.SliceLocation)
+                else:
+                    # Nếu không có thông tin vị trí, sắp xếp theo InstanceNumber
+                    if hasattr(slices[0], 'InstanceNumber'):
+                        slices = sorted(slices, key=lambda s: s.InstanceNumber)
+            except Exception as e:
+                logger.warning(f"Lỗi khi sắp xếp các lát cắt: {str(e)}")
+                # Tiếp tục mà không sắp xếp
             
             # Đảm bảo tất cả các lát cắt có cùng kích thước và loại pixel
             if len(slices) > 1:
@@ -248,31 +330,50 @@ class DicomSeries:
             
             # Chuyển đổi từ các slice thành mảng 3D
             for i, slice in enumerate(slices):
-                pixel_array = slice.pixel_array.astype(np.float32)
-                
-                # Áp dụng rescale slope và intercept nếu có
-                if hasattr(slice, 'RescaleSlope') and hasattr(slice, 'RescaleIntercept'):
-                    pixel_array = pixel_array * slice.RescaleSlope + slice.RescaleIntercept
-                
-                self.image_data[i, :, :] = pixel_array
+                try:
+                    pixel_array = slice.pixel_array.astype(np.float32)
+                    
+                    # Áp dụng rescale slope và intercept nếu có
+                    if hasattr(slice, 'RescaleSlope') and hasattr(slice, 'RescaleIntercept'):
+                        pixel_array = pixel_array * slice.RescaleSlope + slice.RescaleIntercept
+                    
+                    self.image_data[i, :, :] = pixel_array
+                except Exception as e:
+                    logger.warning(f"Lỗi khi xử lý lát cắt {i}: {str(e)}")
+                    # Có thể đặt giá trị mặc định hoặc bỏ qua lát cắt này
+                    self.image_data[i, :, :] = np.zeros((slices[0].Rows, slices[0].Columns), dtype=np.float32)
             
-            # Gán thuộc tính image cho hiển thị
-            self.image = self.image_data
+            # Tạo đối tượng Image từ dữ liệu hình ảnh
+            from quangtps.imaging.image import Image
+            self.image = Image()
+            self.image.data = self.image_data
+            self.image.modality = self.modality if hasattr(self, 'modality') and self.modality else "OT"
             
             # Lưu thông tin pixel spacing và slice thickness
             if hasattr(slices[0], 'PixelSpacing'):
                 self.pixel_spacing = slices[0].PixelSpacing
+                self.image.pixel_spacing = self.pixel_spacing
+            else:
+                self.pixel_spacing = [1.0, 1.0]
+                self.image.pixel_spacing = self.pixel_spacing
             
             if hasattr(slices[0], 'SliceThickness'):
                 self.slice_thickness = slices[0].SliceThickness
+                self.image.slice_thickness = self.slice_thickness
+            else:
+                self.slice_thickness = 1.0
+                self.image.slice_thickness = self.slice_thickness
             
             # Lưu base_directory (thư mục gốc của series)
             self.base_directory = os.path.dirname(self.files[0]) if self.files else ""
             
+            logger.info(f"Đã tải thành công chuỗi DICOM với pydicom, kích thước {self.image_data.shape}")
             return True
             
         except Exception as e:
             logger.error(f"Lỗi khi tải dữ liệu với pydicom: {str(e)}")
+            self.image_data = None
+            self.image = None
             return False
     
     def get_metadata_summary(self) -> Dict[str, str]:
@@ -322,18 +423,56 @@ class DicomSeries:
         Optional[np.ndarray]
             Dữ liệu lát cắt 2D hoặc None nếu không có dữ liệu
         """
-        if self.image_data is None:
+        # Kiểm tra dữ liệu hình ảnh tồn tại
+        if self.image_data is None or not isinstance(self.image_data, np.ndarray) or self.image_data.size == 0:
+            logger.warning("Không thể lấy lát cắt: dữ liệu hình ảnh không tồn tại hoặc rỗng")
             return None
         
-        if plane == 'axial':
-            if 0 <= index < self.image_data.shape[0]:
-                return self.image_data[index, :, :]
-        elif plane == 'coronal':
-            if 0 <= index < self.image_data.shape[1]:
-                return self.image_data[:, index, :]
-        elif plane == 'sagittal':
-            if 0 <= index < self.image_data.shape[2]:
-                return self.image_data[:, :, index]
+        try:
+            # Kiểm tra mặt phẳng hợp lệ
+            if plane not in ['axial', 'coronal', 'sagittal']:
+                logger.warning(f"Mặt phẳng không hợp lệ: {plane}")
+                return None
+            
+            # Đảm bảo dữ liệu là 3D
+            if self.image_data.ndim < 3:
+                logger.warning(f"Dữ liệu hình ảnh không phải là 3D: {self.image_data.ndim}D")
+                
+                # Nếu là 2D và yêu cầu axial với chỉ số 0, trả về dữ liệu 2D
+                if self.image_data.ndim == 2 and plane == 'axial' and index == 0:
+                    return self.image_data
+                return None
+            
+            # Lấy lát cắt phù hợp
+            if plane == 'axial':
+                if 0 <= index < self.image_data.shape[0]:
+                    return self.image_data[index, :, :]
+                else:
+                    logger.warning(f"Chỉ số lát cắt axial không hợp lệ: {index}, phạm vi [0, {self.image_data.shape[0]-1}]")
+                    return None
+            elif plane == 'coronal':
+                if len(self.image_data.shape) < 2 or self.image_data.shape[1] == 0:
+                    logger.warning("Dữ liệu hình ảnh không có đủ chiều cho mặt phẳng coronal")
+                    return None
+                if 0 <= index < self.image_data.shape[1]:
+                    return self.image_data[:, index, :]
+                else:
+                    logger.warning(f"Chỉ số lát cắt coronal không hợp lệ: {index}, phạm vi [0, {self.image_data.shape[1]-1}]")
+                    return None
+            elif plane == 'sagittal':
+                if len(self.image_data.shape) < 3 or self.image_data.shape[2] == 0:
+                    logger.warning("Dữ liệu hình ảnh không có đủ chiều cho mặt phẳng sagittal")
+                    return None
+                if 0 <= index < self.image_data.shape[2]:
+                    return self.image_data[:, :, index]
+                else:
+                    logger.warning(f"Chỉ số lát cắt sagittal không hợp lệ: {index}, phạm vi [0, {self.image_data.shape[2]-1}]")
+                    return None
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy lát cắt: {str(e)}")
+            import traceback
+            logger.debug(traceback.format_exc())
+            return None
         
         return None
 
@@ -887,6 +1026,8 @@ class DicomLoaderWidget(QWidget):
                     gender=gender,
                     metadata=patient_metadata
                 )
+                if not patient_id:
+                    raise ValueError("Không thể tạo bệnh nhân mới")
             
             # Kiểm tra và tạo nghiên cứu nếu cần
             study = self.patient_db.get_study(study_uid)
@@ -896,7 +1037,7 @@ class DicomLoaderWidget(QWidget):
                 study_desc = metadata.get('StudyDescription', '')
                 study_date = metadata.get('StudyDate', '')
                 study_time = metadata.get('StudyTime', '')
-                self.patient_db.create_study(
+                study_id = self.patient_db.create_study(
                     study_id=study_uid,
                     patient_id=patient_id,
                     description=study_desc,
@@ -904,23 +1045,34 @@ class DicomLoaderWidget(QWidget):
                     study_time=study_time,
                     metadata=study_metadata
                 )
+                if not study_id:
+                    raise ValueError("Không thể tạo nghiên cứu mới")
             
             self.progress_bar.setValue(50)
             
             # Tạo đối tượng hình ảnh từ chuỗi DICOM
             if SITK_AVAILABLE and self.current_series.modality in ['CT', 'MR', 'PT']:
-                # Tạo đường dẫn tạm thời cho hình ảnh
-                reader = sitk.ImageSeriesReader()
-                reader.SetFileNames(self.current_series.files)
-                sitk_image = reader.Execute()
+                # Kiểm tra đã tải dữ liệu hình ảnh chưa
+                if not hasattr(self.current_series, 'image') or self.current_series.image is None:
+                    success = self.current_series.load_image_data()
+                    if not success:
+                        raise ValueError(f"Không thể tải dữ liệu hình ảnh cho series {self.current_series.description}")
                 
-                # Chuyển đổi sang đối tượng Image
-                image = Image.from_sitk(sitk_image)
+                # Kiểm tra đối tượng hình ảnh
+                if not hasattr(self.current_series, 'image') or self.current_series.image is None:
+                    raise ValueError(f"Đối tượng hình ảnh không tồn tại hoặc không hợp lệ")
                 
-                # Thêm metadata
+                # Kiểm tra dữ liệu hình ảnh
+                if not hasattr(self.current_series.image, 'data') or self.current_series.image.data is None or self.current_series.image.data.size == 0:
+                    raise ValueError(f"Dữ liệu hình ảnh không tồn tại hoặc rỗng")
+                
+                # Thêm metadata nếu chưa có
+                if not hasattr(self.current_series.image, 'metadata') or self.current_series.image.metadata is None:
+                    self.current_series.image.metadata = {}
+                
                 for key, value in metadata.items():
-                    if key not in image.metadata:
-                        image.metadata[key] = value
+                    if key not in self.current_series.image.metadata:
+                        self.current_series.image.metadata[key] = value
                 
                 # Lưu hình ảnh vào cơ sở dữ liệu
                 self.progress_bar.setValue(70)
@@ -928,13 +1080,16 @@ class DicomLoaderWidget(QWidget):
                 # Lưu hình ảnh sử dụng ImageDatabase
                 series_desc = metadata.get('SeriesDescription', 'Unknown Series')
                 saved_series_id = self.image_db.save_image(
-                    image=image,
+                    image=self.current_series.image,
                     series_id=series_id,
                     patient_id=patient_id,
                     study_id=study_uid,
                     description=series_desc,
                     metadata=metadata
                 )
+                
+                if not saved_series_id:
+                    raise ValueError("Không thể lưu hình ảnh vào cơ sở dữ liệu")
                 
                 self.status_label.setText("Đã nhập thành công chuỗi %s" % self.current_series.description)
                 self.progress_bar.setValue(100)

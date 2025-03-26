@@ -39,7 +39,7 @@ class PatientTab(QWidget):
     """
     Tab hiển thị và chỉnh sửa thông tin bệnh nhân.
     
-    Tab này bao gồm các phần thông tin cá nhân, lịch sử bệnh,
+    Tab này bao gồm các phần thông tin cơ bản, lịch sử bệnh,
     kết quả khám lâm sàng, hình ảnh y tế, và các dữ liệu khác
     liên quan đến bệnh nhân.
     """
@@ -1106,8 +1106,30 @@ class PatientTab(QWidget):
             patients = self.patient_db.search_patients(search_query)
 
             if not patients:
-                QMessageBox.information(
-                    self, "Thông báo", "Không tìm thấy bệnh nhân phù hợp.")
+                # Kiểm tra nếu người dùng nhập vào có thể là một ID
+                # và hỏi xem có muốn tạo bệnh nhân mới với ID đó không
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Question)
+                msg_box.setWindowTitle("Bệnh nhân không tồn tại")
+                msg_box.setText(f"Không tìm thấy bệnh nhân với từ khóa '{search_text}'.")
+                msg_box.setInformativeText("Bạn có muốn tạo bệnh nhân mới với ID này không?")
+                create_btn = msg_box.addButton("Tạo mới", QMessageBox.AcceptRole)
+                msg_box.addButton("Hủy", QMessageBox.RejectRole)
+                msg_box.exec_()
+
+                if msg_box.clickedButton() == create_btn:
+                    # Tạo bệnh nhân mới với ID từ từ khóa tìm kiếm
+                    dialog = PatientCreationDialog(self)
+                    # Điền trước ID nếu là dạng ID hợp lệ
+                    if search_text.replace('-', '').isalnum():
+                        dialog.patient_id_edit.setText(search_text)
+                    
+                    if dialog.exec_() == QDialog.Accepted:
+                        # Lấy thông tin bệnh nhân đã tạo
+                        patient_data = dialog.get_patient_data()
+                        self.set_patient(patient_data['id'])
+                        # Phát tín hiệu đã tạo bệnh nhân mới
+                        self.patient_created.emit(patient_data['id'])
                 return
 
             # Hiển thị danh sách bệnh nhân tìm thấy
