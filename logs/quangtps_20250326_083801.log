@@ -1,0 +1,15 @@
+2025-03-26 08:38:01,534 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-26 08:38:01
+2025-03-26 08:38:01,534 - __main__ - INFO - Thư mục gốc: e:\hoctap\QuangTPS
+2025-03-26 08:38:01,534 - __main__ - INFO - File log: e:\hoctap\QuangTPS\logs\quangtps_20250326_083801.log
+2025-03-26 08:38:08,214 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-26 08:38:08,214 - __main__ - ERROR - Lỗi khi khởi động ứng dụng: unexpected indent (patient_tab.py, line 336)
+2025-03-26 08:38:08,214 - __main__ - ERROR - Chi tiết lỗi:
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\scripts\run_quangtps.py", line 312, in start_application
+    from quangtps.ui.main_window import MainWindow
+  File "e:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 38, in <module>
+    from quangtps.ui.patient_tab import PatientTab
+  File "e:\hoctap\QuangTPS\quangtps\ui\patient_tab.py", line 336
+    self._clear_patient_data()
+IndentationError: unexpected indent
+

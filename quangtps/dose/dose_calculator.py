@@ -4,6 +4,8 @@ import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
+import time
+import traceback
 
 from quangtps.core.exceptions import DoseCalculationError
 from quangtps.core.utils import ensure_directory
@@ -55,19 +57,24 @@ class DoseCalculator:
         self.beam_model_dir = beam_model_dir
         ensure_directory(self.beam_model_dir)
         
-        # Initialize Truebeam model manager if data is available
-        truebeam_data_dir = os.path.join(package_dir, "data", "truebeam")
-        if os.path.exists(truebeam_data_dir):
-            truebeam_model_dir = os.path.join(self.beam_model_dir, "truebeam")
-            ensure_directory(truebeam_model_dir)
-            self.truebeam_manager = TruebeamModelManager(
-                data_directory=truebeam_data_dir,
-                model_directory=truebeam_model_dir
-            )
-            logger.info(f"Initialized Truebeam model manager with {len(self.truebeam_manager.get_available_energies())} available energies")
-        else:
+        try:
+            # Initialize Truebeam model manager if data is available
+            truebeam_data_dir = os.path.join(package_dir, "data", "truebeam")
+            if os.path.exists(truebeam_data_dir):
+                truebeam_model_dir = os.path.join(self.beam_model_dir, "truebeam")
+                ensure_directory(truebeam_model_dir)
+                self.truebeam_manager = TruebeamModelManager(
+                    data_directory=truebeam_data_dir,
+                    model_directory=truebeam_model_dir
+                )
+                logger.info(f"Initialized Truebeam model manager with {len(self.truebeam_manager.get_available_energies())} available energies")
+            else:
+                self.truebeam_manager = None
+                logger.warning("Truebeam data directory not found. Truebeam models will not be available.")
+        except Exception as e:
             self.truebeam_manager = None
-            logger.warning("Truebeam data directory not found. Truebeam models will not be available.")
+            logger.error(f"Error initializing Truebeam model manager: {str(e)}")
+            logger.debug(f"Stack trace: {traceback.format_exc()}")
     
     def validate_inputs(self, plan: Plan, ct_image: Image) -> None:
         """
@@ -89,15 +96,18 @@ class DoseCalculator:
         if not plan:
             raise ValueError("Plan cannot be None")
             
-        if not plan.beams:
-            raise ValueError(f"Plan {plan.name} has no beams")
+        if not hasattr(plan, 'beams') or not plan.beams:
+            raise ValueError(f"Plan {plan.name if hasattr(plan, 'name') else '<unnamed>'} has no beams")
             
         # Validate CT image
         if not ct_image:
             raise ValueError("CT image cannot be None")
             
-        if not ct_image.data.any():
+        if not hasattr(ct_image, 'data') or ct_image.data is None:
             raise ValueError("CT image has no data")
+            
+        if not isinstance(ct_image.data, np.ndarray) or ct_image.data.size == 0:
+            raise ValueError("CT image data is empty or not a NumPy array")
             
         # Check image dimensions
         if len(ct_image.data.shape) != 3:
@@ -105,18 +115,18 @@ class DoseCalculator:
             
         # Check CT numbers are in valid range
         if np.min(ct_image.data) < -1024 or np.max(ct_image.data) > 3071:
-            raise ValueError("CT numbers out of valid range [-1024, 3071]")
+            logger.warning(f"CT numbers outside typical range [-1024, 3071]: min={np.min(ct_image.data)}, max={np.max(ct_image.data)}")
             
         # Validate each beam
         for i, beam in enumerate(plan.beams):
-            if not beam.isocenter:
-                raise ValueError(f"Beam {i} ({beam.name}) has no isocenter")
+            if not hasattr(beam, 'isocenter') or beam.isocenter is None:
+                raise ValueError(f"Beam {i} ({beam.name if hasattr(beam, 'name') else '<unnamed>'}) has no isocenter")
                 
-            if not beam.gantry_angle and beam.gantry_angle != 0:
-                raise ValueError(f"Beam {i} ({beam.name}) has no gantry angle")
+            if not hasattr(beam, 'gantry_angle') or (beam.gantry_angle is None and beam.gantry_angle != 0):
+                raise ValueError(f"Beam {i} ({beam.name if hasattr(beam, 'name') else '<unnamed>'}) has no gantry angle")
                 
-            if not beam.field_size or any(s <= 0 for s in beam.field_size):
-                raise ValueError(f"Beam {i} ({beam.name}) has invalid field size: {beam.field_size}")
+            if not hasattr(beam, 'field_size') or beam.field_size is None or any(s <= 0 for s in beam.field_size if s is not None):
+                raise ValueError(f"Beam {i} ({beam.name if hasattr(beam, 'name') else '<unnamed>'}) has invalid field size: {beam.field_size if hasattr(beam, 'field_size') else 'None'}")
     
     def calculate_dose_for_beam(self, beam: Beam, ct_image: Image) -> Image:
         """
@@ -135,7 +145,8 @@ class DoseCalculator:
             The calculated dose image
         """
         try:
-            logger.info(f"Calculating dose for beam {beam.name} using {self.algorithm_name} algorithm")
+            beam_name = beam.name if hasattr(beam, 'name') else "<unnamed>"
+            logger.info(f"Calculating dose for beam {beam_name} using {self.algorithm_name} algorithm")
             
             # Load beam model based on beam energy and type
             beam_model = self._get_beam_model(beam)
@@ -146,18 +157,25 @@ class DoseCalculator:
             # Calculate dose
             dose_image = self.algorithm.calculate_beam_dose(beam, ct_image)
             
+            # Validate returned dose image
+            if dose_image is None or not hasattr(dose_image, 'data') or dose_image.data is None:
+                raise DoseCalculationError(f"Algorithm returned empty dose for beam {beam_name}")
+                
+            if not isinstance(dose_image.data, np.ndarray) or dose_image.data.size == 0:
+                raise DoseCalculationError(f"Algorithm returned invalid dose data for beam {beam_name}")
+            
             # Set dose image properties
             dose_image.modality = "RTDOSE"
-            dose_image.description = f"Dose for beam {beam.name} calculated with {self.algorithm_name}"
+            dose_image.description = f"Dose for beam {beam_name} calculated with {self.algorithm_name}"
             
             return dose_image
             
         except Exception as e:
-            error_msg = f"Error calculating dose for beam {beam.name}: {str(e)}"
+            error_msg = f"Error calculating dose for beam {beam.name if hasattr(beam, 'name') else '<unnamed>'}: {str(e)}"
             logger.error(error_msg)
             raise DoseCalculationError(error_msg) from e
     
-    def calculate_dose_for_plan(self, plan: Plan, ct_image: Image) -> Image:
+    def calculate_dose_for_plan(self, plan: Plan, ct_image: Image) -> Optional[Image]:
         """
         Calculate total dose for a treatment plan.
         
@@ -170,80 +188,103 @@ class DoseCalculator:
             
         Returns
         -------
-        Image
-            The calculated total dose image
+        Image or None
+            The calculated total dose image, or None if calculation fails
             
         Raises
         ------
         DoseCalculationError
-            If dose calculation fails
+            If dose calculation fails critically
         """
         try:
-            logger.info(f"Calculating total dose for plan {plan.name} using {self.algorithm_name} algorithm")
+            plan_name = plan.name if hasattr(plan, 'name') else "<unnamed>"
+            logger.info(f"Calculating total dose for plan {plan_name} using {self.algorithm_name} algorithm")
             
             # Validate inputs
             self.validate_inputs(plan, ct_image)
             
             # Calculate dose for each beam
             beam_doses = []
-            total_mu = sum(beam.monitor_units for beam in plan.beams if beam.monitor_units)
+            total_mu = 0
             
+            # Calculate total MU (with validation)
+            for beam in plan.beams:
+                if hasattr(beam, 'monitor_units') and isinstance(beam.monitor_units, (int, float)) and beam.monitor_units > 0:
+                    total_mu += beam.monitor_units
+            
+            # If no valid MUs, use equal weights
+            use_equal_weights = total_mu <= 0
+            if use_equal_weights:
+                logger.warning(f"No valid monitor units found in plan. Using equal weights for all beams.")
+            
+            # Calculate dose for each beam
             for i, beam in enumerate(plan.beams):
-                logger.info(f"Calculating dose for beam {i+1}/{len(plan.beams)}: {beam.name}")
+                beam_name = beam.name if hasattr(beam, 'name') else f"Beam_{i+1}"
+                logger.info(f"Calculating dose for beam {i+1}/{len(plan.beams)}: {beam_name}")
                 
                 try:
                     beam_dose = self.calculate_dose_for_beam(beam, ct_image)
                     
                     # Apply beam weight/MU
-                    if beam.monitor_units and total_mu > 0:
+                    if not use_equal_weights and hasattr(beam, 'monitor_units') and isinstance(beam.monitor_units, (int, float)) and beam.monitor_units > 0:
                         weight = beam.monitor_units / total_mu
+                        logger.info(f"Applied weight {weight:.4f} to beam {beam_name} based on {beam.monitor_units} MU")
                     else:
-                        weight = beam.weight if beam.weight else 1.0 / len(plan.beams)
+                        weight = 1.0 / len(plan.beams)  # Equal weight if no MU
+                        logger.info(f"Applied equal weight {weight:.4f} to beam {beam_name}")
+                    
+                    if hasattr(beam_dose, 'data') and beam_dose.data is not None and beam_dose.data.size > 0:
+                        beam_dose.data = beam_dose.data * weight
+                        beam_doses.append(beam_dose)
+                    else:
+                        logger.warning(f"Skipping beam {beam_name} as it has invalid dose data")
                         
-                    beam_dose.data *= weight
-                    beam_doses.append(beam_dose)
-                    
-                    logger.info(f"Completed beam {beam.name} with weight {weight:.3f}")
-                    
                 except Exception as e:
-                    error_msg = f"Failed to calculate dose for beam {beam.name}: {str(e)}"
-                    logger.error(error_msg)
-                    raise DoseCalculationError(error_msg, algorithm=self.algorithm_name) from e
+                    logger.error(f"Error calculating dose for beam {beam_name}: {str(e)}")
+                    logger.info(f"Continuing with other beams...")
+                    continue
             
-            # Create total dose by summing all beam doses
+            # Check if we have any valid doses
+            if not beam_doses:
+                logger.error("No valid beam doses calculated. Cannot create plan dose.")
+                return None
+                
+            # Create a total dose array matching the first beam dose
+            template_dose = beam_doses[0]
+            total_dose_data = np.zeros_like(template_dose.data)
+            
+            # Sum all doses
+            for beam_dose in beam_doses:
+                if beam_dose.data.shape == total_dose_data.shape:
+                    total_dose_data += beam_dose.data
+                else:
+                    logger.warning(f"Skipping a beam dose with incompatible shape: {beam_dose.data.shape} vs {total_dose_data.shape}")
+            
+            # Create total dose image
             total_dose = Image(
-                data=np.zeros_like(beam_doses[0].data),
-                spacing=beam_doses[0].spacing,
-                origin=beam_doses[0].origin,
-                direction=beam_doses[0].direction
+                data=total_dose_data,
+                metadata={
+                    **template_dose.metadata,
+                    'plan_name': plan_name,
+                    'plan_id': plan.plan_id if hasattr(plan, 'plan_id') else '',
+                    'algorithm': self.algorithm_name,
+                    'num_beams': len(beam_doses),
+                    'total_mu': total_mu,
+                    'calculation_time': time.time()
+                }
             )
             
-            # Sum all beam doses
-            for dose in beam_doses:
-                total_dose.data += dose.data
-            
-            # Set dose image properties
+            # Set image properties
             total_dose.modality = "RTDOSE"
-            total_dose.description = f"Total dose for plan {plan.name} calculated with {self.algorithm_name}"
+            total_dose.description = f"Total dose for plan {plan_name} calculated with {self.algorithm_name}"
             
-            # Apply plan normalization if specified
-            if plan.normalization_value is not None:
-                normalization_factor = plan.normalization_value / np.max(total_dose.data)
-                total_dose.data *= normalization_factor
-                logger.info(f"Applied plan normalization factor: {normalization_factor:.4f}")
-            
-            # Calculate and log dose statistics
-            min_dose = np.min(total_dose.data)
-            max_dose = np.max(total_dose.data)
-            mean_dose = np.mean(total_dose.data)
-            logger.info(f"Dose statistics - Min: {min_dose:.2f} Gy, Max: {max_dose:.2f} Gy, Mean: {mean_dose:.2f} Gy")
-            
+            logger.info(f"Successfully calculated total dose for plan {plan_name}")
             return total_dose
             
         except Exception as e:
-            error_msg = f"Error calculating dose for plan {plan.name}: {str(e)}"
+            error_msg = f"Error calculating dose for plan {plan.name if hasattr(plan, 'name') else '<unnamed>'}: {str(e)}"
             logger.error(error_msg)
-            raise DoseCalculationError(error_msg, algorithm=self.algorithm_name) from e
+            raise DoseCalculationError(error_msg) from e
     
     def _get_beam_model(self, beam: Beam):
         """

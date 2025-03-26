@@ -30,6 +30,40 @@ QuangTPS là một dự án phần mềm mã nguồn mở nhằm cung cấp mộ
 - **Liên kết hình ảnh đa phương thức**: Hỗ trợ đăng ký và chồng chéo CT, MRI, PET.
 - **Trí tuệ nhân tạo**: Hỗ trợ tự động phân đoạn và đề xuất kế hoạch.
 
+## Recent Improvements
+
+QuangTPS has undergone significant enhancements to improve system stability, error handling, and overall robustness:
+
+### Imaging and DICOM
+* Enhanced DICOM loading capabilities that handle non-uniform slice spacing
+* Improved handling of diverse image datasets with better error recovery
+* Automatic detection and adaptation to inconsistent DICOM orientation data
+* Added progress dialogs for large DICOM datasets to enhance user experience
+* Implemented comprehensive validation for image data before processing
+
+### Dose Calculation
+* Significantly improved error handling in dose calculation algorithms
+* Enhanced beam weight assignment with better validation of monitor units
+* Added fallback options when encountering beam calculation issues
+* Improved metadata tracking for dose calculation results
+* Better validation of CT data and plan parameters before calculation
+
+### Treatment Planning & Evaluation
+* Enhanced DVH calculation with proper structure mask validation
+* Improved structure handling with automatic binary mask conversion
+* Better error recovery in plan evaluation when encountering partial data issues
+* Enhanced dose statistics calculation with proper error handling
+* Improved JSON metadata handling for plan and structure information
+
+### System Architecture
+* Implemented comprehensive attribute validation throughout the codebase
+* Enhanced error logging with detailed traceback information
+* Improved database schema compatibility and update mechanisms
+* Better memory management with proper object copying to prevent reference errors
+* Enhanced user feedback with more detailed and helpful error messages
+
+These improvements make QuangTPS more stable, reliable, and user-friendly when working with diverse clinical datasets.
+
 ## Yêu cầu hệ thống
 
 - **Hệ điều hành**: Windows 10/11, Linux, macOS

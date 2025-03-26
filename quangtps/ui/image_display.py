@@ -939,7 +939,7 @@ class ImageDisplay(QWidget):
         
         self.setLayout(layout)
         
-    def set_image(self, image_data, window_center=None, window_width=None):
+    def set_image(self, image_data, window_center=None, window_width=None, plane=None):
         """
         Thiết lập hình ảnh hiển thị.
         
@@ -947,6 +947,7 @@ class ImageDisplay(QWidget):
             image_data: Mảng NumPy 2D chứa dữ liệu hình ảnh
             window_center: Tâm cửa sổ (level)
             window_width: Chiều rộng cửa sổ
+            plane: Mặt phẳng hiển thị ('axial', 'coronal', 'sagittal'), không ảnh hưởng đến hiển thị
         """
         self.image_data = image_data
         
@@ -999,73 +1000,321 @@ class ImageDisplay(QWidget):
         if self.image_data is None:
             # Hiển thị tiêu đề trên nền đen nếu không có hình ảnh
             if self.title:
+                try:
+                    blank_image = np.zeros((200, 200), dtype=np.uint8)
+                    h, w = blank_image.shape
+                    qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                    pixmap = QPixmap.fromImage(qimage)
+                    
+                    # Vẽ tiêu đề lên pixmap
+                    painter = QPainter(pixmap)
+                    painter.setPen(QPen(Qt.white))
+                    font = QFont()
+                    font.setBold(True)
+                    font.setPointSize(12)
+                    painter.setFont(font)
+                    painter.drawText(pixmap.rect(), Qt.AlignCenter, self.title)
+                    painter.end()
+                    
+                    self.image_frame.setPixmap(pixmap)
+                    logger.info(f"Hiển thị tiêu đề '{self.title}' trên nền đen")
+                except Exception as e:
+                    logger.error(f"Lỗi khi hiển thị tiêu đề trên nền đen: {str(e)}")
+            else:
+                logger.debug("Không có dữ liệu hình ảnh và tiêu đề để hiển thị")
+            return
+        
+        try:
+            # Kiểm tra tính hợp lệ của dữ liệu hình ảnh
+            if not isinstance(self.image_data, np.ndarray):
+                logger.error(f"Dữ liệu hình ảnh không phải là mảng NumPy: {type(self.image_data)}")
+                if self.title:
+                    # Hiển thị thông báo lỗi
+                    blank_image = np.zeros((200, 200), dtype=np.uint8)
+                    h, w = blank_image.shape
+                    qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                    pixmap = QPixmap.fromImage(qimage)
+                    painter = QPainter(pixmap)
+                    painter.setPen(QPen(Qt.red))
+                    font = QFont()
+                    font.setBold(True)
+                    font.setPointSize(10)
+                    painter.setFont(font)
+                    error_message = f"{self.title if self.title else 'Error'}\nLỗi: Dữ liệu không hợp lệ"
+                    painter.drawText(pixmap.rect(), Qt.AlignCenter, error_message)
+                    painter.end()
+                    self.image_frame.setPixmap(pixmap)
+                return
+            
+            if self.image_data.size == 0:
+                logger.error("Dữ liệu hình ảnh rỗng")
+                # Hiển thị thông báo lỗi tương tự
+                if self.title:
+                    blank_image = np.zeros((200, 200), dtype=np.uint8)
+                    h, w = blank_image.shape
+                    qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                    pixmap = QPixmap.fromImage(qimage)
+                    painter = QPainter(pixmap)
+                    painter.setPen(QPen(Qt.red))
+                    font = QFont()
+                    font.setBold(True)
+                    font.setPointSize(10)
+                    painter.setFont(font)
+                    error_message = f"{self.title if self.title else 'Error'}\nLỗi: Dữ liệu rỗng"
+                    painter.drawText(pixmap.rect(), Qt.AlignCenter, error_message)
+                    painter.end()
+                    self.image_frame.setPixmap(pixmap)
+                return
+            
+            if self.image_data.ndim < 2:
+                logger.error(f"Dữ liệu hình ảnh cần ít nhất 2 chiều, nhưng có {self.image_data.ndim} chiều")
+                # Hiển thị thông báo lỗi tương tự
+                if self.title:
+                    blank_image = np.zeros((200, 200), dtype=np.uint8)
+                    h, w = blank_image.shape
+                    qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                    pixmap = QPixmap.fromImage(qimage)
+                    painter = QPainter(pixmap)
+                    painter.setPen(QPen(Qt.red))
+                    font = QFont()
+                    font.setBold(True)
+                    font.setPointSize(10)
+                    painter.setFont(font)
+                    error_message = f"{self.title if self.title else 'Error'}\nLỗi: Chiều không hợp lệ ({self.image_data.ndim}D)"
+                    painter.drawText(pixmap.rect(), Qt.AlignCenter, error_message)
+                    painter.end()
+                    self.image_frame.setPixmap(pixmap)
+                return
+            
+            # Ghi log thông tin hình ảnh
+            logger.debug(f"Đang hiển thị hình ảnh: shape={self.image_data.shape}, "
+                       f"dtype={self.image_data.dtype}, "
+                       f"min={self.image_data.min()}, max={self.image_data.max()}, "
+                       f"window: {self.window_level}±{self.window_width//2}")
+            
+            # Áp dụng cửa sổ
+            min_val = self.window_level - self.window_width // 2
+            max_val = self.window_level + self.window_width // 2
+            
+            # Đảm bảo min_val < max_val
+            if min_val >= max_val:
+                logger.warning(f"Window không hợp lệ: min={min_val}, max={max_val}, điều chỉnh để có khoảng cách tối thiểu")
+                min_val = self.window_level - 1
+                max_val = self.window_level + 1
+            
+            # Clip giá trị trong khoảng [min_val, max_val]
+            try:
+                # Đảm bảo dữ liệu là kiểu số thực để tránh overflow
+                if np.issubdtype(self.image_data.dtype, np.integer) and (min_val < np.iinfo(self.image_data.dtype).min or max_val > np.iinfo(self.image_data.dtype).max):
+                    logger.debug(f"Chuyển đổi dữ liệu từ {self.image_data.dtype} sang float32 để tránh tràn số")
+                    image_data_float = self.image_data.astype(np.float32)
+                    clipped = np.clip(image_data_float, min_val, max_val)
+                else:
+                    clipped = np.clip(self.image_data, min_val, max_val)
+            except Exception as e:
+                logger.error(f"Lỗi khi clip dữ liệu hình ảnh: {str(e)}")
+                # Thử sửa lỗi bằng cách chuyển đổi kiểu dữ liệu
+                try:
+                    logger.debug("Thử chuyển đổi sang float32 để xử lý")
+                    image_data_float = self.image_data.astype(np.float32)
+                    clipped = np.clip(image_data_float, min_val, max_val)
+                    logger.info("Đã chuyển đổi thành công sang float32 để xử lý")
+                except Exception as e2:
+                    logger.error(f"Vẫn không thể clip sau khi chuyển đổi: {str(e2)}")
+                    # Hiển thị thông báo lỗi
+                    if self.title:
+                        blank_image = np.zeros((200, 200), dtype=np.uint8)
+                        h, w = blank_image.shape
+                        qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                        pixmap = QPixmap.fromImage(qimage)
+                        painter = QPainter(pixmap)
+                        painter.setPen(QPen(Qt.red))
+                        painter.drawText(pixmap.rect(), Qt.AlignCenter, f"{self.title}\nLỗi xử lý dữ liệu")
+                        painter.end()
+                        self.image_frame.setPixmap(pixmap)
+                    return
+            
+            # Chuẩn hóa về khoảng [0, 255]
+            try:
+                if max_val > min_val:
+                    normalized = ((clipped - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+                else:
+                    normalized = np.zeros_like(clipped, dtype=np.uint8)
+                    logger.warning("Khoảng cửa sổ quá nhỏ, tạo ảnh đen")
+            except Exception as e:
+                logger.error(f"Lỗi khi chuẩn hóa dữ liệu hình ảnh: {str(e)}")
+                # Thử phương pháp chuẩn hóa khác
+                try:
+                    # Kiểm tra giá trị tối đa và tối thiểu
+                    if np.isfinite(clipped).all():
+                        # Nếu tất cả giá trị hữu hạn
+                        range_val = max_val - min_val
+                        if range_val > 0:
+                            normalized = np.round(((clipped - min_val) / range_val) * 255).astype(np.uint8)
+                        else:
+                            normalized = np.zeros_like(clipped, dtype=np.uint8)
+                            logger.warning("Khoảng cửa sổ bằng 0, tạo ảnh đen")
+                    else:
+                        # Xử lý giá trị NaN/Inf
+                        logger.warning("Dữ liệu có giá trị NaN/Inf, thay thế bằng 0")
+                        clipped_finite = np.copy(clipped)
+                        clipped_finite[~np.isfinite(clipped_finite)] = 0
+                        range_val = max_val - min_val
+                        if range_val > 0:
+                            normalized = np.round(((clipped_finite - min_val) / range_val) * 255).astype(np.uint8)
+                        else:
+                            normalized = np.zeros_like(clipped_finite, dtype=np.uint8)
+                    
+                    logger.info("Đã sử dụng phương pháp chuẩn hóa thay thế")
+                except Exception as e2:
+                    logger.error(f"Vẫn không thể chuẩn hóa: {str(e2)}")
+                    # Hiển thị thông báo lỗi
+                    if self.title:
+                        blank_image = np.zeros((200, 200), dtype=np.uint8)
+                        h, w = blank_image.shape
+                        qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                        pixmap = QPixmap.fromImage(qimage)
+                        painter = QPainter(pixmap)
+                        painter.setPen(QPen(Qt.red))
+                        painter.drawText(pixmap.rect(), Qt.AlignCenter, f"{self.title}\nLỗi chuẩn hóa")
+                        painter.end()
+                        self.image_frame.setPixmap(pixmap)
+                    return
+            
+            # Kiểm tra kích thước dữ liệu
+            h, w = normalized.shape
+            if h <= 0 or w <= 0:
+                logger.error(f"Kích thước hình ảnh không hợp lệ: {h}x{w}")
+                # Hiển thị thông báo lỗi
+                if self.title:
+                    blank_image = np.zeros((200, 200), dtype=np.uint8)
+                    h, w = blank_image.shape
+                    qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                    pixmap = QPixmap.fromImage(qimage)
+                    painter = QPainter(pixmap)
+                    painter.setPen(QPen(Qt.red))
+                    painter.drawText(pixmap.rect(), Qt.AlignCenter, f"{self.title}\nKích thước không hợp lệ")
+                    painter.end()
+                    self.image_frame.setPixmap(pixmap)
+                return
+            
+            # Chuyển sang định dạng QImage
+            try:
+                # Sao chép dữ liệu để đảm bảo nó liên tục trong bộ nhớ
+                normalized_copy = normalized.copy(order='C')
+                qimage = QImage(normalized_copy.data, w, h, w, QImage.Format_Grayscale8)
+                pixmap = QPixmap.fromImage(qimage)
+                
+                # Kiểm tra xem QImage có hợp lệ không
+                if qimage.isNull():
+                    raise ValueError("QImage tạo ra là null")
+                    
+                # Kiểm tra kích thước QPixmap
+                if pixmap.width() <= 0 or pixmap.height() <= 0:
+                    raise ValueError(f"QPixmap có kích thước không hợp lệ: {pixmap.width()}x{pixmap.height()}")
+                
+            except Exception as e:
+                logger.error(f"Lỗi khi tạo QImage/QPixmap: {str(e)}")
+                # Thử phương pháp khác
+                try:
+                    logger.debug("Thử tạo QImage với phương pháp thay thế")
+                    # Đảm bảo dữ liệu liên tục và đúng thứ tự byte
+                    data_copy = np.ascontiguousarray(normalized)
+                    
+                    # Tạo QImage trực tiếp từ mảng NumPy
+                    bytes_per_line = w
+                    qimage = QImage(data_copy.data, w, h, bytes_per_line, QImage.Format_Grayscale8)
+                    
+                    # Tạo bản sao của QImage để đảm bảo dữ liệu được sao chép
+                    qimage = qimage.copy()
+                    
+                    # Tạo QPixmap từ QImage
+                    pixmap = QPixmap.fromImage(qimage)
+                    
+                    logger.info("Đã tạo thành công QImage/QPixmap bằng phương pháp thay thế")
+                except Exception as e2:
+                    logger.error(f"Vẫn không thể tạo QImage/QPixmap: {str(e2)}")
+                    # Hiển thị thông báo lỗi
+                    if self.title:
+                        blank_image = np.zeros((200, 200), dtype=np.uint8)
+                        h, w = blank_image.shape
+                        qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
+                        pixmap = QPixmap.fromImage(qimage)
+                        painter = QPainter(pixmap)
+                        painter.setPen(QPen(Qt.red))
+                        painter.drawText(pixmap.rect(), Qt.AlignCenter, f"{self.title}\nLỗi hiển thị")
+                        painter.end()
+                        self.image_frame.setPixmap(pixmap)
+                    return
+            
+            # Áp dụng zoom nếu cần
+            if self.zoom_factor != 1.0:
+                w_zoomed = int(w * self.zoom_factor)
+                h_zoomed = int(h * self.zoom_factor)
+                if w_zoomed > 0 and h_zoomed > 0:
+                    try:
+                        pixmap = pixmap.scaled(w_zoomed, h_zoomed, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    except Exception as e:
+                        logger.error(f"Lỗi khi áp dụng zoom: {str(e)}")
+                        # Thử với phương pháp không làm mượt
+                        try:
+                            pixmap = pixmap.scaled(w_zoomed, h_zoomed, Qt.KeepAspectRatio, Qt.FastTransformation)
+                            logger.info("Đã áp dụng zoom với phương pháp FastTransformation")
+                        except Exception:
+                            logger.warning("Không thể áp dụng zoom, tiếp tục mà không có zoom")
+            
+            # Vẽ tiêu đề nếu có
+            if self.title:
+                try:
+                    painter = QPainter(pixmap)
+                    painter.setPen(QPen(Qt.white))
+                    
+                    # Tạo font đậm cho tiêu đề
+                    font = QFont()
+                    font.setBold(True)
+                    font.setPointSize(10)
+                    painter.setFont(font)
+                    
+                    # Vẽ nền chữ bán trong suốt
+                    rect = QRectF(5, 5, pixmap.width() - 10, 25)
+                    painter.fillRect(rect, QBrush(QColor(0, 0, 0, 128)))
+                    
+                    # Vẽ chữ
+                    painter.drawText(rect, Qt.AlignCenter, self.title)
+                    painter.end()
+                except Exception as e:
+                    logger.warning(f"Lỗi khi vẽ tiêu đề: {str(e)}")
+                    # Tiếp tục mà không có tiêu đề
+            
+            # Hiển thị pixmap
+            self.image_frame.setPixmap(pixmap)
+            
+            logger.debug("Hiển thị hình ảnh thành công")
+            
+        except Exception as e:
+            logger.error(f"Lỗi không xác định khi cập nhật hiển thị hình ảnh: {str(e)}")
+            import traceback
+            logger.debug(traceback.format_exc())
+            
+            # Hiển thị thông báo lỗi
+            try:
                 blank_image = np.zeros((200, 200), dtype=np.uint8)
                 h, w = blank_image.shape
                 qimage = QImage(blank_image.data, w, h, w, QImage.Format_Grayscale8)
                 pixmap = QPixmap.fromImage(qimage)
-                
-                # Vẽ tiêu đề lên pixmap
                 painter = QPainter(pixmap)
-                painter.setPen(QPen(Qt.white))
+                painter.setPen(QPen(Qt.red))
                 font = QFont()
                 font.setBold(True)
-                font.setPointSize(12)
+                font.setPointSize(10)
                 painter.setFont(font)
-                painter.drawText(pixmap.rect(), Qt.AlignCenter, self.title)
+                error_message = f"{self.title if self.title else 'Error'}\nLỗi hiển thị hình ảnh"
+                painter.drawText(pixmap.rect(), Qt.AlignCenter, error_message)
                 painter.end()
-                
                 self.image_frame.setPixmap(pixmap)
-            return
-            
-        # Áp dụng cửa sổ
-        min_val = self.window_level - self.window_width // 2
-        max_val = self.window_level + self.window_width // 2
-        
-        # Clip giá trị trong khoảng [min_val, max_val]
-        clipped = np.clip(self.image_data, min_val, max_val)
-        
-        # Chuẩn hóa về khoảng [0, 255]
-        if max_val > min_val:
-            normalized = ((clipped - min_val) / (max_val - min_val) * 255).astype(np.uint8)
-        else:
-            normalized = np.zeros_like(clipped, dtype=np.uint8)
-        
-        # Chuyển sang định dạng RGB
-        h, w = normalized.shape
-        qimage = QImage(normalized.data, w, h, w, QImage.Format_Grayscale8)
-        
-        # Tạo pixmap từ qimage
-        pixmap = QPixmap.fromImage(qimage)
-        
-        # Áp dụng zoom nếu cần
-        if self.zoom_factor != 1.0:
-            w_zoomed = int(w * self.zoom_factor)
-            h_zoomed = int(h * self.zoom_factor)
-            if w_zoomed > 0 and h_zoomed > 0:
-                pixmap = pixmap.scaled(w_zoomed, h_zoomed, Qt.KeepAspectRatio)
-        
-        # Vẽ tiêu đề nếu có
-        if self.title:
-            painter = QPainter(pixmap)
-            painter.setPen(QPen(Qt.white))
-            
-            # Tạo font đậm cho tiêu đề
-            font = QFont()
-            font.setBold(True)
-            font.setPointSize(10)
-            painter.setFont(font)
-            
-            # Vẽ nền chữ bán trong suốt
-            rect = QRectF(5, 5, pixmap.width() - 10, 25)
-            painter.fillRect(rect, QBrush(QColor(0, 0, 0, 128)))
-            
-            # Vẽ chữ
-            painter.drawText(rect, Qt.AlignCenter, self.title)
-            painter.end()
-        
-        # Hiển thị pixmap
-        self.image_frame.setPixmap(pixmap)
-        
+            except Exception:
+                logger.error("Không thể hiển thị thông báo lỗi")
+    
     def mousePressEvent(self, event):
         """Xử lý sự kiện nhấn chuột."""
         # Lưu vị trí bắt đầu

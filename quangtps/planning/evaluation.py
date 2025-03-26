@@ -103,58 +103,148 @@ class PlanEvaluation:
         if self.dose_grid is None:
             logger.error("Không thể tính DVH - chưa có lưới liều")
             return {}
-            
+
+        # Kiểm tra thêm tính hợp lệ của lưới liều
+        if not isinstance(self.dose_grid, np.ndarray):
+            logger.error(f"Dữ liệu lưới liều không phải là mảng NumPy: {type(self.dose_grid)}")
+            return {}
+        
+        if self.dose_grid.size == 0:
+            logger.error("Lưới liều rỗng")
+            return {}
+        
         # Xác định danh sách cấu trúc cần tính DVH
-        structures_to_process = structure_ids if structure_ids else list(self.structure_masks.keys())
+        structures_to_process = []
+        if structure_ids:
+            structures_to_process = [s for s in structure_ids if s in self.structure_masks]
+            missing_structs = [s for s in structure_ids if s not in self.structure_masks]
+            if missing_structs:
+                logger.warning(f"Các cấu trúc sau không tìm thấy: {', '.join(missing_structs)}")
+        else:
+            structures_to_process = list(self.structure_masks.keys())
+        
+        if not structures_to_process:
+            logger.warning("Không có cấu trúc để tính DVH")
+            return {}
         
         # Xác định liều tối đa nếu không được cung cấp
-        if max_dose is None:
-            max_dose = np.max(self.dose_grid) * 1.1  # Thêm 10% margint
-            
+        try:
+            if max_dose is None:
+                max_dose = np.max(self.dose_grid) * 1.1  # Thêm 10% margin
+                if np.isnan(max_dose) or max_dose <= 0:
+                    max_dose = 100.0  # Giá trị mặc định
+                    logger.warning(f"Không thể xác định liều tối đa từ lưới liều, sử dụng giá trị mặc định: {max_dose}")
+        except Exception as e:
+            max_dose = 100.0  # Giá trị mặc định an toàn
+            logger.error(f"Lỗi khi tính liều tối đa: {str(e)}")
+        
         # Tính toán DVH cho mỗi cấu trúc
+        results = {}
         for struct_id in structures_to_process:
-            if struct_id not in self.structure_masks:
-                logger.warning(f"Bỏ qua cấu trúc không tồn tại: {struct_id}")
-                continue
+            try:
+                struct_data = self.structure_masks[struct_id]
+                struct_mask = struct_data.get('mask')
                 
-            struct_data = self.structure_masks[struct_id]
-            struct_mask = struct_data['mask']
-            
-            # Trích xuất liều trong cấu trúc
-            structure_dose = self.dose_grid[struct_mask > 0]
-            
-            if len(structure_dose) == 0:
-                logger.warning(f"Cấu trúc {struct_id} không có voxel")
-                continue
+                if struct_mask is None:
+                    logger.warning(f"Cấu trúc {struct_id} không có mặt nạ")
+                    continue
                 
-            # Tính histogram
-            hist, bin_edges = np.histogram(structure_dose, bins=bins, range=(0, max_dose))
-            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                if not isinstance(struct_mask, np.ndarray):
+                    logger.warning(f"Mặt nạ của cấu trúc {struct_id} không phải là mảng NumPy: {type(struct_mask)}")
+                    continue
+                
+                if struct_mask.shape != self.dose_grid.shape:
+                    logger.warning(f"Kích thước mặt nạ ({struct_mask.shape}) và lưới liều ({self.dose_grid.shape}) không khớp cho cấu trúc {struct_id}")
+                    continue
+                
+                # Kiểm tra mặt nạ có phải là nhị phân không
+                if not np.all(np.logical_or(struct_mask == 0, struct_mask == 1)):
+                    logger.warning(f"Mặt nạ của cấu trúc {struct_id} không phải là nhị phân, sẽ chuyển đổi")
+                    struct_mask = (struct_mask > 0).astype(np.int8)
+                
+                # Trích xuất liều trong cấu trúc
+                structure_dose = self.dose_grid[struct_mask > 0]
+                
+                if len(structure_dose) == 0:
+                    logger.warning(f"Cấu trúc {struct_id} ({struct_data.get('name', '')}) không có voxel")
+                    continue
+                
+                # Đảm bảo bins là số dương
+                bins = max(10, int(bins))  # Tối thiểu 10 bin
+                
+                # Tính histogram
+                hist, bin_edges = np.histogram(structure_dose, bins=bins, range=(0, max_dose))
+                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                
+                # Tính DVH tích lũy
+                try:
+                    cumulative_dvh = np.cumsum(hist[::-1])[::-1]
+                    if cumulative_dvh[0] > 0:
+                        cumulative_dvh = cumulative_dvh / cumulative_dvh[0]
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính DVH tích lũy cho cấu trúc {struct_id}: {str(e)}")
+                    continue
+                
+                # Tính DVH vi phân
+                try:
+                    sum_hist = np.sum(hist)
+                    if sum_hist > 0:
+                        differential_dvh = hist / sum_hist
+                    else:
+                        logger.warning(f"Tổng histogram = 0 cho cấu trúc {struct_id}, sử dụng histogram gốc")
+                        differential_dvh = hist
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính DVH vi phân cho cấu trúc {struct_id}: {str(e)}")
+                    continue
+                
+                # Tính thể tích (cc)
+                try:
+                    voxel_dimensions = self.voxel_size()
+                    voxel_volume_cc = (voxel_dimensions[0] * voxel_dimensions[1] * voxel_dimensions[2]) / 1000.0
+                    volume_cc = np.sum(struct_mask) * voxel_volume_cc
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính thể tích cho cấu trúc {struct_id}: {str(e)}")
+                    volume_cc = np.sum(struct_mask) * 0.027  # Gía trị mặc định cho 3x3x3 mm voxel
+                
+                # Tính các thống kê
+                try:
+                    min_dose = np.min(structure_dose)
+                    max_dose_actual = np.max(structure_dose)
+                    mean_dose = np.mean(structure_dose)
+                    median_dose = np.median(structure_dose)
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính thống kê liều cho cấu trúc {struct_id}: {str(e)}")
+                    min_dose = 0
+                    max_dose_actual = 0
+                    mean_dose = 0
+                    median_dose = 0
+                
+                # Lưu kết quả
+                self.dvh_data[struct_id] = {
+                    'structure_id': struct_id,
+                    'structure_name': struct_data.get('name', f"Structure_{struct_id}"),
+                    'structure_type': struct_data.get('type', ''),
+                    'bin_centers': bin_centers,
+                    'bin_edges': bin_edges,
+                    'differential': differential_dvh,
+                    'cumulative': cumulative_dvh,
+                    'volume_cc': volume_cc,
+                    'min_dose': min_dose,
+                    'max_dose': max_dose_actual,
+                    'mean_dose': mean_dose,
+                    'median_dose': median_dose
+                }
+                
+                # Thêm vào kết quả trả về
+                results[struct_id] = self.dvh_data[struct_id]
+                
+            except Exception as e:
+                logger.error(f"Lỗi khi tính DVH cho cấu trúc {struct_id}: {str(e)}")
+                import traceback
+                logger.debug(traceback.format_exc())
+                continue
             
-            # Tính DVH tích lũy
-            cumulative_dvh = np.cumsum(hist[::-1])[::-1]
-            cumulative_dvh = cumulative_dvh / cumulative_dvh[0] if cumulative_dvh[0] > 0 else cumulative_dvh
-            
-            # Tính DVH vi phân
-            differential_dvh = hist / np.sum(hist) if np.sum(hist) > 0 else hist
-            
-            # Lưu kết quả
-            self.dvh_data[struct_id] = {
-                'structure_id': struct_id,
-                'structure_name': struct_data['name'],
-                'structure_type': struct_data['type'],
-                'bin_centers': bin_centers,
-                'bin_edges': bin_edges,
-                'differential': differential_dvh,
-                'cumulative': cumulative_dvh,
-                'volume_cc': np.sum(struct_mask) * (self.voxel_size()[0] * self.voxel_size()[1] * self.voxel_size()[2]) / 1000.0,
-                'min_dose': np.min(structure_dose),
-                'max_dose': np.max(structure_dose),
-                'mean_dose': np.mean(structure_dose),
-                'median_dose': np.median(structure_dose)
-            }
-            
-        return self.dvh_data
+        return results
     
     def voxel_size(self) -> Tuple[float, float, float]:
         """
@@ -165,7 +255,8 @@ class PlanEvaluation:
         Tuple[float, float, float]
             Kích thước voxel (mm) theo (x, y, z)
         """
-        # Giả định kích thước voxel, trong thực tế lấy từ thông tin DICOM
+        # Trong thực tế, lấy thông tin này từ metadata của ảnh (DICOM)
+        # Đây là giá trị mặc định khi không có thông tin
         return (3.0, 3.0, 3.0)
         
     def plot_dvh(self, structure_ids: Optional[List[str]] = None, dvh_type: DVHType = DVHType.CUMULATIVE,

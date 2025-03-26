@@ -1,0 +1,24 @@
+2025-03-26 08:20:06,744 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-26 08:20:06
+2025-03-26 08:20:06,744 - __main__ - INFO - Thư mục gốc: e:\hoctap\QuangTPS
+2025-03-26 08:20:06,744 - __main__ - INFO - File log: e:\hoctap\QuangTPS\logs\quangtps_20250326_082006.log
+2025-03-26 08:20:10,921 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-26 08:20:22,021 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-26 08:20:22,216 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-26 08:20:22,280 - root - WARNING - PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.
+2025-03-26 08:20:24,457 - quangtps.database.db_connector - INFO - Đã kết nối đến cơ sở dữ liệu: e:\hoctap\QuangTPS\data\database\quangtps.db
+2025-03-26 08:20:24,516 - quangtps.database.patient_db - INFO - Đã lấy danh sách 5 bệnh nhân
+2025-03-26 08:20:24,516 - quangtps.database.patient_db - INFO - Không có kế hoạch nào cho bệnh nhân b06aee7a-a352-45d1-a1be-b79689ae1efd
+2025-03-26 08:20:24,516 - quangtps.database.patient_db - INFO - Không có kế hoạch nào cho bệnh nhân b9a63769-7813-4be1-b85e-7ded5e9f79f6
+2025-03-26 08:20:24,516 - quangtps.database.patient_db - INFO - Không có kế hoạch nào cho bệnh nhân 9ac76bc5-4f0f-4163-beec-45dc5a26546e
+2025-03-26 08:20:24,516 - quangtps.database.patient_db - INFO - Không có kế hoạch nào cho bệnh nhân 6aaf1b06-dc49-4278-9fb6-fc7f475c5940
+2025-03-26 08:20:24,516 - quangtps.database.patient_db - INFO - Không có kế hoạch nào cho bệnh nhân d55a4683-e6af-41ee-b994-0e5f7d51f35b
+2025-03-26 08:20:24,540 - quangtps.dicom.pacs_client - INFO - Initialized AE with title QUANGTPS and 10 contexts
+2025-03-26 08:20:24,569 - quangtps.ui.patient_tab - INFO - Khởi tạo giao diện tab bệnh nhân hoàn tất
+2025-03-26 08:20:24,571 - quangtps.ui.patient_tab - INFO - Khởi tạo tab thông tin bệnh nhân hoàn tất
+2025-03-26 08:20:24,611 - quangtps.ui.planning_tab - INFO - Khởi tạo tab lập kế hoạch hoàn tất
+2025-03-26 08:20:24,805 - quangtps.ui.dose_tab - INFO - Khởi tạo tab liều lượng hoàn tất
+2025-03-26 08:20:25,050 - quangtps.ui.treatment_tab - INFO - Khởi tạo tab điều trị hoàn tất
+2025-03-26 08:20:25,059 - quangtps.ui.qa_tab - INFO - Đã tải 0 bài kiểm tra QA
+2025-03-26 08:20:25,070 - quangtps.ui.reporting_tab - INFO - Khởi tạo tab báo cáo hoàn tất
+2025-03-26 08:20:26,190 - quangtps.database.patient_db - INFO - Đã lấy danh sách 5 bệnh nhân
+2025-03-26 08:20:26,261 - quangtps.ui.main_window - INFO - Khởi tạo cửa sổ chính QuangTPS hoàn tất

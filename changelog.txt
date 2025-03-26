@@ -1,3 +1,125 @@
+2025-04-21
+=========
+
+Sửa lỗi:
+- Khắc phục lỗi "'QStackedWidget' object has no attribute 'statusBar'" trong quangtps/ui/imaging_tab.py
+- Sửa lỗi "'NoneType' object is not iterable" trong quá trình tìm kiếm bệnh nhân tại quangtps/database/patient_db.py
+- Cải thiện phương thức search_patients để luôn trả về danh sách hợp lệ, ngay cả khi có lỗi
+- Tăng khả năng phục hồi khi gặp lỗi trong thao tác hiển thị DICOM và tìm kiếm bệnh nhân
+- Cải thiện phương thức get_slice trong DicomSeries để xử lý tốt hơn các trường hợp đặc biệt
+- Xử lý các trường hợp chỉ số lát cắt (slice index) ngoài phạm vi trong DICOM
+- Sửa lỗi IndexError trong _update_displays của ImageViewer khi truy cập mảng NumPy không hợp lệ
+- Thêm kiểm tra kỹ lưỡng hơn với dữ liệu hình ảnh trước khi hiển thị trong image_viewer.py
+- Cải thiện xử lý DICOM không hợp lệ trong quá trình phân loại và nhập dữ liệu
+- Ngăn chặn lỗi khi lưu DICOM dataset thiếu thông tin quan trọng như SOPInstanceUID
+
+Cải tiến:
+- Thêm kiểm tra null/existed trước khi truy cập statusBar() trong imaging_tab.py
+- Cải thiện việc xử lý lỗi trong quá trình tìm kiếm bệnh nhân để tránh gây sập ứng dụng
+- Bổ sung đầy đủ tài liệu docstring cho phương thức search_patients
+- Tối ưu hóa quá trình tìm kiếm trong metadata của bệnh nhân
+- Tự động điều chỉnh chỉ số lát cắt khi nằm ngoài phạm vi thay vì trả về None
+- Thêm khả năng tự động chuyển đổi kiểu dữ liệu cho chỉ số lát cắt DICOM nếu có thể
+- Mặc định sử dụng mặt phẳng axial khi giá trị mặt phẳng không hợp lệ
+- Nâng cao khả năng xử lý ngoại lệ trong phương thức _update_displays tránh lỗi khi truy cập vị trí hình ảnh
+- Thêm logs chi tiết cho quá trình hiển thị hình ảnh để dễ dàng gỡ lỗi
+- Cải thiện DicomImporter để xử lý tốt hơn các DICOM không hợp lệ
+- Thêm khả năng dự đoán modality dựa trên SOPClassUID khi attribute modality bị thiếu
+- Bổ sung kiểm tra PixelData trước khi lưu DICOM cho các modality hình ảnh
+- Tối ưu hóa quá trình tạo series DICOM với xử lý lỗi tốt hơn
+
+Tính năng:
+- Tăng cường khả năng logging thông báo khi không thể hiển thị thông báo trên statusBar
+- Bổ sung thông tin chi tiết khi tìm kiếm bệnh nhân để dễ dàng gỡ lỗi
+- Thêm xử lý lỗi SQL để tránh trường hợp truy vấn không hợp lệ gây sập ứng dụng
+- Cải thiện hiển thị hình ảnh DICOM bằng cách phục hồi tự động từ các lỗi chỉ số
+- Kiểm tra tính hợp lệ của mảng NumPy và kích thước của dữ liệu hình ảnh trước khi hiển thị
+- Tự động tạo SOPInstanceUID cho các DICOM bị thiếu thông tin này
+- Thêm báo cáo chi tiết về quá trình phân loại DICOM và số lượng file hợp lệ/không hợp lệ
+- Cải thiện khả năng bỏ qua các DICOM không hợp lệ thay vì gây lỗi toàn bộ quá trình nhập
+
+2025-04-20
+=========
+
+Sửa lỗi:
+- Sửa lỗi "IndentationError: unexpected indent" trong patient_tab.py tại phương thức self._clear_patient_data() 
+- Khắc phục lỗi "NameError: name 'PatientDatabase' is not defined" trong main_window.py
+- Sửa lỗi indentation trong treatment_delivery.py gây ra lỗi "IndentationError: unexpected indent" tại dòng 851
+- Sửa lỗi cú pháp "SyntaxError: invalid syntax" trong quangtps/dose/physics/terma.py tại dòng 317
+- Đồng bộ hóa tên lớp PatientDatabase trong tất cả các module
+- Sửa lỗi cú pháp và đảm bảo nhất quán trong việc sử dụng tên lớp trên toàn bộ hệ thống
+- Cải thiện quá trình khởi động ứng dụng để tránh các lỗi cú pháp
+
+Cải tiến:
+- Cập nhật tài liệu API để phản ánh cấu trúc lớp hiện tại
+- Làm rõ việc sử dụng PatientDatabase và các trường dữ liệu liên quan
+- Cải thiện khả năng phục hồi của ứng dụng trước các lỗi cú pháp và thiếu tham chiếu
+- Tăng cường khả năng chẩn đoán và ghi log khi gặp lỗi cú pháp hoặc tham chiếu
+- Tạo bản sao lưu của file treatment_delivery.py trước khi sửa đổi
+- Tạo bản sao lưu của file terma.py trước khi sửa đổi
+
+Tính năng:
+- Tự động phát hiện và sửa chữa các tham chiếu không đúng đến các lớp trong cơ sở dữ liệu
+- Cải thiện thông báo lỗi khi khởi động ứng dụng để cung cấp thông tin chi tiết hơn
+- Thêm kiểm tra tính nhất quán của dữ liệu trong hệ thống
+
+2025-04-19
+=========
+
+Sửa lỗi:
+- Sửa lỗi khi tính DVH với dữ liệu mặt nạ cấu trúc không hợp lệ hoặc không khớp với lưới liều
+- Khắc phục sự cố khi xử lý/hiển thị chuỗi DICOM với các trường dữ liệu không hợp lệ hoặc thiếu
+- Cải thiện việc xác thực dữ liệu đầu vào trong phương thức calculate_dvh
+- Giải quyết lỗi khi tính thống kê liều (min, max, mean) trên dữ liệu không hợp lệ
+- Ngăn chặn việc truy cập không an toàn vào các chuỗi DICOM có dữ liệu không đầy đủ
+- Cải thiện phương thức _display_current_series để xử lý tốt hơn các trường hợp dữ liệu thiếu hoặc không hợp lệ
+
+Cải tiến:
+- Cải thiện trải nghiệm người dùng bằng cách thêm hộp thoại tiến trình khi tải chuỗi DICOM lớn
+- Nâng cao quy trình kiểm tra chất lượng mặt nạ cấu trúc trước khi tính toán DVH
+- Tăng cường khả năng xử lý dữ liệu hình ảnh bằng cách kiểm tra kỹ lưỡng các thuộc tính trước khi sử dụng
+- Bổ sung các thông báo chi tiết giúp người dùng hiểu rõ lỗi khi gặp vấn đề tải hình ảnh
+- Tự động chuyển đổi mặt nạ cấu trúc không nhị phân thành dạng nhị phân khi cần thiết
+- Tính toán khoảng cách lát cắt chính xác hơn bằng cách sử dụng thông tin DICOM
+- Ghi log chi tiết về quá trình tải và hiển thị hình ảnh để dễ dàng gỡ lỗi
+- Cải thiện khả năng phục hồi của tính toán DVH khi gặp lỗi cấu trúc riêng lẻ
+
+Tính năng:
+- Thêm cơ chế sao chép dữ liệu trong quá trình xử lý để tránh lỗi tham chiếu đến dữ liệu gốc
+- Bổ sung khả năng hiển thị thông báo trạng thái sau khi tải thành công chuỗi DICOM
+- Bổ sung kiểm tra và chuyển đổi mặt nạ cấu trúc không nhị phân thành dạng nhị phân
+- Thêm xác thực chặt chẽ các thuộc tính và dữ liệu trong mô-đun đánh giá kế hoạch
+- Cải thiện thông báo lỗi với thông tin cụ thể về nguyên nhân gốc rễ
+
+2025-04-18
+=========
+
+Sửa lỗi:
+- Khắc phục lỗi khi tính toán liều với dữ liệu đầu vào không đầy đủ hoặc không hợp lệ
+- Sửa lỗi khi tải các chuỗi DICOM có lát cắt không đồng đều hoặc khoảng cách không nhất quán
+- Cải thiện quá trình tính toán liều xạ trị khi beam không có thông tin monitor units
+- Đảm bảo xử lý đúng các trường hợp tập dữ liệu CT có chiều dày lát cắt không đồng nhất
+- Ngăn chặn lỗi phát sinh khi truy cập các thuộc tính không tồn tại trong đối tượng Beam
+- Sửa lỗi trong hàm validate_inputs để kiểm tra dữ liệu CT và beam một cách an toàn
+- Thêm khả năng phát hiện và xử lý các tập dữ liệu DICOM không đồng nhất về hướng và vị trí
+
+Cải tiến:
+- Nâng cao khả năng phục hồi của quá trình tính toán liều khi gặp lỗi một beam trong kế hoạch
+- Cải thiện việc gán trọng số (weight) cho các beam trong tính toán liều tổng
+- Bổ sung chi tiết metadata cho ảnh liều để phục vụ việc phân tích và theo dõi
+- Tối ưu hóa phương thức _load_with_sitk và _load_with_pydicom để xử lý tốt hơn các tập dữ liệu DICOM phức tạp
+- Cải thiện cơ chế xác định hướng và trục của tập dữ liệu 3D từ thông tin DICOM
+- Thêm khả năng tính toán khoảng cách lát cắt từ vị trí thực tế thay vì dựa vào SliceThickness
+- Tăng cường khả năng kiểm tra và xác thực dữ liệu trước khi thực hiện các phép tính phức tạp
+- Ghi log chi tiết hơn trong quá trình tính toán liều và xử lý DICOM để dễ dàng gỡ lỗi
+
+Tính năng:
+- Cho phép tiếp tục tính toán liều cho kế hoạch ngay cả khi có beam không thành công
+- Thêm phương pháp dự phòng để tải DICOM với pydicom khi SimpleITK thất bại
+- Tự động phát hiện và điều chỉnh khoảng cách lát cắt không đồng đều trong tập dữ liệu DICOM
+- Nâng cao kết quả tính toán liều với metadata chi tiết về thuật toán và các tham số sử dụng
+- Bổ sung khả năng báo cáo về sự không đồng nhất của tập dữ liệu đầu vào
+
 2025-04-17
 =========
 
@@ -101,3 +223,26 @@ Nâng cao:
 - Cải thiện việc xử lý lỗi và hiển thị thông báo chi tiết
 - Tự động tạo ID bệnh nhân khi cần thiết
 - Thêm khả năng tạo bệnh nhân mới với ID cụ thể khi tìm kiếm không thấy ID đó 
+
+2025-04-22
+---------------
+Bug Fixes:
+- Fixed database schema mismatch between code and actual database structure.
+- Fixed SQL error "table studies has no column named id" by updating the code to use the correct field name 'uid' instead of 'id'.
+- Updated PatientDatabase.add_study_to_patient to use the correct column names when inserting studies and series.
+- Updated the files table schema to use series_uid instead of series_id to match the series table structure.
+- Fixed SQL queries in get_study_series and get_series_files to use the new column names.
+- Updated the Study and Series classes to use uid as the primary key field instead of id to match the database schema.
+- Added backwards compatibility to ensure the UI components that expect 'id' fields still work.
+- Fixed DICOM error handling in DicomReader to prevent application crashes with invalid DICOM files.
+- Enhanced error recovery in DICOM import process to skip invalid files instead of failing the entire import.
+- Fixed storage path construction in DicomImporter to use the new uid property.
+
+Improvements:
+- Enhanced database schema consistency across the application.
+- Improved error handling when dealing with database operations to prevent application crashes.
+- Added better logging for SQL operations to help with debugging.
+- Enhanced DICOM file validation to detect and handle common issues like missing PixelData or SOPInstanceUID.
+- Added automatic detection of DICOM modality based on SOPClassUID when Modality tag is missing.
+- Improved error logging for DICOM operations with detailed information about file paths and error types.
+- Added robust file path validation and error handling during DICOM file saving. 

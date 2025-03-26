@@ -235,7 +235,7 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
         except ValidationError as e:
             logger.error(f"Validation error in {self.name} calculation: {str(e)}")
             raise
-            
+        
         except Exception as e:
             logger.error(f"Error in {self.name} calculation: {str(e)}")
             raise DoseCalculationError(f"{self.name} calculation failed: {str(e)}")

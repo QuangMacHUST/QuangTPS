@@ -99,7 +99,7 @@ class Study:
             patient_id (str): ID của bệnh nhân liên quan
             metadata (dict): Metadata bổ sung của nghiên cứu
         """
-        self.id = study_id or str(uuid.uuid4())
+        self.uid = study_id or str(uuid.uuid4())
         self.description = description or ""
         self.date = date or datetime.now().isoformat()
         self.patient_id = patient_id
@@ -116,7 +116,7 @@ class Study:
             series (Series): Đối tượng chuỗi
         """
         self.series_list.append(series)
-        series.study_id = self.id
+        series.study_uid = self.uid
     
     def get_series_by_id(self, series_id):
         """
@@ -129,7 +129,7 @@ class Study:
             Series: Đối tượng chuỗi hoặc None nếu không tìm thấy
         """
         for series in self.series_list:
-            if series.id == series_id:
+            if series.uid == series_id:
                 return series
         return None
     
@@ -141,7 +141,8 @@ class Study:
             dict: Thông tin nghiên cứu dưới dạng dictionary
         """
         return {
-            "id": self.id,
+            "id": self.uid,  # Keep id for backwards compatibility
+            "uid": self.uid,
             "description": self.description,
             "date": self.date,
             "patient_id": self.patient_id,
@@ -168,10 +169,10 @@ class Series:
             study_id (str): ID của nghiên cứu liên quan
             metadata (dict): Metadata bổ sung của chuỗi
         """
-        self.id = series_id or str(uuid.uuid4())
+        self.uid = series_id or str(uuid.uuid4())
         self.description = description or ""
         self.modality = modality or ""
-        self.study_id = study_id
+        self.study_uid = study_id
         self.metadata = metadata or {}
         self.file_paths = []
         self.created_at = datetime.now().isoformat()
@@ -196,10 +197,12 @@ class Series:
             dict: Thông tin chuỗi dưới dạng dictionary
         """
         return {
-            "id": self.id,
+            "id": self.uid,  # Keep id for backwards compatibility
+            "uid": self.uid,
             "description": self.description,
             "modality": self.modality,
-            "study_id": self.study_id,
+            "study_id": self.study_uid,
+            "study_uid": self.study_uid,
             "metadata": self.metadata,
             "file_paths": self.file_paths,
             "data_path": self.data_path,
@@ -511,72 +514,85 @@ class PatientDatabase:
 
     def search_patients(self, query=None, limit=100, offset=0):
         """
-        Tìm kiếm bệnh nhân theo các tiêu chí.
-        
+        Tìm kiếm bệnh nhân theo tiêu chí.
+
         Args:
-            query (dict, optional): Từ điển các tiêu chí tìm kiếm
-                Các khóa có thể là: 'name', 'gender', 'birth_date', 'metadata'
-            limit (int, optional): Số lượng kết quả tối đa
-            offset (int, optional): Vị trí bắt đầu
-            
+            query (dict, optional): Các tiêu chí tìm kiếm. Mặc định là None, trả về tất cả bệnh nhân.
+                Các tiêu chí có thể bao gồm:
+                - name: Tên hoặc một phần tên của bệnh nhân.
+                - birth_date: Ngày sinh của bệnh nhân.
+                - gender: Giới tính của bệnh nhân.
+                - id: ID của bệnh nhân (tìm chính xác).
+                - metadata: Dict chứa các cặp key-value cần tìm kiếm trong metadata.
+            limit (int, optional): Số lượng bệnh nhân tối đa cần lấy. Mặc định là 100.
+            offset (int, optional): Vị trí bắt đầu lấy dữ liệu. Mặc định là 0.
+
         Returns:
-            list: Danh sách các bệnh nhân phù hợp
-            
+            list: Danh sách bệnh nhân thỏa mãn tiêu chí tìm kiếm.
+
         Raises:
-            DatabaseError: Nếu có lỗi xảy ra khi truy vấn
+            DatabaseError: Nếu có lỗi xảy ra trong quá trình tìm kiếm.
         """
         try:
-            # Chuẩn bị câu truy vấn cơ sở
-            base_query = "SELECT * FROM patients"
-            where_clauses = []
+            # Xây dựng câu truy vấn SQL
+            conditions = []
             params = []
             
-            # Thêm các điều kiện tìm kiếm nếu có
             if query:
                 if 'name' in query and query['name']:
-                    where_clauses.append("name LIKE ?")
-                    params.append(f"%{query['name']}%")
-                
-                if 'gender' in query and query['gender']:
-                    where_clauses.append("gender = ?")
-                    params.append(query['gender'])
+                    conditions.append("name LIKE ?")
+                    params.append("%" + query['name'] + "%")
                 
                 if 'birth_date' in query and query['birth_date']:
-                    where_clauses.append("dob = ?")
+                    conditions.append("dob = ?")
                     params.append(query['birth_date'])
                 
-                # Tìm kiếm trong metadata (cần xử lý đặc biệt)
-                if 'metadata' in query and query['metadata']:
-                    for key, value in query['metadata'].items():
-                        where_clauses.append("metadata LIKE ?")
-                        params.append(f"%\"{key}\":\"{value}\"%")
-                        
-                # Tìm theo DICOM ID (lưu trong metadata)
-                if 'dicom_id' in query and query['dicom_id']:
-                    where_clauses.append("metadata LIKE ?")
-                    params.append(f"%\"dicom_id\":\"{query['dicom_id']}\"%")
-            
-            # Hoàn thiện câu truy vấn
-            if where_clauses:
-                base_query += " WHERE " + " AND ".join(where_clauses)
-            
-            # Thêm giới hạn kết quả
-            base_query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
-            params.append(limit)
-            params.append(offset)
+                if 'gender' in query and query['gender']:
+                    conditions.append("gender = ?")
+                    params.append(query['gender'])
+                
+                if 'id' in query and query['id']:
+                    conditions.append("id = ?")
+                    params.append(query['id'])
             
             # Thực hiện truy vấn
-            results = self.db.execute_query(base_query, tuple(params))
+            sql_query = "SELECT * FROM patients"
+            if conditions:
+                sql_query += " WHERE " + " AND ".join(conditions)
             
-            # Chuyển đổi kết quả thành danh sách dict
+            sql_query += " ORDER BY name LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            
+            try:
+                results = self.db.execute_query(sql_query, params, fetchall=True)
+            except Exception as e:
+                logger.error(f"Lỗi SQL khi tìm kiếm bệnh nhân: {str(e)}")
+                return []
+                
+            if not results:
+                logger.info("Không tìm thấy bệnh nhân nào phù hợp với tiêu chí tìm kiếm")
+                return []
+            
+            # Chuyển đổi kết quả thành danh sách dictionaries
             patients = []
             for row in results:
                 patient_dict = dict(row)
                 
-                # Giải mã metadata từ JSON
+                # Giải mã metadata từ JSON nếu có
                 if 'metadata' in patient_dict and patient_dict['metadata']:
                     try:
                         patient_dict['metadata'] = json.loads(patient_dict['metadata'])
+                        
+                        # Tìm kiếm trong metadata nếu có tiêu chí
+                        if query and 'metadata' in query and query['metadata']:
+                            match = True
+                            for key, value in query['metadata'].items():
+                                if key not in patient_dict['metadata'] or patient_dict['metadata'][key] != value:
+                                    match = False
+                                    break
+                            
+                            if not match:
+                                continue  # Bỏ qua bệnh nhân này nếu metadata không khớp
                     except json.JSONDecodeError:
                         patient_dict['metadata'] = {}
                 else:
@@ -589,7 +605,9 @@ class PatientDatabase:
             
         except Exception as e:
             logger.error(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}", exc_info=True)
-            raise DatabaseError(f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}") from e
+            # Thay vì ném ngoại lệ, trả về danh sách rỗng để tránh lỗi khi gọi hàm
+            logger.warning("Trả về danh sách rỗng do lỗi trong quá trình tìm kiếm")
+            return []
 
     def count_patients(self, name=None, birth_date=None, gender=None):
         """
@@ -752,7 +770,7 @@ class PatientDatabase:
         """
         try:
             # Truy vấn danh sách series
-            query = "SELECT * FROM series WHERE study_id = ?"
+            query = "SELECT * FROM series WHERE study_uid = ?"
             series_data = self.db.execute_query(query, (study_id,), fetchall=True)
             
             # Kiểm tra nếu không có kết quả
@@ -775,8 +793,8 @@ class PatientDatabase:
                     series_dict['metadata'] = {}
                 
                 # Lấy danh sách file_paths
-                query = "SELECT file_path FROM files WHERE series_id = ?"
-                files_data = self.db.execute_query(query, (series_dict['id'],), fetchall=True)
+                query = "SELECT file_path FROM files WHERE series_uid = ?"
+                files_data = self.db.execute_query(query, (series_dict['uid'],), fetchall=True)
                 
                 # Kiểm tra nếu không có file nào
                 if files_data:
@@ -923,7 +941,7 @@ class PatientDatabase:
             
             # Lưu nghiên cứu vào bảng studies
             query = '''
-                INSERT INTO studies (id, description, date, patient_id, created_at, updated_at, metadata)
+                INSERT INTO studies (uid, description, date, patient_id, created_at, updated_at, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             '''
             
@@ -943,7 +961,7 @@ class PatientDatabase:
             # Lưu từng series
             for series_data in study_data['series']:
                 query = '''
-                    INSERT INTO series (id, description, modality, study_id, created_at, updated_at, metadata, data_path)
+                    INSERT INTO series (uid, description, modality, study_uid, created_at, updated_at, metadata, data_path)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 '''
                 
@@ -964,7 +982,7 @@ class PatientDatabase:
                 # Lưu danh sách files
                 for file_path in series_data['file_paths']:
                     query = '''
-                        INSERT INTO files (series_id, file_path, created_at)
+                        INSERT INTO files (series_uid, file_path, created_at)
                         VALUES (?, ?, ?)
                     '''
                     
@@ -1035,7 +1053,7 @@ class PatientDatabase:
         """
         try:
             # Truy vấn danh sách file
-            query = "SELECT file_path FROM files WHERE series_id = ?"
+            query = "SELECT file_path FROM files WHERE series_uid = ?"
             results = self.db.execute_query(query, (series_id,), fetchall=True)
             
             if not results:

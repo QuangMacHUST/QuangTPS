@@ -28,21 +28,37 @@ class DicomReader:
             file_path (str): Đường dẫn đến file DICOM
         
         Returns:
-            pydicom.dataset.FileDataset: Dataset DICOM
+            pydicom.dataset.FileDataset: Dataset DICOM hoặc None nếu file không hợp lệ
         
         Raises:
             IOError: Nếu file không tồn tại
             DicomError: Nếu file không phải là DICOM hợp lệ
         """
-        if not os.path.exists(file_path):
-            raise IOError(f"File not found", file_path=file_path)
-        
         try:
-            return pydicom.dcmread(file_path)
-        except InvalidDicomError:
-            raise DicomError(f"Invalid DICOM file: {file_path}")
+            if not os.path.exists(file_path):
+                logger.warning(f"File không tồn tại: {file_path}")
+                return None
+            
+            try:
+                # Thử đọc file với force=True để chấp nhận một số lỗi nhỏ
+                dataset = pydicom.dcmread(file_path, force=True)
+                
+                # Kiểm tra tính hợp lệ của DICOM
+                if not hasattr(dataset, 'SOPClassUID'):
+                    logger.warning(f"File không phải là DICOM hợp lệ (không có SOPClassUID): {file_path}")
+                    return None
+                
+                return dataset
+            except InvalidDicomError as e:
+                logger.warning(f"File không phải là DICOM hợp lệ: {file_path}, lỗi: {str(e)}")
+                return None
+            except Exception as e:
+                logger.error(f"Lỗi khi đọc file DICOM: {file_path}, lỗi: {str(e)}")
+                return None
         except Exception as e:
-            raise DicomError(f"Error reading DICOM file: {str(e)}")
+            # Đảm bảo không crash ứng dụng trong mọi trường hợp
+            logger.error(f"Lỗi không mong đợi khi đọc file: {file_path}, lỗi: {str(e)}")
+            return None
     
     @staticmethod
     def read_directory(directory):
@@ -59,20 +75,32 @@ class DicomReader:
             IOError: Nếu thư mục không tồn tại
         """
         if not os.path.exists(directory):
-            raise IOError(f"Directory not found", file_path=directory)
+            logger.error(f"Thư mục không tồn tại: {directory}")
+            return []
         
         dicom_files = []
+        invalid_count = 0
+        total_files = 0
         
         for root, _, files in os.walk(directory):
             for file in files:
+                total_files += 1
                 file_path = os.path.join(root, file)
-                try:
-                    dicom_dataset = DicomReader.read_file(file_path)
+                
+                dicom_dataset = DicomReader.read_file(file_path)
+                if dicom_dataset is not None:
                     dicom_files.append(dicom_dataset)
-                except (DicomError, IOError) as e:
-                    logger.warning(f"Skipping file {file_path}: {str(e)}")
-                except Exception as e:
-                    logger.error(f"Unexpected error reading {file_path}: {str(e)}")
+                else:
+                    invalid_count += 1
+        
+        # Log thông tin về quá trình đọc file
+        if dicom_files:
+            logger.info(f"Đã đọc thành công {len(dicom_files)}/{total_files} file DICOM từ thư mục {directory}")
+        else:
+            logger.warning(f"Không tìm thấy file DICOM hợp lệ nào trong thư mục {directory}")
+        
+        if invalid_count > 0:
+            logger.warning(f"Bỏ qua {invalid_count} file không hợp lệ hoặc không phải là DICOM")
         
         return dicom_files
     

@@ -378,7 +378,7 @@ class PatientTab(QWidget):
                     # Không phải UUID hợp lệ
                     QMessageBox.warning(
                         self, "Cảnh báo", f"Không tìm thấy bệnh nhân với ID: {patient_id}")
-                    return
+                return
             
             # Lưu bệnh nhân hiện tại
             self.current_patient = patient_data
@@ -542,7 +542,7 @@ class PatientTab(QWidget):
             self.import_images_button.setEnabled(False)
             self.view_images_button.setEnabled(False)
             return
-
+        
         try:
             # Lấy danh sách nghiên cứu của bệnh nhân
             studies = self.patient_db.get_patient_studies(self.current_patient['id'])
@@ -596,7 +596,7 @@ class PatientTab(QWidget):
         self.import_images_button.setEnabled(self.current_patient is not None)
         # Vô hiệu hóa nút xem ảnh cho đến khi chọn một nghiên cứu cụ thể
         self.view_images_button.setEnabled(False)
-
+    
     def _save_patient_info(self):
         """
         Lưu thông tin bệnh nhân vào cơ sở dữ liệu.

@@ -299,27 +299,120 @@ class DicomImporter:
     
     def _categorize_datasets(self, datasets: List[pydicom.dataset.FileDataset]) -> Dict[str, List[pydicom.dataset.FileDataset]]:
         """
-        Phân loại các dataset DICOM theo modality.
+        Phân loại các DICOM datasets theo modality.
         
         Parameters
         ----------
         datasets : List[pydicom.dataset.FileDataset]
-            Danh sách các dataset DICOM
+            Danh sách các datasets cần phân loại
             
         Returns
         -------
         Dict[str, List[pydicom.dataset.FileDataset]]
-            Từ điển với khóa là modality và giá trị là danh sách dataset
+            Dictionary với key là tên modality, value là danh sách các datasets thuộc modality đó
         """
         result = {}
+        invalid_datasets = []
+        
+        if not datasets:
+            logger.warning("Không có DICOM datasets để phân loại")
+            return {}
+        
+        logger.info(f"Phân loại {len(datasets)} DICOM datasets")
         
         for ds in datasets:
-            modality = self._get_modality(ds)
-            
-            if modality not in result:
-                result[modality] = []
+            try:
+                # Validate that the dataset is a FileDataset
+                if not isinstance(ds, pydicom.dataset.FileDataset):
+                    logger.warning(f"Bỏ qua đối tượng không phải FileDataset: {type(ds)}")
+                    invalid_datasets.append(ds)
+                    continue
                 
-            result[modality].append(ds)
+                # Kiểm tra xem dataset có thuộc tính cơ bản không
+                basic_attrs = ['SOPClassUID', 'InstanceNumber']
+                missing_attrs = [attr for attr in basic_attrs if not hasattr(ds, attr)]
+                if missing_attrs:
+                    logger.warning(f"Dataset thiếu các thuộc tính cơ bản: {missing_attrs}")
+                    # Ghi chi tiết hơn để hỗ trợ debug
+                    logger.debug(f"Dataset info: {str(ds)[:200]}...")
+                    
+                    # Nếu thiếu thuộc tính quan trọng nhưng vẫn muốn phân loại
+                    # Có thể bỏ qua hoặc thử lấy thông tin từ các thuộc tính khác
+                
+                # Get modality, with fallbacks if not directly available
+                modality = self._get_modality(ds)
+                
+                # If modality is unknown, try to infer it from SOP Class UID
+                if modality == 'UNKNOWN' and hasattr(ds, 'SOPClassUID'):
+                    sop_class = ds.SOPClassUID
+                    # Map common SOP Class UIDs to modalities
+                    sop_to_modality = {
+                        '1.2.840.10008.5.1.4.1.1.2': 'CT',        # CT Image Storage
+                        '1.2.840.10008.5.1.4.1.1.4': 'MR',        # MR Image Storage
+                        '1.2.840.10008.5.1.4.1.1.128': 'PT',      # PET Image Storage
+                        '1.2.840.10008.5.1.4.1.1.481.3': 'RTSTRUCT', # RT Structure Set Storage
+                        '1.2.840.10008.5.1.4.1.1.481.2': 'RTDOSE',   # RT Dose Storage
+                        '1.2.840.10008.5.1.4.1.1.481.5': 'RTPLAN',   # RT Plan Storage
+                        '1.2.840.10008.5.1.4.1.1.481.1': 'RTIMAGE',  # RT Image Storage
+                        '1.2.840.10008.5.1.4.1.1.7': 'SC',        # Secondary Capture Image Storage
+                        '1.2.840.10008.5.1.4.1.1.6.1': 'US',      # Ultrasound Image Storage
+                    }
+                    
+                    # Tìm kiếm tất cả UIDs có thể phù hợp
+                    for uid_prefix, mod in sop_to_modality.items():
+                        if str(sop_class).startswith(uid_prefix):
+                            modality = mod
+                            logger.info(f"Suy ra modality '{modality}' từ SOPClassUID: {sop_class}")
+                            break
+                
+                # Kiểm tra thêm nếu vẫn không xác định được
+                if modality == 'UNKNOWN':
+                    # Thử kiểm tra các thuộc tính khác
+                    if hasattr(ds, 'StudyDescription'):
+                        study_desc = str(ds.StudyDescription).upper()
+                        if 'CT' in study_desc:
+                            modality = 'CT'
+                        elif 'MR' in study_desc:
+                            modality = 'MR'
+                        elif 'PET' in study_desc:
+                            modality = 'PT'
+                        logger.info(f"Suy ra modality '{modality}' từ StudyDescription: {study_desc}")
+                
+                # Kiểm tra tính hợp lệ của modality với kiểu dữ liệu hình ảnh
+                if modality in ['CT', 'MR', 'PT'] and not hasattr(ds, 'PixelData'):
+                    logger.warning(f"Dataset có modality '{modality}' nhưng không có PixelData")
+                    # Đánh dấu là không hợp lệ nếu đây là vấn đề nghiêm trọng
+                    if modality == 'CT' and hasattr(ds, 'PatientID'):  # Giảm nhẹ cảnh báo nếu có thể xác định bệnh nhân
+                        logger.warning(f"Dữ liệu CT không có pixel data cho bệnh nhân: {ds.PatientID}")
+                        
+                    # Vẫn thêm vào danh sách theo modality để có thể xử lý sau
+                
+                # Initialize result entry if needed
+                if modality not in result:
+                    result[modality] = []
+                
+                # Add dataset to result
+                result[modality].append(ds)
+                
+            except Exception as e:
+                logger.error(f"Lỗi khi phân loại DICOM dataset: {str(e)}")
+                logger.debug(f"Thông tin dataset: {str(ds)[:200]}...")
+                
+                # Ghi log chi tiết hơn trong debug mode
+                import traceback
+                logger.debug(traceback.format_exc())
+                
+                invalid_datasets.append(ds)
+        
+        # Log information about invalid datasets
+        if invalid_datasets:
+            logger.warning(f"Tìm thấy {len(invalid_datasets)} DICOM datasets không hợp lệ và bị bỏ qua")
+        
+        # Log summary of results
+        valid_count = sum(len(datasets) for datasets in result.values())
+        logger.info(f"Đã phân loại {valid_count} DICOM datasets hợp lệ thành {len(result)} modalities")
+        for modality, mod_datasets in result.items():
+            logger.info(f"  - {modality}: {len(mod_datasets)} datasets")
         
         return result
     
@@ -435,7 +528,7 @@ class DicomImporter:
             # Tạo thư mục lưu trữ
             storage_dir = os.path.join(
                 "data", "patients", patient_id, 
-                "studies", study.id, 
+                "studies", study.uid, 
                 "series", modality.lower()
             )
             os.makedirs(storage_dir, exist_ok=True)
@@ -443,28 +536,61 @@ class DicomImporter:
             # Lưu file DICOM
             file_paths = []
             for i, dataset in enumerate(datasets):
-                file_name = f"{modality}_{i+1:04d}.dcm"
-                file_path = os.path.join(storage_dir, file_name)
-                dataset.save_as(file_path)
-                file_paths.append(file_path)
+                try:
+                    file_name = f"{modality}_{i+1:04d}.dcm"
+                    file_path = os.path.join(storage_dir, file_name)
+                    
+                    # Ensure the dataset is valid before saving
+                    if not hasattr(dataset, 'SOPInstanceUID'):
+                        logger.warning(f"Dataset {i+1} missing SOPInstanceUID, generating a placeholder")
+                        dataset.SOPInstanceUID = pydicom.uid.generate_uid()
+                    
+                    # Ensure pixel data is valid for image modalities
+                    if modality in ['CT', 'MR', 'PT'] and not hasattr(dataset, 'PixelData'):
+                        logger.warning(f"Image dataset {i+1} missing PixelData, skipping")
+                        continue
+                    
+                    # Make sure the dataset can be serialized
+                    try:
+                        dataset.save_as(file_path)
+                        file_paths.append(file_path)
+                        logger.debug(f"Saved DICOM file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error saving DICOM dataset {i+1}: {str(e)}")
+                        continue
+                    
+                except Exception as e:
+                    logger.error(f"Error processing DICOM dataset {i+1}: {str(e)}")
+                    # Continue with other datasets
+                    continue
+            
+            # Skip if no valid files were saved
+            if not file_paths:
+                logger.warning(f"No valid DICOM files saved for modality {modality}, skipping series creation")
+                continue
             
             # Tạo chuỗi
-            series = Series(
-                description=f"{modality} Series",
-                modality=modality,
-                study_id=study.id,
-                metadata={
-                    'count': len(datasets),
-                    'first_instance_date': self._get_acquisition_date(datasets[0])
-                }
-            )
-            
-            # Thêm các file vào chuỗi
-            for file_path in file_paths:
-                series.add_file(file_path)
+            try:
+                series = Series(
+                    description=f"{modality} Series",
+                    modality=modality,
+                    study_id=study.uid,
+                    metadata={
+                        'count': len(file_paths),
+                        'first_instance_date': self._get_acquisition_date(datasets[0]) if datasets else ''
+                    }
+                )
                 
-            # Thêm chuỗi vào nghiên cứu
-            study.add_series(series)
+                # Thêm các file vào chuỗi
+                for file_path in file_paths:
+                    series.add_file(file_path)
+                    
+                # Thêm chuỗi vào nghiên cứu
+                study.add_series(series)
+                logger.info(f"Created series for modality {modality} with {len(file_paths)} files")
+            except Exception as e:
+                logger.error(f"Error creating series for modality {modality}: {str(e)}")
+                # Continue with other modalities
         
         # Lưu nghiên cứu vào cơ sở dữ liệu
         self.patient_db.add_study_to_patient(patient_id, study)

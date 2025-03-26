@@ -1,0 +1,25 @@
+2025-03-26 09:00:45,805 - __main__ - INFO - Khởi động QuangTPS tại 2025-03-26 09:00:45
+2025-03-26 09:00:45,805 - __main__ - INFO - Thư mục gốc: e:\hoctap\QuangTPS
+2025-03-26 09:00:45,805 - __main__ - INFO - File log: e:\hoctap\QuangTPS\logs\quangtps_20250326_090045.log
+2025-03-26 09:00:49,766 - __main__ - INFO - Bắt đầu ứng dụng chính
+2025-03-26 09:00:59,328 - quangtps.segmentation.auto.model_repository - INFO - Đã tải thông tin về 0 mô hình cục bộ
+2025-03-26 09:00:59,528 - root - WARNING - WeasyPrint không khả dụng. Báo cáo PDF sẽ bị hạn chế chức năng.
+2025-03-26 09:00:59,576 - root - WARNING - PyQt5.QtDataVisualization không khả dụng. Chức năng 3D sẽ bị giới hạn.
+2025-03-26 09:01:00,682 - __main__ - ERROR - Lỗi khi khởi động ứng dụng: expected 'except' or 'finally' block (monte_carlo.py, line 207)
+2025-03-26 09:01:00,766 - __main__ - ERROR - Chi tiết lỗi:
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\scripts\run_quangtps.py", line 312, in start_application
+    from quangtps.ui.main_window import MainWindow
+  File "e:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 54, in <module>
+    from quangtps.ui.dose_calculation_dialog import DoseCalculationDialog
+  File "e:\hoctap\QuangTPS\quangtps\ui\dose_calculation_dialog.py", line 27, in <module>
+    from quangtps.dose.dose_calculator import DoseCalculator
+  File "e:\hoctap\QuangTPS\quangtps\dose\dose_calculator.py", line 13, in <module>
+    from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
+  File "e:\hoctap\QuangTPS\quangtps\dose\algorithms\__init__.py", line 10, in <module>
+    from quangtps.dose.algorithms.monte_carlo import MonteCarloAlgorithm
+  File "e:\hoctap\QuangTPS\quangtps\dose\algorithms\monte_carlo.py", line 207
+    else:
+    ^^^^
+SyntaxError: expected 'except' or 'finally' block
+

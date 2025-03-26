@@ -18,7 +18,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QListWidget, QListWidgetItem, QSlider, QComboBox,
                            QFileDialog, QMessageBox, QToolBar, QAction,
                            QScrollArea, QFrame, QColorDialog, QToolButton,
-                           QButtonGroup, QMenu, QCheckBox, QSpinBox, QDoubleSpinBox)
+                           QButtonGroup, QMenu, QCheckBox, QSpinBox, QDoubleSpinBox,
+                           QProgressDialog, QApplication)
 from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QDir, QPoint, QRect
 from PyQt5.QtGui import QIcon, QPixmap, QColor, QPalette, QPainter, QPen, QBrush
 
@@ -560,45 +561,156 @@ class ImagingTab(QWidget):
     def _display_current_series(self):
         """Hiển thị series DICOM hiện tại."""
         if not self.current_series:
+            logger.warning("Không thể hiển thị series: current_series là None")
             return
         
-        # Đảm bảo rằng dữ liệu hình ảnh đã được tải
-        if not hasattr(self.current_series, 'image') or self.current_series.image is None:
-            # Nếu image không có sẵn, thử tải dữ liệu hình ảnh
-            if hasattr(self.current_series, 'image_data') and self.current_series.image_data is not None and self.current_series.image_data.size > 0:
-                from quangtps.imaging.image import Image
-                self.current_series.image = Image()
-                self.current_series.image.data = self.current_series.image_data
-                self.current_series.image.modality = self.current_series.modality if hasattr(self.current_series, 'modality') and self.current_series.modality else "OT"
-            else:
-                # Thử tải dữ liệu hình ảnh
-                success = self.current_series.load_image_data()
-                if not success:
-                    logger.error("Không thể tải dữ liệu hình ảnh DICOM")
-                    QMessageBox.warning(self, "Lỗi tải", "Không thể tải dữ liệu hình ảnh DICOM")
-                    return
-                
-            # Kiểm tra lại sau khi tải
-            if not hasattr(self.current_series, 'image') or self.current_series.image is None:
-                logger.error("Không thể hiển thị series: không có dữ liệu hình ảnh")
-                QMessageBox.warning(self, "Lỗi hiển thị", "Không thể hiển thị series: không có dữ liệu hình ảnh")
-                return
-        
         try:
+            # Đảm bảo rằng dữ liệu hình ảnh đã được tải
+            if not hasattr(self.current_series, 'image') or self.current_series.image is None:
+                logger.info("Series không có đối tượng image, thử tải dữ liệu hình ảnh")
+                
+                # Nếu image không có sẵn, thử tải dữ liệu hình ảnh
+                if hasattr(self.current_series, 'image_data') and self.current_series.image_data is not None:
+                    if not isinstance(self.current_series.image_data, np.ndarray):
+                        logger.error(f"Dữ liệu hình ảnh không phải là mảng NumPy: {type(self.current_series.image_data)}")
+                        QMessageBox.warning(self, "Lỗi tải", "Dữ liệu hình ảnh không hợp lệ")
+                        return
+                        
+                    if self.current_series.image_data.size == 0:
+                        logger.error("Dữ liệu hình ảnh rỗng")
+                        QMessageBox.warning(self, "Lỗi tải", "Dữ liệu hình ảnh rỗng")
+                        return
+                    
+                    try:
+                        from quangtps.imaging.image import Image
+                        self.current_series.image = Image()
+                        self.current_series.image.data = self.current_series.image_data.copy()  # Tạo bản sao để tránh lỗi tham chiếu
+                        
+                        # Đảm bảo modality hợp lệ
+                        if hasattr(self.current_series, 'modality') and self.current_series.modality:
+                            self.current_series.image.modality = self.current_series.modality
+                        else:
+                            self.current_series.image.modality = "OT"  # Unknown modality
+                            
+                        # Thiết lập metadata cơ bản
+                        self.current_series.image.metadata = {}
+                        
+                        # Thiết lập spacing nếu có
+                        if hasattr(self.current_series, 'pixel_spacing') and self.current_series.pixel_spacing:
+                            try:
+                                spacing_x, spacing_y = self.current_series.pixel_spacing[0:2]
+                                self.current_series.image.metadata['pixel_spacing_x'] = float(spacing_x)
+                                self.current_series.image.metadata['pixel_spacing_y'] = float(spacing_y)
+                            except (IndexError, ValueError, TypeError) as e:
+                                logger.warning(f"Không thể thiết lập pixel_spacing: {str(e)}")
+                        
+                        # Thiết lập slice thickness nếu có
+                        if hasattr(self.current_series, 'slice_thickness') and self.current_series.slice_thickness:
+                            try:
+                                self.current_series.image.metadata['slice_thickness'] = float(self.current_series.slice_thickness)
+                            except (ValueError, TypeError) as e:
+                                logger.warning(f"Không thể thiết lập slice_thickness: {str(e)}")
+                                
+                        logger.info("Đã tạo đối tượng image từ image_data có sẵn")
+                    except ImportError as e:
+                        logger.error(f"Lỗi khi import module Image: {str(e)}")
+                        QMessageBox.warning(self, "Lỗi tải", f"Không thể tải module hình ảnh: {str(e)}")
+                        return
+                    except Exception as e:
+                        logger.error(f"Lỗi khi tạo đối tượng Image: {str(e)}")
+                        QMessageBox.warning(self, "Lỗi tải", f"Lỗi khi xử lý dữ liệu hình ảnh: {str(e)}")
+                        return
+                else:
+                    # Thử tải dữ liệu hình ảnh từ files DICOM
+                    logger.info("Thử tải dữ liệu hình ảnh từ files DICOM")
+                    try:
+                        if not hasattr(self.current_series, 'files') or not self.current_series.files:
+                            logger.error("Series không có danh sách files DICOM")
+                            QMessageBox.warning(self, "Lỗi tải", "Series không có danh sách files DICOM")
+                            return
+                        
+                        # Hiển thị thông báo tiến trình
+                        progress_dialog = QProgressDialog("Đang tải dữ liệu hình ảnh...", "Hủy", 0, 100, self)
+                        progress_dialog.setWindowTitle("Tải dữ liệu")
+                        progress_dialog.setWindowModality(Qt.WindowModal)
+                        progress_dialog.show()
+                        QApplication.processEvents()
+                        
+                        success = self.current_series.load_image_data()
+                        progress_dialog.close()
+                        
+                        if not success:
+                            logger.error("Không thể tải dữ liệu hình ảnh DICOM")
+                            QMessageBox.warning(self, "Lỗi tải", "Không thể tải dữ liệu hình ảnh DICOM")
+                            return
+                    except Exception as e:
+                        logger.exception(f"Lỗi trong quá trình tải dữ liệu hình ảnh: {str(e)}")
+                        QMessageBox.warning(self, "Lỗi tải", f"Lỗi trong quá trình tải dữ liệu hình ảnh: {str(e)}")
+                        return
+                    
+                # Kiểm tra lại sau khi tải
+                if not hasattr(self.current_series, 'image') or self.current_series.image is None:
+                    logger.error("Không thể hiển thị series: không có dữ liệu hình ảnh sau khi tải")
+                    QMessageBox.warning(self, "Lỗi hiển thị", "Không thể hiển thị series: không có dữ liệu hình ảnh sau khi tải")
+                    return
+            
             # Kiểm tra xem đối tượng hình ảnh có dữ liệu hợp lệ không
-            if not hasattr(self.current_series.image, 'data') or self.current_series.image.data is None or self.current_series.image.data.size == 0:
-                logger.error("Đối tượng hình ảnh không có dữ liệu hợp lệ")
-                QMessageBox.warning(self, "Lỗi hiển thị", "Đối tượng hình ảnh không có dữ liệu hợp lệ")
+            if not hasattr(self.current_series.image, 'data'):
+                logger.error("Đối tượng hình ảnh không có thuộc tính 'data'")
+                QMessageBox.warning(self, "Lỗi hiển thị", "Đối tượng hình ảnh không có dữ liệu")
+                return
+            
+            if self.current_series.image.data is None:
+                logger.error("Dữ liệu hình ảnh là None")
+                QMessageBox.warning(self, "Lỗi hiển thị", "Dữ liệu hình ảnh không tồn tại")
+                return
+            
+            if not isinstance(self.current_series.image.data, np.ndarray):
+                logger.error(f"Dữ liệu hình ảnh không phải là mảng NumPy: {type(self.current_series.image.data)}")
+                QMessageBox.warning(self, "Lỗi hiển thị", "Dữ liệu hình ảnh không hợp lệ (không phải NumPy array)")
+                return
+            
+            if self.current_series.image.data.size == 0:
+                logger.error("Đối tượng hình ảnh có dữ liệu rỗng")
+                QMessageBox.warning(self, "Lỗi hiển thị", "Đối tượng hình ảnh có dữ liệu rỗng")
                 return
             
             # Thiết lập dữ liệu hình ảnh cho ImageViewer
-            self.image_viewer.load_image(self.current_series.image)
-            
-            # Cập nhật thông tin series
-            self._update_series_info()
+            try:
+                logger.info(f"Tải hình ảnh vào ImageViewer, kích thước: {self.current_series.image.data.shape}")
+                self.image_viewer.load_image(self.current_series.image)
+                
+                # Cập nhật thông tin series
+                self._update_series_info()
+                
+                # Hiển thị thông báo thành công
+                status_text = f"Đã tải thành công series {self.current_series.description if hasattr(self.current_series, 'description') else ''} ({self.current_series.image.data.shape})"
+                try:
+                    # Kiểm tra xem parent có statusBar không trước khi sử dụng
+                    if self.parent() and hasattr(self.parent(), 'statusBar') and callable(self.parent().statusBar):
+                        self.parent().statusBar().showMessage(status_text, 5000)  # Hiển thị trong 5 giây
+                    else:
+                        logger.info(status_text)
+                except AttributeError:
+                    # Nếu không có statusBar, chỉ ghi log thông báo
+                    logger.info(status_text)
+                
+                logger.info(f"Hiển thị thành công series {self.current_series.description if hasattr(self.current_series, 'description') else ''}")
+            except AttributeError as e:
+                logger.exception(f"Lỗi thuộc tính khi hiển thị series DICOM: {str(e)}")
+                QMessageBox.critical(self, "Lỗi hiển thị", f"Lỗi thuộc tính khi hiển thị series DICOM: {str(e)}")
+                return
+            except ValueError as e:
+                logger.exception(f"Lỗi giá trị khi hiển thị series DICOM: {str(e)}")
+                QMessageBox.critical(self, "Lỗi hiển thị", f"Lỗi giá trị khi hiển thị series DICOM: {str(e)}")
+                return
+            except Exception as e:
+                logger.exception(f"Lỗi khi hiển thị series DICOM: {str(e)}")
+                QMessageBox.critical(self, "Lỗi hiển thị", f"Lỗi khi hiển thị series DICOM: {str(e)}")
+                return
         except Exception as e:
-            logger.exception(f"Lỗi khi hiển thị series DICOM: {str(e)}")
-            QMessageBox.critical(self, "Lỗi hiển thị", f"Lỗi khi hiển thị series DICOM: {str(e)}")
+            logger.exception(f"Lỗi không xác định khi hiển thị series DICOM: {str(e)}")
+            QMessageBox.critical(self, "Lỗi hiển thị", f"Lỗi không xác định khi hiển thị series DICOM: {str(e)}")
             return
     
     def _update_series_info(self):

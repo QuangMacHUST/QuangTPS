@@ -28,7 +28,7 @@ from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 logger = logging.getLogger(__name__)
 
 
-class DeliveryStatus:
+class DeliveryStatus(str, Enum):
     """Enum cho trạng thái của quá trình thực hiện điều trị."""
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
@@ -856,7 +856,7 @@ class TreatmentCourse:
         self._check_course_completion()
         
         return True
-    
+
     def _check_course_completion(self):
         """Kiểm tra và cập nhật trạng thái chuỗi điều trị."""
         # Nếu chuỗi điều trị đã hoàn thành thì bỏ qua
