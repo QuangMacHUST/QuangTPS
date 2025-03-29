@@ -1,0 +1,188 @@
+{
+  "protocol_name": "Head and Neck Standard",
+  "version": "1.0",
+  "description": "Standard dose constraints for head and neck IMRT/VMAT treatment",
+  "source": "Based on RTOG 0522/0617 protocols with institutional modifications",
+  "prescription": {
+    "primary_target": {
+      "name": "PTV_70",
+      "dose": 70.0,
+      "fractions": 35,
+      "priority": 1,
+      "coverage_goal": 95,
+      "hotspot_limit": 110
+    },
+    "secondary_targets": [
+      {
+        "name": "PTV_63",
+        "dose": 63.0,
+        "fractions": 35,
+        "priority": 2,
+        "coverage_goal": 95,
+        "hotspot_limit": 110
+      },
+      {
+        "name": "PTV_56",
+        "dose": 56.0,
+        "fractions": 35,
+        "priority": 3,
+        "coverage_goal": 95,
+        "hotspot_limit": 110
+      }
+    ]
+  },
+  "dose_constraints": {
+    "organs_at_risk": [
+      {
+        "name": "Brain Stem",
+        "constraint_type": "maximum",
+        "dose_limit": 54.0,
+        "volume_limit": 0,
+        "priority": "high",
+        "notes": "No part of brainstem should receive > 54 Gy"
+      },
+      {
+        "name": "Spinal Cord",
+        "constraint_type": "maximum",
+        "dose_limit": 45.0,
+        "volume_limit": 0,
+        "priority": "high",
+        "notes": "Planning risk volume (PRV): cord + 5mm should not exceed 50 Gy"
+      },
+      {
+        "name": "Parotid - Ipsilateral",
+        "constraint_type": "mean",
+        "dose_limit": 26.0,
+        "volume_limit": null,
+        "priority": "medium",
+        "notes": "Keep mean dose < 26 Gy when possible"
+      },
+      {
+        "name": "Parotid - Contralateral",
+        "constraint_type": "mean",
+        "dose_limit": 20.0,
+        "volume_limit": null,
+        "priority": "medium",
+        "notes": "Keep mean dose < 20 Gy when possible"
+      },
+      {
+        "name": "Larynx",
+        "constraint_type": "mean",
+        "dose_limit": 45.0,
+        "volume_limit": null,
+        "priority": "medium",
+        "notes": "Aim for mean dose < 45 Gy"
+      },
+      {
+        "name": "Oral Cavity",
+        "constraint_type": "mean",
+        "dose_limit": 30.0,
+        "volume_limit": null,
+        "priority": "low",
+        "notes": "Minimize as much as possible"
+      },
+      {
+        "name": "Mandible",
+        "constraint_type": "maximum",
+        "dose_limit": 70.0,
+        "volume_limit": 0,
+        "priority": "medium",
+        "notes": "Avoid hotspots > 70 Gy"
+      },
+      {
+        "name": "Eyes",
+        "constraint_type": "maximum",
+        "dose_limit": 45.0,
+        "volume_limit": 0,
+        "priority": "medium",
+        "notes": "Keep max dose < 45 Gy"
+      },
+      {
+        "name": "Optic Nerves",
+        "constraint_type": "maximum",
+        "dose_limit": 54.0,
+        "volume_limit": 0,
+        "priority": "high",
+        "notes": "Keep max dose < 54 Gy"
+      },
+      {
+        "name": "Optic Chiasm",
+        "constraint_type": "maximum",
+        "dose_limit": 54.0,
+        "volume_limit": 0,
+        "priority": "high",
+        "notes": "Keep max dose < 54 Gy"
+      },
+      {
+        "name": "Cochlea",
+        "constraint_type": "mean",
+        "dose_limit": 45.0,
+        "volume_limit": null,
+        "priority": "medium",
+        "notes": "Keep mean dose < 45 Gy when possible"
+      },
+      {
+        "name": "Temporal Lobes",
+        "constraint_type": "maximum",
+        "dose_limit": 60.0,
+        "volume_limit": 0,
+        "priority": "medium",
+        "notes": "Keep max dose < 60 Gy"
+      }
+    ],
+    "dvh_constraints": [
+      {
+        "structure": "Parotid - Ipsilateral",
+        "volume_percent": 50,
+        "dose_limit": 30.0,
+        "priority": "medium",
+        "notes": "At least 50% of ipsilateral parotid should receive < 30 Gy"
+      },
+      {
+        "structure": "Parotid - Contralateral",
+        "volume_percent": 70,
+        "dose_limit": 25.0,
+        "priority": "medium",
+        "notes": "At least 70% of contralateral parotid should receive < 25 Gy"
+      }
+    ]
+  },
+  "planning_parameters": {
+    "technique": "VMAT",
+    "energy": "6MV",
+    "optimization_type": "MCO",
+    "fraction_schedule": "Daily",
+    "immobilization": "Thermoplastic mask",
+    "setup_margins": {
+      "PTV_high": 0.3,
+      "PTV_intermediate": 0.5,
+      "PTV_low": 0.5
+    },
+    "beam_arrangement": {
+      "suggested_angles": [
+        [181, 179],
+        [210, 330]
+      ],
+      "notes": "Dual arc VMAT recommended. Second arc pair optional for complex cases."
+    }
+  },
+  "evaluation_criteria": {
+    "conformity_index": {
+      "target": "PTV_70",
+      "acceptable": 1.2,
+      "ideal": 1.1,
+      "notes": "Volume of 95% isodose / target volume"
+    },
+    "homogeneity_index": {
+      "target": "PTV_70",
+      "acceptable": 0.1,
+      "ideal": 0.07,
+      "notes": "(D2% - D98%) / D50%"
+    },
+    "gradient_measure": {
+      "acceptable": 0.5,
+      "ideal": 0.4,
+      "notes": "R50 - ratio of 50% isodose volume to PTV volume"
+    }
+  }
+} 

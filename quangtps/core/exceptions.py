@@ -122,6 +122,7 @@ class BeamDataError(QuangTPSError):
         message_with_type = message
         if beam_type:
             message_with_type = f"{message} for beam type '{beam_type}'"
+        super().__init__(message_with_type)
 class TreatmentDeliveryError(QuangTPSError):
     """Lỗi khi thực hiện điều trị"""
     def __init__(self, message="Treatment delivery error", delivery_type=None):
@@ -129,6 +130,7 @@ class TreatmentDeliveryError(QuangTPSError):
         message_with_type = message
         if delivery_type:
             message_with_type = f"{message} for delivery type '{delivery_type}'"
+        super().__init__(message_with_type)
 class DataImportError(QuangTPSError):
     """Lỗi khi nhập dữ liệu"""
     def __init__(self, message="Data import error", data_type=None):
@@ -136,3 +138,28 @@ class DataImportError(QuangTPSError):
         message_with_type = message
         if data_type:
             message_with_type = f"{message} for data type '{data_type}'"
+        super().__init__(message_with_type)
+class ModelError(QuangTPSError):
+    """Lỗi khi mô hình hóa"""
+    def __init__(self, message="Model error", model_name=None):
+        self.model_name = model_name
+        message_with_name = message
+        if model_name:
+            message_with_name = f"{message} in model '{model_name}'"
+        super().__init__(message_with_name)
+class AnalysisError(QuangTPSError):
+    """Lỗi khi phân tích dữ liệu"""
+    def __init__(self, message="Analysis error", analysis_type=None):
+        self.analysis_type = analysis_type
+        message_with_type = message
+        if analysis_type:
+            message_with_type = f"{message} for analysis type '{analysis_type}'"
+        super().__init__(message_with_type)
+class RegistrationError(QuangTPSError):
+    """Lỗi khi đăng ký hình ảnh"""
+    def __init__(self, message="Registration error", registration_type=None):
+        self.registration_type = registration_type
+        message_with_type = message
+        if registration_type:
+            message_with_type = f"{message} for registration type '{registration_type}'"
+        super().__init__(message_with_type)

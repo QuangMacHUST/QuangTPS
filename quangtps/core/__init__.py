@@ -10,3 +10,5 @@ from quangtps.core.constants import Constants
 from quangtps.core.logging import setup_logger, get_logger
 from quangtps.core.exceptions import QuangTPSError, ValidationError, IOError
 from quangtps.core.utils import Timer, get_memory_usage, create_unique_id
+from quangtps.core.structures import Structure, StructureSet, StructureType
+from quangtps.core.services import ServiceRegistry, ServiceBase, ServiceManager

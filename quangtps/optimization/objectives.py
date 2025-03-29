@@ -1,871 +1,841 @@
-"""
-Module định nghĩa các hàm mục tiêu (objective functions) cho tối ưu hóa kế hoạch xạ trị.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-Module này cung cấp các hàm mục tiêu khác nhau được sử dụng trong quá trình tối ưu hóa kế hoạch 
-xạ trị để đạt được phân bố liều mong muốn cho cấu trúc đích và bảo vệ các cơ quan nguy cấp.
-Các hàm mục tiêu này được sử dụng bởi các thuật toán tối ưu hóa để tìm ra kế hoạch tối ưu.
+"""
+Module for optimization objectives and constraints in QuangTPS.
+
+This module provides classes and functions to define dose-based objectives
+and constraints for radiotherapy treatment planning optimization.
 """
 
-import numpy as np
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Protocol
 import logging
-from dataclasses import dataclass, field
+import numpy as np
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable
 
-from quangtps.evaluation.dvh import calculate_dvh, calculate_dvh_metrics, calculate_dvh_from_dose_grid
-from quangtps.dose.dose_grid import DoseGrid
-from quangtps.core.constants import EPSILON
+# Import DVH functions from the correct location
+from quangtps.evaluation.dvh import (
+    calculate_dvh_from_dose_grid, 
+    calculate_dvh_metrics
+)
+from quangtps.evaluation.dvh.dvh_calculation import (
+    _get_dose_at_volume,
+    _get_volume_at_dose
+)
 
 logger = logging.getLogger(__name__)
 
-# ObjectiveBase là lớp cơ sở cho các hàm mục tiêu
-class ObjectiveBase(Protocol):
-    """Giao thức cơ sở cho tất cả các hàm mục tiêu."""
-    structure_name: str
-    weight: float
-    is_enabled: bool
-    objective_type: str
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        ...
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        ...
 
-@dataclass
-class MinDose:
-    """Mục tiêu liều tối thiểu cho cấu trúc (thường dùng cho PTV)."""
-    structure_name: str
-    dose: float  # Liều mục tiêu, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    objective_type: str = "MinDose"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty cho các voxel trong cấu trúc có liều nhỏ hơn dose.
-        
-        Công thức: sum((dose - D_i)^2) cho các D_i < dose
-        """
-        # Lấy phân bố liều trên cấu trúc
-        structure_dose = dose_grid.get_dose_values_in_structure(structure_mask)
-        
-        # Tính toán penalty cho các voxel dưới liều mong muốn
-        under_dose = np.maximum(0, self.dose - structure_dose)
-        
-        # Tính tổng bình phương của các vi phạm
-        cost = np.sum(under_dose**2)
-        
-        # Chuẩn hóa theo số voxel
-        if structure_mask.sum() > 0:
-            cost /= structure_mask.sum()
-        
-        return cost * self.weight
-        
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class MaxDose:
-    """Mục tiêu liều tối đa cho cấu trúc (thường dùng cho OAR)."""
-    structure_name: str
-    dose: float  # Liều giới hạn, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    objective_type: str = "MaxDose"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty cho các voxel trong cấu trúc có liều lớn hơn dose.
-        
-        Công thức: sum((D_i - dose)^2) cho các D_i > dose
-        """
-        # Lấy phân bố liều trên cấu trúc
-        structure_dose = dose_grid.get_dose_values_in_structure(structure_mask)
-        
-        # Tính toán penalty cho các voxel vượt liều mong muốn
-        over_dose = np.maximum(0, structure_dose - self.dose)
-        
-        # Tính tổng bình phương của các vi phạm
-        cost = np.sum(over_dose**2)
-        
-        # Chuẩn hóa theo số voxel
-        if structure_mask.sum() > 0:
-            cost /= structure_mask.sum()
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class UniformDose:
-    """Mục tiêu liều đồng nhất cho cấu trúc (thường dùng cho PTV)."""
-    structure_name: str
-    dose: float  # Liều mong muốn, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    objective_type: str = "UniformDose"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty cho các voxel trong cấu trúc có liều khác dose.
-        
-        Công thức: sum((D_i - dose)^2) cho tất cả D_i
-        """
-        # Lấy phân bố liều trên cấu trúc
-        structure_dose = dose_grid.get_dose_values_in_structure(structure_mask)
-        
-        # Tính độ lệch so với liều mong muốn
-        dose_diff = structure_dose - self.dose
-        
-        # Tính tổng bình phương của độ lệch
-        cost = np.sum(dose_diff**2)
-        
-        # Chuẩn hóa theo số voxel
-        if structure_mask.sum() > 0:
-            cost /= structure_mask.sum()
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class MeanDose:
-    """Mục tiêu giới hạn liều trung bình cho cấu trúc (thường dùng cho OAR)."""
-    structure_name: str
-    dose: float  # Liều trung bình mục tiêu, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    objective_type: str = "MeanDose"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty khi liều trung bình của cấu trúc vượt quá dose.
-        
-        Công thức: (mean_dose - dose)^2 nếu mean_dose > dose
-        """
-        # Lấy phân bố liều trên cấu trúc
-        structure_dose = dose_grid.get_dose_values_in_structure(structure_mask)
-        
-        # Tính liều trung bình
-        mean_dose = np.mean(structure_dose) if len(structure_dose) > 0 else 0
-        
-        # Tính penalty nếu vượt quá liều mong muốn
-        over_dose = max(0, mean_dose - self.dose)
-        cost = over_dose**2
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class DoseVolume:
-    """Mục tiêu giới hạn thể tích nhận liều mức nào đó (DVH constraint)."""
-    structure_name: str
-    dose: float  # Liều đòi hỏi, đơn vị Gy
-    volume_percent: float  # Phần trăm thể tích
-    weight: float = 1.0
-    is_enabled: bool = True
-    direction: str = "upper"  # "upper" hoặc "lower"
-    objective_type: str = "DoseVolume"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-            
-        if self.volume_percent < 0 or self.volume_percent > 100:
-            raise ValueError(f"volume_percent phải nằm trong khoảng [0, 100], nhận được: {self.volume_percent}")
-        
-        if self.direction not in ["upper", "lower"]:
-            raise ValueError(f"direction phải là 'upper' hoặc 'lower', nhận được: {self.direction}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty khi vi phạm ràng buộc liều-thể tích.
-        
-        Upper: penalty khi có quá {volume_percent}% thể tích nhận liều >= {dose}
-        Lower: penalty khi có ít hơn {volume_percent}% thể tích nhận liều >= {dose}
-        """
-        # Tính DVH
-        dvh = calculate_dvh(
-            dose_array=dose_grid.dose_array,
-            structure_mask=structure_mask,
-            volume_type='relative'
-        )
-        
-        # Tính thể tích thực tế nhận liều >= dose
-        volume_at_dose = np.interp(
-            self.dose,
-            dvh['dose_bins'],
-            100 - dvh['cumulative_volume']
-        )
-        
-        if self.direction == "upper":
-            # Penalty khi vượt quá thể tích cho phép
-            violation = max(0, volume_at_dose - self.volume_percent)
-        else:  # "lower"
-            # Penalty khi không đạt thể tích yêu cầu
-            violation = max(0, self.volume_percent - volume_at_dose)
-        
-        # Bình phương vi phạm
-        cost = violation**2
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class ConformityIndex:
-    """Mục tiêu tối ưu chỉ số đồng dạng (thường dùng cho PTV)."""
-    structure_name: str
-    reference_dose: float  # Liều tham chiếu, thường là liều chỉ định, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    target_ci: float = 1.0  # Chỉ số đồng dạng mục tiêu, thường là 1.0 (lý tưởng)
-    objective_type: str = "ConformityIndex"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty dựa trên độ lệch của chỉ số đồng dạng so với target_ci.
-        
-        CI = (V_ref / V_target) * (V_ref / V_ref_total)
-        Trong đó:
-            V_ref: thể tích PTV nhận >= liều tham chiếu
-            V_target: tổng thể tích PTV
-            V_ref_total: tổng thể tích (cả PTV và ngoài PTV) nhận >= liều tham chiếu
-        """
-        # Tính thể tích PTV
-        v_target = np.sum(structure_mask)
-        
-        # Tạo mặt nạ cho vùng nhận liều >= reference_dose
-        ref_dose_mask = dose_grid.dose_array >= self.reference_dose
-        
-        # Tính V_ref_total - tổng thể tích nhận liều >= reference_dose
-        v_ref_total = np.sum(ref_dose_mask)
-        
-        # Tính V_ref - thể tích PTV nhận liều >= reference_dose
-        v_ref = np.sum(ref_dose_mask & structure_mask)
-        
-        # Tránh chia cho 0
-        if v_target == 0 or v_ref_total == 0:
-            return 0
-        
-        # Tính chỉ số đồng dạng (Paddick CI)
-        ci = (v_ref * v_ref) / (v_target * v_ref_total)
-        
-        # Tính penalty dựa trên độ lệch so với target_ci
-        cost = (ci - self.target_ci)**2
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class HomogeneityIndex:
-    """Mục tiêu tối ưu chỉ số đồng nhất (thường dùng cho PTV)."""
-    structure_name: str
-    prescription_dose: float  # Liều chỉ định, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    target_hi: float = 0.0  # Chỉ số đồng nhất mục tiêu, 0 là lý tưởng (hoàn toàn đồng nhất)
-    method: str = "icru83"  # Phương pháp tính HI: "icru83" hoặc "d5_d95"
-    objective_type: str = "HomogeneityIndex"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-            
-        if self.method not in ["icru83", "d5_d95"]:
-            raise ValueError(f"method phải là 'icru83' hoặc 'd5_d95', nhận được: {self.method}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty dựa trên độ lệch của chỉ số đồng nhất so với target_hi.
-        
-        HI ICRU83 = (D2% - D98%) / D50%
-        HI d5_d95 = (D5% - D95%) / prescription_dose
-        """
-        # Tính DVH
-        dvh = calculate_dvh(
-            dose_array=dose_grid.dose_array,
-            structure_mask=structure_mask,
-            volume_type='relative'
-        )
-        
-        # Tính các giá trị liều cần thiết
-        metrics = ['D2', 'D5', 'D50', 'D95', 'D98']
-        dvh_metrics = calculate_dvh_metrics(dvh, metrics, self.prescription_dose)
-        
-        # Tính chỉ số đồng nhất theo phương pháp được chọn
-        if self.method == "icru83":
-            if dvh_metrics['D50'] > EPSILON:
-                hi = (dvh_metrics['D2'] - dvh_metrics['D98']) / dvh_metrics['D50']
-            else:
-                hi = 0
-        else:  # "d5_d95"
-            if self.prescription_dose > EPSILON:
-                hi = (dvh_metrics['D5'] - dvh_metrics['D95']) / self.prescription_dose
-            else:
-                hi = 0
-        
-        # Tính penalty dựa trên độ lệch so với target_hi
-        cost = (hi - self.target_hi)**2
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class GradientIndex:
-    """Mục tiêu tối ưu chỉ số gradient (thường dùng cho SRS/SBRT)."""
-    structure_name: str
-    reference_dose: float  # Liều tham chiếu cao, đơn vị Gy
-    weight: float = 1.0
-    is_enabled: bool = True
-    low_dose: Optional[float] = None  # Liều thấp, đơn vị Gy, mặc định = reference_dose/2
-    target_gi: float = 3.0  # Chỉ số gradient mục tiêu
-    objective_type: str = "GradientIndex"
-    
-    def __post_init__(self):
-        """Xác thực và hoàn thiện các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-            
-        if self.low_dose is None:
-            self.low_dose = self.reference_dose / 2.0
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty dựa trên độ lệch của chỉ số gradient so với target_gi.
-        
-        GI = V(low_dose) / V(reference_dose)
-        """
-        # Tạo mặt nạ cho vùng nhận liều >= reference_dose
-        high_dose_mask = dose_grid.dose_array >= self.reference_dose
-        
-        # Tạo mặt nạ cho vùng nhận liều >= low_dose
-        low_dose_mask = dose_grid.dose_array >= self.low_dose
-        
-        # Tính thể tích tương ứng
-        v_high = np.sum(high_dose_mask)
-        v_low = np.sum(low_dose_mask)
-        
-        # Tránh chia cho 0
-        if v_high == 0:
-            return 0
-        
-        # Tính chỉ số gradient
-        gi = v_low / v_high
-        
-        # Tính penalty dựa trên độ lệch so với target_gi
-        cost = (gi - self.target_gi)**2
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class EUDObjective:
-    """Mục tiêu dựa trên liều đồng nhất tương đương (EUD)."""
-    structure_name: str
-    target_eud: float  # EUD mục tiêu, đơn vị Gy
-    parameter_a: float  # Tham số a điều chỉnh độ nhạy (a > 0 cho PTV, a < 0 cho OAR)
-    weight: float = 1.0
-    is_enabled: bool = True
-    direction: str = "upper"  # "upper" hoặc "lower"
-    objective_type: str = "EUD"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-            
-        if self.direction not in ["upper", "lower"]:
-            raise ValueError(f"direction phải là 'upper' hoặc 'lower', nhận được: {self.direction}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty dựa trên độ lệch của EUD so với target_eud.
-        
-        EUD = (1/N * sum(D_i^a))^(1/a)
-        """
-        # Lấy phân bố liều trên cấu trúc
-        structure_dose = dose_grid.get_dose_values_in_structure(structure_mask)
-        
-        # Nếu không có voxel nào, trả về 0
-        if len(structure_dose) == 0:
-            return 0
-        
-        # Tính giá trị EUD
-        # Thêm EPSILON để tránh lỗi khi dose = 0
-        dose_plus_eps = structure_dose + EPSILON
-        
-        # Tính trung bình của dose^a
-        mean_pow_dose = np.mean(dose_plus_eps**self.parameter_a)
-        
-        # Tính EUD
-        eud = mean_pow_dose**(1.0/self.parameter_a)
-        
-        # Tính penalty dựa trên hướng và đích
-        if self.direction == "upper":
-            # Penalty khi EUD vượt quá target_eud
-            violation = max(0, eud - self.target_eud)
-        else:  # "lower"
-            # Penalty khi EUD thấp hơn target_eud
-            violation = max(0, self.target_eud - eud)
-        
-        # Bình phương vi phạm
-        cost = violation**2
-        
-        return cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-@dataclass
-class FalloffObjective:
-    """Mục tiêu kiểm soát gradient liều xung quanh cấu trúc đích (dose falloff)."""
-    structure_name: str
-    high_dose: float  # Liều cao, thường là liều chỉ định, đơn vị Gy
-    low_dose: float  # Liều thấp, đơn vị Gy
-    falloff_distance: float  # Khoảng cách mong muốn (mm), liều giảm từ high_dose xuống low_dose
-    weight: float = 1.0
-    is_enabled: bool = True
-    objective_type: str = "Falloff"
-    
-    def __post_init__(self):
-        """Xác thực các tham số sau khi khởi tạo."""
-        if self.weight < 0:
-            raise ValueError(f"Trọng số phải là giá trị không âm, nhận được: {self.weight}")
-    
-    def evaluate(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> float:
-        """
-        Đánh giá hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
-        
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
-            
-        Returns:
-            Giá trị của hàm mục tiêu (cost)
-        """
-        if not self.is_enabled:
-            return 0.0
-            
-        if self.structure_name not in structures:
-            logger.warning(f"Cấu trúc '{self.structure_name}' không tồn tại trong structures")
-            return 0.0
-            
-        return self._calculate_cost(dose_grid, structures[self.structure_name])
-    
-    def _calculate_cost(self, dose_grid: DoseGrid, structure_mask: np.ndarray) -> float:
-        """
-        Tính penalty cho gradient liều quá dốc hoặc quá thoải.
-        
-        Công thức: sử dụng khoảng cách dự kiến và so sánh với gradient thực tế
-        """
-        # Chưa triển khai đầy đủ - cần thêm thuật toán tính khoảng cách 3D
-        # Đây là phiên bản đơn giản hóa
-        
-        # Tạo mặt nạ cho vùng nhận liều >= high_dose
-        high_dose_mask = dose_grid.dose_array >= self.high_dose
-        
-        # Tạo mặt nạ cho vùng nhận liều >= low_dose
-        low_dose_mask = dose_grid.dose_array >= self.low_dose
-        
-        # Tính thể tích tương ứng
-        v_high = np.sum(high_dose_mask)
-        v_low = np.sum(low_dose_mask)
-        
-        # Tránh chia cho 0
-        if v_high == 0:
-            return 0
-        
-        # Tính tỷ lệ thể tích
-        vol_ratio = v_low / v_high
-        
-        # Tính penalty dựa trên tỷ lệ thể tích
-        # Trong phiên bản đầy đủ, sẽ tính toán dựa trên khoảng cách thực
-        falloff_cost = vol_ratio * self.falloff_distance / 10.0
-        
-        return falloff_cost * self.weight
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Trả về thông tin mô tả về hàm mục tiêu."""
-        return {
-            "structure_name": self.structure_name,
-            "type": self.objective_type,
-            "weight": self.weight,
-            "is_enabled": self.is_enabled
-        }
-
-# Dictionary chứa tất cả các loại objective có sẵn để dễ dàng tạo mới
-OBJECTIVE_TYPES = {
-    "MinDose": MinDose,
-    "MaxDose": MaxDose,
-    "UniformDose": UniformDose,
-    "MeanDose": MeanDose,
-    "DoseVolume": DoseVolume,
-    "ConformityIndex": ConformityIndex,
-    "HomogeneityIndex": HomogeneityIndex,
-    "GradientIndex": GradientIndex,
-    "EUD": EUDObjective,
-    "Falloff": FalloffObjective
-}
-
-def create_objective(objective_type: str, **kwargs) -> Any:
+class ObjectiveFunction:
     """
-    Tạo đối tượng objective từ loại và tham số.
+    Base class for all objective functions.
     
-    Args:
-        objective_type: Loại objective ('MinDose', 'MaxDose', etc.)
-        **kwargs: Các tham số cần thiết cho loại objective đó
-        
-    Returns:
-        Đối tượng objective đã được tạo
-        
-    Raises:
-        ValueError: Nếu objective_type không được hỗ trợ
+    This class defines the interface for all objective functions used in the 
+    optimization process. Subclasses must implement the __call__ method to 
+    compute the objective value and the gradient method to compute the gradient.
     """
-    if objective_type not in OBJECTIVE_TYPES:
-        raise ValueError(f"Loại objective không hợp lệ: {objective_type}. "
-                         f"Các loại được hỗ trợ: {list(OBJECTIVE_TYPES.keys())}")
     
-    return OBJECTIVE_TYPES[objective_type](**kwargs)
-
-class ObjectiveCollection:
-    """Tập hợp nhiều hàm mục tiêu để đánh giá tổng thể kế hoạch."""
-    
-    def __init__(self):
-        """Khởi tạo danh sách hàm mục tiêu trống."""
-        self.objectives: List[Any] = []
-    
-    def add_objective(self, objective: Any) -> None:
-        """Thêm một hàm mục tiêu vào danh sách."""
-        self.objectives.append(objective)
-    
-    def remove_objective(self, index: int) -> None:
-        """Xóa một hàm mục tiêu từ danh sách theo chỉ số."""
-        if 0 <= index < len(self.objectives):
-            del self.objectives[index]
-        else:
-            raise IndexError(f"Chỉ số không hợp lệ: {index}")
-    
-    def enable_objective(self, index: int, enabled: bool = True) -> None:
-        """Bật/tắt một hàm mục tiêu theo chỉ số."""
-        if 0 <= index < len(self.objectives):
-            self.objectives[index].is_enabled = enabled
-        else:
-            raise IndexError(f"Chỉ số không hợp lệ: {index}")
-    
-    def evaluate_all(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]) -> Dict[str, float]:
+    def __init__(self, weight: float = 1.0, name: Optional[str] = None):
         """
-        Đánh giá tất cả các hàm mục tiêu với phân bố liều và cấu trúc hiện tại.
+        Initialize the objective function.
         
-        Args:
-            dose_grid: Phân bố liều hiện tại trong kế hoạch
-            structures: Dictionary chứa các mặt nạ cấu trúc
+        Parameters
+        ----------
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        self.weight = weight
+        self.name = name or self.__class__.__name__
+    
+    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+        """
+        Evaluate the objective function.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
             
-        Returns:
-            Dictionary chứa kết quả đánh giá của từng hàm mục tiêu và tổng cost
+        Returns
+        -------
+        float
+            Objective function value
         """
-        results = {}
-        total_cost = 0.0
-        
-        for i, objective in enumerate(self.objectives):
-            if not objective.is_enabled:
-                results[f"objective_{i}"] = 0.0
-                continue
-                
-            cost = objective.evaluate(dose_grid, structures)
-            results[f"objective_{i}"] = cost
-            total_cost += cost
-        
-        results["total_cost"] = total_cost
-        return results
+        raise NotImplementedError("Subclasses must implement this method")
     
-    def get_objectives_info(self) -> List[Dict[str, Any]]:
-        """Trả về thông tin mô tả về tất cả các hàm mục tiêu."""
-        return [obj.get_info() for obj in self.objectives]
+    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+        """
+        Compute the gradient of the objective function.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient of the objective function
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class DoseBasedObjective(ObjectiveFunction):
+    """
+    Base class for dose-based objective functions.
     
-    def __len__(self) -> int:
-        """Trả về số lượng hàm mục tiêu trong danh sách."""
-        return len(self.objectives)
+    Dose-based objectives depend only on the dose distribution, such as
+    minimizing the total dose.
+    """
+    
+    def __init__(self, weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the dose-based objective.
+        
+        Parameters
+        ----------
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(weight, name)
+
+
+class StructureBasedObjective(ObjectiveFunction):
+    """
+    Base class for structure-based objective functions.
+    
+    Structure-based objectives depend on both the dose distribution and 
+    the structures, such as minimizing the dose to an organ at risk.
+    """
+    
+    def __init__(self, structure_name: str, weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the structure-based objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(weight, name)
+        self.structure_name = structure_name
+
+
+class MinDose(StructureBasedObjective):
+    """
+    Minimize the minimum dose to a structure.
+    
+    This objective function penalizes doses below the prescribed minimum dose.
+    It is typically used for target structures.
+    """
+    
+    def __init__(self, structure_name: str, min_dose: float, 
+                 weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the minimum dose objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure
+        min_dose : float
+            Minimum dose in Gy
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(structure_name, weight, name or f"MinDose_{structure_name}")
+        self.min_dose = min_dose
+    
+    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+        """
+        Evaluate the minimum dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Objective function value
+        """
+        if structures is None or self.structure_name not in structures:
+            return 0.0
+        
+        structure_mask = structures[self.structure_name]
+        doses = dose_grid[structure_mask > 0]
+        
+        if len(doses) == 0:
+            return 0.0
+        
+        min_dose = np.min(doses)
+        if min_dose >= self.min_dose:
+            return 0.0
+        
+        return self.weight * (self.min_dose - min_dose)**2
+    
+    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+        """
+        Compute the gradient of the minimum dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient of the objective function
+        """
+        if structures is None or self.structure_name not in structures:
+            return np.zeros_like(dose_grid)
+        
+        structure_mask = structures[self.structure_name]
+        
+        # Find voxel with minimum dose
+        doses = dose_grid * structure_mask
+        flat_indices = np.argwhere(structure_mask > 0)
+        
+        if len(flat_indices) == 0:
+            return np.zeros_like(dose_grid)
+        
+        voxel_doses = doses[structure_mask > 0]
+        min_dose_idx = np.argmin(voxel_doses)
+        min_dose = voxel_doses[min_dose_idx]
+        
+        if min_dose >= self.min_dose:
+            return np.zeros_like(dose_grid)
+        
+        # Get coordinates of minimum dose voxel
+        min_voxel = tuple(flat_indices[min_dose_idx])
+        
+        # Initialize gradient
+        gradient = np.zeros_like(dose_grid)
+        
+        # Update gradient at the minimum dose voxel
+        gradient[min_voxel] = -2.0 * self.weight * (self.min_dose - min_dose)
+        
+        return gradient
+
+
+class MaxDose(StructureBasedObjective):
+    """
+    Minimize the maximum dose to a structure.
+    
+    This objective function penalizes doses above the prescribed maximum dose.
+    It is typically used for organs at risk.
+    """
+    
+    def __init__(self, structure_name: str, max_dose: float, 
+                 weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the maximum dose objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure
+        max_dose : float
+            Maximum dose in Gy
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(structure_name, weight, name or f"MaxDose_{structure_name}")
+        self.max_dose = max_dose
+    
+    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+        """
+        Evaluate the maximum dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Objective function value
+        """
+        if structures is None or self.structure_name not in structures:
+            return 0.0
+        
+        structure_mask = structures[self.structure_name]
+        doses = dose_grid[structure_mask > 0]
+        
+        if len(doses) == 0:
+            return 0.0
+        
+        max_dose = np.max(doses)
+        if max_dose <= self.max_dose:
+            return 0.0
+        
+        return self.weight * (max_dose - self.max_dose)**2
+    
+    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+        """
+        Compute the gradient of the maximum dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient of the objective function
+        """
+        if structures is None or self.structure_name not in structures:
+            return np.zeros_like(dose_grid)
+        
+        structure_mask = structures[self.structure_name]
+        
+        # Find voxel with maximum dose
+        doses = dose_grid * structure_mask
+        flat_indices = np.argwhere(structure_mask > 0)
+        
+        if len(flat_indices) == 0:
+            return np.zeros_like(dose_grid)
+        
+        voxel_doses = doses[structure_mask > 0]
+        max_dose_idx = np.argmax(voxel_doses)
+        max_dose = voxel_doses[max_dose_idx]
+        
+        if max_dose <= self.max_dose:
+            return np.zeros_like(dose_grid)
+        
+        # Get coordinates of maximum dose voxel
+        max_voxel = tuple(flat_indices[max_dose_idx])
+        
+        # Initialize gradient
+        gradient = np.zeros_like(dose_grid)
+        
+        # Update gradient at the maximum dose voxel
+        gradient[max_voxel] = 2.0 * self.weight * (max_dose - self.max_dose)
+        
+        return gradient
+
+
+class MeanDose(StructureBasedObjective):
+    """
+    Minimize the mean dose to a structure.
+    
+    This objective function penalizes the mean dose above the prescribed dose.
+    It is typically used for organs at risk.
+    """
+    
+    def __init__(self, structure_name: str, target_dose: float, 
+                 weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the mean dose objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure
+        target_dose : float
+            Target mean dose in Gy
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(structure_name, weight, name or f"MeanDose_{structure_name}")
+        self.target_dose = target_dose
+    
+    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+        """
+        Evaluate the mean dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Objective function value
+        """
+        if structures is None or self.structure_name not in structures:
+            return 0.0
+        
+        structure_mask = structures[self.structure_name]
+        doses = dose_grid[structure_mask > 0]
+        
+        if len(doses) == 0:
+            return 0.0
+        
+        mean_dose = np.mean(doses)
+        if mean_dose <= self.target_dose:
+            return 0.0
+        
+        return self.weight * (mean_dose - self.target_dose)**2
+    
+    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+        """
+        Compute the gradient of the mean dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient of the objective function
+        """
+        if structures is None or self.structure_name not in structures:
+            return np.zeros_like(dose_grid)
+        
+        structure_mask = structures[self.structure_name]
+        doses = dose_grid[structure_mask > 0]
+        
+        if len(doses) == 0:
+            return np.zeros_like(dose_grid)
+        
+        mean_dose = np.mean(doses)
+        if mean_dose <= self.target_dose:
+            return np.zeros_like(dose_grid)
+        
+        # Calculate gradient
+        gradient = np.zeros_like(dose_grid)
+        voxel_count = np.sum(structure_mask > 0)
+        
+        # Update gradient for all voxels in the structure
+        gradient[structure_mask > 0] = 2.0 * self.weight * (mean_dose - self.target_dose) / voxel_count
+        
+        return gradient
+
+
+class UniformDose(StructureBasedObjective):
+    """
+    Minimize dose non-uniformity in a structure.
+    
+    This objective function penalizes the variance of the dose distribution
+    in a structure. It is typically used for target structures to achieve
+    a uniform dose distribution.
+    """
+    
+    def __init__(self, structure_name: str, target_dose: float, 
+                 weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the uniform dose objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure
+        target_dose : float
+            Target dose in Gy
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(structure_name, weight, name or f"UniformDose_{structure_name}")
+        self.target_dose = target_dose
+    
+    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+        """
+        Evaluate the uniform dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Objective function value
+        """
+        if structures is None or self.structure_name not in structures:
+            return 0.0
+        
+        structure_mask = structures[self.structure_name]
+        doses = dose_grid[structure_mask > 0]
+        
+        if len(doses) == 0:
+            return 0.0
+        
+        return self.weight * np.sum((doses - self.target_dose)**2) / len(doses)
+    
+    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+        """
+        Compute the gradient of the uniform dose objective.
+        
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            3D dose grid
+        structures : Dict[str, np.ndarray], optional
+            Dictionary mapping structure names to binary masks
+        **kwargs : Any
+            Additional parameters
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient of the objective function
+        """
+        if structures is None or self.structure_name not in structures:
+            return np.zeros_like(dose_grid)
+        
+        structure_mask = structures[self.structure_name]
+        
+        # Initialize gradient
+        gradient = np.zeros_like(dose_grid)
+        
+        # Update gradient for all voxels in the structure
+        voxel_count = np.sum(structure_mask > 0)
+        if voxel_count > 0:
+            gradient[structure_mask > 0] = 2.0 * self.weight * (dose_grid[structure_mask > 0] - self.target_dose) / voxel_count
+        
+        return gradient
+
+
+class DoseVolumeObjective(StructureBasedObjective):
+    """
+    Base class for dose-volume based objectives.
+    
+    Dose-volume objectives depend on the dose-volume histogram (DVH) of a structure.
+    These objectives are typically used to constrain the volume of a structure
+    receiving a certain dose.
+    """
+    
+    def __init__(self, structure_name: str, dose: float, volume: float,
+                 weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the dose-volume objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure
+        dose : float
+            Dose threshold in Gy
+        volume : float
+            Volume threshold as a percentage (0-100)
+        weight : float, optional
+            Weight of the objective in the total cost function
+        name : str, optional
+            Name of the objective function
+        """
+        super().__init__(structure_name, weight, name)
+        self.dose = dose
+        self.volume = volume
+
+
+class DVHObjective(DoseVolumeObjective):
+    """
+    Dose-volume histogram based objective.
+    
+    This objective uses DVH metrics for optimization.
+    """
+    
+    def __init__(self, structure_name: str, metric_type: str, metric_value: float,
+                 target_value: float, constraint: str = "<",
+                 weight: float = 1.0, name: Optional[str] = None):
+        """
+        Initialize the DVH objective.
+        
+        Parameters
+        ----------
+        structure_name : str
+            Name of the structure to apply the objective to
+        metric_type : str
+            Type of DVH metric ('Dx' or 'Vx')
+        metric_value : float
+            Value for the metric (x in Dx or Vx)
+        target_value : float
+            Target value for the objective
+        constraint : str
+            Constraint type ('<', '>', '=')
+        weight : float
+            Objective weight
+        name : str, optional
+            Name of the objective
+        """
+        super().__init__(structure_name, 0, 0, weight, name)
+        self.metric_type = metric_type.upper()
+        self.metric_value = metric_value
+        self.target_value = target_value
+        self.constraint = constraint
+
+        # Validate inputs
+        if not (self.metric_type.startswith('D') or self.metric_type.startswith('V')):
+            raise ValueError(f"Metric type '{metric_type}' not supported. Use 'Dx' or 'Vx'.")
+        
+        # Set name if not provided
+        if not name:
+            self.name = f"{self.metric_type}{self.metric_value}{self.constraint}{self.target_value}"
+
+    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+        """
+        Calculate the objective value.
+        
+        Parameters
+        ----------
+        dose_grid : array-like
+            3D dose grid
+        structures : dict, optional
+            Dictionary of structure masks
+        **kwargs : dict
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Objective value
+        """
+        if not structures or self.structure_name not in structures:
+            logger.warning(f"Structure '{self.structure_name}' not found.")
+            return 0.0
+        
+        # Get structure mask
+        structure_mask = structures[self.structure_name]
+        
+        # Calculate DVH
+        dvh_data = calculate_dvh_from_dose_grid(dose_grid, structure_mask)
+        
+        # Get actual value based on metric type
+        actual_value = 0.0
+        
+        if self.metric_type.startswith('D'):
+            # We need to adjust the dose
+            dose_bins = dvh_data.get('dose_bins', [])
+            volume_bins = dvh_data.get('cumulative_volume', [])
+            
+            if len(dose_bins) > 0 and len(volume_bins) > 0:
+                actual_value = _get_dose_at_volume(
+                    dose_bins, 
+                    volume_bins, 
+                    self.metric_value
+                )
+            
+        elif self.metric_type.startswith('V'):
+            # We need to adjust the volume
+            dose_bins = dvh_data.get('dose_bins', [])
+            volume_bins = dvh_data.get('cumulative_volume', [])
+            
+            if len(dose_bins) > 0 and len(volume_bins) > 0:
+                actual_value = _get_volume_at_dose(
+                    dose_bins, 
+                    volume_bins, 
+                    self.metric_value
+                )
+        
+        # Calculate penalty based on constraint
+        penalty = 0.0
+        
+        if self.constraint == '<':
+            if actual_value > self.target_value:
+                penalty = (actual_value - self.target_value) ** 2
+        elif self.constraint == '>':
+            if actual_value < self.target_value:
+                penalty = (self.target_value - actual_value) ** 2
+        else:  # constraint == '='
+            penalty = (actual_value - self.target_value) ** 2
+        
+        return self.weight * penalty
+
+    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+        """
+        Compute the gradient of the DVH objective.
+        
+        Parameters
+        ----------
+        dose_grid : array-like
+            3D dose grid
+        structures : dict, optional
+            Dictionary of structure masks
+        **kwargs : dict
+            Additional parameters
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient of the objective function
+        """
+        if not structures or self.structure_name not in structures:
+            logger.warning(f"Structure '{self.structure_name}' not found.")
+            return np.zeros_like(dose_grid)
+        
+        structure_mask = structures[self.structure_name]
+        
+        # Calculate current objective value
+        current_value = self.__call__(dose_grid, structures, **kwargs)
+        
+        # If constraint is already satisfied, gradient is zero
+        if current_value == 0.0:
+            return np.zeros_like(dose_grid)
+        
+        # For simplicity, use a uniform gradient inside the structure
+        # This is a rough approximation and not optimal for all cases
+        gradient = np.zeros_like(dose_grid)
+        
+        if self.metric_type.startswith('D'):
+            # For D metrics, we want to increase/decrease the dose
+            if self.constraint == '<':
+                # We want to decrease the dose
+                gradient[structure_mask > 0] = 2.0 * self.weight
+            elif self.constraint == '>':
+                # We want to increase the dose
+                gradient[structure_mask > 0] = -2.0 * self.weight
+            else:  # self.constraint == '='
+                # We need to adjust the dose
+                dvh_data = calculate_dvh_from_dose_grid(dose_grid, structure_mask)
+                actual_value = _get_dose_at_volume(
+                    dvh_data.get('dose_bins', []), 
+                    dvh_data.get('cumulative_volume', []), 
+                    self.metric_value
+                )
+            
+                if actual_value < self.target_value:
+                    gradient[structure_mask > 0] = -2.0 * self.weight
+                else:
+                    gradient[structure_mask > 0] = 2.0 * self.weight
+        else:  # self.metric_type.startswith('V')
+            # For V metrics, we want to adjust the volume receiving a dose
+            if self.constraint == '<':
+                # We want to decrease the volume
+                gradient[structure_mask > 0] = 2.0 * self.weight
+            elif self.constraint == '>':
+                # We want to increase the volume
+                gradient[structure_mask > 0] = -2.0 * self.weight
+            else:  # self.constraint == '='
+                # We need to adjust the volume
+                dvh_data = calculate_dvh_from_dose_grid(dose_grid, structure_mask)
+                actual_value = _get_volume_at_dose(
+                    dvh_data.get('dose_bins', []), 
+                    dvh_data.get('cumulative_volume', []), 
+                    self.metric_value
+                )
+            
+                if actual_value < self.target_value:
+                    gradient[structure_mask > 0] = -2.0 * self.weight
+                else:
+                    gradient[structure_mask > 0] = 2.0 * self.weight
+        
+        return gradient
+
+
+def get_objective_result(objective: Union[ObjectiveFunction, Dict],
+                        dose_grid, structures=None, **kwargs) -> Dict:
+    """
+    Evaluate an objective function and return detailed results.
+    
+    Parameters
+    ----------
+    objective : Union[ObjectiveFunction, Dict]
+        Objective function or a dictionary describing it
+    dose_grid : np.ndarray
+        3D dose grid
+    structures : Dict[str, np.ndarray], optional
+        Dictionary mapping structure names to binary masks
+    **kwargs : Any
+        Additional parameters
+        
+    Returns
+    -------
+    Dict
+        Dictionary containing objective function details and result
+    """
+    if isinstance(objective, dict):
+        # Create objective function from dictionary
+        obj_type = objective.get('type', 'UniformDose')
+        structure_name = objective.get('structure', '')
+        weight = objective.get('weight', 1.0)
+        name = objective.get('name', None)
+        
+        if obj_type == 'MinDose':
+            min_dose = objective.get('min_dose', 0.0)
+            obj = MinDose(structure_name, min_dose, weight, name)
+        elif obj_type == 'MaxDose':
+            max_dose = objective.get('max_dose', 0.0)
+            obj = MaxDose(structure_name, max_dose, weight, name)
+        elif obj_type == 'MeanDose':
+            target_dose = objective.get('target_dose', 0.0)
+            obj = MeanDose(structure_name, target_dose, weight, name)
+        elif obj_type == 'UniformDose':
+            target_dose = objective.get('target_dose', 0.0)
+            obj = UniformDose(structure_name, target_dose, weight, name)
+        elif obj_type == 'DVH':
+            metric_type = objective.get('metric_type', 'D')
+            metric_value = objective.get('metric_value', 0.0)
+            target_value = objective.get('target_value', 0.0)
+            constraint = objective.get('constraint', '<')
+            obj = DVHObjective(structure_name, metric_type, metric_value, 
+                              target_value, constraint, weight, name)
+        else:
+            # Default to uniform dose
+            target_dose = objective.get('target_dose', 0.0)
+            obj = UniformDose(structure_name, target_dose, weight, name)
+    else:
+        # Use provided objective function
+        obj = objective
+    
+    # Evaluate objective function
+    value = obj(dose_grid, structures, **kwargs)
+    
+    # Return result
+    return {
+        'name': obj.name,
+        'type': obj.__class__.__name__,
+        'weight': obj.weight,
+        'value': value,
+        'weighted_value': value,
+        'structure': getattr(obj, 'structure_name', None)
+    }

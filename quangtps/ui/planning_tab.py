@@ -23,7 +23,8 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QTabWidget, QLineEdit, QScrollArea, QSplitter,
     QMessageBox, QGroupBox, QHeaderView, QCheckBox, QComboBox, QFileDialog,
     QDoubleSpinBox, QSpinBox, QRadioButton, QFrame, QApplication,
-    QFormLayout, QTextEdit, QDateEdit, QDialog, QButtonGroup, QProgressDialog
+    QFormLayout, QTextEdit, QDateEdit, QDialog, QButtonGroup, QProgressDialog,
+    QToolBar
 )
 
 from quangtps.planning.plan import Plan, PlanStatus, PlanType
@@ -39,9 +40,47 @@ from quangtps.optimization.objectives import ObjectiveCollection
 from quangtps.optimization import ConstraintCollection
 from quangtps.optimization.optimization_engine import OptimizationEngine, OptimizationParameters
 from quangtps.dose.dose_grid import DoseGrid
+# Import 3D CRT Planner
+from quangtps.ui.crt_planner import CRTPlanner
+from quangtps.treatment.techniques.crt_manager import CRTManager
+from quangtps.ui.beam_visualization_panel import BeamVisualizationPanel
+# Check for 3D visualization dependency
+from quangtps.ui.dependency_installer import check_and_install_feature_dependencies
 import numpy as np
+import importlib
+# Import robust optimization dialog (commented out, using local implementation instead)
+#from quangtps.ui.robust_optimization_dialog import show_robust_optimization_dialog
+from quangtps.core.logging import get_logger
+from quangtps.treatment.techniques.crt.crt_planner import CRTPlanner
+from quangtps.treatment.techniques.imrt.imrt_planner import IMRTPlanner
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+
+def show_robust_optimization_dialog(plan, structures, dose_grid=None, parent=None):
+    """
+    Show the robust optimization dialog.
+    
+    Args:
+        plan: Treatment plan to optimize
+        structures: Dictionary of structures
+        dose_grid: Optional dose grid for analysis
+        parent: Parent widget
+    
+    Returns:
+        int: Dialog result (QDialog.Accepted or QDialog.Rejected)
+    """
+    from quangtps.ui.robust_optimization_dialog import RobustOptimizationDialog
+    
+    dialog = RobustOptimizationDialog(plan, structures, dose_grid, parent)
+    
+    # Connect signals
+    dialog.planOptimized.connect(lambda optimized_plan: setattr(plan, 'beams', optimized_plan.beams))
+    
+    # Show dialog
+    result = dialog.exec_()
+    
+    return result
 
 
 class PlanningTab(QWidget):
@@ -76,274 +115,313 @@ class PlanningTab(QWidget):
         # Kết nối cơ sở dữ liệu
         self.plan_db = PlanDB()
         
+        # Khởi tạo CRT Manager
+        self.crt_manager = CRTManager()
+        
         # Thiết lập giao diện
         self._init_ui()
         
         logger.info("Khởi tạo tab lập kế hoạch hoàn tất")
         
     def _init_ui(self):
-        """Khởi tạo các thành phần giao diện."""
-        # Layout chính
-        self.main_layout = QHBoxLayout(self)
+        """Initialize the user interface."""
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Splitter chính
+        # Add toolbar for common actions
+        toolbar = QToolBar("Planning Tools")
+        
+        # Add patient/plan selection
+        patient_label = QLabel("Patient:")
+        toolbar.addWidget(patient_label)
+        
+        self.patient_combo = QComboBox()
+        self.patient_combo.setMinimumWidth(200)
+        self.patient_combo.currentIndexChanged.connect(self._on_patient_changed)
+        toolbar.addWidget(self.patient_combo)
+        toolbar.addSeparator()
+        
+        # Add plan selection
+        plan_label = QLabel("Plan:")
+        toolbar.addWidget(plan_label)
+        
+        self.plan_combo = QComboBox()
+        self.plan_combo.setMinimumWidth(150)
+        self.plan_combo.currentIndexChanged.connect(self._on_plan_changed)
+        toolbar.addWidget(self.plan_combo)
+        
+        # Add plan management buttons
+        new_plan_btn = QPushButton("New Plan")
+        new_plan_btn.setIcon(QIcon.fromTheme("document-new"))
+        new_plan_btn.clicked.connect(self._create_plan_dialog)
+        toolbar.addWidget(new_plan_btn)
+        
+        save_plan_btn = QPushButton("Save Plan")
+        save_plan_btn.setIcon(QIcon.fromTheme("document-save"))
+        save_plan_btn.clicked.connect(self._save_plan)
+        toolbar.addWidget(save_plan_btn)
+        
+        main_layout.addWidget(toolbar)
+        
+        # Main splitter
         self.main_splitter = QSplitter(Qt.Horizontal)
-        self.main_layout.addWidget(self.main_splitter)
         
-        # Panel bên trái (cấu trúc và thông tin kế hoạch)
+        # Left panel for plan properties and general settings
         self.left_panel = QWidget()
-        self.left_layout = QVBoxLayout(self.left_panel)
+        left_layout = QVBoxLayout(self.left_panel)
         
-        # Tab widget cho panel bên trái
-        self.left_tabs = QTabWidget()
-        self.left_layout.addWidget(self.left_tabs)
+        # Plan properties group
+        plan_group = QGroupBox("Plan Properties")
+        plan_layout = QFormLayout()
         
-        # Tab kế hoạch
-        self.plan_info_widget = QWidget()
-        self.plan_info_layout = QVBoxLayout(self.plan_info_widget)
+        self.plan_name_edit = QLineEdit()
+        plan_layout.addRow("Name:", self.plan_name_edit)
         
-        # Nhóm thông tin kế hoạch
-        self.plan_group = QGroupBox("Thông tin kế hoạch")
-        self.plan_form = QFormLayout(self.plan_group)
+        self.plan_desc_edit = QLineEdit()
+        plan_layout.addRow("Description:", self.plan_desc_edit)
         
-        self.plan_name_field = QLineEdit()
-        self.plan_form.addRow("Tên kế hoạch:", self.plan_name_field)
+        self.plan_date_edit = QDateEdit()
+        self.plan_date_edit.setCalendarPopup(True)
+        self.plan_date_edit.setDate(QDate.currentDate())
+        plan_layout.addRow("Date:", self.plan_date_edit)
         
-        self.plan_description_field = QTextEdit()
-        self.plan_description_field.setMaximumHeight(100)
-        self.plan_form.addRow("Mô tả:", self.plan_description_field)
+        self.plan_type_combo = QComboBox()
+        self.plan_type_combo.addItems(["Treatment", "QA", "Research", "Other"])
+        plan_layout.addRow("Type:", self.plan_type_combo)
         
-        self.plan_date_field = QDateEdit()
-        self.plan_date_field.setDisplayFormat("dd/MM/yyyy")
-        self.plan_date_field.setCalendarPopup(True)
-        self.plan_date_field.setDate(QDate.currentDate())
-        self.plan_form.addRow("Ngày tạo:", self.plan_date_field)
+        self.plan_status_combo = QComboBox()
+        self.plan_status_combo.addItems(["Planning", "Approved", "Delivered", "Archived"])
+        plan_layout.addRow("Status:", self.plan_status_combo)
         
-        self.plan_intent_field = QComboBox()
-        self.plan_intent_field.addItems(["Điều trị triệt căn", "Điều trị triệu chứng", "Điều trị bổ trợ", "Khác"])
-        self.plan_form.addRow("Mục đích:", self.plan_intent_field)
+        plan_group.setLayout(plan_layout)
+        left_layout.addWidget(plan_group)
         
-        self.plan_status_field = QComboBox()
-        self.plan_status_field.addItems(["Đang dự thảo", "Đang xem xét", "Đã phê duyệt", "Hoàn thành", "Hủy bỏ"])
-        self.plan_form.addRow("Trạng thái:", self.plan_status_field)
+        # Prescription group
+        prescription_group = QGroupBox("Prescription")
+        prescription_layout = QFormLayout()
         
-        self.plan_info_layout.addWidget(self.plan_group)
+        self.rx_dose_edit = QDoubleSpinBox()
+        self.rx_dose_edit.setRange(0, 1000)
+        self.rx_dose_edit.setSuffix(" Gy")
+        prescription_layout.addRow("Dose:", self.rx_dose_edit)
         
-        # Nhóm liều lượng
-        self.dose_group = QGroupBox("Liều lượng")
-        self.dose_form = QFormLayout(self.dose_group)
+        self.rx_fractions_edit = QSpinBox()
+        self.rx_fractions_edit.setRange(1, 100)
+        prescription_layout.addRow("Fractions:", self.rx_fractions_edit)
         
-        self.prescribed_dose_field = QLineEdit()
-        self.dose_form.addRow("Liều chỉ định:", self.prescribed_dose_field)
+        self.technique_combo = QComboBox()
+        self.technique_combo.addItems(["3D-CRT", "IMRT", "VMAT", "SRS", "SBRT"])
+        self.technique_combo.currentIndexChanged.connect(self._on_technique_changed)
+        prescription_layout.addRow("Technique:", self.technique_combo)
         
-        self.fractions_field = QLineEdit()
-        self.dose_form.addRow("Số phân liều:", self.fractions_field)
+        prescription_group.setLayout(prescription_layout)
+        left_layout.addWidget(prescription_group)
         
-        self.dose_per_fraction_field = QLineEdit()
-        self.dose_form.addRow("Liều/phân liều:", self.dose_per_fraction_field)
+        # Advanced Planning Options group
+        advanced_group = QGroupBox("Advanced Planning")
+        advanced_layout = QVBoxLayout()
         
-        self.plan_info_layout.addWidget(self.dose_group)
+        # MCO button
+        self.mco_button = QPushButton("Multi-Criteria Optimization")
+        self.mco_button.setIcon(QIcon.fromTheme("view-refresh"))
+        self.mco_button.clicked.connect(self._open_mco_dialog)
+        advanced_layout.addWidget(self.mco_button)
         
-        # Nút lưu kế hoạch
-        self.save_plan_button = QPushButton("Lưu kế hoạch")
-        self.save_plan_button.clicked.connect(self._save_plan)
-        self.plan_info_layout.addWidget(self.save_plan_button, alignment=Qt.AlignRight)
+        # Robust optimization button
+        self.robust_button = QPushButton("Robust Optimization")
+        self.robust_button.setIcon(QIcon.fromTheme("view-refresh"))
+        self.robust_button.clicked.connect(self._open_robust_optimization)
+        advanced_layout.addWidget(self.robust_button)
         
-        # Thêm tab kế hoạch
-        self.left_tabs.addTab(self.plan_info_widget, "Kế hoạch")
+        advanced_group.setLayout(advanced_layout)
+        left_layout.addWidget(advanced_group)
         
-        # Tab cấu trúc
-        self.structures_widget = QWidget()
-        self.structures_layout = QVBoxLayout(self.structures_widget)
+        # Add some spacing
+        left_layout.addStretch()
         
-        # Hiển thị cấu trúc
-        self.structure_view = QLabel("Cấu trúc")
-        self.structures_layout.addWidget(self.structure_view)
+        # Right splitter for beams and visualization
+        self.right_splitter = QSplitter(Qt.Vertical)
         
-        # Thêm tab cấu trúc
-        self.left_tabs.addTab(self.structures_widget, "Cấu trúc")
+        # Beams tab widget
+        self.beams_tab = QTabWidget()
         
-        # Tab ràng buộc
-        self.constraints_widget = QWidget()
-        self.constraints_layout = QVBoxLayout(self.constraints_widget)
+        # 3D-CRT planner
+        self.crt_planner = CRTPlanner()
+        self.crt_planner.plan_created.connect(self._on_crt_plan_created)
+        self.beams_tab.addTab(self.crt_planner, "3D-CRT")
         
-        # Bảng ràng buộc
-        self.constraints_table = QTableWidget(0, 4)
-        self.constraints_table.setHorizontalHeaderLabels(["Cấu trúc", "Loại", "Giá trị", "Mức độ ưu tiên"])
-        self.constraints_table.horizontalHeader().setStretchLastSection(True)
-        self.constraints_layout.addWidget(self.constraints_table)
+        # IMRT planner
+        self.imrt_planner = IMRTPlanner()
+        self.beams_tab.addTab(self.imrt_planner, "IMRT")
         
-        # Nút thêm ràng buộc
-        self.add_constraint_button = QPushButton("Thêm ràng buộc")
-        self.add_constraint_button.clicked.connect(self._add_constraint)
-        self.constraints_layout.addWidget(self.add_constraint_button, alignment=Qt.AlignRight)
+        # VMAT planner
+        self.vmat_planner = QWidget()  # Placeholder for now
+        self.beams_tab.addTab(self.vmat_planner, "VMAT")
         
-        # Thêm tab ràng buộc
-        self.left_tabs.addTab(self.constraints_widget, "Ràng buộc")
+        # SRS planner
+        self.srs_planner = QWidget()  # Placeholder for now
+        self.beams_tab.addTab(self.srs_planner, "SRS")
         
-        # Panel bên phải (thiết lập kỹ thuật và chùm tia)
-        self.right_panel = QWidget()
-        self.right_layout = QVBoxLayout(self.right_panel)
+        # Disable tabs until they're implemented
+        self.beams_tab.setTabEnabled(2, False)  # VMAT
+        self.beams_tab.setTabEnabled(3, False)  # SRS
         
-        # Tab widget cho panel bên phải
-        self.right_tabs = QTabWidget()
-        self.right_layout.addWidget(self.right_tabs)
+        # Add tabs to right splitter
+        self.right_splitter.addWidget(self.beams_tab)
         
-        # Tab kỹ thuật
-        self.technique_widget = QWidget()
-        self.technique_layout = QVBoxLayout(self.technique_widget)
+        # Visualization panel
+        self.viz_panel = QTabWidget()
         
-        # Nhóm lựa chọn kỹ thuật
-        self.technique_group = QGroupBox("Kỹ thuật xạ trị")
-        self.technique_button_layout = QVBoxLayout(self.technique_group)
+        # 2D beam visualization
+        self.beam_viz_panel = BeamVisualizationPanel()
+        self.beam_viz_panel.beam_added.connect(self._on_beam_added)
+        self.beam_viz_panel.beam_modified.connect(self._on_beam_modified)
+        self.beam_viz_panel.beam_removed.connect(self._on_beam_removed)
+        self.beam_viz_panel.beam_selected.connect(self._on_beam_selected)
+        self.beam_viz_panel.calculate_dose_requested.connect(self._on_calculate_beam_dose)
+        self.viz_panel.addTab(self.beam_viz_panel, "2D View")
         
-        # Radio buttons cho các kỹ thuật
-        self.technique_button_group = QButtonGroup(self)
+        # 3D beam visualization (added if dependencies available)
+        self.beam_3d_view = None
         
-        self.dcat_button = QRadioButton("DCAT - Dynamic Conformal Arc Therapy")
-        self.technique_button_group.addButton(self.dcat_button)
-        self.technique_button_layout.addWidget(self.dcat_button)
+        # Add 3D visualization tab if dependencies are available
+        try:
+            import pyvista
+            from quangtps.ui.beam_3d_visualization import Beam3DVisualization
+            self.beam_3d_view = Beam3DVisualization()
+            self.beam_3d_view.beam_selected.connect(self._on_beam_selected)
+            self.viz_panel.addTab(self.beam_3d_view, "3D View")
+        except ImportError:
+            # Add a placeholder tab with a button to install dependencies
+            placeholder = QWidget()
+            placeholder_layout = QVBoxLayout(placeholder)
+            placeholder_layout.addStretch()
+            
+            message = QLabel("3D visualization requires additional dependencies.")
+            message.setAlignment(Qt.AlignCenter)
+            placeholder_layout.addWidget(message)
+            
+            install_button = QPushButton("Install Dependencies")
+            install_button.clicked.connect(self._check_3d_visualization_dependencies)
+            placeholder_layout.addWidget(install_button, 0, Qt.AlignCenter)
+            
+            placeholder_layout.addStretch()
+            self.viz_panel.addTab(placeholder, "3D View")
         
-        self.imrt_button = QRadioButton("IMRT - Intensity Modulated Radiation Therapy")
-        self.technique_button_group.addButton(self.imrt_button)
-        self.technique_button_layout.addWidget(self.imrt_button)
+        self.right_splitter.addWidget(self.viz_panel)
         
-        self.vmat_button = QRadioButton("VMAT - Volumetric Modulated Arc Therapy")
-        self.technique_button_group.addButton(self.vmat_button)
-        self.technique_button_layout.addWidget(self.vmat_button)
+        # Set initial splitter sizes
+        self.right_splitter.setSizes([500, 500])
         
-        self.srs_button = QRadioButton("SRS - Stereotactic Radiosurgery")
-        self.technique_button_group.addButton(self.srs_button)
-        self.technique_button_layout.addWidget(self.srs_button)
-        
-        self.sbrt_button = QRadioButton("SBRT - Stereotactic Body Radiation Therapy")
-        self.technique_button_group.addButton(self.sbrt_button)
-        self.technique_button_layout.addWidget(self.sbrt_button)
-        
-        # Kết nối sự kiện thay đổi lựa chọn
-        self.technique_button_group.buttonClicked.connect(self._technique_selected)
-        
-        self.technique_layout.addWidget(self.technique_group)
-        
-        # Nhóm tính toán độ phù hợp
-        self.suitability_group = QGroupBox("Độ phù hợp của kỹ thuật")
-        self.suitability_layout = QVBoxLayout(self.suitability_group)
-        
-        # Label hiển thị mức độ phù hợp
-        self.suitability_label = QLabel("Vui lòng nhập thông tin bệnh nhân và kế hoạch để tính toán độ phù hợp")
-        self.suitability_label.setWordWrap(True)
-        self.suitability_layout.addWidget(self.suitability_label)
-        
-        # Nút tính toán độ phù hợp
-        self.calculate_suitability_button = QPushButton("Tính toán độ phù hợp")
-        self.calculate_suitability_button.clicked.connect(self._calculate_technique_suitability)
-        self.suitability_layout.addWidget(self.calculate_suitability_button)
-        
-        self.technique_layout.addWidget(self.suitability_group)
-        
-        # Thêm tab kỹ thuật
-        self.right_tabs.addTab(self.technique_widget, "Kỹ thuật")
-        
-        # Tab chùm tia
-        self.beams_widget = QWidget()
-        self.beams_layout = QVBoxLayout(self.beams_widget)
-        
-        # Bảng chùm tia
-        self.beams_table = QTableWidget(0, 7)
-        self.beams_table.setHorizontalHeaderLabels(["ID", "Tên", "Góc gantry", "Góc collimator", "Góc bàn", "MU", "Trạng thái"])
-        self.beams_table.horizontalHeader().setStretchLastSection(True)
-        self.beams_layout.addWidget(self.beams_table)
-        
-        # Nút thêm chùm tia
-        self.beam_buttons_layout = QHBoxLayout()
-        
-        self.add_beam_button = QPushButton("Thêm chùm tia")
-        self.add_beam_button.clicked.connect(self._add_beam)
-        self.beam_buttons_layout.addWidget(self.add_beam_button)
-        
-        self.add_arc_button = QPushButton("Thêm cung")
-        self.add_arc_button.clicked.connect(self._add_arc)
-        self.beam_buttons_layout.addWidget(self.add_arc_button)
-        
-        self.edit_beam_button = QPushButton("Chỉnh sửa")
-        self.edit_beam_button.clicked.connect(self._edit_beam)
-        self.beam_buttons_layout.addWidget(self.edit_beam_button)
-        
-        self.delete_beam_button = QPushButton("Xóa")
-        self.delete_beam_button.clicked.connect(self._delete_beam)
-        self.beam_buttons_layout.addWidget(self.delete_beam_button)
-        
-        self.beams_layout.addLayout(self.beam_buttons_layout)
-        
-        # Thêm tab chùm tia
-        self.right_tabs.addTab(self.beams_widget, "Chùm tia")
-        
-        # Tab tối ưu hóa
-        self.optimization_widget = QWidget()
-        self.optimization_layout = QVBoxLayout(self.optimization_widget)
-        
-        # Nhóm thiết lập tối ưu hóa
-        self.optimization_group = QGroupBox("Thiết lập tối ưu hóa")
-        self.optimization_form = QFormLayout(self.optimization_group)
-        
-        self.opt_algorithm_field = QComboBox()
-        self.opt_algorithm_field.addItems(["Simulated Annealing", "Genetic Algorithm", "Gradient Descent", "IPOPT"])
-        self.optimization_form.addRow("Thuật toán:", self.opt_algorithm_field)
-        
-        self.opt_iterations_field = QLineEdit()
-        self.optimization_form.addRow("Số lần lặp:", self.opt_iterations_field)
-        
-        self.opt_convergence_field = QLineEdit()
-        self.optimization_form.addRow("Ngưỡng hội tụ:", self.opt_convergence_field)
-        
-        self.optimization_layout.addWidget(self.optimization_group)
-        
-        # Nút tối ưu hóa
-        self.run_optimization_button = QPushButton("Chạy tối ưu hóa")
-        self.run_optimization_button.clicked.connect(self._run_optimization)
-        self.optimization_layout.addWidget(self.run_optimization_button, alignment=Qt.AlignRight)
-        
-        # Nút tối ưu đa tiêu chí
-        self.mco_button = QPushButton("Tối ưu Đa Tiêu Chí (MCO)")
-        self.mco_button.setToolTip("Khởi chạy tối ưu đa tiêu chí và khám phá mặt Pareto")
-        self.mco_button.clicked.connect(self.run_mco_optimization)
-        self.optimization_layout.addWidget(self.mco_button)
-        
-        # Thêm nút tối ưu hóa KBP
-        self.kbp_button = QPushButton("Tối ưu dựa trên kiến thức (KBP)")
-        self.kbp_button.clicked.connect(self.run_kbp_optimization)
-        self.optimization_layout.addWidget(self.kbp_button)
-        
-        # Thêm tab tối ưu hóa
-        self.right_tabs.addTab(self.optimization_widget, "Tối ưu hóa")
-        
-        # Thêm các panel vào splitter
+        # Add panels to main splitter
         self.main_splitter.addWidget(self.left_panel)
-        self.main_splitter.addWidget(self.right_panel)
+        self.main_splitter.addWidget(self.right_splitter)
         
-        # Thiết lập kích thước ban đầu
-        self.main_splitter.setSizes([400, 600])
+        # Set main splitter sizes (left panel gets less space)
+        self.main_splitter.setSizes([300, 700])
         
-        # Vô hiệu hóa các tab liên quan đến kỹ thuật khi chưa có kế hoạch
-        self.right_tabs.setEnabled(False)
+        # Add main splitter to layout
+        main_layout.addWidget(self.main_splitter, 1)
+        
+        # Status bar
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(QLabel("Status:"))
+        self.status_label = QLabel("Ready")
+        status_layout.addWidget(self.status_label, 1)
+        main_layout.addLayout(status_layout)
+        
+        # Initialize current plan
+        self.current_patient_id = None
+        self.current_plan = None
+        self.current_structures = None
+        
+        # Populate patient list
+        self._populate_patient_list()
+    
+    def _on_technique_changed(self, index):
+        """
+        Xử lý khi kỹ thuật xạ trị được thay đổi.
+        
+        Parameters
+        ----------
+        index : int
+            Chỉ số của kỹ thuật được chọn
+        """
+        technique = self.technique_combo.currentText()
+        
+        # Chuyển đến tab tương ứng
+        if technique == "3D-CRT":
+            # Chuyển đến tab 3D CRT Planner
+            for i in range(self.beams_tab.count()):
+                if self.beams_tab.tabText(i) == "3D-CRT":
+                    self.beams_tab.setCurrentIndex(i)
+                    break
+        elif technique == "IMRT" or technique == "VMAT":
+            # Chuyển đến tab tối ưu hóa
+            for i in range(self.beams_tab.count()):
+                if self.beams_tab.tabText(i) == "Tối ưu hóa":
+                    self.beams_tab.setCurrentIndex(i)
+                    break
+        else:
+            # Mặc định chuyển đến tab chùm tia
+            self.beams_tab.setCurrentIndex(0)
+    
+    def _on_crt_plan_created(self, plan):
+        """
+        Xử lý khi kế hoạch 3D CRT được tạo.
+        
+        Parameters
+        ----------
+        plan : Plan
+            Kế hoạch xạ trị được tạo từ CRTPlanner
+        """
+        try:
+            # Cập nhật kế hoạch hiện tại
+            self.current_plan = plan
+            
+            # Cập nhật thông tin kế hoạch
+            self.plan_name_edit.setText(plan.name)
+            self.plan_desc_edit.setText(f"Kế hoạch 3D CRT với {len(plan.beams)} chùm tia")
+            
+            # Cập nhật bảng chùm tia
+            self._populate_beams_table()
+            
+            # Hiển thị thông báo
+            QMessageBox.information(
+                self, 
+                "Thông báo", 
+                f"Đã tạo kế hoạch 3D CRT '{plan.name}' với {len(plan.beams)} chùm tia"
+            )
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý kế hoạch 3D CRT: {e}")
+            QMessageBox.critical(self, "Lỗi", f"Không thể áp dụng kế hoạch 3D CRT: {e}")
     
     def set_plan(self, plan):
-        """Thiết lập kế hoạch hiện tại và cập nhật giao diện.
+        """
+        Thiết lập kế hoạch hiện tại.
         
-        Args:
-            plan: Đối tượng kế hoạch
+        Parameters
+        ----------
+        plan : Plan
+            Kế hoạch xạ trị
         """
         self.current_plan = plan
-        if plan:
-            self._populate_plan_data()
-            self.right_tabs.setEnabled(True)
-        else:
-            self._clear_plan_data()
-            self.right_tabs.setEnabled(False)
+        
+        # Update UI with plan data
+        self._populate_plan_data()
+        
+        # Set the plan in the beam visualization panel
+        if hasattr(self, 'beam_viz_panel'):
+            self.beam_viz_panel.set_plan(plan)
+            
+            # If the plan has dose data, update the visualization
+            if hasattr(plan, 'dose_grid') and plan.dose_grid is not None:
+                self.beam_viz_panel.set_dose_grid(plan.dose_grid)
     
     def set_patient(self, patient_id):
         """
-        Thiết lập ID bệnh nhân hiện tại.
+        Thiết lập bệnh nhân hiện tại.
         
         Parameters
         ----------
@@ -351,11 +429,31 @@ class PlanningTab(QWidget):
             ID của bệnh nhân
         """
         self.current_patient_id = patient_id
-        # Kích hoạt nút tạo kế hoạch nếu có ID bệnh nhân
-        if patient_id:
-            self.save_plan_button.setEnabled(True)
-        else:
-            self.save_plan_button.setEnabled(False)
+        
+        # Load patient data for the beam visualization panel
+        if hasattr(self, 'beam_viz_panel'):
+            from quangtps.core.services import ServiceManager
+            service_manager = ServiceManager()
+            patient_service = service_manager.get_service('PatientService')
+            
+            if patient_service:
+                patient_image = patient_service.get_patient_image(patient_id)
+                structures = patient_service.get_patient_structures(patient_id)
+                
+                if patient_image:
+                    self.beam_viz_panel.set_patient_data(patient_image, structures)
+    
+    def set_structures(self, structures):
+        """
+        Thiết lập danh sách cấu trúc.
+        
+        Parameters
+        ----------
+        structures : List
+            Danh sách các cấu trúc
+        """
+        # Cập nhật danh sách cấu trúc cho CRT Planner
+        self.crt_planner.set_structures(structures)
     
     def _populate_plan_data(self):
         """Điền thông tin kế hoạch vào giao diện."""
@@ -363,8 +461,8 @@ class PlanningTab(QWidget):
             return
             
         # Thông tin cơ bản
-        self.plan_name_field.setText(self.current_plan.plan_name)
-        self.plan_description_field.setText(self.current_plan.description)
+        self.plan_name_edit.setText(self.current_plan.name)
+        self.plan_desc_edit.setText(self.current_plan.description)
         
         # Thiết lập ngày tạo
         if self.current_plan.created_date:
@@ -373,16 +471,16 @@ class PlanningTab(QWidget):
                 self.current_plan.created_date.month,
                 self.current_plan.created_date.day
             )
-            self.plan_date_field.setDate(qdate)
+            self.plan_date_edit.setDate(qdate)
         
         # Thiết lập mục đích và trạng thái
-        self.plan_intent_field.setCurrentText(str(self.current_plan.plan_type))
-        self.plan_status_field.setCurrentText(str(self.current_plan.status))
+        self.plan_type_combo.setCurrentText(str(self.current_plan.type))
+        self.plan_status_combo.setCurrentText(str(self.current_plan.status))
         
         # Thông tin liều lượng
         if self.current_plan.prescription:
-            self.prescribed_dose_field.setText(str(self.current_plan.prescription.total_dose))
-            self.fractions_field.setText(str(self.current_plan.prescription.fractions))
+            self.rx_dose_edit.setValue(self.current_plan.prescription.total_dose)
+            self.rx_fractions_edit.setValue(self.current_plan.prescription.fractions)
         
         # Cập nhật bảng chùm tia
         self._populate_beams_table()
@@ -444,7 +542,7 @@ class PlanningTab(QWidget):
             return
         
         # Lấy thông tin từ giao diện
-        plan_name = self.plan_name_field.text().strip()
+        plan_name = self.plan_name_edit.text().strip()
         if not plan_name:
             QMessageBox.warning(
                 self, 
@@ -454,30 +552,30 @@ class PlanningTab(QWidget):
             return
         
         # Kiểm tra và lấy các giá trị từ giao diện
-        description = self.plan_description_field.text().strip()
-        plan_date = self.plan_date_field.date().toPyDate()
-        plan_type = self.plan_intent_field.currentText()
-        plan_status = self.plan_status_field.currentText()
+        description = self.plan_desc_edit.text().strip()
+        plan_date = self.plan_date_edit.date().toPyDate()
+        plan_type = self.plan_type_combo.currentText()
+        plan_status = self.plan_status_combo.currentText()
         
         # Thông tin liều lượng
-        prescribed_dose = self.prescribed_dose_field.text().strip()
-        fractions = self.fractions_field.text().strip()
+        prescribed_dose = self.rx_dose_edit.value()
+        fractions = self.rx_fractions_edit.value()
         
         # Tạo hoặc cập nhật kế hoạch
         if self.current_plan:
             # Cập nhật kế hoạch hiện tại
-            self.current_plan.plan_name = plan_name
+            self.current_plan.name = plan_name
             self.current_plan.description = description
             self.current_plan.created_date = plan_date
-            self.current_plan.plan_type = PlanType(plan_type)
+            self.current_plan.type = PlanType(plan_type)
             self.current_plan.status = PlanStatus(plan_status)
             
             # Cập nhật đơn thuốc
             if not self.current_plan.prescription:
                 self.current_plan.prescription = Prescription()
                 
-            self.current_plan.prescription.total_dose = float(prescribed_dose)
-            self.current_plan.prescription.fractions = int(fractions)
+            self.current_plan.prescription.total_dose = prescribed_dose
+            self.current_plan.prescription.fractions = fractions
             
             # Lưu kế hoạch vào cơ sở dữ liệu
             try:
@@ -504,8 +602,8 @@ class PlanningTab(QWidget):
                 plan_date, 
                 plan_type, 
                 plan_status, 
-                float(prescribed_dose), 
-                int(fractions)
+                prescribed_dose, 
+                fractions
             )
     
     def _create_new_plan(self, name, description, date, plan_type, status, dose, fractions):
@@ -533,10 +631,10 @@ class PlanningTab(QWidget):
             # Tạo đối tượng kế hoạch mới
             new_plan = Plan()
             new_plan.patient_id = self.current_patient_id
-            new_plan.plan_name = name
+            new_plan.name = name
             new_plan.description = description
             new_plan.created_date = date
-            new_plan.plan_type = PlanType(plan_type)
+            new_plan.type = PlanType(plan_type)
             new_plan.status = PlanStatus(status)
             
             # Thiết lập đơn thuốc
@@ -553,18 +651,8 @@ class PlanningTab(QWidget):
             new_plan.optimization_settings = optimization
             
             # Thiết lập kỹ thuật điều trị
-            if self.imrt_button.isChecked():
-                new_plan.technique = "IMRT"
-            elif self.vmat_button.isChecked():
-                new_plan.technique = "VMAT"
-            elif self.dcat_button.isChecked():
-                new_plan.technique = "DCAT"
-            elif self.srs_button.isChecked():
-                new_plan.technique = "SRS"
-            elif self.sbrt_button.isChecked():
-                new_plan.technique = "SBRT"
-            else:
-                new_plan.technique = "3DCRT"  # Mặc định
+            self.current_technique = "3D-CRT"
+            new_plan.technique = "3D-CRT"
             
             # Tạo bố trí chùm tia mặc định
             new_plan.beam_arrangement = BeamArrangement()
@@ -589,7 +677,7 @@ class PlanningTab(QWidget):
             
             # Cập nhật giao diện
             self._populate_plan_data()
-            self.right_tabs.setEnabled(True)
+            self.beams_tab.setEnabled(True)
             
         except Exception as e:
             QMessageBox.critical(
@@ -602,25 +690,18 @@ class PlanningTab(QWidget):
     def _clear_plan_data(self):
         """Xóa thông tin kế hoạch khỏi giao diện."""
         # Xóa thông tin kế hoạch
-        self.plan_name_field.clear()
-        self.plan_description_field.clear()
-        self.plan_date_field.setDate(QDate.currentDate())
-        self.plan_intent_field.setCurrentIndex(0)
-        self.plan_status_field.setCurrentIndex(0)
+        self.plan_name_edit.clear()
+        self.plan_desc_edit.clear()
+        self.plan_date_edit.setDate(QDate.currentDate())
+        self.plan_type_combo.setCurrentIndex(0)
+        self.plan_status_combo.setCurrentIndex(0)
         
         # Xóa thông tin liều lượng
-        self.prescribed_dose_field.clear()
-        self.fractions_field.clear()
-        self.dose_per_fraction_field.clear()
+        self.rx_dose_edit.setValue(0)
+        self.rx_fractions_edit.setValue(0)
         
         # Xóa bảng ràng buộc
         self.constraints_table.setRowCount(0)
-        
-        # Xóa lựa chọn kỹ thuật
-        self.technique_button_group.setExclusive(False)
-        for button in self.technique_button_group.buttons():
-            button.setChecked(False)
-        self.technique_button_group.setExclusive(True)
         
         # Xóa bảng chùm tia
         self.beams_table.setRowCount(0)
@@ -630,736 +711,6 @@ class PlanningTab(QWidget):
         logger.info("Thêm ràng buộc")
         # Chưa có dữ liệu thực tế, sẽ được triển khai khi có dữ liệu
     
-    def _technique_selected(self, button):
-        """
-        Xử lý sự kiện khi một kỹ thuật được chọn.
-        
-        Parameters
-        ----------
-        button : QRadioButton
-            Nút radio được chọn
-        """
-        logger.info(f"Kỹ thuật được chọn: {button.text()}")
-        
-        # Xác định kỹ thuật dựa trên nút được chọn
-        if button is self.dcat_button:
-            self.current_technique = "DCAT"
-        elif button is self.imrt_button:
-            self.current_technique = "IMRT"
-        elif button is self.vmat_button:
-            self.current_technique = "VMAT"
-        elif button is self.srs_button:
-            self.current_technique = "SRS"
-        elif button is self.sbrt_button:
-            self.current_technique = "SBRT"
-        
-        # Cập nhật giao diện dựa trên kỹ thuật được chọn
-        self._update_beam_controls()
-    
-    def _update_beam_controls(self):
-        """Cập nhật các điều khiển chùm tia dựa trên kỹ thuật được chọn."""
-        # Kích hoạt/vô hiệu hóa các nút dựa trên kỹ thuật
-        if self.current_technique in ["DCAT", "VMAT", "SRS", "SBRT"]:
-            self.add_arc_button.setEnabled(True)
-        else:
-            self.add_arc_button.setEnabled(False)
-        
-        # Xóa bảng chùm tia
-        self.beams_table.setRowCount(0)
-    
-    def _calculate_technique_suitability(self):
-        """Tính toán độ phù hợp của các kỹ thuật."""
-        logger.info("Tính toán độ phù hợp của kỹ thuật")
-        
-        # Chưa có dữ liệu thực tế, sẽ được triển khai khi có dữ liệu
-        # Hiện tại chỉ mô phỏng kết quả
-        
-        site = self.plan_intent_field.currentText()
-        
-        # Mô phỏng tính toán độ phù hợp
-        suitability_text = (
-            "Độ phù hợp của các kỹ thuật (thang điểm 1-10):\n"
-            "- DCAT: 7/10 (Phù hợp cho hầu hết các trường hợp)\n"
-            "- IMRT: 9/10 (Rất phù hợp cho các trường hợp phức tạp)\n"
-            "- VMAT: 8/10 (Phù hợp cho các trường hợp cần phân bố liều đồng đều)\n"
-            "- SRS: 5/10 (Phù hợp cho các tổn thương nhỏ trong não)\n"
-            "- SBRT: 6/10 (Phù hợp cho các tổn thương ngoài não)"
-        )
-        
-        self.suitability_label.setText(suitability_text)
-    
-    def _add_beam(self):
-        """Thêm chùm tia mới vào kế hoạch điều trị hiện tại."""
-        plan = self._get_current_plan()
-        if not plan:
-            QMessageBox.warning(
-                self,
-                "Không thể thêm chùm tia",
-                "Vui lòng tạo kế hoạch điều trị trước."
-            )
-            return
-        
-        dialog = BeamDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            result = dialog.get_beam_data()
-            beam_setup = result['beam_setup']
-            
-            if not plan.beam_arrangement:
-                plan.beam_arrangement = BeamArrangement()
-            
-            plan.beam_arrangement.add_beam_setup(beam_setup)
-            self._update_beams_table()
-            
-            # Log và thông báo
-            logger.info(f"Thêm chùm tia {beam_setup.name} vào kế hoạch {plan.plan_name}")
-            self.statusBar().showMessage(f"Đã thêm chùm tia: {beam_setup.name}", 3000)
-    
-    def _add_arc(self):
-        """Thêm chùm tia dạng cung (arc) vào kế hoạch điều trị hiện tại."""
-        plan = self._get_current_plan()
-        if not plan:
-            QMessageBox.warning(
-                self,
-                "Không thể thêm cung",
-                "Vui lòng tạo kế hoạch điều trị trước."
-            )
-            return
-        
-        dialog = BeamDialog(self, is_arc=True)
-        if dialog.exec_() == QDialog.Accepted:
-            result = dialog.get_beam_data()
-            beam_setup = result['beam_setup']
-            
-            # Thiết lập các thông số đặc trưng cho cung
-            beam_setup.is_arc = True
-            beam_setup.arc_start_angle = result.get('arc_start_angle', 0)
-            beam_setup.arc_stop_angle = result.get('arc_stop_angle', 359)
-            beam_setup.arc_direction = result.get('arc_direction', 'CW')  # CW: clockwise, CCW: counter-clockwise
-            
-            if not plan.beam_arrangement:
-                plan.beam_arrangement = BeamArrangement()
-            
-            plan.beam_arrangement.add_beam_setup(beam_setup)
-            
-            # Cập nhật bảng
-            self._update_beam_table()
-            
-            # Thông báo thay đổi
-            self.plan_updated.emit(plan)
-            
-    def _edit_beam(self):
-        """Chỉnh sửa chùm tia đã chọn."""
-        plan = self._get_current_plan()
-        if not plan or not plan.beam_arrangement:
-            return
-            
-        # Lấy chùm tia đã chọn
-        selected_indexes = self.beams_table.selectedIndexes()
-        if not selected_indexes:
-            QMessageBox.warning(
-                self,
-                "Không thể chỉnh sửa",
-                "Vui lòng chọn một chùm tia để chỉnh sửa."
-            )
-            return
-        
-        # Lấy index của dòng đang chọn (chỉ lấy row đầu tiên nếu có nhiều dòng được chọn)
-        row = selected_indexes[0].row()
-        
-        # Lấy beam_id từ bảng
-        beam_id = self.beams_table.item(row, 0).data(Qt.UserRole)
-        
-        # Tìm beam_setup tương ứng
-        beam_setup = plan.beam_arrangement.get_beam_setup_by_id(beam_id)
-        if not beam_setup:
-            QMessageBox.warning(
-                self,
-                "Lỗi",
-                "Không tìm thấy chùm tia đã chọn."
-            )
-            return
-        
-        # Mở hộp thoại chỉnh sửa
-        dialog = BeamDialog(self, beam_setup)
-        if dialog.exec_() == QDialog.Accepted:
-            result = dialog.get_beam_data()
-            updated_beam_setup = result['beam_setup']
-            
-            # Cập nhật beam_setup
-            # Các thuộc tính đã được cập nhật trong BeamDialog
-            
-            self._update_beam_table()
-            
-            # Thông báo thay đổi
-            self.plan_updated.emit(plan)
-            
-    def _delete_beam(self):
-        """Xóa chùm tia đã chọn khỏi kế hoạch điều trị hiện tại."""
-        plan = self._get_current_plan()
-        if not plan or not plan.beam_arrangement:
-            return
-        
-        # Lấy chùm tia đã chọn
-        selected_indexes = self.beams_table.selectedIndexes()
-        if not selected_indexes:
-            QMessageBox.warning(
-                self,
-                "Không thể xóa",
-                "Vui lòng chọn một chùm tia để xóa."
-            )
-            return
-        
-        # Lấy index của dòng đang chọn (chỉ lấy row đầu tiên nếu có nhiều dòng được chọn)
-        row = selected_indexes[0].row()
-        
-        # Lấy beam_id từ bảng
-        beam_id = self.beams_table.item(row, 0).data(Qt.UserRole)
-        beam_name = self.beams_table.item(row, 1).text()
-        
-        # Hiển thị hộp thoại xác nhận
-        reply = QMessageBox.question(
-            self,
-            "Xác nhận xóa",
-            f"Bạn có chắc muốn xóa chùm tia '{beam_name}'?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            # Xóa chùm tia khỏi beam_arrangement
-            plan.beam_arrangement.remove_beam_setup(beam_id)
-            
-            # Cập nhật bảng
-            self._update_beam_table()
-            
-            # Thông báo thay đổi
-            self.plan_updated.emit(plan)
-            
-            logger.info(f"Đã xóa chùm tia {beam_name}")
-            self.statusBar().showMessage(f"Đã xóa chùm tia: {beam_name}", 3000)
-            
-    def _update_beams_table(self):
-        """Cập nhật bảng hiển thị chùm tia."""
-        self.beams_table.setRowCount(0)  # Xóa tất cả dòng
-        
-        plan = self._get_current_plan()
-        if not plan or not plan.beam_arrangement:
-            return
-        
-        # Lấy danh sách các beam_setup
-        beam_setups = plan.beam_arrangement.beam_setups
-        
-        # Thêm dòng cho mỗi chùm tia
-        for i, beam_setup in enumerate(beam_setups):
-            self.beams_table.insertRow(i)
-            
-            # ID (ẩn, lưu trong UserRole)
-            id_item = QTableWidgetItem()
-            id_item.setData(Qt.UserRole, beam_setup.beam_id)
-            
-            # Tên
-            name_item = QTableWidgetItem(beam_setup.name)
-            
-            # Góc gantry
-            gantry_angle = beam_setup.beam_geometry.gantry_angle if beam_setup.beam_geometry else 0
-            gantry_item = QTableWidgetItem(f"{gantry_angle:.1f}°")
-            
-            # Góc collimator
-            collimator_angle = beam_setup.beam_geometry.collimator_angle if beam_setup.beam_geometry else 0
-            collimator_item = QTableWidgetItem(f"{collimator_angle:.1f}°")
-            
-            # Góc bàn
-            couch_angle = beam_setup.beam_geometry.couch_angle if beam_setup.beam_geometry else 0
-            couch_item = QTableWidgetItem(f"{couch_angle:.1f}°")
-            
-            # MU
-            mu_item = QTableWidgetItem(f"{beam_setup.monitor_units:.1f}")
-            
-            # Trạng thái
-            status = beam_setup.metadata.get('status', 'planning')
-            status_display = {
-                'planning': 'Đang lập kế hoạch',
-                'approved': 'Đã phê duyệt',
-                'delivered': 'Đã gửi',
-                'processed': 'Đã xử lý'
-            }
-            status_item = QTableWidgetItem(status_display.get(status, 'Không xác định'))
-            
-            # Đặt các mục vào bảng
-            self.beams_table.setItem(i, 0, id_item)
-            self.beams_table.setItem(i, 1, name_item)
-            self.beams_table.setItem(i, 2, gantry_item)
-            self.beams_table.setItem(i, 3, collimator_item)
-            self.beams_table.setItem(i, 4, couch_item)
-            self.beams_table.setItem(i, 5, mu_item)
-            self.beams_table.setItem(i, 6, status_item)
-    
-    def _get_current_plan(self):
-        """Lấy kế hoạch hiện tại."""
-        return self.current_plan
-    
-    def _update_plan(self):
-        """Cập nhật kế hoạch hiện tại lên cơ sở dữ liệu."""
-        if not self.current_plan:
-            return
-            
-        try:
-            # Cập nhật kế hoạch lên cơ sở dữ liệu
-            self.plan_db.update_plan(self.current_plan)
-            
-            # Phát tín hiệu cập nhật
-            self.plan_updated.emit(self.current_plan)
-            
-        except Exception as e:
-            QMessageBox.critical(
-                self, 
-                "Lỗi", 
-                f"Không thể cập nhật kế hoạch: {str(e)}"
-            )
-            logger.error(f"Lỗi cập nhật kế hoạch: {str(e)}")
-
-    def _save_plan(self):
-        """Lưu kế hoạch hiện tại."""
-        if not self.current_patient_id:
-            QMessageBox.warning(
-                self, 
-                "Không thể lưu kế hoạch", 
-                "Vui lòng chọn một bệnh nhân trước khi lưu kế hoạch."
-            )
-            return
-        
-        # Lấy thông tin từ form
-        name = self.plan_name_field.text().strip()
-        description = self.plan_description_field.toPlainText().strip()
-        date = self.plan_date_field.date().toPyDate()
-        plan_type = self.plan_intent_field.currentText()
-        status = self.plan_status_field.currentText()
-        dose = self.prescribed_dose_field.text().strip()
-        fractions = self.fractions_field.text().strip()
-        
-        # Kiểm tra tên kế hoạch
-        if not name:
-            QMessageBox.warning(
-                self, 
-                "Tên không hợp lệ", 
-                "Vui lòng nhập tên kế hoạch."
-            )
-            return
-            
-        try:
-            if self.current_plan:
-                # Cập nhật kế hoạch hiện tại
-                self.current_plan.plan_name = name
-                self.current_plan.description = description
-                self.current_plan.created_date = date
-                self.current_plan.plan_type = PlanType(plan_type)
-                self.current_plan.status = PlanStatus(status)
-                
-                # Cập nhật đơn thuốc
-                if not self.current_plan.prescription:
-                    self.current_plan.prescription = Prescription()
-                self.current_plan.prescription.total_dose = float(dose)
-                self.current_plan.prescription.fractions = int(fractions)
-                
-                # Thiết lập kỹ thuật điều trị
-                if self.imrt_button.isChecked():
-                    self.current_plan.technique = "IMRT"
-                elif self.vmat_button.isChecked():
-                    self.current_plan.technique = "VMAT"
-                elif self.dcat_button.isChecked():
-                    self.current_plan.technique = "DCAT"
-                elif self.srs_button.isChecked():
-                    self.current_plan.technique = "SRS"
-                elif self.sbrt_button.isChecked():
-                    self.current_plan.technique = "SBRT"
-                else:
-                    self.current_plan.technique = "3DCRT"  # Mặc định
-                
-                # Cập nhật lên DB
-                self.plan_db.update_plan(self.current_plan)
-                
-                # Thông báo
-                QMessageBox.information(
-                    self, 
-                    "Cập nhật kế hoạch", 
-                    f"Đã cập nhật kế hoạch {name} thành công."
-                )
-                
-                # Phát tín hiệu cập nhật
-                self.plan_updated.emit(self.current_plan)
-                logger.info(f"Đã cập nhật kế hoạch ID={self.current_plan.plan_id}")
-                
-            else:
-                # Tạo kế hoạch mới
-                self._create_new_plan(name, description, date, plan_type, status, float(dose), int(fractions))
-                
-        except Exception as e:
-            QMessageBox.critical(
-                self, 
-                "Lỗi", 
-                f"Không thể lưu kế hoạch: {str(e)}"
-            )
-            logger.error(f"Lỗi lưu kế hoạch: {str(e)}")
-
-    def _init_right_panel(self):
-        """Khởi tạo panel bên phải."""
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        
-        # Tab widget
-        self.right_tabs = QTabWidget()
-        self.right_tabs.setEnabled(False)  # Bắt đầu với trạng thái không hoạt động
-        
-        # Các tab
-        self.right_tabs.addTab(self._init_prescription_tab(), "Đơn thuốc")
-        self.right_tabs.addTab(self._init_beam_tab(), "Chùm tia")
-        self.right_tabs.addTab(self._init_objectives_tab(), "Ràng buộc")
-        self.right_tabs.addTab(self._init_optimization_tab(), "Tối ưu")
-        self.right_tabs.addTab(self._init_results_tab(), "Kết quả")
-        
-        right_layout.addWidget(self.right_tabs)
-        
-        return right_panel
-
-    def _populate_prescription_fields(self):
-        """Điền thông tin đơn thuốc vào form."""
-        if not self.current_plan or not self.current_plan.prescription:
-            return
-            
-        # Lấy thông tin đơn thuốc
-        prescription = self.current_plan.prescription
-        
-        # Điền vào form
-        self.prescribed_dose_field.setText(str(prescription.total_dose))
-        self.fractions_field.setText(str(prescription.fractions))
-        
-        # Tính liều mỗi phân liều
-        if prescription.fractions > 0:
-            self.dose_per_fraction_field.setText(str(prescription.total_dose / prescription.fractions))
-
-    def _update_prescribed_dose(self):
-        """Cập nhật liều chỉ định."""
-        if not self.current_plan or not self.current_plan.prescription:
-            return
-            
-        # Lấy giá trị từ form
-        total_dose = self.prescribed_dose_field.text().strip()
-        fractions = self.fractions_field.text().strip()
-        
-        # Cập nhật đơn thuốc
-        self.current_plan.prescription.total_dose = float(total_dose)
-        self.current_plan.prescription.fractions = int(fractions)
-        
-        # Tính liều mỗi phân liều
-        if fractions > 0:
-            dose_per_fraction = float(total_dose) / int(fractions)
-            self.dose_per_fraction_field.setText(str(dose_per_fraction))
-        
-        # Lưu thay đổi
-        self._update_plan()
-
-    def _populate_plan_data(self):
-        """Điền thông tin kế hoạch vào form."""
-        if not self.current_plan:
-            self._clear_form()
-            return
-            
-        # Điền thông tin kế hoạch vào form
-        self.plan_name_field.setText(self.current_plan.plan_name)
-        self.plan_description_field.setText(self.current_plan.description)
-        
-        # Thiết lập ngày tạo
-        if self.current_plan.created_date:
-            date = QDate.fromString(self.current_plan.created_date.strftime("%Y-%m-%d"), "yyyy-MM-dd")
-            self.plan_date_field.setDate(date)
-        
-        # Thiết lập loại kế hoạch
-        index = self.plan_intent_field.findText(self.current_plan.plan_type.value)
-        if index >= 0:
-            self.plan_intent_field.setCurrentIndex(index)
-            
-        # Thiết lập trạng thái
-        index = self.plan_status_field.findText(self.current_plan.status.value)
-        if index >= 0:
-            self.plan_status_field.setCurrentIndex(index)
-            
-        # Thiết lập kỹ thuật điều trị
-        if self.current_plan.technique == "IMRT":
-            self.imrt_button.setChecked(True)
-        elif self.current_plan.technique == "VMAT":
-            self.vmat_button.setChecked(True)
-        elif self.current_plan.technique == "DCAT":
-            self.dcat_button.setChecked(True)
-        elif self.current_plan.technique == "SRS":
-            self.srs_button.setChecked(True)
-        elif self.current_plan.technique == "SBRT":
-            self.sbrt_button.setChecked(True)
-            
-        # Điền đơn thuốc
-        if self.current_plan.prescription:
-            self.prescribed_dose_field.setText(str(self.current_plan.prescription.total_dose))
-            self.fractions_field.setText(str(self.current_plan.prescription.fractions))
-            
-        # Điền bảng chùm tia
-        self._populate_beam_table()
-        
-        # Bật tab
-        self.right_tabs.setEnabled(True)
-
-    def _populate_beam_table(self):
-        """Điền danh sách chùm tia vào bảng."""
-        # Xóa dữ liệu cũ
-        self.beams_table.setRowCount(0)
-        
-        if not self.current_plan or not self.current_plan.beam_arrangement:
-            return
-        
-        # Điền dữ liệu mới
-        for i, beam in enumerate(self.current_plan.beam_arrangement.beams):
-            self.beams_table.insertRow(i)
-            
-            # Thiết lập các cột
-            self.beams_table.setItem(i, 0, QTableWidgetItem(beam.name))
-            self.beams_table.setItem(i, 1, QTableWidgetItem(f"{beam.gantry_angle:.1f}°"))
-            self.beams_table.setItem(i, 2, QTableWidgetItem(f"{beam.couch_angle:.1f}°"))
-            self.beams_table.setItem(i, 3, QTableWidgetItem(f"{beam.collimator_angle:.1f}°"))
-            self.beams_table.setItem(i, 4, QTableWidgetItem(f"{beam.field_size_x:.1f} cm"))
-            self.beams_table.setItem(i, 5, QTableWidgetItem(f"{beam.field_size_y:.1f} cm"))
-            self.beams_table.setItem(i, 6, QTableWidgetItem(f"{beam.monitor_units:.1f}"))
-            self.beams_table.setItem(i, 7, QTableWidgetItem(beam.status))
-        
-        # Điều chỉnh kích thước cột
-        self.beams_table.resizeColumnsToContents()
-
-    def _add_beam(self):
-        """Thêm chùm tia mới vào kế hoạch."""
-        if not self.current_plan:
-            QMessageBox.warning(
-                self, 
-                "Không có kế hoạch", 
-                "Vui lòng chọn hoặc tạo một kế hoạch trước khi thêm chùm tia."
-            )
-            return
-        
-        # Tạo hộp thoại chùm tia mới
-        dialog = BeamDialog(self)
-        
-        # Tạo tên mặc định cho chùm tia mới
-        beam_count = len(self.current_plan.beam_arrangement.beams) + 1
-        default_beam = Beam()
-        default_beam.name = f"Beam {beam_count}"
-        
-        # Thiết lập góc gantry để đều đặn các chùm tia
-        if beam_count > 1:
-            default_beam.gantry_angle = (beam_count - 1) * (360.0 / beam_count) % 360
-        
-        # Điền thông tin mặc định vào form
-        dialog.beam = default_beam
-        dialog._populate_beam_data()
-        
-        # Hiển thị hộp thoại
-        if dialog.exec_() == QDialog.Accepted:
-            # Lấy thông tin chùm tia từ form
-            new_beam = dialog.get_beam_data()
-            
-            # Thêm chùm tia vào kế hoạch
-            self.current_plan.beam_arrangement.beams.append(new_beam)
-            
-            # Cập nhật bảng
-            self._populate_beam_table()
-            
-            # Cập nhật kế hoạch
-            self._update_plan()
-            
-            logger.info(f"Đã thêm chùm tia {new_beam.name} vào kế hoạch {self.current_plan.plan_name}")
-
-    def _edit_beam(self):
-        """Chỉnh sửa chùm tia được chọn."""
-        if not self.current_plan or not self.current_plan.beam_arrangement:
-            return
-            
-        # Lấy chỉ số chùm tia được chọn
-        selected_row = self.beams_table.currentRow()
-        if selected_row < 0 or selected_row >= len(self.current_plan.beam_arrangement.beams):
-            return
-            
-        # Lấy đối tượng chùm tia
-        beam = self.current_plan.beam_arrangement.beams[selected_row]
-        
-        # Tạo hộp thoại chỉnh sửa
-        dialog = BeamDialog(self, beam)
-        
-        # Hiển thị hộp thoại
-        if dialog.exec_() == QDialog.Accepted:
-            # Cập nhật thông tin chùm tia
-            updated_beam = dialog.get_beam_data()
-            self.current_plan.beam_arrangement.beams[selected_row] = updated_beam
-            
-            # Cập nhật bảng
-            self._populate_beam_table()
-            
-            # Cập nhật kế hoạch
-            self._update_plan()
-            
-            logger.info(f"Đã cập nhật chùm tia {updated_beam.name} trong kế hoạch {self.current_plan.plan_name}")
-
-    def _delete_beam(self):
-        """Xóa chùm tia được chọn."""
-        if not self.current_plan or not self.current_plan.beam_arrangement:
-            return
-            
-        # Lấy chỉ số chùm tia được chọn
-        selected_row = self.beams_table.currentRow()
-        if selected_row < 0 or selected_row >= len(self.current_plan.beam_arrangement.beams):
-            return
-            
-        # Lấy tên chùm tia để hiển thị
-        beam_name = self.current_plan.beam_arrangement.beams[selected_row].name
-        
-        # Xác nhận xóa
-        confirm = QMessageBox.question(
-            self,
-            "Xác nhận xóa",
-            f"Bạn có chắc chắn muốn xóa chùm tia {beam_name}?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if confirm == QMessageBox.Yes:
-            # Xóa chùm tia
-            del self.current_plan.beam_arrangement.beams[selected_row]
-            
-            # Cập nhật bảng
-            self._populate_beam_table()
-            
-            # Cập nhật kế hoạch
-            self._update_plan()
-            
-            logger.info(f"Đã xóa chùm tia {beam_name} khỏi kế hoạch {self.current_plan.plan_name}")
-
-    def _update_plan(self):
-        """Cập nhật kế hoạch hiện tại lên cơ sở dữ liệu."""
-        if not self.current_plan:
-            return
-            
-        try:
-            # Cập nhật kế hoạch lên cơ sở dữ liệu
-            self.plan_db.update_plan(self.current_plan)
-            
-            # Phát tín hiệu cập nhật
-            self.plan_updated.emit(self.current_plan)
-            
-        except Exception as e:
-            QMessageBox.critical(
-                self, 
-                "Lỗi", 
-                f"Không thể cập nhật kế hoạch: {str(e)}"
-            )
-            logger.error(f"Lỗi cập nhật kế hoạch: {str(e)}")
-
-    def _save_plan(self):
-        """Lưu kế hoạch hiện tại."""
-        if not self.current_patient_id:
-            QMessageBox.warning(
-                self, 
-                "Không thể lưu kế hoạch", 
-                "Vui lòng chọn một bệnh nhân trước khi lưu kế hoạch."
-            )
-            return
-        
-        # Lấy thông tin từ form
-        name = self.plan_name_field.text().strip()
-        description = self.plan_description_field.toPlainText().strip()
-        date = self.plan_date_field.date().toPyDate()
-        plan_type = self.plan_intent_field.currentText()
-        status = self.plan_status_field.currentText()
-        dose = self.prescribed_dose_field.text().strip()
-        fractions = self.fractions_field.text().strip()
-        
-        # Kiểm tra tên kế hoạch
-        if not name:
-            QMessageBox.warning(
-                self, 
-                "Tên không hợp lệ", 
-                "Vui lòng nhập tên kế hoạch."
-            )
-            return
-            
-        try:
-            if self.current_plan:
-                # Cập nhật kế hoạch hiện tại
-                self.current_plan.plan_name = name
-                self.current_plan.description = description
-                self.current_plan.created_date = date
-                self.current_plan.plan_type = PlanType(plan_type)
-                self.current_plan.status = PlanStatus(status)
-                
-                # Cập nhật đơn thuốc
-                if not self.current_plan.prescription:
-                    self.current_plan.prescription = Prescription()
-                self.current_plan.prescription.total_dose = float(dose)
-                self.current_plan.prescription.fractions = int(fractions)
-                
-                # Thiết lập kỹ thuật điều trị
-                if self.imrt_button.isChecked():
-                    self.current_plan.technique = "IMRT"
-                elif self.vmat_button.isChecked():
-                    self.current_plan.technique = "VMAT"
-                elif self.dcat_button.isChecked():
-                    self.current_plan.technique = "DCAT"
-                elif self.srs_button.isChecked():
-                    self.current_plan.technique = "SRS"
-                elif self.sbrt_button.isChecked():
-                    self.current_plan.technique = "SBRT"
-                else:
-                    self.current_plan.technique = "3DCRT"  # Mặc định
-                
-                # Cập nhật lên DB
-                self.plan_db.update_plan(self.current_plan)
-                
-                # Thông báo
-                QMessageBox.information(
-                    self, 
-                    "Cập nhật kế hoạch", 
-                    f"Đã cập nhật kế hoạch {name} thành công."
-                )
-                
-                # Phát tín hiệu cập nhật
-                self.plan_updated.emit(self.current_plan)
-                logger.info(f"Đã cập nhật kế hoạch ID={self.current_plan.plan_id}")
-                
-            else:
-                # Tạo kế hoạch mới
-                self._create_new_plan(name, description, date, plan_type, status, float(dose), int(fractions))
-                
-        except Exception as e:
-            QMessageBox.critical(
-                self, 
-                "Lỗi", 
-                f"Không thể lưu kế hoạch: {str(e)}"
-            )
-            logger.error(f"Lỗi lưu kế hoạch: {str(e)}")
-
-    def _init_right_panel(self):
-        """Khởi tạo panel bên phải."""
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        
-        # Tab widget
-        self.right_tabs = QTabWidget()
-        self.right_tabs.setEnabled(False)  # Bắt đầu với trạng thái không hoạt động
-        
-        # Các tab
-        self.right_tabs.addTab(self._init_prescription_tab(), "Đơn thuốc")
-        self.right_tabs.addTab(self._init_beam_tab(), "Chùm tia")
-        self.right_tabs.addTab(self._init_objectives_tab(), "Ràng buộc")
-        self.right_tabs.addTab(self._init_optimization_tab(), "Tối ưu")
-        self.right_tabs.addTab(self._init_results_tab(), "Kết quả")
-        
-        right_layout.addWidget(self.right_tabs)
-        
-        return right_panel
-
     def _run_optimization(self):
         """Chạy quy trình tối ưu hóa kế hoạch điều trị."""
         # Kiểm tra có kế hoạch hiện tại không
@@ -1438,7 +789,7 @@ class PlanningTab(QWidget):
             self._update_plan()
             
             # Log
-            logger.info(f"Tối ưu hóa kế hoạch {plan.plan_name} hoàn tất sau {pareto_basis.num_iterations} lần lặp")
+            logger.info(f"Tối ưu hóa kế hoạch {plan.name} hoàn tất sau {pareto_basis.num_iterations} lần lặp")
             
         except Exception as e:
             # Xử lý lỗi
@@ -1453,22 +804,78 @@ class PlanningTab(QWidget):
             msg.close()
             
     def _update_plan_display(self):
-        """Cập nhật hiển thị thông tin kế hoạch sau khi tối ưu hóa."""
-        plan = self._get_current_plan()
-        if not plan:
+        """Update the display with current plan data."""
+        if self.current_plan is None:
+            # Clear everything
+            self._clear_plan_data()
             return
+        
+        # Update basic plan information
+        self.plan_name_edit.setText(self.current_plan.name)
+        self.plan_desc_edit.setText(self.current_plan.description)
+        
+        if hasattr(self.current_plan, 'date') and self.current_plan.date:
+            try:
+                plan_date = QDate.fromString(self.current_plan.date, "yyyy-MM-dd")
+                self.plan_date_edit.setDate(plan_date)
+            except:
+                self.plan_date_edit.setDate(QDate.currentDate())
+        
+        # Set plan type and status if available
+        if hasattr(self.current_plan, 'type'):
+            index = self.plan_type_combo.findText(self.current_plan.type)
+            if index >= 0:
+                self.plan_type_combo.setCurrentIndex(index)
+        
+        if hasattr(self.current_plan, 'status'):
+            index = self.plan_status_combo.findText(self.current_plan.status)
+            if index >= 0:
+                self.plan_status_combo.setCurrentIndex(index)
+        
+        # Set prescription if available
+        if hasattr(self.current_plan, 'prescription'):
+            rx = self.current_plan.prescription
+            if hasattr(rx, 'dose'):
+                self.rx_dose_edit.setValue(rx.dose)
+            if hasattr(rx, 'fractions'):
+                self.rx_fractions_edit.setValue(rx.fractions)
+        
+        # Set technique if available
+        if hasattr(self.current_plan, 'technique'):
+            index = self.technique_combo.findText(self.current_plan.technique)
+            if index >= 0:
+                self.technique_combo.setCurrentIndex(index)
+        
+        # Update beam visualization
+        if hasattr(self.current_plan, 'beams'):
+            self.beam_viz_panel.set_plan(self.current_plan)
             
-        # Cập nhật thông tin hiển thị
-        self._populate_plan_data()
-        self._populate_beam_table()
+            # Update 3D visualization if available
+            if self.beam_3d_view is not None:
+                if self.current_structures:
+                    self.beam_3d_view.set_patient_data(self.current_plan.image, self.current_structures)
+                else:
+                    self.beam_3d_view.set_patient_data(self.current_plan.image)
+                self.beam_3d_view.set_plan(self.current_plan)
+                if hasattr(self.current_plan, 'dose_grid') and self.current_plan.dose_grid is not None:
+                    self.beam_3d_view.set_dose_grid(self.current_plan.dose_grid)
         
-        # Phát tín hiệu cập nhật
-        self.plan_updated.emit(plan)
+        # Update the appropriate technique planner
+        technique = self.current_plan.technique if hasattr(self.current_plan, 'technique') else "3D-CRT"
         
-        # Thông báo
-        self.statusBar().showMessage(f"Đã cập nhật hiển thị kế hoạch: {plan.plan_name}", 3000)
-        logger.info(f"Đã cập nhật hiển thị kế hoạch: {plan.plan_name}")
-
+        if technique == "3D-CRT":
+            self.beams_tab.setCurrentIndex(0)
+            self.crt_planner.set_plan(self.current_plan)
+        elif technique == "IMRT":
+            self.beams_tab.setCurrentIndex(1)
+            self.imrt_planner.set_plan(self.current_plan)
+        elif technique == "VMAT":
+            # Future implementation
+            pass
+        elif technique == "SRS" or technique == "SBRT":
+            # Future implementation
+            pass
+    
     def run_mco_optimization(self):
         """Thực hiện tối ưu đa tiêu chí (MCO)."""
         try:
@@ -1562,7 +969,7 @@ class PlanningTab(QWidget):
         
         # Lấy liều kê đơn
         try:
-            dose = float(self.prescribed_dose_field.text())
+            dose = float(self.rx_dose_edit.value())
             if dose <= 0:
                 QMessageBox.warning(self, "Cảnh báo", "Liều kê đơn không hợp lệ.")
                 return
@@ -1639,3 +1046,205 @@ class PlanningTab(QWidget):
         except Exception as e:
             logger.error(f"Lỗi khi mở điều hướng MCO: {str(e)}")
             QMessageBox.critical(self, "Lỗi", f"Không thể mở điều hướng MCO: {str(e)}")
+
+    def _check_3d_visualization_dependencies(self):
+        """Check if 3D visualization dependencies are available and offer to install them."""
+        from quangtps.ui.dependency_installer import check_and_install_feature_dependencies
+        
+        # Check dependencies only if 3D visualization is requested
+        if self.beam_3d_view is not None:
+            return True
+            
+        # Check if dependencies are available
+        dependencies_available = importlib.util.find_spec("pyvista") is not None and \
+                                importlib.util.find_spec("pyvistaqt") is not None and \
+                                importlib.util.find_spec("vtk") is not None
+        
+        if not dependencies_available:
+            # Ask user if they want to install dependencies
+            response = QMessageBox.question(
+                self,
+                "3D Visualization Dependencies",
+                "The 3D beam visualization feature requires additional packages. "
+                "Would you like to install them now?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if response == QMessageBox.Yes:
+                # Install dependencies
+                success = check_and_install_feature_dependencies("3d_visualization", self)
+                if success:
+                    QMessageBox.information(
+                        self,
+                        "Installation Complete",
+                        "Dependencies installed successfully. Please restart the application "
+                        "to use the 3D visualization feature."
+                    )
+                return success
+            
+            return False
+        
+        return True
+
+    def _on_beam_added(self, beam):
+        """Handle the addition of a new beam."""
+        if self.current_plan:
+            # Update the plan with the new beam
+            if not hasattr(self.current_plan, 'beams'):
+                self.current_plan.beams = []
+            
+            # Make sure the beam is not already in the plan
+            if beam not in self.current_plan.beams:
+                # Add beam to the plan
+                self.current_plan.add_beam(beam)
+            
+            # Update the UI
+            self._update_plan_display()
+            
+            logger.info(f"Beam added to plan: {beam.name}")
+
+    def _on_beam_modified(self, beam):
+        """Handle modifications to a beam."""
+        if self.current_plan:
+            # Update the plan with the modified beam
+            self._update_plan_display()
+            
+            logger.info(f"Beam modified: {beam.name}")
+
+    def _on_beam_removed(self, beam):
+        """Handle removal of a beam."""
+        if self.current_plan and hasattr(self.current_plan, 'beams'):
+            # Update the plan
+            self._update_plan_display()
+            
+            logger.info(f"Beam removed: {beam.name}")
+
+    def _on_beam_selected(self, beam):
+        """Handle selection of a beam."""
+        # This method can be used to update other UI elements based on beam selection
+        logger.debug(f"Beam selected: {beam.name}")
+
+    def _on_calculate_beam_dose(self, beam):
+        """Handle request to calculate dose for a beam."""
+        if not self.current_plan:
+            QMessageBox.warning(
+                self, 
+                "No Plan", 
+                "Please create or load a plan before calculating dose."
+            )
+            return
+        
+        # Get the dose calculation service
+        from quangtps.core.services import ServiceManager
+        service_manager = ServiceManager()
+        dose_service = service_manager.get_service('DoseCalculationService')
+        
+        if not dose_service:
+            QMessageBox.warning(
+                self, 
+                "Service Unavailable", 
+                "Dose calculation service is not available."
+            )
+            return
+        
+        # Show progress dialog
+        progress = QProgressDialog("Calculating dose...", "Cancel", 0, 100, self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+        
+        try:
+            # Calculate dose
+            progress.setValue(10)
+            QApplication.processEvents()
+            
+            # Get patient data
+            patient_service = service_manager.get_service('PatientService')
+            if not patient_service:
+                QMessageBox.warning(self, "Service Unavailable", "Patient service is not available.")
+                return
+                
+            ct_image = patient_service.get_patient_image(self.current_patient_id)
+            if not ct_image:
+                QMessageBox.warning(self, "No Image Data", "Patient CT image is not available.")
+                return
+            
+            progress.setValue(25)
+            QApplication.processEvents()
+            
+            # Calculate dose for the beam
+            dose_grid = dose_service.calculate_beam_dose(beam, ct_image)
+            
+            progress.setValue(90)
+            QApplication.processEvents()
+            
+            # Update the current plan with the dose
+            if dose_grid:
+                self.current_plan.set_dose_grid(dose_grid)
+                
+                # Update visualization
+                self.beam_viz_panel.set_dose_grid(dose_grid)
+                
+                QMessageBox.information(self, "Dose Calculation", "Beam dose calculation completed successfully.")
+            else:
+                QMessageBox.warning(self, "Calculation Failed", "Failed to calculate dose for the beam.")
+            
+            progress.setValue(100)
+            
+        except Exception as e:
+            logger.error(f"Error calculating dose: {str(e)}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"An error occurred during dose calculation: {str(e)}")
+        finally:
+            progress.close()
+
+    def _open_mco_dialog(self):
+        """Open the MCO navigation dialog."""
+        if not self.current_plan:
+            QMessageBox.warning(self, "No Plan Selected", "Please select a plan first.")
+            return
+            
+        # Implementation for MCO dialog
+        pass
+    
+    def _open_robust_optimization(self):
+        """Open the robust optimization dialog."""
+        if not self.current_plan:
+            QMessageBox.warning(self, "No Plan Selected", "Please select a plan first.")
+            return
+        
+        # Check if dose has been calculated
+        has_dose = False
+        if hasattr(self.current_plan, 'dose_grid') and self.current_plan.dose_grid is not None:
+            has_dose = True
+        
+        if not has_dose:
+            response = QMessageBox.question(
+                self,
+                "No Dose Grid",
+                "Robust optimization works best with a calculated dose grid. Do you want to proceed anyway?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if response == QMessageBox.No:
+                return
+        
+        # Get structures from patient
+        structures = {}
+        if hasattr(self.current_plan, 'patient') and self.current_plan.patient is not None:
+            if hasattr(self.current_plan.patient, 'structures'):
+                structures = self.current_plan.patient.structures
+        
+        # Show the robust optimization dialog
+        dose_grid = self.current_plan.dose_grid if has_dose else None
+        result = show_robust_optimization_dialog(self.current_plan, structures, dose_grid, self)
+        
+        # Handle the result
+        if result == QDialog.Accepted:
+            QMessageBox.information(
+                self,
+                "Plan Updated",
+                "The plan has been robustly optimized. Please calculate the dose again to see the results."
+            )
+            
+            # Update the plan
+            self.plan_updated.emit(self.current_plan)

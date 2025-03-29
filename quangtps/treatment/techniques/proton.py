@@ -11,15 +11,208 @@ treatment planning including Passive Scattering and Pencil Beam Scanning techniq
 import uuid
 import logging
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 
 from quangtps.treatment.beams.beam import Beam
 from quangtps.treatment.machine.proton import ProtonMachine
 from quangtps.treatment.machine.treatment_machine import TreatmentMachine
 from quangtps.treatment.fractionation import Fractionation
 from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
+from quangtps.treatment.techniques.treatment_technique import TreatmentTechnique
 
 logger = logging.getLogger(__name__)
+
+
+class Proton(TreatmentTechnique):
+    """
+    Lớp đại diện cho kỹ thuật xạ trị proton.
+    
+    Kỹ thuật xạ trị proton sử dụng chùm proton để điều trị ung thư,
+    với lợi thế chính là phân bố liều theo đỉnh Bragg, nơi hầu hết
+    năng lượng được giải phóng ở cuối quãng đường của chùm tia.
+    """
+    
+    def __init__(self, technique_name: str = "Proton"):
+        """
+        Khởi tạo kỹ thuật xạ trị proton.
+        
+        Parameters
+        ----------
+        technique_name : str, optional
+            Tên của kỹ thuật, mặc định là "Proton"
+        """
+        super().__init__(technique_name)
+        self.delivery_method = None  # PBS (Pencil Beam Scanning), US (Uniform Scanning), DS (Double Scattering)
+        self.energy_range = (70, 250)  # MeV, mặc định
+        self.range_modulation = None  # Modulation width (g/cm^2)
+        self.spot_size = None  # mm, cho PBS
+        self.spot_spacing = None  # mm, cho PBS
+        self.layer_spacing = None  # mm, cho PBS
+        self.has_range_shifter = False
+        self.range_shifter_thickness = None  # mm water equivalent
+    
+    def set_delivery_method(self, method: str):
+        """
+        Thiết lập phương pháp phân phối chùm tia proton.
+        
+        Parameters
+        ----------
+        method : str
+            Phương pháp phân phối: "PBS", "US", "DS"
+        """
+        valid_methods = ["PBS", "US", "DS"]
+        if method not in valid_methods:
+            logger.warning(f"Phương pháp phân phối không hợp lệ: {method}. Phải là một trong {valid_methods}")
+            return
+        
+        self.delivery_method = method
+        logger.info(f"Đã thiết lập phương pháp phân phối proton: {method}")
+    
+    def set_energy_range(self, min_energy: float, max_energy: float):
+        """
+        Thiết lập phạm vi năng lượng proton.
+        
+        Parameters
+        ----------
+        min_energy : float
+            Năng lượng tối thiểu (MeV)
+        max_energy : float
+            Năng lượng tối đa (MeV)
+        """
+        if min_energy <= 0 or max_energy <= 0 or min_energy >= max_energy:
+            logger.warning(f"Phạm vi năng lượng không hợp lệ: {min_energy}-{max_energy} MeV")
+            return
+        
+        self.energy_range = (min_energy, max_energy)
+        logger.info(f"Đã thiết lập phạm vi năng lượng proton: {min_energy}-{max_energy} MeV")
+    
+    def set_range_modulation(self, modulation_width: float):
+        """
+        Thiết lập độ rộng điều chế phạm vi.
+        
+        Parameters
+        ----------
+        modulation_width : float
+            Độ rộng điều chế (g/cm^2)
+        """
+        if modulation_width <= 0:
+            logger.warning(f"Độ rộng điều chế không hợp lệ: {modulation_width} g/cm^2")
+            return
+        
+        self.range_modulation = modulation_width
+        logger.info(f"Đã thiết lập độ rộng điều chế: {modulation_width} g/cm^2")
+    
+    def configure_pbs(self, spot_size: float, spot_spacing: float, layer_spacing: float):
+        """
+        Cấu hình thông số cho phương pháp PBS (Pencil Beam Scanning).
+        
+        Parameters
+        ----------
+        spot_size : float
+            Kích thước điểm (mm)
+        spot_spacing : float
+            Khoảng cách giữa các điểm (mm)
+        layer_spacing : float
+            Khoảng cách giữa các lớp (mm)
+        """
+        if self.delivery_method != "PBS":
+            logger.warning("Không thể cấu hình PBS khi phương pháp phân phối không phải là PBS")
+            return
+        
+        if spot_size <= 0 or spot_spacing <= 0 or layer_spacing <= 0:
+            logger.warning("Thông số PBS không hợp lệ")
+            return
+        
+        self.spot_size = spot_size
+        self.spot_spacing = spot_spacing
+        self.layer_spacing = layer_spacing
+        logger.info(f"Đã cấu hình PBS với kích thước điểm: {spot_size} mm, "
+                   f"khoảng cách điểm: {spot_spacing} mm, khoảng cách lớp: {layer_spacing} mm")
+    
+    def add_range_shifter(self, thickness: float):
+        """
+        Thêm range shifter để điều chỉnh phạm vi chùm tia.
+        
+        Parameters
+        ----------
+        thickness : float
+            Độ dày của range shifter (mm water equivalent)
+        """
+        if thickness <= 0:
+            logger.warning(f"Độ dày range shifter không hợp lệ: {thickness} mm")
+            return
+        
+        self.has_range_shifter = True
+        self.range_shifter_thickness = thickness
+        logger.info(f"Đã thêm range shifter với độ dày: {thickness} mm water equivalent")
+    
+    def remove_range_shifter(self):
+        """Loại bỏ range shifter."""
+        self.has_range_shifter = False
+        self.range_shifter_thickness = None
+        logger.info("Đã loại bỏ range shifter")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi thông tin kỹ thuật xạ trị proton thành dictionary.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary chứa thông tin kỹ thuật
+        """
+        data = super().to_dict()
+        data.update({
+            "delivery_method": self.delivery_method,
+            "energy_range": self.energy_range,
+            "range_modulation": self.range_modulation,
+            "spot_size": self.spot_size,
+            "spot_spacing": self.spot_spacing,
+            "layer_spacing": self.layer_spacing,
+            "has_range_shifter": self.has_range_shifter,
+            "range_shifter_thickness": self.range_shifter_thickness
+        })
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Proton':
+        """
+        Tạo đối tượng Proton từ dictionary.
+        
+        Parameters
+        ----------
+        data : Dict[str, Any]
+            Dictionary chứa thông tin kỹ thuật
+            
+        Returns
+        -------
+        Proton
+            Đối tượng Proton
+        """
+        technique = cls(data.get("technique_name", "Proton"))
+        
+        # Thiết lập các thuộc tính
+        if "delivery_method" in data:
+            technique.set_delivery_method(data["delivery_method"])
+        
+        if "energy_range" in data and isinstance(data["energy_range"], tuple) and len(data["energy_range"]) == 2:
+            technique.set_energy_range(data["energy_range"][0], data["energy_range"][1])
+        
+        if "range_modulation" in data and data["range_modulation"] is not None:
+            technique.set_range_modulation(data["range_modulation"])
+        
+        if (data.get("delivery_method") == "PBS" and
+            "spot_size" in data and "spot_spacing" in data and "layer_spacing" in data):
+            technique.configure_pbs(
+                data["spot_size"],
+                data["spot_spacing"],
+                data["layer_spacing"]
+            )
+        
+        if data.get("has_range_shifter", False) and "range_shifter_thickness" in data:
+            technique.add_range_shifter(data["range_shifter_thickness"])
+        
+        return technique
 
 
 class ProtonTherapy(BaseTreatmentTechnique):

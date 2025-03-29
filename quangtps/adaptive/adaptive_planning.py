@@ -14,17 +14,17 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional, Union, Any
 from enum import Enum, auto
 
-from ..core.types import Patient, Image, Structure, Plan, Dose
-from ..core.exceptions import AdaptivePlanningError
-from ..planning.plan import TreatmentPlan
-from ..planning.prescription import Prescription
-from ..treatment.treatment_manager import TreatmentManager
-from ..database.plan_db import PlanDB
-from ..database.image_db import ImageDB
-from ..database.structure_db import StructureDB
-from ..dose.dose_calculation import DoseCalculation
-from ..evaluation.dvh.dvh_calculator import DVHCalculator
-from ..core.utils import get_timestamp
+from quangtps.core.types import Patient, Image, Structure, Plan, Dose
+from quangtps.core.exceptions import AdaptivePlanningError
+from quangtps.planning.plan import TreatmentPlan
+from quangtps.planning.prescription import Prescription
+from quangtps.treatment.treatment_manager import TreatmentManager
+from quangtps.database.plan_db import PlanDB
+from quangtps.database.image_db import ImageDB
+from quangtps.database.structure_db import StructureDB
+from quangtps.dose.dose_calculation import DoseCalculation
+from quangtps.evaluation.dvh.dvh_calculator import DVHCalculator
+from quangtps.core.utils import get_timestamp
 
 logger = logging.getLogger(__name__)
 

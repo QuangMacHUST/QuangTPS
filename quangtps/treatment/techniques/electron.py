@@ -11,7 +11,8 @@ variants like total skin electron therapy.
 
 import logging
 from enum import Enum
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple, Union
+import numpy as np
 
 # Treatment technique imports
 from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
@@ -19,6 +20,7 @@ from quangtps.treatment.beams.beam import Beam, BeamType
 from quangtps.treatment.beams.beam_modifiers import Bolus
 from quangtps.treatment.fractionation import Fractionation
 from quangtps.treatment.machine.treatment_machine import TreatmentMachine
+from quangtps.treatment.techniques.treatment_technique import TreatmentTechnique
 
 logger = logging.getLogger(__name__)
 
@@ -444,3 +446,29 @@ class ElectronTherapy(BaseTreatmentTechnique):
             )
             
         return therapy
+
+class Electron(TreatmentTechnique):
+    """
+    Lớp đại diện cho kỹ thuật xạ trị electron.
+    
+    Kỹ thuật xạ trị electron sử dụng chùm electron để điều trị các 
+    khối u nông, gần bề mặt cơ thể.
+    """
+    
+    def __init__(self, technique_name: str = "Electron"):
+        """
+        Khởi tạo kỹ thuật xạ trị electron.
+        
+        Parameters
+        ----------
+        technique_name : str, optional
+            Tên của kỹ thuật, mặc định là "Electron"
+        """
+        super().__init__(technique_name)
+        self.energy_range = (4, 20)  # MeV, mặc định
+        self.current_energy = None   # MeV
+        self.applicator_size = None  # cm x cm
+        self.custom_cutout = False
+        self.cutout_shape = None
+        self.bolus_thickness = 0.0   # cm
+        self.ssd = 100.0             # Source-to-Surface Distance (cm)

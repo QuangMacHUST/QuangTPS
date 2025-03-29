@@ -1,0 +1,57 @@
+[
+  {
+    "name": "Target Focus",
+    "weights": {
+      "PTV_D95": 0.8,
+      "PTV_Uniformity": 0.7,
+      "PTV_Conformity": 0.6,
+      "OAR_Sparing": 0.2,
+      "Normal_Tissue": 0.1
+    },
+    "timestamp": "2025-03-29 12:00:00"
+  },
+  {
+    "name": "OAR Sparing",
+    "weights": {
+      "PTV_D95": 0.5,
+      "PTV_Uniformity": 0.4,
+      "PTV_Conformity": 0.4,
+      "OAR_Sparing": 0.9,
+      "Normal_Tissue": 0.6
+    },
+    "timestamp": "2025-03-29 12:01:00"
+  },
+  {
+    "name": "Balanced",
+    "weights": {
+      "PTV_D95": 0.6,
+      "PTV_Uniformity": 0.6,
+      "PTV_Conformity": 0.6,
+      "OAR_Sparing": 0.6,
+      "Normal_Tissue": 0.6
+    },
+    "timestamp": "2025-03-29 12:02:00"
+  },
+  {
+    "name": "Conformity Priority",
+    "weights": {
+      "PTV_D95": 0.6,
+      "PTV_Uniformity": 0.5,
+      "PTV_Conformity": 0.9,
+      "OAR_Sparing": 0.4,
+      "Normal_Tissue": 0.3
+    },
+    "timestamp": "2025-03-29 12:03:00"
+  },
+  {
+    "name": "Normal Tissue Sparing",
+    "weights": {
+      "PTV_D95": 0.5,
+      "PTV_Uniformity": 0.5,
+      "PTV_Conformity": 0.5,
+      "OAR_Sparing": 0.7,
+      "Normal_Tissue": 0.8
+    },
+    "timestamp": "2025-03-29 12:04:00"
+  }
+] 

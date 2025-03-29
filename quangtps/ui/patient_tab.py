@@ -10,27 +10,31 @@ bao gồm thông tin cá nhân, lịch sử bệnh, và các hồ sơ y tế li�
 
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, List, Any, Optional
 import os
 import shutil
+import uuid
 
+from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QDateEdit, QComboBox, QGroupBox, QFormLayout,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit,
     QScrollArea, QSplitter, QCheckBox, QSpinBox, QDoubleSpinBox,
     QMessageBox, QFileDialog, QDialog, QHeaderView, QProgressBar,
-    QInputDialog
+    QInputDialog, QFrame, QDialogButtonBox
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap
 
-from quangtps.database.patient_db import PatientDatabase
+from quangtps.database.patient_db import PatientDB
 from quangtps.dicom.dicom_importer import DicomImporter
 from quangtps.dicom.dicom_exporter import DicomExporter
 from quangtps.core.patient import Patient
 from quangtps.ui.patient_creation_dialog import PatientCreationDialog
+from quangtps.ui.patient_search_result_dialog import PatientSearchResultDialog
+from quangtps.ui.new_patient_dialog import NewPatientDialog
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,7 @@ class PatientTab(QWidget):
     # Tín hiệu để thông báo khi cập nhật dữ liệu bệnh nhân
     patient_updated = pyqtSignal(str)  # patient_id
     patient_created = pyqtSignal(str)
+    patient_deleted = pyqtSignal(str)  # patient_id
     
     def __init__(self, parent=None):
         """
@@ -61,7 +66,7 @@ class PatientTab(QWidget):
         
         # Trạng thái
         self.current_patient = None
-        self.patient_db = PatientDatabase()
+        self.patient_db = PatientDB()
         self.dicom_importer = DicomImporter()
         self.dicom_exporter = DicomExporter()
         
@@ -131,6 +136,14 @@ class PatientTab(QWidget):
         self.basic_info_tab = QWidget()
         basic_info_layout = QVBoxLayout(self.basic_info_tab)
 
+        # Tạo scroll area để có thể cuộn khi có nhiều thông tin
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+
         # Form nhập thông tin cơ bản
         form_group = QGroupBox("Thông tin cơ bản")
         form_layout = QFormLayout(form_group)
@@ -145,14 +158,32 @@ class PatientTab(QWidget):
         self.gender_combo = QComboBox()
         self.gender_combo.addItems(["Nam", "Nữ", "Khác"])
         self.gender_combo.setEnabled(False)
+        
+        # Thêm các trường thông tin liên hệ
+        self.address_edit = QTextEdit()
+        self.address_edit.setReadOnly(True)
+        self.address_edit.setMaximumHeight(60)
+        
+        self.phone_edit = QLineEdit()
+        self.phone_edit.setReadOnly(True)
+        
+        self.email_edit = QLineEdit()
+        self.email_edit.setReadOnly(True)
 
         self.notes_edit = QTextEdit()
         self.notes_edit.setReadOnly(True)
+        self.notes_edit.setMaximumHeight(80)
 
         form_layout.addRow("Họ tên:", self.name_edit)
         form_layout.addRow("Ngày sinh:", self.birth_date_edit)
         form_layout.addRow("Giới tính:", self.gender_combo)
+        form_layout.addRow("Địa chỉ:", self.address_edit)
+        form_layout.addRow("Điện thoại:", self.phone_edit)
+        form_layout.addRow("Email:", self.email_edit)
         form_layout.addRow("Ghi chú:", self.notes_edit)
+        
+        # Thêm form group vào scroll layout
+        scroll_layout.addWidget(form_group)
 
         # Nút chỉnh sửa / lưu
         edit_layout = QHBoxLayout()
@@ -175,8 +206,17 @@ class PatientTab(QWidget):
         edit_layout.addWidget(self.cancel_button)
         edit_layout.addStretch()
 
-        basic_info_layout.addWidget(form_group)
-        basic_info_layout.addLayout(edit_layout)
+        scroll_layout.addLayout(edit_layout)
+        scroll_area.setWidget(scroll_content)
+        basic_info_layout.addWidget(scroll_area)
+
+        # Tab thông tin y tế
+        self.medical_info_tab = QWidget()
+        self._init_medical_info_tab()
+        
+        # Tab thông tin xạ trị
+        self.rt_info_tab = QWidget()
+        self._init_rt_info_tab()
 
         # Tab lịch sử bệnh
         self.medical_history_tab = QWidget()
@@ -284,6 +324,8 @@ class PatientTab(QWidget):
 
         # Thêm các tab vào stacked widget
         self.stacked_widget.addTab(self.basic_info_tab, "Thông tin cơ bản")
+        self.stacked_widget.addTab(self.medical_info_tab, "Thông tin y tế")
+        self.stacked_widget.addTab(self.rt_info_tab, "Thông tin xạ trị")
         self.stacked_widget.addTab(self.medical_history_tab, "Lịch sử bệnh")
         self.stacked_widget.addTab(self.medical_data_tab, "Dữ liệu y tế")
 
@@ -297,6 +339,158 @@ class PatientTab(QWidget):
         
         logger.info("Khởi tạo giao diện tab bệnh nhân hoàn tất")
     
+    def _init_medical_info_tab(self):
+        """Khởi tạo tab thông tin y tế."""
+        layout = QVBoxLayout(self.medical_info_tab)
+        
+        # Tạo scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        
+        # Thông tin hành chính y tế
+        admin_group = QGroupBox("Thông tin hành chính")
+        admin_layout = QFormLayout(admin_group)
+        
+        # Mã số bệnh án
+        self.mrn_edit = QLineEdit()
+        self.mrn_edit.setReadOnly(True)
+        admin_layout.addRow("Mã số bệnh án:", self.mrn_edit)
+        
+        # Bác sĩ chính
+        self.primary_physician_edit = QLineEdit()
+        self.primary_physician_edit.setReadOnly(True)
+        admin_layout.addRow("Bác sĩ chính:", self.primary_physician_edit)
+        
+        # Bác sĩ giới thiệu
+        self.referring_physician_edit = QLineEdit()
+        self.referring_physician_edit.setReadOnly(True)
+        admin_layout.addRow("Bác sĩ giới thiệu:", self.referring_physician_edit)
+        
+        # Mã bệnh viện
+        self.hospital_id_edit = QLineEdit()
+        self.hospital_id_edit.setReadOnly(True)
+        admin_layout.addRow("Mã bệnh viện:", self.hospital_id_edit)
+        
+        # Mã bảo hiểm
+        self.insurance_id_edit = QLineEdit()
+        self.insurance_id_edit.setReadOnly(True)
+        admin_layout.addRow("Mã bảo hiểm:", self.insurance_id_edit)
+        
+        # Thông tin thể chất
+        physical_group = QGroupBox("Thông tin thể chất")
+        physical_layout = QFormLayout(physical_group)
+        
+        # Chiều cao
+        self.height_edit = QDoubleSpinBox()
+        self.height_edit.setRange(0, 250)
+        self.height_edit.setDecimals(1)
+        self.height_edit.setSuffix(" cm")
+        self.height_edit.setReadOnly(True)
+        self.height_edit.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        physical_layout.addRow("Chiều cao:", self.height_edit)
+        
+        # Cân nặng
+        self.weight_edit = QDoubleSpinBox()
+        self.weight_edit.setRange(0, 250)
+        self.weight_edit.setDecimals(1)
+        self.weight_edit.setSuffix(" kg")
+        self.weight_edit.setReadOnly(True)
+        self.weight_edit.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        physical_layout.addRow("Cân nặng:", self.weight_edit)
+        
+        # Hiển thị BMI và BSA
+        self.bmi_label = QLabel("BMI: ...")
+        self.bsa_label = QLabel("BSA: ...")
+        
+        bmi_bsa_layout = QHBoxLayout()
+        bmi_bsa_layout.addWidget(self.bmi_label)
+        bmi_bsa_layout.addWidget(self.bsa_label)
+        physical_layout.addRow("Chỉ số:", bmi_bsa_layout)
+        
+        # Dị ứng
+        self.allergies_edit = QTextEdit()
+        self.allergies_edit.setReadOnly(True)
+        self.allergies_edit.setMaximumHeight(80)
+        physical_layout.addRow("Dị ứng:", self.allergies_edit)
+        
+        # Thêm các nhóm vào layout
+        scroll_layout.addWidget(admin_group)
+        scroll_layout.addWidget(physical_group)
+        scroll_layout.addStretch()
+        
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area)
+    
+    def _init_rt_info_tab(self):
+        """Khởi tạo tab thông tin xạ trị."""
+        layout = QVBoxLayout(self.rt_info_tab)
+        
+        # Tạo scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        
+        # Thông tin chẩn đoán
+        diagnosis_group = QGroupBox("Thông tin chẩn đoán")
+        diagnosis_layout = QFormLayout(diagnosis_group)
+        
+        # Mã chẩn đoán ICD-10
+        self.diagnosis_code_edit = QLineEdit()
+        self.diagnosis_code_edit.setReadOnly(True)
+        diagnosis_layout.addRow("Mã ICD-10:", self.diagnosis_code_edit)
+        
+        # Chẩn đoán chi tiết
+        self.diagnosis_edit = QTextEdit()
+        self.diagnosis_edit.setReadOnly(True)
+        self.diagnosis_edit.setMaximumHeight(80)
+        diagnosis_layout.addRow("Chẩn đoán:", self.diagnosis_edit)
+        
+        # Thông tin kế hoạch xạ trị
+        planning_group = QGroupBox("Thông tin kế hoạch xạ trị")
+        planning_layout = QFormLayout(planning_group)
+        
+        # Vị trí điều trị
+        self.site_combo = QComboBox()
+        self.site_combo.addItems([
+            "", "Não", "Đầu cổ", "Phổi", "Vú", "Thực quản", "Gan", 
+            "Tụy", "Tuyến tiền liệt", "Trực tràng", "Cổ tử cung", "Hạch bạch huyết", "Khác"
+        ])
+        self.site_combo.setEnabled(False)
+        planning_layout.addRow("Vị trí điều trị:", self.site_combo)
+        
+        # Kỹ thuật xạ trị
+        self.technique_combo = QComboBox()
+        self.technique_combo.addItems([
+            "", "3D-CRT", "IMRT", "VMAT", "SBRT", "SRS", 
+            "Electron", "IORT", "Brachytherapy", "Proton", "Carbon ion", "Khác"
+        ])
+        self.technique_combo.setEnabled(False)
+        planning_layout.addRow("Kỹ thuật xạ trị:", self.technique_combo)
+        
+        # Mục đích điều trị
+        self.treatment_intent_combo = QComboBox()
+        self.treatment_intent_combo.addItems([
+            "", "Điều trị triệt căn (Curative)", "Điều trị giảm nhẹ (Palliative)", 
+            "Điều trị bổ trợ (Adjuvant)", "Điều trị tân bổ trợ (Neoadjuvant)", "Khác"
+        ])
+        self.treatment_intent_combo.setEnabled(False)
+        planning_layout.addRow("Mục đích điều trị:", self.treatment_intent_combo)
+        
+        # Thêm các nhóm vào layout
+        scroll_layout.addWidget(diagnosis_group)
+        scroll_layout.addWidget(planning_group)
+        scroll_layout.addStretch()
+        
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area)
+    
     def _toggle_edit_mode(self, enabled: bool):
         """
         Bật/tắt chế độ chỉnh sửa thông tin bệnh nhân.
@@ -306,16 +500,98 @@ class PatientTab(QWidget):
         enabled : bool
             True để bật chế độ chỉnh sửa, False để tắt
         """
-        # Thiết lập trạng thái của các trường nhập liệu
+        if enabled and self.current_patient:
+            # Sử dụng dialog chỉnh sửa thay vì chỉnh sửa trực tiếp trên form
+            dialog = PatientCreationDialog(
+                parent=self,
+                patient_id=self.current_patient['id'],
+                edit_mode=True,
+                patient_data=self.current_patient
+            )
+            
+            if dialog.exec_() == QDialog.Accepted:
+                # Lấy dữ liệu bệnh nhân sau khi chỉnh sửa
+                updated_data = dialog.get_patient_data()
+                
+                # Cập nhật thông tin bệnh nhân hiện tại
+                self.current_patient = self.patient_db.get_patient(updated_data['id'])
+                
+                # Cập nhật lại giao diện
+                self._populate_patient_data()
+                
+                # Kích hoạt tín hiệu cập nhật
+                self.patient_updated.emit(self.current_patient['id'])
+                
+                # Ghi log
+                logger.info(f"Đã cập nhật thông tin bệnh nhân: {self.current_patient['id']}")
+            
+            # Luôn luôn ở chế độ đọc sau khi mở dialog chỉnh sửa
+            self._update_edit_mode_ui(False)
+            return
+            
+        # Nếu là tắt chế độ chỉnh sửa hoặc không có patient hiện tại
+        self._update_edit_mode_ui(enabled)
+            
+    def _update_edit_mode_ui(self, enabled: bool):
+        """
+        Cập nhật giao diện theo trạng thái chỉnh sửa.
+        
+        Parameters
+        ----------
+        enabled : bool
+            True để bật chế độ chỉnh sửa, False để tắt
+        """
+        # Thiết lập trạng thái của các trường nhập liệu thông tin cơ bản
         self.name_edit.setReadOnly(not enabled)
         self.birth_date_edit.setReadOnly(not enabled)
         self.gender_combo.setEnabled(enabled)
+        self.address_edit.setReadOnly(not enabled)
+        self.phone_edit.setReadOnly(not enabled)
+        self.email_edit.setReadOnly(not enabled)
         self.notes_edit.setReadOnly(not enabled)
+        
+        # Thiết lập trạng thái của các trường nhập liệu thông tin y tế
+        self.mrn_edit.setReadOnly(not enabled)
+        self.primary_physician_edit.setReadOnly(not enabled)
+        self.referring_physician_edit.setReadOnly(not enabled)
+        self.hospital_id_edit.setReadOnly(not enabled)
+        self.insurance_id_edit.setReadOnly(not enabled)
+        
+        self.height_edit.setReadOnly(not enabled)
+        self.height_edit.setButtonSymbols(QDoubleSpinBox.NoButtons if not enabled else QDoubleSpinBox.UpDownArrows)
+        
+        self.weight_edit.setReadOnly(not enabled)
+        self.weight_edit.setButtonSymbols(QDoubleSpinBox.NoButtons if not enabled else QDoubleSpinBox.UpDownArrows)
+        
+        self.allergies_edit.setReadOnly(not enabled)
+        
+        # Thiết lập trạng thái của các trường nhập liệu thông tin xạ trị
+        self.diagnosis_code_edit.setReadOnly(not enabled)
+        self.diagnosis_edit.setReadOnly(not enabled)
+        self.site_combo.setEnabled(enabled)
+        self.technique_combo.setEnabled(enabled)
+        self.treatment_intent_combo.setEnabled(enabled)
 
         # Cập nhật trạng thái các nút
         self.edit_button.setEnabled(not enabled)
         self.save_button.setEnabled(enabled)
         self.cancel_button.setEnabled(enabled)
+        
+        # Nếu bật chế độ chỉnh sửa, cập nhật các chỉ số BMI và BSA
+        if enabled:
+            self._update_physical_metrics()
+            
+            # Kết nối tín hiệu cho các trường sẽ ảnh hưởng đến BMI và BSA
+            self.height_edit.valueChanged.connect(self._update_physical_metrics)
+            self.weight_edit.valueChanged.connect(self._update_physical_metrics)
+        else:
+            # Ngắt kết nối khi không ở chế độ chỉnh sửa
+            try:
+                self.height_edit.valueChanged.disconnect(self._update_physical_metrics)
+                self.weight_edit.valueChanged.disconnect(self._update_physical_metrics)
+            except TypeError:
+                # Bỏ qua lỗi nếu chưa được kết nối
+                pass
     
     def _on_patient_data_changed(self):
         """Xử lý khi dữ liệu bệnh nhân thay đổi."""
@@ -342,7 +618,6 @@ class PatientTab(QWidget):
             if not patient_data:
                 # Kiểm tra xem có phải ID hợp lệ không
                 try:
-                    import uuid
                     uuid.UUID(patient_id)  # Kiểm tra định dạng UUID
                     
                     # Hiển thị hộp thoại xác nhận để tạo bệnh nhân mới
@@ -405,44 +680,6 @@ class PatientTab(QWidget):
             logger.error(
                 f"Lỗi khi thiết lập bệnh nhân {patient_id}: {str(e)}", exc_info=True)
     
-    def _clear_patient_data(self):
-        """
-        Xóa dữ liệu bệnh nhân hiện tại và đặt lại giao diện.
-        """
-        # Đặt lại trạng thái
-        self.current_patient = None
-        
-        # Xóa dữ liệu trên giao diện
-        self.name_edit.clear()
-        self.name_edit.setReadOnly(True)
-
-        self.birth_date_edit.setDate(QDate.currentDate())
-        self.birth_date_edit.setReadOnly(True)
-
-        self.gender_combo.setCurrentIndex(0)
-        self.gender_combo.setEnabled(False)
-
-        self.notes_edit.clear()
-        self.notes_edit.setReadOnly(True)
-
-        # Vô hiệu hóa các nút
-        self.delete_button.setEnabled(False)
-        self.edit_button.setEnabled(False)
-        self.save_button.setEnabled(False)
-        self.cancel_button.setEnabled(False)
-        self.import_button.setEnabled(False)
-        self.export_button.setEnabled(False)
-        self.import_images_button.setEnabled(False)
-        self.view_images_button.setEnabled(False)
-        self.add_history_button.setEnabled(False)
-
-        # Xóa dữ liệu bảng
-        self.history_table.setRowCount(0)
-        self.studies_table.setRowCount(0)
-        self.series_table.setRowCount(0)
-        
-        logger.info("Đã xóa dữ liệu bệnh nhân khỏi giao diện")
-    
     def _populate_patient_data(self):
         """
         Hiển thị thông tin bệnh nhân lên giao diện.
@@ -475,11 +712,66 @@ class PatientTab(QWidget):
             gender = gender_map.get(patient.get('gender', ''), 'Khác')
             self.gender_combo.setCurrentText(gender)
 
-            # Ghi chú từ metadata
+            # Thông tin liên hệ
+            self.address_edit.setText(patient.get('address', ''))
+            self.phone_edit.setText(patient.get('phone', ''))
+            self.email_edit.setText(patient.get('email', ''))
+            
+            # Ghi chú
+            self.notes_edit.setText(patient.get('notes', ''))
+
+            # Thông tin y tế
+            self.mrn_edit.setText(patient.get('mrn', ''))
+            self.primary_physician_edit.setText(patient.get('primary_physician', ''))
+            self.referring_physician_edit.setText(patient.get('referring_physician', ''))
+            self.hospital_id_edit.setText(patient.get('hospital_id', ''))
+            self.insurance_id_edit.setText(patient.get('insurance_id', ''))
+            
+            # Thông tin thể chất
+            try:
+                height = float(patient.get('height_cm', 0))
+                self.height_edit.setValue(height)
+            except (ValueError, TypeError):
+                self.height_edit.setValue(0)
+                
+            try:
+                weight = float(patient.get('weight_kg', 0))
+                self.weight_edit.setValue(weight)
+            except (ValueError, TypeError):
+                self.weight_edit.setValue(0)
+                
+            # Dị ứng
+            self.allergies_edit.setText(patient.get('allergies', ''))
+            
+            # Thông tin xạ trị
+            self.diagnosis_code_edit.setText(patient.get('diagnosis_code', ''))
+            self.diagnosis_edit.setText(patient.get('diagnosis', ''))
+            
+            # Chọn giá trị trong combobox dựa trên dữ liệu bệnh nhân
+            site = patient.get('site', '')
+            if site:
+                index = self.site_combo.findText(site, Qt.MatchFixedString)
+                if index >= 0:
+                    self.site_combo.setCurrentIndex(index)
+            
+            technique = patient.get('technique', '')
+            if technique:
+                index = self.technique_combo.findText(technique, Qt.MatchFixedString)
+                if index >= 0:
+                    self.technique_combo.setCurrentIndex(index)
+                    
+            intent = patient.get('treatment_intent', '')
+            if intent:
+                index = self.treatment_intent_combo.findText(intent, Qt.MatchContains)
+                if index >= 0:
+                    self.treatment_intent_combo.setCurrentIndex(index)
+                    
+            # Cập nhật các chỉ số BMI và BSA
+            self._update_physical_metrics()
+            
+            # Kiểm tra và hiển thị metadata nếu có
             if 'metadata' in patient and patient['metadata']:
                 metadata = patient['metadata']
-                notes = metadata.get('notes', '')
-                self.notes_edit.setText(notes)
 
                 # Hiển thị thêm thông tin từ metadata nếu có
                 additional_info = ""
@@ -504,98 +796,36 @@ class PatientTab(QWidget):
             QMessageBox.critical(
                 self, "Lỗi", f"Không thể hiển thị thông tin bệnh nhân: {str(e)}")
     
-    def _populate_medical_history(self, history_data: List[Dict] = None):
-        """Điền dữ liệu vào bảng lịch sử y tế."""
-        self.history_table.setRowCount(0)
+    def _update_physical_metrics(self):
+        """Cập nhật chỉ số BMI và BSA."""
+        height_cm = self.height_edit.value() 
+        weight_kg = self.weight_edit.value()
         
-        if not history_data:
-            history_data = []
-            # Thử lấy lịch sử y tế từ bệnh nhân hiện tại nếu có
-            if self.current_patient and 'medical_history' in self.current_patient:
-                history_data = self.current_patient.get('medical_history', [])
+        height_m = height_cm / 100.0  # Chuyển từ cm sang m
         
-        for entry in history_data:
-            row_position = self.history_table.rowCount()
-            self.history_table.insertRow(row_position)
-            
-            date_item = QTableWidgetItem(entry.get("date", ""))
-            type_item = QTableWidgetItem(entry.get("type", ""))
-            desc_item = QTableWidgetItem(entry.get("description", ""))
-            doctor_item = QTableWidgetItem(entry.get("doctor", ""))
-            
-            self.history_table.setItem(row_position, 0, date_item)
-            self.history_table.setItem(row_position, 1, type_item)
-            self.history_table.setItem(row_position, 2, desc_item)
-            self.history_table.setItem(row_position, 3, doctor_item)
-    
-    def _populate_medical_images(self):
-        """
-        Hiển thị danh sách dữ liệu y tế của bệnh nhân.
-        """
-        # Xóa dữ liệu hiện tại
-        self.studies_table.setRowCount(0)
-        self.series_table.setRowCount(0)
-
-        # Kiểm tra nếu không có bệnh nhân hiện tại
-        if not self.current_patient:
-            logger.debug("Không có bệnh nhân được chọn để hiển thị dữ liệu y tế")
-            self.import_images_button.setEnabled(False)
-            self.view_images_button.setEnabled(False)
-            return
+        # Tính BMI
+        bmi = 0
+        if height_m > 0 and weight_kg > 0:
+            bmi = weight_kg / (height_m * height_m)
         
-        try:
-            # Lấy danh sách nghiên cứu của bệnh nhân
-            studies = self.patient_db.get_patient_studies(self.current_patient['id'])
-            
-            # Kiểm tra nếu không có nghiên cứu nào
-            if not studies:
-                logger.info(f"Không có nghiên cứu nào cho bệnh nhân {self.current_patient['id']}")
-                self.import_images_button.setEnabled(True)
-                self.view_images_button.setEnabled(False)
-                return
-                
-            # Thêm dữ liệu vào bảng
-            for i, study in enumerate(studies):
-                self.studies_table.insertRow(i)
-
-                # Lấy số lượng series cho nghiên cứu này
-                series_count = 0
-                try:
-                    series_list = self.patient_db.get_study_series(study['id'])
-                    series_count = len(series_list) if series_list else 0
-                except Exception as e:
-                    logger.warning(f"Không thể lấy danh sách series cho nghiên cứu {study['id']}: {str(e)}")
-
-                # Thêm thông tin study
-                date_item = QTableWidgetItem(study.get('date', ''))
-                desc_item = QTableWidgetItem(study.get('description', ''))
-                
-                # Xác định loại dữ liệu
-                study_type = "Khác"
-                if study.get('metadata') and isinstance(study['metadata'], dict) and 'type' in study['metadata']:
-                    study_type = study['metadata']['type']
-                
-                type_item = QTableWidgetItem(study_type)
-                count_item = QTableWidgetItem(str(series_count))
-
-                self.studies_table.setItem(i, 0, date_item)
-                self.studies_table.setItem(i, 1, desc_item)
-                self.studies_table.setItem(i, 2, type_item)
-                self.studies_table.setItem(i, 3, count_item)
-
-                # Lưu ID study vào item
-                date_item.setData(Qt.UserRole, study.get('id', ''))
-                
-            logger.info(f"Đã hiển thị {self.studies_table.rowCount()} nghiên cứu cho bệnh nhân {self.current_patient['id']}")
-
-        except Exception as e:
-            logger.error(f"Lỗi khi hiển thị dữ liệu y tế: {str(e)}", exc_info=True)
-            QMessageBox.warning(self, "Cảnh báo", f"Không thể hiển thị dữ liệu y tế: {str(e)}")
-
-        # Cập nhật trạng thái nút
-        self.import_images_button.setEnabled(self.current_patient is not None)
-        # Vô hiệu hóa nút xem ảnh cho đến khi chọn một nghiên cứu cụ thể
-        self.view_images_button.setEnabled(False)
+        # Tính BSA (Diện tích bề mặt cơ thể) theo công thức Mosteller
+        bsa = 0
+        if height_cm > 0 and weight_kg > 0:
+            bsa = ((height_cm * weight_kg) / 3600) ** 0.5
+        
+        # Cập nhật nhãn
+        self.bmi_label.setText(f"BMI: {bmi:.1f} kg/m²")
+        self.bsa_label.setText(f"BSA: {bsa:.2f} m²")
+        
+        # Thêm màu sắc cho BMI để dễ nhận biết trạng thái
+        if bmi < 18.5:
+            self.bmi_label.setStyleSheet("color: orange;")  # Thiếu cân
+        elif 18.5 <= bmi < 25:
+            self.bmi_label.setStyleSheet("color: green;")   # Bình thường
+        elif 25 <= bmi < 30:
+            self.bmi_label.setStyleSheet("color: orange;")  # Thừa cân
+        else:
+            self.bmi_label.setStyleSheet("color: red;")     # Béo phì
     
     def _save_patient_info(self):
         """
@@ -607,7 +837,7 @@ class PatientTab(QWidget):
             return
         
         try:
-            # Lấy dữ liệu từ giao diện
+            # Lấy dữ liệu từ giao diện - thông tin cơ bản
             name = self.name_edit.text().strip()
 
             if not name:
@@ -619,24 +849,74 @@ class PatientTab(QWidget):
             birth_date = self.birth_date_edit.date().toString("yyyy-MM-dd")
             gender_map = {"Nam": "male", "Nữ": "female", "Khác": "other"}
             gender = gender_map[self.gender_combo.currentText()]
+            
+            address = self.address_edit.toPlainText().strip()
+            phone = self.phone_edit.text().strip()
+            email = self.email_edit.text().strip()
             notes = self.notes_edit.toPlainText().strip()
+            
+            # Thông tin y tế
+            mrn = self.mrn_edit.text().strip()
+            primary_physician = self.primary_physician_edit.text().strip()
+            referring_physician = self.referring_physician_edit.text().strip()
+            hospital_id = self.hospital_id_edit.text().strip()
+            insurance_id = self.insurance_id_edit.text().strip()
+            
+            height_cm = self.height_edit.value()
+            weight_kg = self.weight_edit.value()
+            allergies = self.allergies_edit.toPlainText().strip()
+            
+            # Thông tin xạ trị
+            diagnosis_code = self.diagnosis_code_edit.text().strip()
+            diagnosis = self.diagnosis_edit.toPlainText().strip()
+            
+            site = self.site_combo.currentText() if self.site_combo.currentIndex() > 0 else ""
+            technique = self.technique_combo.currentText() if self.technique_combo.currentIndex() > 0 else ""
+            treatment_intent = self.treatment_intent_combo.currentText() if self.treatment_intent_combo.currentIndex() > 0 else ""
 
             # Lấy metadata hiện tại
             metadata = self.current_patient.get('metadata', {})
             if not isinstance(metadata, dict):
                 metadata = {}
 
-            # Cập nhật notes trong metadata
-            metadata['notes'] = notes
+            # Cập nhật patient data
+            patient_data = {
+                'id': self.current_patient['id'],
+                'name': name,
+                'dob': birth_date,
+                'birth_date': birth_date,  # Để tương thích với cả hai trường
+                'gender': gender,
+                'address': address,
+                'phone': phone,
+                'email': email,
+                'notes': notes,
+                
+                # Thông tin y tế
+                'mrn': mrn,
+                'primary_physician': primary_physician,
+                'referring_physician': referring_physician,
+                'hospital_id': hospital_id,
+                'insurance_id': insurance_id,
+                'height_cm': height_cm,
+                'weight_kg': weight_kg,
+                'allergies': allergies,
+                
+                # Thông tin xạ trị
+                'diagnosis_code': diagnosis_code,
+                'diagnosis': diagnosis,
+                'site': site,
+                'technique': technique,
+                'treatment_intent': treatment_intent,
+                
+                # Giữ metadata
+                'metadata': metadata,
+                
+                # Cập nhật thời gian
+                'updated_at': datetime.now().isoformat()
+            }
 
             # Lưu vào cơ sở dữ liệu
-            success = self.patient_db.update_patient(
-                self.current_patient['id'],
-                name=name,
-                birth_date=birth_date,
-                gender=gender,
-                metadata=metadata
-            )
+            success = self.patient_db.update_patient(self.current_patient['id'], patient_data)
             
             if success:
                 # Cập nhật thông tin bệnh nhân hiện tại
@@ -668,149 +948,185 @@ class PatientTab(QWidget):
             QMessageBox.critical(
                 self, "Lỗi", f"Không thể lưu thông tin bệnh nhân: {str(e)}")
     
-    def _get_medical_history_data(self) -> List[Dict]:
-        """Lấy dữ liệu từ bảng lịch sử y tế."""
-        history_data = []
+    def _clear_patient_data(self):
+        """
+        Xóa dữ liệu bệnh nhân hiện tại và đặt lại giao diện.
+        """
+        # Đặt lại trạng thái
+        self.current_patient = None
         
-        for row in range(self.history_table.rowCount()):
-            entry = {
-                "date": self.history_table.item(row, 0).text() if self.history_table.item(row, 0) else "",
-                "type": self.history_table.item(row, 1).text() if self.history_table.item(row, 1) else "",
-                "description": self.history_table.item(row, 2).text() if self.history_table.item(row, 2) else "",
-                "doctor": self.history_table.item(row, 3).text() if self.history_table.item(row, 3) else ""
-            }
-            history_data.append(entry)
-        
-        return history_data
-    
-    def _get_medical_images_data(self) -> List[Dict]:
-        """Lấy dữ liệu hình ảnh y tế."""
-        # TODO: Triển khai việc lấy dữ liệu từ các widget hình ảnh
-        # Hiện tại sẽ trả về dữ liệu trống hoặc giữ nguyên dữ liệu cũ nếu có
-        if self.current_patient and isinstance(self.current_patient.get("metadata"), dict):
-            return self.current_patient.get("metadata", {}).get("medical_images", [])
-        return []
-    
-    def _add_medical_history(self):
-        """Thêm mục mới vào lịch sử y tế."""
-        row_position = self.history_table.rowCount()
-        self.history_table.insertRow(row_position)
-        
-        # Thiết lập mục mặc định cho hàng mới
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        self.history_table.setItem(
-            row_position, 0, QTableWidgetItem(current_date))
-        self.history_table.setItem(row_position, 1, QTableWidgetItem("Khám"))
-        self.history_table.setItem(row_position, 2, QTableWidgetItem(""))
-        self.history_table.setItem(row_position, 3, QTableWidgetItem(""))
-        
-        # Kích hoạt chế độ chỉnh sửa cho ô mô tả
-        self.history_table.editItem(self.history_table.item(row_position, 2))
-        
-        # Đánh dấu là có thay đổi chưa lưu
-        self._on_patient_data_changed()
-    
-    def _add_medical_image(self):
-        """Thêm hình ảnh mới."""
-        # Mở hộp thoại chọn tệp tin
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn hình ảnh", "", "Image Files (*.png *.jpg *.jpeg *.bmp)"
-        )
-        
-        if not file_path:
-            return
-        
-        # Tạo widget hiển thị hình ảnh
-        image_widget = QWidget()
-        image_layout = QVBoxLayout(image_widget)
-        
-        # Label hiển thị hình ảnh
-        image_label = QLabel()
-        image_label.setFixedSize(150, 150)
-        image_label.setScaledContents(True)
-        
-        # Tải hình ảnh
-        pixmap = QPixmap(file_path)
-        image_label.setPixmap(pixmap)
-        
-        # Label hiển thị thông tin hình ảnh
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        info_label = QLabel(f"Hình ảnh - {current_date}")
-        
-        image_layout.addWidget(image_label)
-        image_layout.addWidget(info_label)
-        
-        self.images_list_layout.addWidget(image_widget)
-        
-        # Đánh dấu là có thay đổi chưa lưu
-        self._on_patient_data_changed()
-    
-    def _create_new_patient(self):
-        """Tạo một bệnh nhân mới."""
-        try:
-            # Hiển thị dialog nhập thông tin
-            dialog = PatientCreationDialog(self)
-            if dialog.exec_() == QDialog.Accepted:
-                patient_data = dialog.get_patient_data()
+        # Xóa dữ liệu trên giao diện - thông tin cơ bản
+        self.name_edit.clear()
+        self.name_edit.setReadOnly(True)
 
-                # Cập nhật tab với bệnh nhân mới
-                self.set_patient(patient_data["id"])
-                
-                # Phát tín hiệu cho biết bệnh nhân mới đã được tạo
-                self.patient_created.emit(patient_data["id"])
-                
-                logger.info(f"Đã tạo và hiển thị bệnh nhân mới với ID: {patient_data['id']}")
+        self.birth_date_edit.setDate(QDate.currentDate())
+        self.birth_date_edit.setReadOnly(True)
 
-        except Exception as e:
-            logger.error("Lỗi khi tạo bệnh nhân mới: %s", str(e), exc_info=True)
-            QMessageBox.critical(
-                self, 
-                "Lỗi", 
-                f"Không thể tạo bệnh nhân mới: {str(e)}"
-            )
+        self.gender_combo.setCurrentIndex(0)
+        self.gender_combo.setEnabled(False)
+        
+        self.address_edit.clear()
+        self.address_edit.setReadOnly(True)
+        
+        self.phone_edit.clear()
+        self.phone_edit.setReadOnly(True)
+        
+        self.email_edit.clear()
+        self.email_edit.setReadOnly(True)
+
+        self.notes_edit.clear()
+        self.notes_edit.setReadOnly(True)
+        
+        # Xóa dữ liệu y tế
+        self.mrn_edit.clear()
+        self.mrn_edit.setReadOnly(True)
+        
+        self.primary_physician_edit.clear()
+        self.primary_physician_edit.setReadOnly(True)
+        
+        self.referring_physician_edit.clear()
+        self.referring_physician_edit.setReadOnly(True)
+        
+        self.hospital_id_edit.clear()
+        self.hospital_id_edit.setReadOnly(True)
+        
+        self.insurance_id_edit.clear()
+        self.insurance_id_edit.setReadOnly(True)
+        
+        self.height_edit.setValue(0)
+        self.height_edit.setReadOnly(True)
+        
+        self.weight_edit.setValue(0)
+        self.weight_edit.setReadOnly(True)
+        
+        self.allergies_edit.clear()
+        self.allergies_edit.setReadOnly(True)
+        
+        # Đặt lại chỉ số BMI và BSA
+        self.bmi_label.setText("BMI: ...")
+        self.bsa_label.setText("BSA: ...")
+        
+        # Xóa dữ liệu xạ trị
+        self.diagnosis_code_edit.clear()
+        self.diagnosis_code_edit.setReadOnly(True)
+        
+        self.diagnosis_edit.clear()
+        self.diagnosis_edit.setReadOnly(True)
+        
+        self.site_combo.setCurrentIndex(0)
+        self.site_combo.setEnabled(False)
+        
+        self.technique_combo.setCurrentIndex(0)
+        self.technique_combo.setEnabled(False)
+        
+        self.treatment_intent_combo.setCurrentIndex(0)
+        self.treatment_intent_combo.setEnabled(False)
+
+        # Vô hiệu hóa các nút
+        self.delete_button.setEnabled(False)
+        self.edit_button.setEnabled(False)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.import_button.setEnabled(False)
+        self.export_button.setEnabled(False)
+        self.import_images_button.setEnabled(False)
+        self.view_images_button.setEnabled(False)
+        self.add_history_button.setEnabled(False)
+
+        # Xóa dữ liệu bảng
+        self.history_table.setRowCount(0)
+        self.studies_table.setRowCount(0)
+        self.series_table.setRowCount(0)
+        
+        logger.info("Đã xóa dữ liệu bệnh nhân khỏi giao diện")
+
+    def _populate_medical_history(self, history_data: List[Dict] = None):
+        """Điền dữ liệu vào bảng lịch sử y tế."""
+        self.history_table.setRowCount(0)
+        
+        if not history_data:
+            history_data = []
+            # Thử lấy lịch sử y tế từ bệnh nhân hiện tại nếu có
+            if self.current_patient and 'medical_history' in self.current_patient:
+                history_data = self.current_patient.get('medical_history', [])
+        
+        for entry in history_data:
+            row_position = self.history_table.rowCount()
+            self.history_table.insertRow(row_position)
+            
+            date_item = QTableWidgetItem(entry.get("date", ""))
+            type_item = QTableWidgetItem(entry.get("type", ""))
+            desc_item = QTableWidgetItem(entry.get("description", ""))
+            doctor_item = QTableWidgetItem(entry.get("doctor", ""))
+            
+            self.history_table.setItem(row_position, 0, date_item)
+            self.history_table.setItem(row_position, 1, type_item)
+            self.history_table.setItem(row_position, 2, desc_item)
+            self.history_table.setItem(row_position, 3, doctor_item)
     
-    def _delete_current_patient(self):
-        """Xóa bệnh nhân hiện tại."""
+    def _populate_medical_images(self):
+        """Điền dữ liệu hình ảnh y tế vào các bảng."""
         if not self.current_patient:
-            return
-        
-        patient_id = self.current_patient.get("id")
-        patient_name = self.current_patient.get("name")
-        
-        # Hiển thị hộp thoại xác nhận
-        reply = QMessageBox.question(
-            self, 
-            "Xác nhận xóa",
-            f"Bạn có chắc chắn muốn xóa bệnh nhân '{patient_name}' (ID: {patient_id}) không?\n\nHành động này không thể hoàn tác!",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply != QMessageBox.Yes:
+            self.studies_table.setRowCount(0)
+            self.series_table.setRowCount(0)
             return
         
         try:
-            # Xóa bệnh nhân khỏi cơ sở dữ liệu
-            success = self.patient_db.delete_patient(patient_id)
+            # Lấy danh sách nghiên cứu của bệnh nhân
+            studies = self.patient_db.get_patient_studies(self.current_patient['id'])
             
-            if not success:
-                raise ValueError(
-                    f"Không thể xóa bệnh nhân với ID: {patient_id}")
+            # Kiểm tra nếu không có nghiên cứu nào
+            if not studies:
+                self.studies_table.setRowCount(0)
+                logger.info(f"Không có nghiên cứu nào cho bệnh nhân {self.current_patient['id']}")
+            return
+        
+            # Điền dữ liệu nghiên cứu vào bảng
+            self.studies_table.setRowCount(len(studies))
             
-            # Xóa dữ liệu khỏi giao diện
-            self._clear_patient_data()
-            self._toggle_edit_mode(False)
-            
-            # Phát tín hiệu thông báo đã xóa (có thể phát với patient_id=None)
-            self.patient_updated.emit(patient_id)
-            
-            QMessageBox.information(
-                self, "Thành công", f"Đã xóa bệnh nhân '{patient_name}' thành công")
-            logger.info(f"Đã xóa bệnh nhân: {patient_id}")
+            for i, study in enumerate(studies):
+                # Lấy số lượng series cho mỗi nghiên cứu
+                series_count = 0
+                try:
+                    series_list = self.patient_db.get_study_series(study['id'])
+                    series_count = len(series_list) if series_list else 0
+                except Exception as e:
+                    logger.warning(f"Không thể lấy danh sách series cho nghiên cứu {study['id']}: {str(e)}")
+                
+                # Thêm dữ liệu vào bảng
+                for j, column in enumerate(['Mô tả', 'Ngày', 'Loại', 'Số lượng series']):
+                    item = QtWidgets.QTableWidgetItem()
+                    
+                    if j == 0:
+                        # Cột mô tả
+                        value = study.get('description', 'Không có mô tả')
+                        item.setText(value)
+                        # Lưu ID nghiên cứu vào item để sử dụng sau này
+                        item.setData(QtCore.Qt.UserRole, study['id'])
+                    elif j == 1:
+                        # Cột ngày
+                        item.setText(study.get('date', 'N/A'))
+                    elif j == 2:
+                        # Cột loại
+                        item.setText(study.get('modality', 'N/A'))
+                    elif j == 3:
+                        # Cột số lượng series
+                        item.setText(str(series_count))
+                        
+                    self.studies_table.setItem(i, j, item)
+                    
+            # Điều chỉnh độ rộng các cột
+            self.studies_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+            for i in range(1, self.studies_table.columnCount()):
+                self.studies_table.horizontalHeader().setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
+                
+            # Chọn nghiên cứu đầu tiên
+            if self.studies_table.rowCount() > 0:
+                self.studies_table.selectRow(0)
+                self._on_study_selected()
+                
         except Exception as e:
-            logger.exception(f"Lỗi khi xóa bệnh nhân {patient_id}: {str(e)}")
-            QMessageBox.critical(
-                self, "Lỗi", f"Không thể xóa bệnh nhân: {str(e)}")
+            logger.error(f"Lỗi khi điền dữ liệu hình ảnh y tế: {str(e)}", exc_info=True)
 
     def _import_patient_data(self):
         """
@@ -864,12 +1180,9 @@ class PatientTab(QWidget):
             progress_dialog.close()
 
     def _export_patient_data(self):
-        """
-        Xuất dữ liệu DICOM cho bệnh nhân hiện tại.
-        """
+        """Xuất dữ liệu bệnh nhân ra một thư mục."""
         if not self.current_patient:
-            QMessageBox.warning(
-                self, "Lỗi", "Vui lòng chọn bệnh nhân trước khi xuất dữ liệu.")
+            QtWidgets.QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn bệnh nhân trước khi xuất dữ liệu.")
             return
 
         # Kiểm tra xem có dữ liệu để xuất không
@@ -878,69 +1191,88 @@ class PatientTab(QWidget):
             patient_id, include_series=True)
 
         if not studies:
-            QMessageBox.warning(
-                self, "Lỗi", "Bệnh nhân không có dữ liệu để xuất.")
+            QtWidgets.QMessageBox.information(self, "Thông báo", 
+                                            f"Bệnh nhân {self.current_patient['name']} không có dữ liệu y tế để xuất.")
             return
 
-        # Mở dialog chọn thư mục đích
-        directory = QFileDialog.getExistingDirectory(
-            self, "Chọn thư mục lưu dữ liệu DICOM", "",
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        # Chọn thư mục đích
+        export_dir = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Chọn thư mục xuất dữ liệu", 
+            os.path.expanduser("~"),
+            QtWidgets.QFileDialog.ShowDirsOnly | QtWidgets.QFileDialog.DontResolveSymlinks
         )
-
-        if not directory:
+            
+        if not export_dir:
             return
 
+        # Tạo thư mục cho bệnh nhân
+        patient_dir = os.path.join(export_dir, f"{patient_id}_{self.current_patient['name'].replace(' ', '_')}")
+        os.makedirs(patient_dir, exist_ok=True)
+            
+        # Xuất thông tin bệnh nhân
+        patient_info_path = os.path.join(patient_dir, "patient_info.json")
+        with open(patient_info_path, 'w', encoding='utf-8') as f:
+            json.dump(self.current_patient, f, ensure_ascii=False, indent=4)
+            
         # Hiển thị dialog tiến trình
-        progress_dialog = QDialog(self)
-        progress_dialog.setWindowTitle("Đang xuất dữ liệu DICOM")
-        progress_dialog.setFixedSize(400, 100)
-
-        progress_layout = QVBoxLayout(progress_dialog)
-        progress_label = QLabel("Đang xuất dữ liệu DICOM, vui lòng chờ...")
-        progress_bar = QProgressBar()
-        progress_bar.setRange(0, 0)  # Chế độ không xác định
-
-        progress_layout.addWidget(progress_label)
-        progress_layout.addWidget(progress_bar)
-
-        progress_dialog.show()
-
+        progress = QtWidgets.QProgressDialog("Đang xuất dữ liệu bệnh nhân...", "Hủy", 0, 100, self)
+        progress.setWindowTitle("Xuất dữ liệu")
+        progress.setWindowModality(QtCore.Qt.WindowModal)
+        progress.show()
+            
+        # Đếm tổng số series để tính tiến trình
+        total_series = sum(len(study.get('series', [])) for study in studies)
+        if total_series == 0:
+            progress.setValue(100)
+            QtWidgets.QMessageBox.information(self, "Thông báo", 
+                                            f"Đã xuất thông tin bệnh nhân ra: {patient_info_path}")
+            return
+            
+        # Xuất các file DICOM
         try:
-            # Tạo thư mục cho bệnh nhân
-            patient_dir = os.path.join(
-                directory, f"patient_{self.current_patient['id']}")
-            os.makedirs(patient_dir, exist_ok=True)
-
-            # Xuất từng study
+            series_processed = 0
+            
             for study in studies:
-                # Tạo thư mục cho study
-                study_dir = os.path.join(patient_dir, f"study_{study['id']}")
+                study_dir = os.path.join(patient_dir, study.get('description', f"Study_{study['id']}").replace(' ', '_'))
                 os.makedirs(study_dir, exist_ok=True)
 
-                # Xuất từng series
+                # Xuất thông tin nghiên cứu
+                study_info_path = os.path.join(study_dir, "study_info.json")
+                with open(study_info_path, 'w', encoding='utf-8') as f:
+                    json.dump(study, f, ensure_ascii=False, indent=4)
+                
                 for series in study.get('series', []):
+                    series_processed += 1
+                    progress.setValue(int(series_processed * 100 / total_series))
+                    
+                    if progress.wasCanceled():
+                        break
+                        
                     # Tạo thư mục cho series
-                    series_dir = os.path.join(
-                        study_dir, f"{series['modality']}_{series['id']}")
+                    series_dir = os.path.join(study_dir, series.get('description', f"Series_{series['id']}").replace(' ', '_'))
                     os.makedirs(series_dir, exist_ok=True)
 
-                    # Sao chép các file DICOM
-                    for file_path in series.get('file_paths', []):
-                        if os.path.exists(file_path):
-                            dest_path = os.path.join(
-                                series_dir, os.path.basename(file_path))
+                    # Lấy danh sách các file trong series
+                    files = self.patient_db.get_series_files(series['id'])
+                    
+                    for file_data in files:
+                        file_path = file_data.get('file_path')
+                        if file_path and os.path.exists(file_path):
+                            # Sao chép file vào thư mục đích
+                            dest_path = os.path.join(series_dir, os.path.basename(file_path))
                             shutil.copy2(file_path, dest_path)
 
-            QMessageBox.information(
-                self, "Thành công", f"Đã xuất dữ liệu DICOM thành công.\nĐường dẫn: {patient_dir}")
+                if progress.wasCanceled():
+                    break
+                    
+            progress.setValue(100)
+            QtWidgets.QMessageBox.information(self, "Thông báo", 
+                                            f"Đã xuất dữ liệu bệnh nhân ra: {patient_dir}")
 
         except Exception as e:
-            QMessageBox.critical(
-                self, "Lỗi", f"Lỗi khi xuất dữ liệu DICOM: {str(e)}")
-
-        finally:
-            progress_dialog.close()
+            progress.cancel()
+            logger.error(f"Lỗi khi xuất dữ liệu bệnh nhân: {str(e)}", exc_info=True)
+            QtWidgets.QMessageBox.critical(self, "Lỗi", f"Không thể xuất dữ liệu bệnh nhân: {str(e)}")
 
     def _import_medical_images(self):
         """
@@ -955,25 +1287,16 @@ class PatientTab(QWidget):
         self._update_series_table()
 
     def _update_series_table(self):
-        """
-        Cập nhật bảng series dựa trên nghiên cứu được chọn.
-        """
-        # Xóa dữ liệu hiện tại
-        self.series_table.setRowCount(0)
-
-        # Lấy nghiên cứu được chọn
-        selected_rows = self.studies_table.selectedItems()
-        if not selected_rows:
-            self.view_images_button.setEnabled(False)
-            return
-
-        row = selected_rows[0].row()
-        study_id = self.studies_table.item(row, 0).data(Qt.UserRole)
+        """Cập nhật bảng series dựa trên nghiên cứu đã chọn."""
+        selected_rows = self.studies_table.selectionModel().selectedRows()
         
-        if not study_id:
-            logger.warning("Không thể lấy ID của nghiên cứu từ dòng đã chọn")
-            self.view_images_button.setEnabled(False)
+        if not selected_rows:
+            self.series_table.setRowCount(0)
             return
+
+        # Lấy study_id của nghiên cứu được chọn
+        study_row = selected_rows[0].row()
+        study_id = self.studies_table.item(study_row, 0).data(QtCore.Qt.UserRole)
 
         try:
             # Lấy danh sách series
@@ -981,66 +1304,65 @@ class PatientTab(QWidget):
             
             if not series_list:
                 logger.info(f"Không có series nào cho nghiên cứu {study_id}")
-                self.view_images_button.setEnabled(False)
+                self.series_table.setRowCount(0)
                 return
 
-            # Thêm dữ liệu vào bảng
+            # Điền dữ liệu vào bảng series
+            self.series_table.setRowCount(len(series_list))
+            
             for i, series in enumerate(series_list):
-                self.series_table.insertRow(i)
-
-                # Thêm thông tin series
-                desc_item = QTableWidgetItem(series.get('description', ''))
-                modality_item = QTableWidgetItem(series.get('modality', ''))
-                count_item = QTableWidgetItem(str(len(series.get('file_paths', []))))
-
-                self.series_table.setItem(i, 0, desc_item)
-                self.series_table.setItem(i, 1, modality_item)
-                self.series_table.setItem(i, 2, count_item)
-
-                # Lưu ID series vào item
-                desc_item.setData(Qt.UserRole, series.get('id', ''))
-
-            # Cập nhật trạng thái nút
-            self.view_images_button.setEnabled(self.series_table.rowCount() > 0)
+                # Thêm dữ liệu vào bảng
+                for j, column in enumerate(['Mô tả', 'Loại', 'Số series', 'Vùng cơ thể']):
+                    item = QtWidgets.QTableWidgetItem()
+                    
+                    if j == 0:
+                        # Cột mô tả
+                        value = series.get('description', 'Không có mô tả')
+                        item.setText(value)
+                        # Lưu ID series vào item để sử dụng sau này
+                        item.setData(QtCore.Qt.UserRole, series['id'])
+                    elif j == 1:
+                        # Cột loại
+                        item.setText(series.get('modality', 'N/A'))
+                    elif j == 2:
+                        # Cột số series
+                        item.setText(str(series.get('series_number', 'N/A')))
+                    elif j == 3:
+                        # Cột vùng cơ thể
+                        item.setText(series.get('body_part', 'N/A'))
+                        
+                    self.series_table.setItem(i, j, item)
+                    
+            # Điều chỉnh độ rộng các cột
+            self.series_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+            for i in range(1, self.series_table.columnCount()):
+                self.series_table.horizontalHeader().setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
+                
+            # Chọn series đầu tiên
+            if self.series_table.rowCount() > 0:
+                self.series_table.selectRow(0)
             
         except Exception as e:
             logger.error(f"Lỗi khi cập nhật bảng series: {str(e)}", exc_info=True)
-            QMessageBox.warning(self, "Cảnh báo", f"Không thể hiển thị danh sách series: {str(e)}")
-            self.view_images_button.setEnabled(False)
 
     def _view_medical_images(self):
-        """
-        Mở tab xem hình ảnh y tế dựa trên series đã chọn.
-        """
-        selected_series = self.series_table.selectedItems()
-        if not selected_series:
-            QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn một series để xem.")
+        """Mở cửa sổ xem hình ảnh cho series được chọn."""
+        # Kiểm tra xem có series nào được chọn không
+        selected_rows = self.series_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QtWidgets.QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn series để xem hình ảnh.")
             return
 
-        try:
-            # Lấy ID của series đã chọn
-            row = selected_series[0].row()
-            series_id = self.series_table.item(row, 0).data(Qt.UserRole)
+        # Lấy ID series
+        series_row = selected_rows[0].row()
+        series_id = self.series_table.item(series_row, 0).data(QtCore.Qt.UserRole)
+        
+        # Lấy ID nghiên cứu
+        study_row = self.studies_table.selectionModel().selectedRows()[0].row()
+        study_id = None
             
-            if not series_id:
-                logger.warning("Không thể lấy ID của series từ dòng đã chọn")
-                QMessageBox.warning(self, "Cảnh báo", "Không thể xác định series đã chọn.")
-                return
-
-            # Lấy dữ liệu của patient hiện tại
-            if not self.current_patient:
-                QMessageBox.warning(self, "Cảnh báo", "Không có bệnh nhân được chọn.")
-                return
-
-            # Tìm kiếm series trong danh sách nghiên cứu của bệnh nhân
-            selected_series_data = None
-            study_id = None
-            
-            # Lấy nghiên cứu được chọn
-            selected_study_rows = self.studies_table.selectedItems()
-            if selected_study_rows:
-                study_row = selected_study_rows[0].row()
-                study_id = self.studies_table.item(study_row, 0).data(Qt.UserRole)
+        if self.studies_table.item(study_row, 0):
+            study_id = self.studies_table.item(study_row, 0).data(QtCore.Qt.UserRole)
 
             studies = self.patient_db.get_patient_studies(self.current_patient['id'], include_series=True)
             
@@ -1050,116 +1372,233 @@ class PatientTab(QWidget):
                     
                 for series in study.get('series', []):
                     if series['id'] == series_id:
-                        selected_series_data = series
-                        break
+                        # Lấy danh sách file trong series
+                        files = self.patient_db.get_series_files(series_id)
+                        
+                        if not files:
+                            QtWidgets.QMessageBox.warning(self, "Cảnh báo", 
+                                                       f"Không tìm thấy file nào trong series {series.get('description', series_id)}.")
+                        return
+                        
+                    # Tạo danh sách đường dẫn file
+                    file_paths = []
+                    for file_data in files:
+                        file_path = file_data.get('file_path')
+                        if file_path and os.path.exists(file_path):
+                            file_paths.append(file_path)
+                            
+                    if not file_paths:
+                        QtWidgets.QMessageBox.warning(self, "Cảnh báo", 
+                                                   f"Không tìm thấy file nào trong series {series.get('description', series_id)}.")
+                        return
+
+                    # Tạo signal để yêu cầu main window hiển thị hình ảnh
+                    modality = series.get('modality', 'Unknown')
+                    description = series.get('description', f"Series {series_id}")
+                    
+                    try:
+                        # Tìm parent widget là main window
+                        main_window = None
+                        parent = self.parent()
+                        while parent is not None:
+                            if hasattr(parent, 'show_medical_images'):
+                                main_window = parent
+                                break
+                            parent = parent.parent()
+                            
+                        if main_window is not None:
+                            main_window.show_medical_images(
+                                file_paths, modality, description, 
+                                patient_name=self.current_patient['name'],
+                                patient_id=self.current_patient['id']
+                            )
+                        else:
+                            QtWidgets.QMessageBox.warning(self, "Cảnh báo", 
+                                                     "Không thể mở cửa sổ xem hình ảnh.")
                 
-                if selected_series_data:
-                    break
-
-            if not selected_series_data:
-                logger.error(f"Không tìm thấy dữ liệu series {series_id}")
-                QMessageBox.warning(self, "Lỗi", "Không tìm thấy dữ liệu series.")
-                return
-
-            # Lấy modality (loại dữ liệu y tế) để xác định viewer phù hợp
-            modality = selected_series_data.get('modality', '').upper()
-            
-            logger.info(f"Chuẩn bị mở viewer cho series {series_id} modality {modality}")
-
-            # Mở tab viewer phù hợp với loại dữ liệu
-            if modality in ['CT', 'MR', 'PT']:
-                self.open_image_viewer_signal.emit(self.current_patient['id'], series_id)
-            elif modality == 'RTSTRUCT':
-                self.open_rtstruct_viewer_signal.emit(self.current_patient['id'], series_id)
-            elif modality == 'RTPLAN':
-                self.open_plan_viewer_signal.emit(self.current_patient['id'], series_id)
-            elif modality == 'RTDOSE':
-                self.open_dose_viewer_signal.emit(self.current_patient['id'], series_id)
-            else:
-                QMessageBox.warning(
-                    self, "Không hỗ trợ", 
-                    f"Loại dữ liệu '{modality}' chưa được hỗ trợ để xem."
-                )
-                
-        except Exception as e:
-            logger.error(f"Lỗi khi mở viewer hình ảnh y tế: {str(e)}", exc_info=True)
-            QMessageBox.critical(self, "Lỗi", f"Không thể mở viewer: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"Lỗi khi mở cửa sổ xem hình ảnh: {str(e)}", exc_info=True)
+                        QtWidgets.QMessageBox.critical(self, "Lỗi", f"Không thể mở cửa sổ xem hình ảnh: {str(e)}")
+                        
+                    return
+                    
+        QtWidgets.QMessageBox.warning(self, "Cảnh báo", f"Không tìm thấy series với ID {series_id}.")
 
     def _search_patients(self):
-        """
-        Tìm kiếm bệnh nhân dựa trên từ khóa nhập vào.
-        """
+        """Tìm kiếm bệnh nhân theo tên hoặc ID"""
         search_text = self.search_input.text().strip()
+        
         if not search_text:
-            QMessageBox.warning(self, "Lỗi", "Vui lòng nhập từ khóa tìm kiếm.")
+            QMessageBox.warning(self, "Thông báo", "Vui lòng nhập tên hoặc mã bệnh nhân")
             return
 
         try:
-            # Tìm kiếm bệnh nhân
-            search_query = {
-                'name': search_text
-            }
-
-            # Thử truy vấn dạng DICOM ID trong metadata
-            search_query['metadata'] = {'dicom_id': search_text}
-
-            patients = self.patient_db.search_patients(search_query)
+            patients = self.patient_db.search_patients(search_text)
 
             if not patients:
-                # Kiểm tra nếu người dùng nhập vào có thể là một ID
-                # và hỏi xem có muốn tạo bệnh nhân mới với ID đó không
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Question)
-                msg_box.setWindowTitle("Bệnh nhân không tồn tại")
-                msg_box.setText(f"Không tìm thấy bệnh nhân với từ khóa '{search_text}'.")
-                msg_box.setInformativeText("Bạn có muốn tạo bệnh nhân mới với ID này không?")
-                create_btn = msg_box.addButton("Tạo mới", QMessageBox.AcceptRole)
-                msg_box.addButton("Hủy", QMessageBox.RejectRole)
-                msg_box.exec_()
-
-                if msg_box.clickedButton() == create_btn:
-                    # Tạo bệnh nhân mới với ID từ từ khóa tìm kiếm
-                    dialog = PatientCreationDialog(self)
-                    # Điền trước ID nếu là dạng ID hợp lệ
-                    if search_text.replace('-', '').isalnum():
-                        dialog.patient_id_edit.setText(search_text)
-                    
-                    if dialog.exec_() == QDialog.Accepted:
-                        # Lấy thông tin bệnh nhân đã tạo
-                        patient_data = dialog.get_patient_data()
-                        self.set_patient(patient_data['id'])
-                        # Phát tín hiệu đã tạo bệnh nhân mới
-                        self.patient_created.emit(patient_data['id'])
+                QMessageBox.information(self, "Kết quả tìm kiếm", "Không tìm thấy bệnh nhân phù hợp")
                 return
-
-            # Hiển thị danh sách bệnh nhân tìm thấy
-            if len(patients) == 1:
-                # Nếu chỉ có 1 kết quả, hiển thị ngay
-                self.set_patient(patients[0]['id'])
+                
+            # Hiển thị danh sách bệnh nhân nếu có nhiều kết quả
+            if len(patients) > 1:
+                dialog = PatientSearchResultDialog(patients, self)
+                if dialog.exec_() == QDialog.Accepted and dialog.selected_patient_id:
+                    self.set_patient(dialog.selected_patient_id)
             else:
-                # Nếu có nhiều kết quả, hiển thị dialog chọn
-                patient_list = []
-                for patient in patients:
-                    patient_info = f"{patient['name']} ({patient['birth_date'] or 'N/A'})"
-                    if 'metadata' in patient and patient['metadata'] and 'dicom_id' in patient['metadata']:
-                        patient_info += f" - DICOM ID: {patient['metadata']['dicom_id']}"
-                    patient_list.append((patient_info, patient['id']))
+                # Nếu chỉ có một kết quả, hiển thị ngay
+                self.set_patient(patients[0]['id'])
+                
+        except Exception as e:
+            logger.exception("Error during patient search: %s", str(e))
+            QMessageBox.critical(self, "Lỗi", f"Không thể tìm kiếm bệnh nhân: {str(e)}")
 
-                selected_patient, ok = QInputDialog.getItem(
-                    self, "Chọn bệnh nhân", "Chọn bệnh nhân từ danh sách:",
-                    [p[0] for p in patient_list], 0, False
-                )
+    def _create_new_patient(self):
+        """Tạo bệnh nhân mới"""
+        try:
+            dialog = NewPatientDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
+                patient_data = dialog.get_patient_data()
+                
+                # Thêm thông tin thời gian
+                now = datetime.now().isoformat()
+                patient_data.update({
+                    'created_at': now,
+                    'updated_at': now
+                })
+                
+                # Tạo ID mới cho bệnh nhân
+                patient_id = str(uuid.uuid4())
+                patient_data['id'] = patient_id
+                
+                # Lưu vào cơ sở dữ liệu
+                self.patient_db.add_patient(patient_data)
+                
+                # Cập nhật UI
+                self.set_patient(patient_id)
+                
+                # Emit tín hiệu tạo bệnh nhân mới
+                self.patient_created.emit(patient_id)
+                
+                QMessageBox.information(self, "Thành công", "Đã tạo bệnh nhân mới")
+        except Exception as e:
+            logger.exception("Error creating new patient: %s", str(e))
+            QMessageBox.critical(self, "Lỗi", f"Không thể tạo bệnh nhân mới: {str(e)}")
 
-                if ok and selected_patient:
-                    # Lấy ID của bệnh nhân được chọn
-                    selected_index = [p[0]
-                                      for p in patient_list].index(selected_patient)
-                    selected_id = patient_list[selected_index][1]
-                    self.set_patient(selected_id)
+    def _delete_current_patient(self):
+        """Xóa bệnh nhân hiện tại"""
+        if not self.current_patient:
+            QMessageBox.warning(self, "Cảnh báo", "Không có bệnh nhân nào được chọn.")
+            return
+            
+        # Xác nhận xóa
+        confirm = QMessageBox.question(
+            self,
+            "Xác nhận xóa",
+            f"Bạn có chắc chắn muốn xóa bệnh nhân này không?\nToàn bộ dữ liệu liên quan sẽ bị xóa vĩnh viễn.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if confirm != QMessageBox.Yes:
+            return
+            
+        try:
+            # Lưu ID trước khi xóa
+            patient_id = self.current_patient['id']
+            
+            # Xóa bệnh nhân
+            success = self.patient_db.delete_patient(self.current_patient['id'])
+            
+            if success:
+                # Làm mới UI
+                self._clear_patient_data()
+                self.current_patient = None
+                
+                # Emit tín hiệu đã xóa bệnh nhân
+                self.patient_deleted.emit(patient_id)
+                
+                # Thông báo thành công
+                QMessageBox.information(self, "Thành công", "Đã xóa bệnh nhân.")
+            else:
+                QMessageBox.critical(self, "Lỗi", "Không thể xóa bệnh nhân.")
 
         except Exception as e:
-            logger.error(
-                f"Lỗi khi tìm kiếm bệnh nhân: {str(e)}", exc_info=True)
-            QMessageBox.critical(
-                self, "Lỗi", f"Không thể tìm kiếm bệnh nhân: {str(e)}")
+            logger.exception("Error deleting patient: %s", str(e))
+            QMessageBox.critical(self, "Lỗi", f"Không thể xóa bệnh nhân: {str(e)}")
+
+    def _add_medical_history(self):
+        """Thêm mục lịch sử bệnh mới"""
+        if not self.current_patient:
+            return
+            
+        # Tạo dialog đơn giản để nhập thông tin
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Thêm lịch sử bệnh")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        form_layout = QFormLayout()
+        
+        # Ngày
+        date_edit = QDateEdit()
+        date_edit.setCalendarPopup(True)
+        date_edit.setDate(QDate.currentDate())
+        form_layout.addRow("Ngày:", date_edit)
+        
+        # Chẩn đoán
+        diagnosis_edit = QLineEdit()
+        form_layout.addRow("Chẩn đoán:", diagnosis_edit)
+        
+        # Bác sĩ
+        physician_edit = QLineEdit()
+        form_layout.addRow("Bác sĩ:", physician_edit)
+        
+        # Ghi chú
+        notes_edit = QTextEdit()
+        notes_edit.setMaximumHeight(100)
+        form_layout.addRow("Ghi chú:", notes_edit)
+        
+        layout.addLayout(form_layout)
+        
+        # Nút OK/Cancel
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                # Lấy thông tin từ dialog
+                history_entry = {
+                    "date": date_edit.date().toString("yyyy-MM-dd"),
+                    "diagnosis": diagnosis_edit.text(),
+                    "physician": physician_edit.text(),
+                    "notes": notes_edit.toPlainText()
+                }
+                
+                # Thêm vào dữ liệu bệnh nhân
+                patient_data = self.current_patient.copy()
+                
+                if "medical_history" not in patient_data:
+                    patient_data["medical_history"] = []
+                
+                patient_data["medical_history"].append(history_entry)
+                
+                # Cập nhật bệnh nhân
+                success = self.patient_db.update_patient(
+                    patient_data["id"], 
+                    {"medical_history": patient_data["medical_history"]}
+                )
+                
+                if success:
+                    # Cập nhật hiển thị
+                    self._populate_medical_history(patient_data["medical_history"])
+                    QMessageBox.information(self, "Thành công", "Đã thêm lịch sử bệnh mới.")
+                else:
+                    QMessageBox.critical(self, "Lỗi", "Không thể cập nhật thông tin bệnh nhân.")
+            
+            except Exception as e:
+                logger.exception("Error adding medical history: %s", str(e))
+                QMessageBox.critical(self, "Lỗi", f"Không thể thêm lịch sử bệnh: {str(e)}")
 

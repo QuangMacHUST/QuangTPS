@@ -1,0 +1,43 @@
+$NUMS 019
+$STOM 10.00
+$MLCM 00
+$SSO 100.0
+$FSS 1.0
+$DINA wf
+$RDNG WF
+$VERS 001
+$MODL TrueBeam
+$ENER 10
+$DATE 2025-03-31T00:00:00
+$TYPE PHOTON
+$CIAO Wedge Factors for TrueBeam 10MV
+
+$DPTH 10.0
+$WDGD 15
+// Field Size(cm), Wedge Factor
+4.0, 0.860
+6.0, 0.852
+8.0, 0.845
+10.0, 0.837
+15.0, 0.825
+20.0, 0.813
+
+$DPTH 10.0
+$WDGD 30
+// Field Size(cm), Wedge Factor
+4.0, 0.751
+6.0, 0.743
+8.0, 0.735
+10.0, 0.728
+15.0, 0.716
+20.0, 0.704
+
+$DPTH 10.0
+$WDGD 45
+// Field Size(cm), Wedge Factor
+4.0, 0.642
+6.0, 0.635
+8.0, 0.627
+10.0, 0.620
+15.0, 0.608
+20.0, 0.596 

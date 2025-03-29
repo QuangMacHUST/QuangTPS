@@ -1,0 +1,153 @@
+{
+  "energy_name": "15MV",
+  "machine_name": "TrueBeam",
+  "source_file": "E:\\hoctap\\QuangTPS\\Truebeam representative Beam Data for eclipse\\15MV Beam Data.xlsx",
+  "pdd_data": {
+    "field_sizes": [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40],
+    "depths": [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0],
+    "reference_field_size": 10,
+    "ssd": 100.0,
+    "dmax": 3.0,
+    "values": {
+      "3": [0, 44.5, 94.1, 98.3, 99.6, 100.0, 97.0, 91.5, 86.3, 81.5, 77.0, 69.2, 62.1, 53.1, 41.7, 32.8, 25.7],
+      "4": [0, 46.9, 95.3, 98.1, 99.4, 100.0, 96.8, 91.3, 86.1, 81.3, 76.8, 69.0, 61.9, 53.0, 41.6, 32.7, 25.6],
+      "5": [0, 49.5, 96.2, 98.0, 99.3, 100.0, 96.7, 91.1, 85.9, 81.1, 76.6, 68.8, 61.7, 52.8, 41.5, 32.6, 25.5],
+      "6": [0, 52.1, 96.9, 97.8, 99.1, 100.0, 96.5, 90.9, 85.7, 80.9, 76.4, 68.6, 61.5, 52.7, 41.4, 32.5, 25.4],
+      "8": [0, 56.2, 98.0, 97.6, 98.9, 100.0, 96.3, 90.5, 85.3, 80.5, 76.0, 68.2, 61.2, 52.4, 41.2, 32.4, 25.3],
+      "10": [0, 60.3, 98.9, 97.4, 98.7, 100.0, 96.0, 90.2, 85.0, 80.2, 75.7, 67.9, 60.9, 52.2, 41.0, 32.2, 25.2],
+      "12": [0, 63.7, 99.5, 97.2, 98.5, 100.0, 95.8, 89.9, 84.7, 79.9, 75.4, 67.6, 60.7, 52.0, 40.8, 32.1, 25.1],
+      "15": [0, 67.6, 100.0, 97.0, 98.3, 99.9, 95.6, 89.6, 84.4, 79.6, 75.1, 67.3, 60.4, 51.8, 40.6, 31.9, 25.0],
+      "20": [0, 72.4, 99.8, 96.7, 98.0, 99.8, 95.2, 89.1, 83.8, 79.0, 74.6, 66.9, 60.0, 51.5, 40.4, 31.7, 24.9],
+      "25": [0, 75.8, 99.6, 96.5, 97.8, 99.7, 94.9, 88.8, 83.5, 78.7, 74.3, 66.6, 59.8, 51.3, 40.2, 31.6, 24.8],
+      "30": [0, 78.4, 99.4, 96.3, 97.6, 99.6, 94.6, 88.5, 83.2, 78.4, 74.0, 66.3, 59.5, 51.1, 40.0, 31.5, 24.7],
+      "40": [0, 82.5, 99.1, 95.9, 97.2, 99.4, 94.0, 87.9, 82.6, 77.8, 73.5, 65.9, 59.1, 50.8, 39.8, 31.3, 24.5]
+    }
+  },
+  "profile_data": {
+    "field_sizes": [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40],
+    "depths": [3.0, 5.0, 10.0, 20.0, 30.0],
+    "reference_depth": 3.0,
+    "ssd": 100.0,
+    "values": {
+      "3": {
+        "3.0": [
+          {"position": -5.0, "value": 0.28},
+          {"position": -2.0, "value": 4.3},
+          {"position": -1.7, "value": 26.0},
+          {"position": -1.5, "value": 56.0},
+          {"position": -1.0, "value": 96.5},
+          {"position": -0.5, "value": 99.8},
+          {"position": 0.0, "value": 100.0},
+          {"position": 0.5, "value": 99.8},
+          {"position": 1.0, "value": 96.5},
+          {"position": 1.5, "value": 56.0},
+          {"position": 1.7, "value": 26.0},
+          {"position": 2.0, "value": 4.3},
+          {"position": 5.0, "value": 0.28}
+        ]
+      },
+      "10": {
+        "3.0": [
+          {"position": -25.0, "value": 0.17},
+          {"position": -10.0, "value": 0.9},
+          {"position": -6.0, "value": 3.8},
+          {"position": -5.5, "value": 25.0},
+          {"position": -5.0, "value": 55.0},
+          {"position": -4.5, "value": 85.0},
+          {"position": -3.0, "value": 98.8},
+          {"position": -2.0, "value": 99.8},
+          {"position": 0.0, "value": 100.0},
+          {"position": 2.0, "value": 99.8},
+          {"position": 3.0, "value": 98.8},
+          {"position": 4.5, "value": 85.0},
+          {"position": 5.0, "value": 55.0},
+          {"position": 5.5, "value": 25.0},
+          {"position": 6.0, "value": 3.8},
+          {"position": 10.0, "value": 0.9},
+          {"position": 25.0, "value": 0.17}
+        ],
+        "5.0": [
+          {"position": -25.0, "value": 0.25},
+          {"position": -10.0, "value": 1.2},
+          {"position": -6.0, "value": 4.3},
+          {"position": -5.5, "value": 27.0},
+          {"position": -5.0, "value": 57.0},
+          {"position": -4.5, "value": 87.0},
+          {"position": -3.0, "value": 99.0},
+          {"position": -2.0, "value": 99.9},
+          {"position": 0.0, "value": 100.0},
+          {"position": 2.0, "value": 99.9},
+          {"position": 3.0, "value": 99.0},
+          {"position": 4.5, "value": 87.0},
+          {"position": 5.0, "value": 57.0},
+          {"position": 5.5, "value": 27.0},
+          {"position": 6.0, "value": 4.3},
+          {"position": 10.0, "value": 1.2},
+          {"position": 25.0, "value": 0.25}
+        ],
+        "10.0": [
+          {"position": -25.0, "value": 0.35},
+          {"position": -10.0, "value": 1.6},
+          {"position": -6.0, "value": 4.9},
+          {"position": -5.5, "value": 29.0},
+          {"position": -5.0, "value": 59.0},
+          {"position": -4.5, "value": 89.0},
+          {"position": -3.0, "value": 99.2},
+          {"position": -2.0, "value": 99.9},
+          {"position": 0.0, "value": 100.0},
+          {"position": 2.0, "value": 99.9},
+          {"position": 3.0, "value": 99.2},
+          {"position": 4.5, "value": 89.0},
+          {"position": 5.0, "value": 59.0},
+          {"position": 5.5, "value": 29.0},
+          {"position": 6.0, "value": 4.9},
+          {"position": 10.0, "value": 1.6},
+          {"position": 25.0, "value": 0.35}
+        ]
+      }
+    }
+  },
+  "output_factors": {
+    "field_sizes": [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40],
+    "reference_field_size": 10,
+    "depth": 10.0,
+    "ssd": 100.0,
+    "values": {
+      "3": 0.891,
+      "4": 0.918,
+      "5": 0.938,
+      "6": 0.953,
+      "8": 0.982,
+      "10": 1.000,
+      "12": 1.014,
+      "15": 1.035,
+      "20": 1.060,
+      "25": 1.075,
+      "30": 1.085,
+      "40": 1.094
+    }
+  },
+  "energy_spectrum": {
+    "energy_bins": [0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+    "probabilities": [0.01, 0.02, 0.03, 0.06, 0.09, 0.12, 0.13, 0.12, 0.11, 0.09, 0.08, 0.06, 0.04, 0.02, 0.01, 0.01, 0.00]
+  },
+  "source_model": {
+    "primary_source_size": 0.13,
+    "secondary_source_size": 2.6,
+    "source_distance": 100.0,
+    "primary_source_fraction": 0.86,
+    "flattening_filter_thickness": 1.2
+  },
+  "transmission_data": {
+    "mlc": 0.017,
+    "jaws": 0.007,
+    "dosimetric_leaf_gap": 0.25
+  },
+  "metadata": {
+    "created": "2025-03-30",
+    "version": "1.0",
+    "description": "TrueBeam 15MV photon beam model with standard flattening filter",
+    "commissioned_by": "QuangTPS",
+    "measurement_equipment": "PTW MP3-XS water phantom, PTW 31010 Semiflex 0.125cc ionization chamber"
+  }
+} 

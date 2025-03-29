@@ -3,7 +3,7 @@ Name: quangtps
 Version: 1.0.0
 Summary: Hệ thống lập kế hoạch xạ trị mã nguồn mở
 Author: QuangTPS Developers
-Author-email: quangtps@example.com
+Author-email: quangmacdang@gmail.com
 License-File: LICENSE
 Requires-Dist: numpy>=1.20.0
 Requires-Dist: scipy>=1.7.0

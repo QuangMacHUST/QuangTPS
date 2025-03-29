@@ -15,6 +15,7 @@ import numpy as np
 import scipy.interpolate as interp
 from typing import Dict, List, Tuple, Any, Optional, Union
 from enum import Enum, auto
+import json
 
 from quangtps.core.exceptions import DataProcessingError
 from quangtps.dose.dose_grid import DoseGrid

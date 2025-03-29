@@ -6,34 +6,77 @@ including various modules for plan management, beam setup, optimization, evaluat
 dose visualization, plan comparison, templates, and prescriptions.
 """
 
-from quangtps.planning.plan import (
-    Plan, PlanStatus, PlanType
-)
+# Import basic enums and types first to avoid circular imports
 from quangtps.planning.beam import (
-    BeamSetup, BeamArrangement, BeamModifierType
+    BeamModifierType, BeamArrangementType, BeamSetup, BeamArrangement
 )
+
 from quangtps.planning.optimization import (
-    OptimizationSettings, OptimizationType, OptimizationAlgorithm,
-    OptimizationObjective, OptimizationObjectiveType,
-    OptimizationConstraint, OptimizationConstraintType
+    OptimizationType, OptimizationAlgorithm,
+    OptimizationObjectiveType, OptimizationConstraintType
 )
+
 from quangtps.planning.evaluation import (
-    PlanEvaluation, DVHAnalysis, DVHType, PlanQualityMetrics
+    DVHType
 )
+
+from quangtps.planning.templates import (
+    TemplateCategory, TemplateType, TemplateSorting
+)
+
+from quangtps.planning.dose_visualization import (
+    DoseColormap, DoseDisplayMode
+)
+
+from quangtps.planning.prescription import (
+    PrescriptionStatus
+)
+
+# Then import classes to minimize circular imports
+from quangtps.planning.plan import (
+    PlanStatus, PlanType
+)
+
+from quangtps.planning.comparison import (
+    ComparisonMetricType
+)
+
+# Import classes that might be involved in circular imports
+from quangtps.planning.optimization import (
+    OptimizationSettings, OptimizationObjective, OptimizationConstraint
+)
+
+from quangtps.planning.evaluation import (
+    PlanEvaluation, DVHAnalysis, PlanQualityMetrics
+)
+
 from quangtps.planning.templates import (
     PlanTemplate, BeamTemplate, ProtocolTemplate
 )
+
 from quangtps.planning.prescription import (
-    Prescription, PrescriptionStatus, StructurePrescription
+    Prescription, StructurePrescription
 )
+
+from quangtps.planning.beam import (
+    BeamSetup
+)
+
 from quangtps.planning.comparison import (
-    PlanComparison, ComparisonResult, ComparisonMetricType
+    PlanComparison, ComparisonResult
 )
+
 from quangtps.planning.template_manager import (
-    TemplateManager, TemplateCategory, TemplateType, TemplateSorting
+    TemplateManager
 )
+
 from quangtps.planning.dose_visualization import (
-    DoseDisplay, DoseColormap, DoseDisplayMode
+    DoseDisplay
+)
+
+# Finally import Plan class
+from quangtps.planning.plan import (
+    Plan
 )
 
 __all__ = [

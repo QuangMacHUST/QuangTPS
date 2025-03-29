@@ -62,6 +62,12 @@ from quangtps.segmentation.validation.metrics import SegmentationMetrics, calcul
 from quangtps.segmentation.validation.validator import SegmentationValidator
 from quangtps.segmentation.validation.refinement import SegmentationRefinement
 
+# Import deep learning segmentation and model management components
+from quangtps.segmentation.deep_learning_segmentation import SegmentationModel, segment_patient
+from quangtps.segmentation.model_downloader import ensure_default_models, download_model, get_available_remote_models
+from quangtps.segmentation.auto.engine import AutoSegmentationEngine
+from quangtps.segmentation.auto.model_repository import ModelRepository
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -119,5 +125,14 @@ __all__ = [
     'SegmentationMetrics',
     'calculate_comprehensive_metrics',
     'SegmentationValidator',
-    'SegmentationRefinement'
+    'SegmentationRefinement',
+    
+    # Deep learning segmentation components
+    'SegmentationModel',
+    'segment_patient',
+    'ensure_default_models',
+    'download_model',
+    'get_available_remote_models',
+    'AutoSegmentationEngine',
+    'ModelRepository'
 ]

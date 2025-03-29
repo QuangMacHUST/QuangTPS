@@ -14,8 +14,8 @@ from typing import List, Dict, Tuple, Optional, Union, Any
 from enum import Enum, auto
 from dataclasses import dataclass
 
-from ...core.types import Image, Structure
-from ...core.exceptions import RegistrationError
+from quangtps.core.types import Image, Structure
+from quangtps.core.exceptions import RegistrationError
 
 logger = logging.getLogger(__name__)
 

@@ -22,6 +22,36 @@ from quangtps.planning.optimization import OptimizationObjectiveType, Optimizati
 logger = logging.getLogger(__name__)
 
 
+class TemplateCategory(str, Enum):
+    """Enum cho các danh mục mẫu."""
+    PLAN = "Plan"
+    BEAM = "Beam"
+    PROTOCOL = "Protocol"
+    OPTIMIZATION = "Optimization"
+    DOSE = "Dose"
+    CUSTOM = "Custom"
+
+
+class TemplateType(str, Enum):
+    """Enum cho các loại mẫu."""
+    CLINICAL = "Clinical"
+    RESEARCH = "Research"
+    GENERAL = "General"
+    SPECIFIC = "Specific"
+    USER = "User"
+    SYSTEM = "System"
+
+
+class TemplateSorting(str, Enum):
+    """Enum cho các kiểu sắp xếp mẫu."""
+    NAME = "Name"
+    DATE = "Date"
+    SITE = "Site"
+    TYPE = "Type"
+    CATEGORY = "Category"
+    FREQUENCY = "Frequency"
+
+
 class PlanTemplate:
     """
     Lớp mẫu kế hoạch xạ trị.

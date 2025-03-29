@@ -15,12 +15,12 @@ class AdaptiveStrategy(Enum):
     PLAN_LIBRARY = auto()       # Sử dụng thư viện kế hoạch đã chuẩn bị trước
     DOSE_TRACKING = auto()      # Theo dõi liều tích lũy và điều chỉnh nếu cần
 
-from .adaptive_planning import AdaptivePlanner, PlanAdaptationSession
-from .dose_accumulation import DoseAccumulator, AccumulatedDose
-from .deformation import DeformableRegistration, RigidRegistration
-from .four_d import FourDHandler, RespiratoryMotionModel
-from .setup_error import SetupErrorEstimator, SetupCorrectionStrategy
-from .temporal_analysis import TemporalChangeDetector, AnatomicalChangeMetrics
+from quangtps.adaptive.adaptive_planning import AdaptivePlanner, PlanAdaptationSession
+from quangtps.adaptive.dose_accumulation import DoseAccumulator, AccumulatedDose
+from quangtps.adaptive.deformation import DeformableRegistration, RigidRegistration
+from quangtps.adaptive.four_d import FourDHandler, RespiratoryMotionModel
+from quangtps.adaptive.setup_error import SetupErrorEstimator, SetupCorrectionStrategy
+from quangtps.adaptive.temporal_analysis import TemporalChangeDetector, AnatomicalChangeMetrics
 
 __all__ = [
     'AdaptiveStrategy',

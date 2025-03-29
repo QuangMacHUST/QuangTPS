@@ -1,0 +1,4 @@
+2025-03-29 07:14:22,453 - QuangTPS - INFO - Starting QuangTPS. Log file: E:\hoctap\QuangTPS\logs\quangtps_20250329_071422.log
+2025-03-29 07:14:24,707 - QuangTPS - INFO - Starting QuangTPS GUI
+2025-03-29 07:14:40,272 - quangtps.ui.main_window - WARNING - PlanningTab not available, features will be limited
+2025-03-29 07:14:43,141 - QuangTPS - ERROR - Error starting GUI: MainWindow.__init__() got an unexpected keyword argument 'demo_mode'

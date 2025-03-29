@@ -1,0 +1,3 @@
+2025-03-29 18:01:51,652 - QuangTPS - INFO - Starting QuangTPS. Log file: E:\hoctap\QuangTPS\logs\quangtps_20250329_180151.log
+2025-03-29 18:01:56,861 - QuangTPS - INFO - Starting QuangTPS in console mode
+2025-03-29 18:01:56,862 - QuangTPS - ERROR - Error starting console mode: No module named 'quangtps.console'

@@ -1,27 +1,92 @@
-"""
-Module hiển thị và vẽ biểu đồ DVH (Dose Volume Histogram) cho đánh giá kế hoạch xạ trị.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-Module này cung cấp các hàm vẽ biểu đồ DVH, so sánh nhiều DVH, và các 
-chức năng trực quan hóa khác để đánh giá kế hoạch xạ trị phóng xạ.
+"""
+Module for visualizing DVH (Dose-Volume Histogram) data.
 """
 
-import numpy as np
+import os
 import logging
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable
-import pandas as pd
+from typing import Dict, List, Tuple, Optional, Any, Union
+import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-import os
-from pathlib import Path
-import io
-import base64
+import matplotlib.cm as cmx
+import matplotlib.colors as mcolors
+import pandas as pd
 
-from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh, calculate_dvh_metrics
-from quangtps.evaluation.dvh.dvh_analysis import DVHAnalysis
+from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh_metrics, _get_dose_at_volume, _get_volume_at_dose
 
 logger = logging.getLogger(__name__)
+
+# Ensure we have all cm colormap members we need
+if not hasattr(plt.cm, 'tab10'):
+    # Create a viridis-like colormap with 10 discrete colors
+    cmap = plt.cm.get_cmap('viridis', 10)
+    plt.cm.tab10 = cmap
+
+if not hasattr(plt.cm, 'viridis'):
+    # Fallback to another colormap if viridis is not available
+    plt.cm.viridis = plt.cm.jet
+
+def get_structure_color(structure_name: str) -> str:
+    """
+    Get a consistent color for a structure based on its name.
+    
+    Parameters
+    ----------
+    structure_name : str
+        Name of the structure
+        
+    Returns
+    -------
+    str
+        Hex color string
+    """
+    # Define common structure name prefixes and their colors
+    color_map = {
+        'ptv': '#ff0000',        # Red
+        'ctv': '#ff9999',        # Light red
+        'gtv': '#ff6600',        # Orange
+        'lung': '#99ccff',       # Light blue
+        'heart': '#ff66cc',      # Pink
+        'spinal': '#ffcc00',     # Yellow
+        'cord': '#ffcc00',       # Yellow
+        'esophagus': '#cc99ff',  # Purple
+        'liver': '#996633',      # Brown
+        'kidney': '#66cccc',     # Teal
+        'bowel': '#cc9966',      # Light brown
+        'brain': '#ffff99',      # Light yellow
+        'stem': '#ff9900',       # Dark orange
+        'body': '#aaaaaa',       # Gray
+        'external': '#aaaaaa',   # Gray
+        'skin': '#ffcc99',       # Peach
+        'bone': '#dddddd',       # Light gray
+        'bladder': '#99cccc',    # Light teal
+        'rectum': '#cc6666',     # Dark pink
+        'prostate': '#6666ff',   # Blue
+        'breast': '#ff99cc',     # Light pink
+        'eye': '#99ffff',        # Light cyan
+        'lens': '#66ffff',       # Cyan
+        'optic': '#ffff66',      # Light yellow
+        'parotid': '#cc66cc',    # Magenta
+        'thyroid': '#99ff99',    # Light green
+        'larynx': '#66ff66',     # Green
+    }
+    
+    # Try to find a matching prefix
+    lower_name = structure_name.lower()
+    for prefix, color in color_map.items():
+        if prefix in lower_name:
+            return color
+    
+    # Generate a color based on hash of the name
+    hash_value = hash(structure_name) % 10
+    cmap = plt.cm.tab10
+    rgba = cmap(hash_value)
+    return mcolors.rgb2hex(rgba[:3])
 
 def plot_dvh(
     dvh_data: Dict[str, Any],
@@ -41,140 +106,153 @@ def plot_dvh(
     label: Optional[str] = None
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
-    Vẽ biểu đồ DVH từ dữ liệu DVH.
+    Plot DVH (Dose-Volume Histogram) data for a specific structure.
     
-    Parameters:
-        dvh_data (Dict[str, Any]): Dữ liệu DVH từ hàm calculate_dvh
-        structure_name (str, optional): Tên cấu trúc
-        dvh_type (str, optional): Loại DVH: 'cumulative' hoặc 'differential'
-        ax (plt.Axes, optional): Matplotlib axes để vẽ, nếu None thì tạo mới
-        color (str, optional): Màu sắc đường biểu đồ
-        linestyle (str, optional): Kiểu đường biểu đồ
-        linewidth (float, optional): Độ dày đường biểu đồ
-        marker (str, optional): Marker cho đường biểu đồ
-        normalize_dose (bool, optional): Chuẩn hóa liều theo prescription_dose
-        prescription_dose (float, optional): Liều kê đơn, cần thiết nếu normalize_dose=True
-        show_metrics (bool, optional): Hiển thị chỉ số DVH trên biểu đồ
-        metrics_to_show (List[str], optional): Danh sách chỉ số cần hiển thị
-        alpha (float, optional): Độ trong suốt của đường
-        zorder (int, optional): Thứ tự vẽ
-        label (str, optional): Nhãn cho biểu đồ, nếu None thì sử dụng structure_name
+    Parameters
+    ----------
+    dvh_data : Dict[str, Any]
+        Dictionary containing DVH data with structure names as keys
+    structure_name : str, optional
+        Name of the structure to plot, if None, all structures are plotted
+    dvh_type : str, optional
+        Type of DVH to plot, 'cumulative' or 'differential'
+    ax : plt.Axes, optional
+        Axes to plot on, if None, a new figure is created
+    color : str, optional
+        Line color, if None, a color is chosen automatically
+    linestyle : str, optional
+        Line style
+    linewidth : float, optional
+        Line width
+    marker : str, optional
+        Marker style
+    normalize_dose : bool, optional
+        Whether to normalize dose to prescription dose
+    prescription_dose : float, optional
+        Prescription dose in Gy
+    show_metrics : bool, optional
+        Whether to show DVH metrics as text in the plot
+    metrics_to_show : List[str], optional
+        List of metrics to show
+    alpha : float, optional
+        Line opacity
+    zorder : int, optional
+        Z-order for plotting
+    label : str, optional
+        Label for the legend
         
-    Returns:
-        Tuple[plt.Figure, plt.Axes]: Đối tượng Figure và Axes của biểu đồ
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        Figure and axes objects
     """
-    # Kiểm tra kiểu DVH
-    if dvh_type not in ['cumulative', 'differential']:
-        raise ValueError(f"Unsupported DVH type: {dvh_type}")
-    
-    # Tạo axes mới nếu không được cung cấp
+    # Create figure and axes if not provided
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
     else:
         fig = ax.figure
     
-    # Lấy dữ liệu DVH
-    if dvh_type == 'cumulative':
-        dvh_values = dvh_data['cumulative']
+    # Check if we're plotting a single structure or all
+    if structure_name is not None:
+        if structure_name not in dvh_data:
+            logger.warning(f"Structure '{structure_name}' not found in DVH data.")
+            return fig, ax
+        
+        structures_to_plot = [structure_name]
     else:
-        dvh_values = dvh_data['differential']
+        structures_to_plot = list(dvh_data.keys())
     
-    dose_bins = dvh_data['dose_bins']
-    dose_unit = dvh_data['dose_unit']
-    volume_type = dvh_data['volume_type']
+    # Plot each structure
+    for i, struct_name in enumerate(structures_to_plot):
+        struct_data = dvh_data[struct_name]
+        
+        # Get dose and volume data
+        dose_bins = struct_data['dose_bins']
+        if dvh_type.lower() == 'cumulative':
+            volume_bins = struct_data['cumulative_volume']
+        else:
+            volume_bins = struct_data['differential_volume']
+        
+        # Normalize dose if requested
+        if normalize_dose and prescription_dose is not None and prescription_dose > 0:
+            dose_bins = dose_bins / prescription_dose * 100
+        
+        # Get color if not provided
+        if color is None:
+            c = get_structure_color(struct_name)
+        else:
+            c = color
+        
+        # Get label if not provided
+        if label is None:
+            l = struct_name
+        else:
+            l = label
+        
+        # Plot the DVH
+        ax.plot(
+            dose_bins, 
+            volume_bins, 
+            linestyle=linestyle, 
+            linewidth=linewidth, 
+            marker=marker, 
+            color=c, 
+            alpha=alpha, 
+            zorder=zorder, 
+            label=l
+        )
+        
+        # Show metrics if requested
+        if show_metrics and metrics_to_show:
+            metrics = calculate_dvh_metrics(struct_data, metrics_to_show, prescription_dose)
+            metric_text = []
+            
+            for metric, value in metrics.items():
+                # Format the value depending on its type
+                if metric.startswith('D'):
+                    metric_text.append(f"{metric}: {value:.1f} Gy")
+                elif metric.startswith('V'):
+                    metric_text.append(f"{metric}: {value:.1f}%")
+                else:
+                    metric_text.append(f"{metric}: {value:.1f}")
+            
+            # Position the text at top right
+            text_x = 0.95 * ax.get_xlim()[1]
+            text_y = 0.95 * ax.get_ylim()[1]
+            
+            ax.text(
+                text_x, text_y, 
+                '\n'.join(metric_text),
+                horizontalalignment='right',
+                verticalalignment='top',
+                bbox=dict(facecolor='white', alpha=0.7),
+                color=c if c else 'black',
+                fontsize=8
+            )
     
-    # Chuẩn hóa liều nếu cần
-    if normalize_dose and prescription_dose is not None and prescription_dose > 0:
-        dose_bins = dose_bins / prescription_dose * 100
-        dose_unit = '%'
-    
-    # Xác định nhãn
-    if label is None:
-        label = structure_name if structure_name else "Structure"
-    
-    # Vẽ biểu đồ
-    ax.plot(
-        dose_bins, dvh_values, 
-        color=color, linestyle=linestyle, linewidth=linewidth, 
-        marker=marker, alpha=alpha, zorder=zorder,
-        label=label
-    )
-    
-    # Hiển thị chỉ số DVH nếu cần
-    if show_metrics and metrics_to_show:
-        analyzer = DVHAnalysis(dvh_data, structure_name)
-        for metric in metrics_to_show:
-            if metric.startswith('D'):
-                try:
-                    volume_percent = float(metric[1:])
-                    dose_value = analyzer.get_dx(volume_percent)
-                    
-                    # Chuẩn hóa liều nếu cần
-                    if normalize_dose and prescription_dose is not None and prescription_dose > 0:
-                        dose_value = dose_value / prescription_dose * 100
-                    
-                    # Thêm điểm đánh dấu
-                    ax.plot(dose_value, volume_percent, 'o', color=color)
-                    
-                    # Thêm chú thích
-                    ax.annotate(
-                        f"{metric}={dose_value:.1f}{dose_unit}",
-                        xy=(dose_value, volume_percent),
-                        xytext=(5, 5), textcoords='offset points',
-                        color=color, fontsize=8
-                    )
-                except:
-                    pass
-            elif metric.startswith('V') and prescription_dose is not None:
-                try:
-                    dose_percent = float(metric[1:])
-                    target_dose = prescription_dose * dose_percent / 100
-                    
-                    # Chuẩn hóa liều nếu cần
-                    if normalize_dose:
-                        target_dose_norm = dose_percent
-                    else:
-                        target_dose_norm = target_dose
-                    
-                    volume_value = analyzer.get_vx(target_dose)
-                    
-                    # Thêm điểm đánh dấu
-                    ax.plot(target_dose_norm, volume_value, 'o', color=color)
-                    
-                    # Thêm chú thích
-                    ax.annotate(
-                        f"{metric}={volume_value:.1f}%",
-                        xy=(target_dose_norm, volume_value),
-                        xytext=(5, 5), textcoords='offset points',
-                        color=color, fontsize=8
-                    )
-                except:
-                    pass
-    
-    # Đặt nhãn và tiêu đề
-    if dvh_type == 'cumulative':
-        ax.set_ylabel(f"Volume {'(%)' if volume_type == 'relative' else '(cc)'}")
-        ax.set_title(f"Cumulative Dose Volume Histogram")
+    # Set labels and grid
+    if normalize_dose:
+        ax.set_xlabel('Dose (% of prescription)')
     else:
-        ax.set_ylabel(f"Differential Volume {'(%)' if volume_type == 'relative' else '(cc)'}")
-        ax.set_title(f"Differential Dose Volume Histogram")
+        ax.set_xlabel('Dose (Gy)')
+        
+    ax.set_ylabel('Volume (%)')
     
-    ax.set_xlabel(f"Dose ({dose_unit})")
+    if dvh_type.lower() == 'cumulative':
+        ax.set_title('Cumulative Dose-Volume Histogram')
+    else:
+        ax.set_title('Differential Dose-Volume Histogram')
     
-    # Đảo ngược trục y cho DVH tích lũy
-    if dvh_type == 'cumulative':
-        ax.invert_yaxis()
+    # Set limits
+    ax.set_ylim(0, 105)
+    ax.set_xlim(0, None)
     
-    # Thêm lưới
+    # Add grid
     ax.grid(True, linestyle='--', alpha=0.7)
     
-    # Đặt giới hạn
-    ax.set_xlim(0, np.max(dose_bins) * 1.05)
-    
-    if dvh_type == 'cumulative':
-        ax.set_ylim(0, 105 if volume_type == 'relative' else np.max(dvh_values) * 1.05)
-    else:
-        ax.set_ylim(0, np.max(dvh_values) * 1.05)
+    # Add legend
+    if len(structures_to_plot) > 1 or label is not None:
+        ax.legend(loc='best')
     
     return fig, ax
 
@@ -199,106 +277,111 @@ def plot_multiple_dvh(
     format: str = 'png'
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
-    Vẽ và so sánh nhiều DVH trên cùng một biểu đồ.
+    Plot multiple DVHs for comparison.
     
-    Parameters:
-        dvh_list (List[Dict[str, Any]]): Danh sách các DVH
-        structure_names (List[str], optional): Danh sách tên cấu trúc
-        structure_colors (Dict[str, str], optional): Dict màu sắc cho từng cấu trúc
-        plan_names (List[str], optional): Danh sách tên kế hoạch
-        plan_linestyles (Dict[str, str], optional): Dict kiểu đường cho từng kế hoạch
-        dvh_type (str, optional): Loại DVH: 'cumulative' hoặc 'differential'
-        figsize (Tuple[int, int], optional): Kích thước biểu đồ
-        normalize_dose (bool, optional): Chuẩn hóa liều theo prescription_dose
-        prescription_dose (float, optional): Liều kê đơn, cần thiết nếu normalize_dose=True
-        show_grid (bool, optional): Hiển thị lưới
-        show_legend (bool, optional): Hiển thị legend
-        title (str, optional): Tiêu đề biểu đồ
-        legend_loc (str, optional): Vị trí legend
-        legend_ncol (int, optional): Số cột legend
-        legend_fontsize (int, optional): Kích thước font legend
-        save_path (str, optional): Đường dẫn lưu biểu đồ
-        dpi (int, optional): DPI khi lưu biểu đồ
-        format (str, optional): Định dạng lưu biểu đồ
+    Parameters
+    ----------
+    dvh_list : List[Dict[str, Any]]
+        List of DVH data dictionaries
+    structure_names : List[str], optional
+        List of structure names to plot
+    structure_colors : Dict[str, str], optional
+        Mapping of structure names to colors
+    plan_names : List[str], optional
+        List of plan names for labeling
+    plan_linestyles : Dict[str, str], optional
+        Mapping of plan names to line styles
+    dvh_type : str, optional
+        Type of DVH to plot, 'cumulative' or 'differential'
+    figsize : Tuple[int, int], optional
+        Figure size
+    normalize_dose : bool, optional
+        Whether to normalize dose to prescription dose
+    prescription_dose : float, optional
+        Prescription dose in Gy
+    show_grid : bool, optional
+        Whether to show grid
+    show_legend : bool, optional
+        Whether to show legend
+    title : str, optional
+        Plot title
+    legend_loc : str, optional
+        Legend location
+    legend_ncol : int, optional
+        Number of columns in legend
+    legend_fontsize : int, optional
+        Legend font size
+    save_path : str, optional
+        Path to save the figure
+    dpi : int, optional
+        DPI for saved figure
+    format : str, optional
+        Format for saved figure
         
-    Returns:
-        Tuple[plt.Figure, plt.Axes]: Đối tượng Figure và Axes của biểu đồ
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        Figure and axes objects
     """
-    # Kiểm tra dữ liệu đầu vào
-    if not dvh_list:
-        raise ValueError("Empty dvh_list provided")
-    
-    # Nếu structure_names không được cung cấp, mặc định là ["Structure 1", "Structure 2", ...]
-    if structure_names is None:
-        structure_names = [f"Structure {i+1}" for i in range(len(dvh_list))]
-    
-    # Nếu plan_names không được cung cấp, mặc định là ["Plan 1"]
-    if plan_names is None:
-        plan_names = ["Plan 1"]
-    
-    # Tạo color map nếu chưa được cung cấp
-    if structure_colors is None:
-        colors = plt.cm.tab10.colors  # Sử dụng tab10 colormap
-        structure_colors = {name: colors[i % len(colors)] for i, name in enumerate(structure_names)}
-    
-    # Tạo linestyle map nếu chưa được cung cấp
-    if plan_linestyles is None:
-        linestyles = ['-', '--', ':', '-.']
-        plan_linestyles = {name: linestyles[i % len(linestyles)] for i, name in enumerate(plan_names)}
-    
-    # Tạo figure và axes
+    # Create figure
     fig, ax = plt.subplots(figsize=figsize)
     
-    # Vẽ từng DVH
+    # If no structure names are provided, use all structures from the first DVH
+    if structure_names is None and dvh_list:
+        structure_names = list(dvh_list[0].keys())
+    
+    # Create color map if not provided
+    if structure_colors is None:
+        colors = plt.cm.tab10.colors
+        structure_colors = {name: colors[i % len(colors)] for i, name in enumerate(structure_names)}
+    
+    # Create line style map if not provided
+    if plan_linestyles is None:
+        styles = ['-', '--', ':', '-.', (0, (3, 1, 1, 1)), (0, (5, 1)), (0, (3, 1, 1, 1, 1, 1))]
+        plan_linestyles = {name: styles[i % len(styles)] for i, name in enumerate(plan_names)} if plan_names else {0: '-'}
+    
+    # Plot each DVH
     for i, dvh_data in enumerate(dvh_list):
-        if i < len(structure_names):
-            structure_name = structure_names[i]
-        else:
-            structure_name = f"Structure {i+1}"
+        plan_name = plan_names[i] if plan_names and i < len(plan_names) else f"Plan {i+1}"
+        linestyle = plan_linestyles.get(plan_name, '-')
         
-        # Xác định màu và kiểu đường
-        color = structure_colors.get(structure_name, f"C{i}")
-        
-        # Xác định plan_name
-        if len(plan_names) > 1 and i < len(dvh_list) // len(structure_names):
-            plan_index = i // len(structure_names)
-            plan_name = plan_names[plan_index]
-            linestyle = plan_linestyles.get(plan_name, '-')
-            label = f"{structure_name} - {plan_name}"
-        else:
-            linestyle = '-'
-            label = structure_name
-        
-        # Vẽ DVH
-        plot_dvh(
-            dvh_data=dvh_data,
-            structure_name=structure_name,
-            dvh_type=dvh_type,
-            ax=ax,
-            color=color,
-            linestyle=linestyle,
-            normalize_dose=normalize_dose,
-            prescription_dose=prescription_dose,
-            label=label
-        )
+        for structure_name in structure_names:
+            if structure_name in dvh_data:
+                color = structure_colors.get(structure_name, 'black')
+                label = f"{structure_name} ({plan_name})" if plan_names else structure_name
+                
+                plot_dvh(
+                    dvh_data={structure_name: dvh_data[structure_name]},
+                    structure_name=structure_name,
+                    dvh_type=dvh_type,
+                    ax=ax,
+                    color=color,
+                    linestyle=linestyle,
+                    normalize_dose=normalize_dose,
+                    prescription_dose=prescription_dose,
+                    label=label,
+                    alpha=0.8
+                )
     
-    # Hiển thị grid nếu cần
-    ax.grid(show_grid, linestyle='--', alpha=0.7)
-    
-    # Đặt tiêu đề
+    # Set title
     if title:
         ax.set_title(title)
     
-    # Hiển thị legend nếu cần
+    # Show grid
+    if show_grid:
+        ax.grid(True, linestyle='--', alpha=0.7)
+    
+    # Show legend
     if show_legend:
-        ax.legend(loc=legend_loc, fontsize=legend_fontsize, ncol=legend_ncol)
+        ax.legend(loc=legend_loc, ncol=legend_ncol, fontsize=legend_fontsize)
     
-    # Điều chỉnh layout
-    plt.tight_layout()
-    
-    # Lưu biểu đồ nếu cần
+    # Save figure if path is provided
     if save_path:
-        plt.savefig(save_path, dpi=dpi, format=format, bbox_inches='tight')
+        try:
+            fig.savefig(save_path, dpi=dpi, format=format, bbox_inches='tight')
+            logger.info(f"DVH plot saved to {save_path}")
+        except Exception as e:
+            logger.error(f"Error saving DVH plot: {e}")
     
     return fig, ax
 
@@ -315,138 +398,178 @@ def create_dvh_report(
     show_statistics: bool = True
 ) -> Dict[str, Any]:
     """
-    Tạo báo cáo đầy đủ về DVH, bao gồm biểu đồ và bảng thống kê.
+    Create a comprehensive DVH report.
     
-    Parameters:
-        dvh_list (List[Dict[str, Any]]): Danh sách các DVH
-        structure_names (List[str]): Danh sách tên cấu trúc
-        plan_names (List[str], optional): Danh sách tên kế hoạch
-        prescription_doses (Dict[str, float], optional): Dict liều kê đơn cho từng cấu trúc
-        structure_types (Dict[str, str], optional): Dict loại cấu trúc ('target' hoặc 'oar')
-        metrics (List[str], optional): Danh sách chỉ số cần tính
-        output_path (str, optional): Đường dẫn lưu báo cáo
-        figsize (Tuple[int, int], optional): Kích thước biểu đồ
-        plot_differential (bool, optional): Vẽ thêm DVH vi phân
-        show_statistics (bool, optional): Hiển thị bảng thống kê
+    Parameters
+    ----------
+    dvh_list : List[Dict[str, Any]]
+        List of DVH data dictionaries
+    structure_names : List[str]
+        List of structure names to include in the report
+    plan_names : List[str], optional
+        List of plan names for labeling
+    prescription_doses : Dict[str, float], optional
+        Mapping of structure names to prescription doses
+    structure_types : Dict[str, str], optional
+        Mapping of structure names to types (PTV, OAR, etc.)
+    metrics : List[str], optional
+        List of metrics to include in statistics table
+    output_path : str, optional
+        Path to save the report
+    figsize : Tuple[int, int], optional
+        Figure size
+    plot_differential : bool, optional
+        Whether to include differential DVH
+    show_statistics : bool, optional
+        Whether to include statistics table
         
-    Returns:
-        Dict[str, Any]: Báo cáo dưới dạng dict
+    Returns
+    -------
+    Dict[str, Any]
+        Report data including figures and statistics
     """
-    # Kiểm tra dữ liệu đầu vào
-    if not dvh_list or not structure_names:
-        raise ValueError("Empty dvh_list or structure_names provided")
+    report = {}
     
-    # Nếu plan_names không được cung cấp, mặc định là ["Plan 1"]
-    if plan_names is None:
-        plan_names = ["Plan 1"]
+    # Create figure with subplots based on options
+    n_plots = 1 + (1 if plot_differential else 0) + (1 if show_statistics else 0)
+    fig = plt.figure(figsize=figsize)
+    gs = plt.GridSpec(n_plots, 1, height_ratios=[3] * (n_plots-1 if show_statistics else n_plots) + [2] if show_statistics else None)
     
-    # Tạo báo cáo
-    report = {
-        'figures': {},
-        'statistics': {},
-        'metrics': {}
-    }
-    
-    # Tạo color map
+    # Create color map
     colors = plt.cm.tab10.colors
     structure_colors = {name: colors[i % len(colors)] for i, name in enumerate(structure_names)}
     
-    # Xác định metrics mặc định nếu không được cung cấp
+    # Define default metrics if not provided
     if metrics is None:
-        metrics = ['D98', 'D95', 'D50', 'D2', 'mean_dose', 'max_dose', 'min_dose']
-        if prescription_doses:
-            metrics.extend(['V95', 'V100', 'V105', 'V110'])
+        metrics = [
+            'D2', 'D5', 'D50', 'D95', 'D98', 
+            'V5', 'V10', 'V20', 'V30', 'V40', 'V50', 'Dmean', 'Dmax'
+        ]
     
-    # Tạo figure
-    n_plots = 1 + int(plot_differential)
-    fig = plt.figure(figsize=figsize)
-    gs = gridspec.GridSpec(n_plots, 1, figure=fig, height_ratios=[1] * n_plots)
-    
-    # Vẽ DVH tích lũy
-    ax_cum = fig.add_subplot(gs[0])
-    plot_multiple_dvh(
+    fig_cum = fig.add_subplot(gs[0])
+    fig_cum = plot_multiple_dvh(
         dvh_list=dvh_list,
         structure_names=structure_names,
         structure_colors=structure_colors,
         plan_names=plan_names,
         dvh_type='cumulative',
-        ax=ax_cum,
-        title="Cumulative Dose Volume Histogram"
-    )
+        title="Cumulative Dose Volume Histogram",
+        figsize=None,  # Use the figure's size
+    )[1]  # Get the axes
+
+    plot_idx = 1
     
-    # Vẽ DVH vi phân nếu cần
+    # Plot differential DVH if requested
     if plot_differential:
-        ax_diff = fig.add_subplot(gs[1])
-        plot_multiple_dvh(
+        fig_diff = fig.add_subplot(gs[plot_idx])
+        fig_diff = plot_multiple_dvh(
             dvh_list=dvh_list,
             structure_names=structure_names,
             structure_colors=structure_colors,
             plan_names=plan_names,
             dvh_type='differential',
-            ax=ax_diff,
-            title="Differential Dose Volume Histogram"
-        )
+            title="Differential Dose Volume Histogram",
+            figsize=None,  # Use the figure's size
+        )[1]  # Get the axes
+        
+        plot_idx += 1
     
-    # Thêm hình vào báo cáo
-    if output_path:
-        # Lưu biểu đồ
-        fig_path = os.path.join(output_path, "dvh_plot.png")
-        fig.savefig(fig_path, dpi=300, bbox_inches='tight')
-        report['figures']['path'] = fig_path
-    
-    # Chuyển đổi figure thành chuỗi base64 để nhúng vào HTML
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
-    buf.seek(0)
-    img_str = base64.b64encode(buf.read()).decode('ascii')
-    report['figures']['base64'] = img_str
-    
-    # Tính toán thống kê
+    # Add statistics table if requested
     if show_statistics:
-        stats_by_structure = {}
+        ax_stats = fig.add_subplot(gs[plot_idx])
+        ax_stats.axis('tight')
+        ax_stats.axis('off')
         
-        for i, structure_name in enumerate(structure_names):
-            stats_by_structure[structure_name] = {}
+        # Prepare data for table
+        table_data = []
+        table_colors = []
+        
+        for struct in structure_names:
+            row = [struct]
+            row_colors = ['white']
             
-            for j, plan_name in enumerate(plan_names):
-                # Tính chỉ số index trong dvh_list
-                idx = i if len(plan_names) == 1 else i + j * len(structure_names)
-                
-                if idx < len(dvh_list):
-                    dvh_data = dvh_list[idx]
+            for i, dvh in enumerate(dvh_list):
+                if struct in dvh:
+                    metric_values = calculate_dvh_metrics(
+                        dvh[struct], 
+                        metrics_list=metrics,
+                        rx_dose=prescription_doses.get(struct) if prescription_doses else None
+                    )
                     
-                    # Tính chỉ số DVH
-                    rx_dose = None
-                    if prescription_doses and structure_name in prescription_doses:
-                        rx_dose = prescription_doses[structure_name]
-                    
-                    metrics_results = calculate_dvh_metrics(dvh_data, metrics, rx_dose)
-                    
-                    # Thêm chỉ số homogeneity và conformity cho target
-                    if structure_types and structure_name in structure_types and structure_types[structure_name] == 'target' and rx_dose:
-                        analyzer = DVHAnalysis(dvh_data, structure_name)
-                        
-                        # Tính HI
-                        hi = analyzer.get_homogeneity_index(rx_dose, method='icru83')
-                        metrics_results['HI'] = hi
-                        
-                        # Tính CI
-                        ci = analyzer.get_conformity_index(rx_dose, method='paddick')
-                        metrics_results['CI'] = ci
-                    
-                    stats_by_structure[structure_name][plan_name] = metrics_results
+                    for metric in metrics:
+                        if metric in metric_values:
+                            value = metric_values[metric]
+                            
+                            # Format based on metric type
+                            if isinstance(value, (int, float)):
+                                if 'V' in metric:
+                                    row.append(f"{value:.1f}%")
+                                else:
+                                    row.append(f"{value:.1f} Gy")
+                            else:
+                                row.append(str(value))
+                            
+                            # Set cell color based on structure type
+                            if structure_types and struct in structure_types:
+                                if 'PTV' in structure_types[struct].upper():
+                                    row_colors.append('#ffcccc')  # Light red
+                                elif 'OAR' in structure_types[struct].upper():
+                                    row_colors.append('#ccffcc')  # Light green
+                                else:
+                                    row_colors.append('white')
+                            else:
+                                row_colors.append('white')
+                        else:
+                            row.append('-')
+                            row_colors.append('white')
+                else:
+                    for _ in metrics:
+                        row.append('-')
+                        row_colors.append('white')
+            
+            table_data.append(row)
+            table_colors.append(row_colors)
         
-        report['statistics'] = stats_by_structure
+        # Create column headers
+        headers = ['Structure']
+        cell_colors = [['#e6e6e6']]  # Header color
         
-        # Tạo DataFrame để hiển thị
-        stats_df = pd.DataFrame()
+        for i, dvh in enumerate(dvh_list):
+            plan_name = plan_names[i] if plan_names and i < len(plan_names) else f"Plan {i+1}"
+            for metric in metrics:
+                headers.append(f"{metric}\n{plan_name}")
+                cell_colors[0].append('#e6e6e6')
         
-        for structure_name, structure_stats in stats_by_structure.items():
-            for plan_name, plan_stats in structure_stats.items():
-                col_name = f"{structure_name} - {plan_name}" if len(plan_names) > 1 else structure_name
-                stats_df[col_name] = pd.Series(plan_stats)
+        # Add table
+        table = ax_stats.table(
+            cellText=table_data,
+            colLabels=headers,
+            cellColours=table_colors,
+            colColours=cell_colors[0],
+            loc='center',
+            cellLoc='center'
+        )
         
-        report['metrics_df'] = stats_df
+        # Adjust table style
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1, 1.5)
+        
+        ax_stats.set_title("DVH Statistics", pad=20)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save figure if path is provided
+    if output_path:
+        try:
+            fig.savefig(output_path, dpi=300, bbox_inches='tight')
+            logger.info(f"DVH report saved to {output_path}")
+        except Exception as e:
+            logger.error(f"Error saving DVH report: {e}")
+    
+    # Add to report data
+    report['figure'] = fig
     
     return report
 
@@ -465,74 +588,90 @@ def plot_dvh_bands(
     label: Optional[str] = None
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
-    Vẽ biểu đồ DVH với dải tin cậy (confidence band).
+    Plot DVH with uncertainty bands.
     
-    Parameters:
-        dvh_data (Dict[str, Any]): Dữ liệu DVH chính
-        dvh_upper (Dict[str, Any]): Dữ liệu DVH giới hạn trên của dải
-        dvh_lower (Dict[str, Any]): Dữ liệu DVH giới hạn dưới của dải
-        structure_name (str, optional): Tên cấu trúc
-        ax (plt.Axes, optional): Matplotlib axes để vẽ, nếu None thì tạo mới
-        color (str, optional): Màu sắc đường biểu đồ
-        linestyle (str, optional): Kiểu đường biểu đồ
-        band_alpha (float, optional): Độ trong suốt của dải
-        linewidth (float, optional): Độ dày đường biểu đồ
-        normalize_dose (bool, optional): Chuẩn hóa liều theo prescription_dose
-        prescription_dose (float, optional): Liều kê đơn, cần thiết nếu normalize_dose=True
-        label (str, optional): Nhãn cho biểu đồ, nếu None thì sử dụng structure_name
+    Parameters
+    ----------
+    dvh_data : Dict[str, Any]
+        Dictionary containing DVH data
+    dvh_upper : Dict[str, Any]
+        Dictionary containing upper bound DVH data
+    dvh_lower : Dict[str, Any]
+        Dictionary containing lower bound DVH data
+    structure_name : str, optional
+        Name of the structure to plot
+    ax : plt.Axes, optional
+        Axes to plot on
+    color : str, optional
+        Line color
+    linestyle : str, optional
+        Line style
+    band_alpha : float, optional
+        Opacity of uncertainty band
+    linewidth : float, optional
+        Line width
+    normalize_dose : bool, optional
+        Whether to normalize dose to prescription dose
+    prescription_dose : float, optional
+        Prescription dose in Gy
+    label : str, optional
+        Label for the legend
         
-    Returns:
-        Tuple[plt.Figure, plt.Axes]: Đối tượng Figure và Axes của biểu đồ
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        Figure and axes objects
     """
-    # Tạo axes mới nếu không được cung cấp
+    # Create figure and axes if not provided
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
     else:
         fig = ax.figure
     
-    # Xác định nhãn
-    if label is None:
-        label = structure_name if structure_name else "Structure"
+    # Check if structure exists
+    if structure_name not in dvh_data or structure_name not in dvh_upper or structure_name not in dvh_lower:
+        logger.warning(f"Structure '{structure_name}' not found in all DVH datasets.")
+        return fig, ax
     
-    # Lấy dữ liệu
-    dose_bins = dvh_data['dose_bins']
-    cumulative_dvh = dvh_data['cumulative']
-    upper_dvh = dvh_upper['cumulative']
-    lower_dvh = dvh_lower['cumulative']
-    dose_unit = dvh_data['dose_unit']
+    # Get dose and volume data
+    dose = dvh_data[structure_name]['dose_bins']
+    volume = dvh_data[structure_name]['cumulative_volume']
+    volume_upper = dvh_upper[structure_name]['cumulative_volume']
+    volume_lower = dvh_lower[structure_name]['cumulative_volume']
     
-    # Chuẩn hóa liều nếu cần
+    # Normalize dose if requested
     if normalize_dose and prescription_dose is not None and prescription_dose > 0:
-        dose_bins = dose_bins / prescription_dose * 100
-        dose_unit = '%'
+        dose = dose / prescription_dose * 100
     
-    # Vẽ dải tin cậy
-    ax.fill_between(
-        dose_bins, lower_dvh, upper_dvh, 
-        color=color, alpha=band_alpha,
-        label=f"{label} (confidence band)"
-    )
+    # Get color if not provided
+    if color is None:
+        color = get_structure_color(structure_name)
     
-    # Vẽ đường DVH chính
-    ax.plot(
-        dose_bins, cumulative_dvh, 
-        color=color, linestyle=linestyle, linewidth=linewidth, 
-        label=label
-    )
+    # Plot DVH line
+    ax.plot(dose, volume, color=color, linestyle=linestyle, linewidth=linewidth, label=label)
     
-    # Đặt nhãn và tiêu đề
-    ax.set_ylabel("Volume (%)")
-    ax.set_xlabel(f"Dose ({dose_unit})")
-    ax.set_title("Cumulative Dose Volume Histogram with Confidence Band")
+    # Fill between upper and lower bounds
+    ax.fill_between(dose, volume_lower, volume_upper, color=color, alpha=band_alpha)
     
-    # Đảo ngược trục y
-    ax.invert_yaxis()
+    # Set labels and grid
+    if normalize_dose:
+        ax.set_xlabel('Dose (% of prescription)')
+    else:
+        ax.set_xlabel('Dose (Gy)')
+        
+    ax.set_ylabel('Volume (%)')
+    ax.set_title('DVH with Uncertainty Bands')
     
-    # Thêm lưới
+    # Set limits
+    ax.set_ylim(0, 105)
+    ax.set_xlim(0, None)
+    
+    # Add grid
     ax.grid(True, linestyle='--', alpha=0.7)
     
-    # Thêm legend
-    ax.legend()
+    # Add legend if label is provided
+    if label:
+        ax.legend(loc='best')
     
     return fig, ax
 
@@ -546,95 +685,104 @@ def export_dvh_to_csv(
     prescription_doses: Optional[Dict[str, float]] = None
 ) -> str:
     """
-    Xuất dữ liệu DVH ra file CSV.
+    Export DVH data to CSV file.
     
-    Parameters:
-        dvh_list (List[Dict[str, Any]]): Danh sách các DVH
-        structure_names (List[str]): Danh sách tên cấu trúc
-        plan_names (List[str], optional): Danh sách tên kế hoạch
-        output_path (str, optional): Đường dẫn lưu file CSV
-        include_metrics (bool, optional): Thêm chỉ số DVH vào CSV
-        metrics (List[str], optional): Danh sách chỉ số cần tính
-        prescription_doses (Dict[str, float], optional): Dict liều kê đơn cho từng cấu trúc
+    Parameters
+    ----------
+    dvh_list : List[Dict[str, Any]]
+        List of DVH data dictionaries
+    structure_names : List[str]
+        List of structure names to export
+    plan_names : List[str], optional
+        List of plan names for labeling
+    output_path : str, optional
+        Path to save the CSV file
+    include_metrics : bool, optional
+        Whether to include DVH metrics
+    metrics : List[str], optional
+        List of metrics to include
+    prescription_doses : Dict[str, float], optional
+        Mapping of structure names to prescription doses
         
-    Returns:
-        str: Đường dẫn file CSV đã lưu
+    Returns
+    -------
+    str
+        Path to the saved CSV file
     """
-    # Kiểm tra dữ liệu đầu vào
-    if not dvh_list or not structure_names:
-        raise ValueError("Empty dvh_list or structure_names provided")
+    # Define default metrics if not provided
+    if metrics is None:
+        metrics = [
+            'D2', 'D5', 'D50', 'D95', 'D98', 
+            'V5', 'V10', 'V20', 'V30', 'V40', 'V50', 'Dmean', 'Dmax'
+        ]
     
-    # Nếu plan_names không được cung cấp, mặc định là ["Plan 1"]
-    if plan_names is None:
-        plan_names = ["Plan 1"]
+    # Prepare data
+    data = []
     
-    # Xác định metrics mặc định nếu không được cung cấp và cần tính metrics
-    if include_metrics and metrics is None:
-        metrics = ['D98', 'D95', 'D50', 'D2', 'mean_dose', 'max_dose', 'min_dose']
-        if prescription_doses:
-            metrics.extend(['V95', 'V100', 'V105'])
-    
-    # Tạo DataFrame cho dữ liệu DVH
-    dvh_df = pd.DataFrame()
-    
-    # Thêm dữ liệu từng DVH vào DataFrame
-    for i, structure_name in enumerate(structure_names):
-        for j, plan_name in enumerate(plan_names):
-            # Tính chỉ số index trong dvh_list
-            idx = i if len(plan_names) == 1 else i + j * len(structure_names)
+    # Add DVH metrics if requested
+    if include_metrics:
+        for i, dvh in enumerate(dvh_list):
+            plan_name = plan_names[i] if plan_names and i < len(plan_names) else f"Plan {i+1}"
             
-            if idx < len(dvh_list):
-                dvh_data = dvh_list[idx]
-                col_name = f"{structure_name} - {plan_name}" if len(plan_names) > 1 else structure_name
-                
-                # Thêm dữ liệu DVH tích lũy
-                dvh_df[f"{col_name} (Cum. Vol. %)"] = dvh_data['cumulative']
-                
-                # Thêm dữ liệu DVH vi phân
-                dvh_df[f"{col_name} (Diff. Vol. %)"] = dvh_data['differential']
+            for struct in structure_names:
+                if struct in dvh:
+                    row = {'Plan': plan_name, 'Structure': struct}
+                    
+                    # Add metrics
+                    metric_values = calculate_dvh_metrics(
+                        dvh[struct], 
+                        metrics_list=metrics,
+                        rx_dose=prescription_doses.get(struct) if prescription_doses else None
+                    )
+                    
+                    for metric, value in metric_values.items():
+                        row[metric] = value
+                    
+                    data.append(row)
     
-    # Thêm cột liều
-    dvh_df["Dose (Gy)"] = dvh_list[0]['dose_bins']
+    # Add DVH data
+    dvh_data = []
     
-    # Sắp xếp lại cột để Dose ở đầu
-    cols = dvh_df.columns.tolist()
-    cols = [cols[-1]] + cols[:-1]
-    dvh_df = dvh_df[cols]
-    
-    # Thêm chỉ số DVH nếu cần
-    if include_metrics:
-        metrics_df = pd.DataFrame(index=metrics)
+    for i, dvh in enumerate(dvh_list):
+        plan_name = plan_names[i] if plan_names and i < len(plan_names) else f"Plan {i+1}"
         
-        for i, structure_name in enumerate(structure_names):
-            for j, plan_name in enumerate(plan_names):
-                # Tính chỉ số index trong dvh_list
-                idx = i if len(plan_names) == 1 else i + j * len(structure_names)
+        for struct in structure_names:
+            if struct in dvh:
+                dose_bins = dvh[struct]['dose_bins']
+                cumulative_volume = dvh[struct]['cumulative_volume']
                 
-                if idx < len(dvh_list):
-                    dvh_data = dvh_list[idx]
-                    col_name = f"{structure_name} - {plan_name}" if len(plan_names) > 1 else structure_name
-                    
-                    # Tính metrics
-                    rx_dose = None
-                    if prescription_doses and structure_name in prescription_doses:
-                        rx_dose = prescription_doses[structure_name]
-                    
-                    metrics_results = calculate_dvh_metrics(dvh_data, metrics, rx_dose)
-                    
-                    # Thêm vào DataFrame
-                    metrics_df[col_name] = pd.Series(metrics_results)
+                for j, (dose, volume) in enumerate(zip(dose_bins, cumulative_volume)):
+                    dvh_data.append({
+                        'Plan': plan_name,
+                        'Structure': struct,
+                        'Dose (Gy)': dose,
+                        'Volume (%)': volume,
+                        'Point': j
+                    })
     
-    # Lưu dữ liệu vào file CSV
-    output_dir = os.path.dirname(output_path)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # Create DataFrames
+    df_metrics = pd.DataFrame(data) if data else None
+    df_dvh = pd.DataFrame(dvh_data) if dvh_data else None
     
-    # Lưu dữ liệu DVH
-    dvh_df.to_csv(output_path, index=False)
-    
-    # Lưu metrics nếu có
-    if include_metrics:
-        metrics_path = os.path.splitext(output_path)[0] + "_metrics.csv"
-        metrics_df.to_csv(metrics_path)
-    
-    return output_path
+    # Save to Excel or CSV
+    try:
+        if output_path.endswith('.xlsx'):
+            with pd.ExcelWriter(output_path) as writer:
+                if df_metrics is not None:
+                    df_metrics.to_excel(writer, sheet_name='Metrics', index=False)
+                if df_dvh is not None:
+                    df_dvh.to_excel(writer, sheet_name='DVH Data', index=False)
+        else:
+            # Save as CSV
+            if df_metrics is not None:
+                metrics_path = output_path.replace('.csv', '_metrics.csv')
+                df_metrics.to_csv(metrics_path, index=False)
+            
+            if df_dvh is not None:
+                df_dvh.to_csv(output_path, index=False)
+        
+        logger.info(f"DVH data exported to {output_path}")
+        return output_path
+    except Exception as e:
+        logger.error(f"Error exporting DVH data: {e}")
+        return ""

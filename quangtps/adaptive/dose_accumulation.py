@@ -12,11 +12,11 @@ import datetime
 from typing import List, Dict, Tuple, Optional, Union, Any
 from dataclasses import dataclass
 
-from ..core.types import Patient, Image, Structure, Dose
-from ..core.exceptions import DoseAccumulationError
-from ..dose.dose_grid import DoseGrid
-from ..evaluation.dvh.dvh_calculator import DVHCalculator
-from ..database.dose_db import DoseDB
+from quangtps.core.types import Patient, Image, Structure, Dose
+from quangtps.core.exceptions import DoseAccumulationError
+from quangtps.dose.dose_grid import DoseGrid
+from quangtps.evaluation.dvh.dvh_calculator import DVHCalculator
+from quangtps.database.dose_db import DoseDB
 
 logger = logging.getLogger(__name__)
 

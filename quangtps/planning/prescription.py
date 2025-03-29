@@ -10,9 +10,15 @@ bao gồm thông tin về liều kê đơn, phân đoạn và các ràng buộc 
 
 import logging
 import copy
+import json
+import os
 from typing import Dict, List, Optional, Any, Tuple, Union
 from enum import Enum
 from datetime import datetime
+
+from quangtps.core.services import ServiceRegistry
+from quangtps.core.constants import PRESCRIPTION_TYPES, DOSE_UNITS
+from quangtps.database.prescription_db import PrescriptionDB as PrescriptionDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -644,284 +650,831 @@ class StructurePrescription:
         return copy.deepcopy(self)
 
 
-class Prescription:
-    """
-    Lớp quản lý đơn liều tổng thể cho một kế hoạch xạ trị.
+class DoseConstraint:
+    """Represents a dose constraint for a structure in a treatment plan."""
     
-    Lớp này cung cấp các phương thức để quản lý đơn liều cho nhiều cấu trúc,
-    cũng như phân đoạn và các thông tin bổ sung về đơn liều.
-    """
+    CONSTRAINT_TYPES = [
+        "D_MAX", "D_MIN", "D_MEAN", 
+        "D_X", "V_X",
+        "MAX_DVH", "MIN_DVH",
+        "CONFORMITY", "HOMOGENEITY", "GRADIENT"
+    ]
+    
+    PRIORITIES = ["REQUIRED", "PRIORITY_HIGH", "PRIORITY_MEDIUM", "PRIORITY_LOW"]
+    
+    def __init__(
+        self, 
+        structure_name: str,
+        constraint_type: str,
+        dose_value: float = None,
+        volume_value: float = None,
+        dose_unit: str = "Gy",
+        volume_unit: str = "%",
+        priority: str = "PRIORITY_MEDIUM",
+        achieved: bool = False,
+        evaluation_value: float = None,
+        description: str = None
+    ):
+        """Initialize a dose constraint.
+        
+        Args:
+            structure_name: Name of the structure
+            constraint_type: Type of the constraint (D_MAX, D_MIN, V_X, etc.)
+            dose_value: Dose value for the constraint
+            volume_value: Volume value for the constraint
+            dose_unit: Unit for dose (Gy, cGy, etc.)
+            volume_unit: Unit for volume (%, cc)
+            priority: Priority of the constraint
+            achieved: Whether the constraint is achieved
+            evaluation_value: Actual value from evaluation
+            description: Human-readable description of the constraint
+        """
+        self.structure_name = structure_name
+        
+        if constraint_type not in self.CONSTRAINT_TYPES:
+            logger.warning(f"Unknown constraint type: {constraint_type}. Using D_MAX.")
+            self.constraint_type = "D_MAX"
+        else:
+            self.constraint_type = constraint_type
+            
+        self.dose_value = dose_value
+        self.volume_value = volume_value
+        self.dose_unit = dose_unit if dose_unit in DOSE_UNITS else "Gy"
+        self.volume_unit = volume_unit
+        
+        if priority not in self.PRIORITIES:
+            logger.warning(f"Unknown priority: {priority}. Using PRIORITY_MEDIUM.")
+            self.priority = "PRIORITY_MEDIUM"
+        else:
+            self.priority = priority
+            
+        self.achieved = achieved
+        self.evaluation_value = evaluation_value
+        self.description = description or self._generate_description()
+        
+    def _generate_description(self) -> str:
+        """Generate a human-readable description of the constraint."""
+        if self.constraint_type == "D_MAX":
+            return f"Maximum dose to {self.structure_name} < {self.dose_value} {self.dose_unit}"
+        elif self.constraint_type == "D_MIN":
+            return f"Minimum dose to {self.structure_name} > {self.dose_value} {self.dose_unit}"
+        elif self.constraint_type == "D_MEAN":
+            return f"Mean dose to {self.structure_name} < {self.dose_value} {self.dose_unit}"
+        elif self.constraint_type.startswith("D_"):
+            # D95, D90, etc.
+            volume = self.constraint_type.split("_")[1]
+            return f"Dose to {volume}% of {self.structure_name} > {self.dose_value} {self.dose_unit}"
+        elif self.constraint_type.startswith("V_"):
+            # V20Gy, V5Gy, etc.
+            dose = self.constraint_type.split("_")[1]
+            return f"Volume of {self.structure_name} receiving {dose}{self.dose_unit} < {self.volume_value}{self.volume_unit}"
+        else:
+            return f"{self.constraint_type} constraint for {self.structure_name}"
+    
+    def to_dict(self) -> Dict:
+        """Convert the constraint to a dictionary."""
+        return {
+            "structure_name": self.structure_name,
+            "constraint_type": self.constraint_type,
+            "dose_value": self.dose_value,
+            "volume_value": self.volume_value,
+            "dose_unit": self.dose_unit,
+            "volume_unit": self.volume_unit,
+            "priority": self.priority,
+            "achieved": self.achieved,
+            "evaluation_value": self.evaluation_value,
+            "description": self.description
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'DoseConstraint':
+        """Create a constraint from a dictionary."""
+        return cls(
+            structure_name=data.get("structure_name"),
+            constraint_type=data.get("constraint_type"),
+            dose_value=data.get("dose_value"),
+            volume_value=data.get("volume_value"),
+            dose_unit=data.get("dose_unit", "Gy"),
+            volume_unit=data.get("volume_unit", "%"),
+            priority=data.get("priority", "PRIORITY_MEDIUM"),
+            achieved=data.get("achieved", False),
+            evaluation_value=data.get("evaluation_value"),
+            description=data.get("description")
+        )
+    
+    def evaluate(self, dvh_data: Dict) -> Tuple[bool, float]:
+        """Evaluate the constraint against DVH data.
+        
+        Args:
+            dvh_data: Dictionary containing DVH data for structures
+            
+        Returns:
+            Tuple of (constraint met, actual value)
+        """
+        # This is a placeholder. In a real implementation, this would
+        # evaluate the constraint against actual DVH data.
+        if self.structure_name not in dvh_data:
+            logger.warning(f"Structure {self.structure_name} not found in DVH data")
+            return False, None
+        
+        # Implementation depends on the specific DVH data format
+        # For now, just return placeholder values
+        return True, 0.0
+
+
+class ClinicalGoal:
+    """Represents a clinical goal for a treatment plan, including multiple constraints."""
     
     def __init__(
         self,
-        prescription_id: str,
         name: str,
-        status: PrescriptionStatus = PrescriptionStatus.DRAFT,
-        created_date: Optional[datetime] = None,
-        approved_date: Optional[datetime] = None
+        description: str = None,
+        constraints: List[DoseConstraint] = None,
+        achieved: bool = False
     ):
-        """
-        Khởi tạo một đối tượng đơn liều tổng thể.
+        """Initialize a clinical goal.
         
-        Parameters
-        ----------
-        prescription_id : str
-            ID duy nhất của đơn liều
-        name : str
-            Tên đơn liều
-        status : PrescriptionStatus
-            Trạng thái đơn liều
-        created_date : datetime, optional
-            Ngày tạo đơn liều
-        approved_date : datetime, optional
-            Ngày phê duyệt đơn liều
+        Args:
+            name: Name of the clinical goal
+            description: Description of the goal
+            constraints: List of dose constraints for the goal
+            achieved: Whether the goal is achieved
         """
-        self.prescription_id = prescription_id
         self.name = name
-        self.status = status
-        self.created_date = created_date if created_date else datetime.now()
-        self.approved_date = approved_date
+        self.description = description or name
+        self.constraints = constraints or []
+        self.achieved = achieved
         
-        self.fractionation = Fractionation()
-        self.dose_prescriptions = {}  # Dict[str, DosePrescription]
-        self.physician = ""
-        self.comments = ""
-        self.parameters = {}  # Dictionary lưu trữ các tham số bổ sung
+    def add_constraint(self, constraint: DoseConstraint):
+        """Add a constraint to the clinical goal."""
+        self.constraints.append(constraint)
         
-    def set_fractionation(self, fractionation: Fractionation):
-        """
-        Đặt phân đoạn cho đơn liều.
-        
-        Parameters
-        ----------
-        fractionation : Fractionation
-            Đối tượng phân đoạn
-        """
-        self.fractionation = fractionation
-        
-    def add_dose_prescription(self, dose_prescription: DosePrescription):
-        """
-        Thêm một đơn liều cho một cấu trúc.
-        
-        Parameters
-        ----------
-        dose_prescription : DosePrescription
-            Đối tượng đơn liều cho cấu trúc
-        """
-        self.dose_prescriptions[dose_prescription.structure_id] = dose_prescription
-        
-    def get_dose_prescription(self, structure_id: str) -> Optional[DosePrescription]:
-        """
-        Lấy đơn liều cho một cấu trúc.
-        
-        Parameters
-        ----------
-        structure_id : str
-            ID của cấu trúc
+    def remove_constraint(self, index: int):
+        """Remove a constraint from the clinical goal."""
+        if 0 <= index < len(self.constraints):
+            del self.constraints[index]
             
-        Returns
-        -------
-        DosePrescription, optional
-            Đối tượng đơn liều cho cấu trúc, hoặc None nếu không tồn tại
-        """
-        return self.dose_prescriptions.get(structure_id)
-        
-    def remove_dose_prescription(self, structure_id: str) -> bool:
-        """
-        Xóa đơn liều cho một cấu trúc.
-        
-        Parameters
-        ----------
-        structure_id : str
-            ID của cấu trúc
-            
-        Returns
-        -------
-        bool
-            True nếu xóa thành công, False nếu cấu trúc không tồn tại
-        """
-        if structure_id in self.dose_prescriptions:
-            del self.dose_prescriptions[structure_id]
-            return True
-        return False
-        
-    def get_target_prescriptions(self) -> List[DosePrescription]:
-        """
-        Lấy danh sách đơn liều cho các cấu trúc mục tiêu.
-        
-        Returns
-        -------
-        List[DosePrescription]
-            Danh sách đơn liều cho các cấu trúc mục tiêu
-        """
-        return [dp for dp in self.dose_prescriptions.values() if dp.is_target]
-        
-    def get_oar_prescriptions(self) -> List[DosePrescription]:
-        """
-        Lấy danh sách đơn liều cho các cơ quan nguy cấp.
-        
-        Returns
-        -------
-        List[DosePrescription]
-            Danh sách đơn liều cho các cơ quan nguy cấp
-        """
-        return [dp for dp in self.dose_prescriptions.values() if not dp.is_target]
-        
-    def set_status(self, status: PrescriptionStatus):
-        """
-        Đặt trạng thái của đơn liều.
-        
-        Parameters
-        ----------
-        status : PrescriptionStatus
-            Trạng thái mới
-        """
-        self.status = status
-        
-        # Cập nhật ngày phê duyệt nếu chuyển sang trạng thái Approved
-        if status == PrescriptionStatus.APPROVED and not self.approved_date:
-            self.approved_date = datetime.now()
-            
-    def set_physician(self, physician: str):
-        """
-        Đặt bác sĩ điều trị.
-        
-        Parameters
-        ----------
-        physician : str
-            Tên bác sĩ điều trị
-        """
-        self.physician = physician
-        
-    def set_comments(self, comments: str):
-        """
-        Đặt ghi chú cho đơn liều.
-        
-        Parameters
-        ----------
-        comments : str
-            Ghi chú về đơn liều
-        """
-        self.comments = comments
-        
-    def set_parameter(self, key: str, value: Any):
-        """
-        Đặt một tham số bổ sung.
-        
-        Parameters
-        ----------
-        key : str
-            Tên tham số
-        value : Any
-            Giá trị tham số
-        """
-        self.parameters[key] = value
-        
-    def get_parameter(self, key: str, default: Any = None) -> Any:
-        """
-        Lấy giá trị của một tham số.
-        
-        Parameters
-        ----------
-        key : str
-            Tên tham số
-        default : Any, optional
-            Giá trị mặc định nếu tham số không tồn tại
-            
-        Returns
-        -------
-        Any
-            Giá trị của tham số
-        """
-        return self.parameters.get(key, default)
-        
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Chuyển đổi đối tượng đơn liều tổng thể thành dictionary.
-        
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary chứa thông tin đơn liều tổng thể
-        """
+    def to_dict(self) -> Dict:
+        """Convert the clinical goal to a dictionary."""
         return {
-            'prescription_id': self.prescription_id,
-            'name': self.name,
-            'status': self.status.value,
-            'created_date': self.created_date.isoformat() if self.created_date else None,
-            'approved_date': self.approved_date.isoformat() if self.approved_date else None,
-            'fractionation': self.fractionation.to_dict(),
-            'dose_prescriptions': {k: v.to_dict() for k, v in self.dose_prescriptions.items()},
-            'physician': self.physician,
-            'comments': self.comments,
-            'parameters': self.parameters
+            "name": self.name,
+            "description": self.description,
+            "constraints": [c.to_dict() for c in self.constraints],
+            "achieved": self.achieved
         }
-        
+    
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Prescription':
-        """
-        Tạo đối tượng Prescription từ dictionary.
+    def from_dict(cls, data: Dict) -> 'ClinicalGoal':
+        """Create a clinical goal from a dictionary."""
+        constraints = [DoseConstraint.from_dict(c) for c in data.get("constraints", [])]
+        return cls(
+            name=data.get("name", ""),
+            description=data.get("description"),
+            constraints=constraints,
+            achieved=data.get("achieved", False)
+        )
+    
+    def evaluate(self, dvh_data: Dict) -> bool:
+        """Evaluate all constraints in the clinical goal.
         
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Dictionary chứa thông tin đơn liều tổng thể
+        Args:
+            dvh_data: Dictionary containing DVH data for structures
             
-        Returns
-        -------
-        Prescription
-            Đối tượng đơn liều tổng thể
+        Returns:
+            Whether the goal is achieved (all required constraints met)
         """
-        created_date = None
-        if 'created_date' in data and data['created_date']:
-            created_date = datetime.fromisoformat(data['created_date'])
+        required_constraints_met = True
+        
+        for constraint in self.constraints:
+            met, value = constraint.evaluate(dvh_data)
+            constraint.achieved = met
+            constraint.evaluation_value = value
             
-        approved_date = None
-        if 'approved_date' in data and data['approved_date']:
-            approved_date = datetime.fromisoformat(data['approved_date'])
+            if not met and constraint.priority == "REQUIRED":
+                required_constraints_met = False
+                
+        self.achieved = required_constraints_met
+        return required_constraints_met
+
+
+class PrescriptionTemplate:
+    """Template for prescription parameters for a specific treatment site."""
+    
+    def __init__(
+        self,
+        name: str,
+        site: str,
+        technique: str,
+        prescription_type: str = "STANDARD",
+        dose: float = None,
+        fractions: int = None,
+        targets: Dict[str, Dict] = None,
+        clinical_goals: List[ClinicalGoal] = None,
+        description: str = None,
+        version: str = "1.0",
+        last_modified: datetime = None
+    ):
+        """Initialize a prescription template.
+        
+        Args:
+            name: Template name
+            site: Treatment site (e.g., "Lung", "Prostate")
+            technique: Treatment technique (e.g., "IMRT", "VMAT")
+            prescription_type: Type of prescription (e.g., "STANDARD", "SIB")
+            dose: Reference dose in Gy
+            fractions: Number of fractions
+            targets: Dictionary of target structures and their prescribed doses
+            clinical_goals: List of clinical goals
+            description: Template description
+            version: Template version
+            last_modified: Last modification date
+        """
+        self.name = name
+        self.site = site
+        self.technique = technique
+        
+        if prescription_type not in PRESCRIPTION_TYPES:
+            logger.warning(f"Unknown prescription type: {prescription_type}. Using STANDARD.")
+            self.prescription_type = "STANDARD"
+        else:
+            self.prescription_type = prescription_type
             
-        prescription = cls(
-            prescription_id=data.get('prescription_id', ''),
-            name=data.get('name', ''),
-            status=PrescriptionStatus(data.get('status', 'DRAFT')),
-            created_date=created_date,
-            approved_date=approved_date
+        self.dose = dose
+        self.fractions = fractions
+        self.targets = targets or {}
+        self.clinical_goals = clinical_goals or []
+        self.description = description or f"{site} {technique} Template"
+        self.version = version
+        self.last_modified = last_modified or datetime.now()
+        
+    def to_dict(self) -> Dict:
+        """Convert the template to a dictionary."""
+        return {
+            "name": self.name,
+            "site": self.site,
+            "technique": self.technique,
+            "prescription_type": self.prescription_type,
+            "dose": self.dose,
+            "fractions": self.fractions,
+            "targets": self.targets,
+            "clinical_goals": [g.to_dict() for g in self.clinical_goals],
+            "description": self.description,
+            "version": self.version,
+            "last_modified": self.last_modified.isoformat() if self.last_modified else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'PrescriptionTemplate':
+        """Create a template from a dictionary."""
+        clinical_goals = [ClinicalGoal.from_dict(g) for g in data.get("clinical_goals", [])]
+        last_modified = None
+        if data.get("last_modified"):
+            try:
+                last_modified = datetime.fromisoformat(data["last_modified"])
+            except (ValueError, TypeError):
+                last_modified = datetime.now()
+                
+        return cls(
+            name=data.get("name", ""),
+            site=data.get("site", ""),
+            technique=data.get("technique", ""),
+            prescription_type=data.get("prescription_type", "STANDARD"),
+            dose=data.get("dose"),
+            fractions=data.get("fractions"),
+            targets=data.get("targets", {}),
+            clinical_goals=clinical_goals,
+            description=data.get("description"),
+            version=data.get("version", "1.0"),
+            last_modified=last_modified
+        )
+
+
+class Prescription:
+    """Represents a prescription for a treatment plan."""
+    
+    def __init__(
+        self,
+        id: int = None,
+        patient_id: str = None,
+        plan_id: int = None,
+        prescription_type: str = "STANDARD",
+        site: str = None,
+        technique: str = None,
+        dose: float = None,
+        fractions: int = None,
+        dose_per_fraction: float = None,
+        targets: Dict[str, Dict] = None,
+        clinical_goals: List[ClinicalGoal] = None,
+        creation_date: datetime = None,
+        last_modified: datetime = None,
+        description: str = None,
+        notes: str = None,
+        template_name: str = None
+    ):
+        """Initialize a prescription.
+        
+        Args:
+            id: Prescription ID
+            patient_id: Patient ID
+            plan_id: Plan ID
+            prescription_type: Type of prescription
+            site: Treatment site
+            technique: Treatment technique
+            dose: Reference dose in Gy
+            fractions: Number of fractions
+            dose_per_fraction: Dose per fraction in Gy
+            targets: Dictionary of target structures and their prescribed doses
+            clinical_goals: List of clinical goals
+            creation_date: Creation date
+            last_modified: Last modification date
+            description: Prescription description
+            notes: Additional notes
+            template_name: Name of the template used, if any
+        """
+        self.id = id
+        self.patient_id = patient_id
+        self.plan_id = plan_id
+        
+        if prescription_type not in PRESCRIPTION_TYPES:
+            logger.warning(f"Unknown prescription type: {prescription_type}. Using STANDARD.")
+            self.prescription_type = "STANDARD"
+        else:
+            self.prescription_type = prescription_type
+            
+        self.site = site
+        self.technique = technique
+        self.dose = dose
+        self.fractions = fractions
+        
+        # Calculate dose per fraction if not provided
+        if dose_per_fraction is None and dose is not None and fractions is not None and fractions > 0:
+            self.dose_per_fraction = dose / fractions
+        else:
+            self.dose_per_fraction = dose_per_fraction
+            
+        self.targets = targets or {}
+        self.clinical_goals = clinical_goals or []
+        self.creation_date = creation_date or datetime.now()
+        self.last_modified = last_modified or datetime.now()
+        self.description = description or f"Prescription for {site}" if site else "New Prescription"
+        self.notes = notes
+        self.template_name = template_name
+        
+    def to_dict(self) -> Dict:
+        """Convert the prescription to a dictionary."""
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "plan_id": self.plan_id,
+            "prescription_type": self.prescription_type,
+            "site": self.site,
+            "technique": self.technique,
+            "dose": self.dose,
+            "fractions": self.fractions,
+            "dose_per_fraction": self.dose_per_fraction,
+            "targets": self.targets,
+            "clinical_goals": [g.to_dict() for g in self.clinical_goals],
+            "creation_date": self.creation_date.isoformat() if self.creation_date else None,
+            "last_modified": self.last_modified.isoformat() if self.last_modified else None,
+            "description": self.description,
+            "notes": self.notes,
+            "template_name": self.template_name
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Prescription':
+        """Create a prescription from a dictionary."""
+        clinical_goals = [ClinicalGoal.from_dict(g) for g in data.get("clinical_goals", [])]
+        
+        creation_date = None
+        if data.get("creation_date"):
+            try:
+                creation_date = datetime.fromisoformat(data["creation_date"])
+            except (ValueError, TypeError):
+                creation_date = datetime.now()
+                
+        last_modified = None
+        if data.get("last_modified"):
+            try:
+                last_modified = datetime.fromisoformat(data["last_modified"])
+            except (ValueError, TypeError):
+                last_modified = datetime.now()
+                
+        return cls(
+            id=data.get("id"),
+            patient_id=data.get("patient_id"),
+            plan_id=data.get("plan_id"),
+            prescription_type=data.get("prescription_type", "STANDARD"),
+            site=data.get("site"),
+            technique=data.get("technique"),
+            dose=data.get("dose"),
+            fractions=data.get("fractions"),
+            dose_per_fraction=data.get("dose_per_fraction"),
+            targets=data.get("targets", {}),
+            clinical_goals=clinical_goals,
+            creation_date=creation_date,
+            last_modified=last_modified,
+            description=data.get("description"),
+            notes=data.get("notes"),
+            template_name=data.get("template_name")
+        )
+    
+    def add_clinical_goal(self, goal: ClinicalGoal):
+        """Add a clinical goal to the prescription."""
+        self.clinical_goals.append(goal)
+        self.last_modified = datetime.now()
+        
+    def remove_clinical_goal(self, index: int):
+        """Remove a clinical goal from the prescription."""
+        if 0 <= index < len(self.clinical_goals):
+            del self.clinical_goals[index]
+            self.last_modified = datetime.now()
+            
+    def add_target(self, name: str, dose: float, dose_unit: str = "Gy", volume: float = 100, volume_unit: str = "%"):
+        """Add a target to the prescription."""
+        self.targets[name] = {
+            "dose": dose,
+            "dose_unit": dose_unit,
+            "volume": volume,
+            "volume_unit": volume_unit
+        }
+        self.last_modified = datetime.now()
+        
+    def remove_target(self, name: str):
+        """Remove a target from the prescription."""
+        if name in self.targets:
+            del self.targets[name]
+            self.last_modified = datetime.now()
+            
+    def update_from_template(self, template: PrescriptionTemplate):
+        """Update prescription from a template."""
+        self.site = template.site
+        self.technique = template.technique
+        self.prescription_type = template.prescription_type
+        self.dose = template.dose
+        self.fractions = template.fractions
+        
+        if self.dose is not None and self.fractions is not None and self.fractions > 0:
+            self.dose_per_fraction = self.dose / self.fractions
+            
+        # Add new targets, keeping existing ones
+        for name, details in template.targets.items():
+            self.targets[name] = details.copy()
+            
+        # Replace clinical goals with template's goals
+        self.clinical_goals = [ClinicalGoal.from_dict(g.to_dict()) for g in template.clinical_goals]
+        
+        self.template_name = template.name
+        self.last_modified = datetime.now()
+        
+    def save(self):
+        """Save the prescription to the database."""
+        db = ServiceRegistry.get("PrescriptionDatabase")
+        if db:
+            if self.id is None:
+                # New prescription
+                prescription_id = db.create_prescription(self.to_dict())
+                if prescription_id:
+                    self.id = prescription_id
+                    logger.info(f"Created new prescription with ID {self.id}")
+                    return True
+                else:
+                    logger.error("Failed to create prescription")
+                    return False
+            else:
+                # Update existing prescription
+                success = db.update_prescription(self.id, self.to_dict())
+                if success:
+                    logger.info(f"Updated prescription with ID {self.id}")
+                    return True
+                else:
+                    logger.error(f"Failed to update prescription with ID {self.id}")
+                    return False
+        else:
+            logger.error("PrescriptionDatabase service not available")
+            return False
+            
+    @classmethod
+    def load(cls, prescription_id: int) -> Optional['Prescription']:
+        """Load a prescription from the database."""
+        db = ServiceRegistry.get("PrescriptionDatabase")
+        if db:
+            data = db.get_prescription(prescription_id)
+            if data:
+                return cls.from_dict(data)
+            else:
+                logger.warning(f"Prescription with ID {prescription_id} not found")
+                return None
+        else:
+            logger.error("PrescriptionDatabase service not available")
+            return None
+            
+    @classmethod
+    def load_for_plan(cls, plan_id: int) -> Optional['Prescription']:
+        """Load a prescription for a specific plan."""
+        db = ServiceRegistry.get("PrescriptionDatabase")
+        if db:
+            data = db.get_prescription_by_plan(plan_id)
+            if data:
+                return cls.from_dict(data)
+            else:
+                logger.info(f"No prescription found for plan ID {plan_id}")
+                return None
+        else:
+            logger.error("PrescriptionDatabase service not available")
+            return None
+    
+    @classmethod
+    def load_for_patient(cls, patient_id: str) -> List['Prescription']:
+        """Load all prescriptions for a patient."""
+        db = ServiceRegistry.get("PrescriptionDatabase")
+        if db:
+            data_list = db.get_prescriptions_by_patient(patient_id)
+            return [cls.from_dict(data) for data in data_list]
+        else:
+            logger.error("PrescriptionDatabase service not available")
+            return []
+
+
+class PrescriptionTemplateManager:
+    """Manages prescription templates."""
+    
+    def __init__(self, templates_dir: str = None):
+        """Initialize the template manager.
+        
+        Args:
+            templates_dir: Directory containing template files
+        """
+        self.templates_dir = templates_dir or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "data",
+            "clinical_protocols"
+        )
+        self.templates = {}
+        self._load_templates()
+        
+    def _load_templates(self):
+        """Load templates from the templates directory."""
+        if not os.path.exists(self.templates_dir):
+            os.makedirs(self.templates_dir, exist_ok=True)
+            logger.info(f"Created templates directory: {self.templates_dir}")
+            return
+        
+        for filename in os.listdir(self.templates_dir):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(self.templates_dir, filename), "r") as f:
+                        data = json.load(f)
+                        template = PrescriptionTemplate.from_dict(data)
+                        self.templates[template.name] = template
+                except Exception as e:
+                    logger.error(f"Error loading template from {filename}: {str(e)}")
+                    
+        logger.info(f"Loaded {len(self.templates)} templates")
+    
+    def get_template(self, name: str) -> Optional[PrescriptionTemplate]:
+        """Get a template by name."""
+        return self.templates.get(name)
+    
+    def get_templates_by_site(self, site: str) -> List[PrescriptionTemplate]:
+        """Get all templates for a specific site."""
+        return [t for t in self.templates.values() if t.site.lower() == site.lower()]
+    
+    def get_templates_by_technique(self, technique: str) -> List[PrescriptionTemplate]:
+        """Get all templates for a specific technique."""
+        return [t for t in self.templates.values() if t.technique.lower() == technique.lower()]
+    
+    def get_all_templates(self) -> List[PrescriptionTemplate]:
+        """Get all templates."""
+        return list(self.templates.values())
+    
+    def get_all_sites(self) -> List[str]:
+        """Get all unique treatment sites."""
+        return sorted(set(t.site for t in self.templates.values()))
+    
+    def save_template(self, template: PrescriptionTemplate) -> bool:
+        """Save a template to disk."""
+        try:
+            if not os.path.exists(self.templates_dir):
+                os.makedirs(self.templates_dir, exist_ok=True)
+                
+            filename = f"{template.name.replace(' ', '_')}.json"
+            filepath = os.path.join(self.templates_dir, filename)
+            
+            with open(filepath, "w") as f:
+                json.dump(template.to_dict(), f, indent=2)
+                
+            self.templates[template.name] = template
+            logger.info(f"Saved template to {filepath}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving template {template.name}: {str(e)}")
+            return False
+    
+    def delete_template(self, name: str) -> bool:
+        """Delete a template."""
+        template = self.templates.get(name)
+        if not template:
+            logger.warning(f"Template '{name}' not found")
+            return False
+        
+        try:
+            filename = f"{name.replace(' ', '_')}.json"
+            filepath = os.path.join(self.templates_dir, filename)
+            
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                
+            del self.templates[name]
+            logger.info(f"Deleted template '{name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting template '{name}': {str(e)}")
+            return False
+    
+    def create_standard_templates(self):
+        """Create a set of standard templates for common treatment sites."""
+        # Lung SBRT template
+        lung_sbrt = PrescriptionTemplate(
+            name="Lung SBRT",
+            site="Lung",
+            technique="SBRT",
+            prescription_type="STANDARD",
+            dose=50.0,
+            fractions=5,
+            targets={
+                "PTV": {"dose": 50.0, "dose_unit": "Gy", "volume": 95, "volume_unit": "%"}
+            }
         )
         
-        # Phục hồi phân đoạn
-        if 'fractionation' in data:
-            prescription.fractionation = Fractionation.from_dict(data['fractionation'])
-            
-        # Phục hồi các đơn liều cấu trúc
-        if 'dose_prescriptions' in data:
-            for struct_id, dp_data in data['dose_prescriptions'].items():
-                prescription.add_dose_prescription(DosePrescription.from_dict(dp_data))
-                
-        # Phục hồi các thuộc tính khác
-        prescription.physician = data.get('physician', '')
-        prescription.comments = data.get('comments', '')
+        # Add clinical goals
+        ptv_coverage = ClinicalGoal(name="PTV Coverage", description="PTV dose coverage")
+        ptv_coverage.add_constraint(DoseConstraint(
+            structure_name="PTV",
+            constraint_type="D_95",
+            dose_value=47.5,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
         
-        # Phục hồi các tham số
-        if 'parameters' in data:
-            prescription.parameters = data['parameters']
-            
-        return prescription
+        lung_constraint = ClinicalGoal(name="Lung Dose", description="Normal lung dose limits")
+        lung_constraint.add_constraint(DoseConstraint(
+            structure_name="Lung_L",
+            constraint_type="V_20Gy",
+            volume_value=10,
+            volume_unit="%",
+            priority="PRIORITY_HIGH"
+        ))
+        lung_constraint.add_constraint(DoseConstraint(
+            structure_name="Lung_R",
+            constraint_type="V_20Gy",
+            volume_value=10,
+            volume_unit="%",
+            priority="PRIORITY_HIGH"
+        ))
         
-    def __str__(self) -> str:
-        """Biểu diễn chuỗi của đối tượng đơn liều tổng thể."""
-        targets = self.get_target_prescriptions()
-        if targets:
-            primary_target = sorted(targets, key=lambda x: x.priority)[0]
-            return f"{self.name}: {primary_target.prescribed_dose} Gy in {self.fractionation.num_fractions} fractions"
-        return f"{self.name}: {self.fractionation.num_fractions} fractions"
+        spinal_cord = ClinicalGoal(name="Spinal Cord", description="Spinal cord maximum dose")
+        spinal_cord.add_constraint(DoseConstraint(
+            structure_name="SpinalCord",
+            constraint_type="D_MAX",
+            dose_value=30,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
         
-    def copy(self) -> 'Prescription':
-        """
-        Tạo một bản sao của đối tượng đơn liều tổng thể.
+        lung_sbrt.clinical_goals = [ptv_coverage, lung_constraint, spinal_cord]
+        self.save_template(lung_sbrt)
         
-        Returns
-        -------
-        Prescription
-            Bản sao của đối tượng đơn liều tổng thể
-        """
-        return copy.deepcopy(self)
+        # Prostate IMRT template
+        prostate_imrt = PrescriptionTemplate(
+            name="Prostate IMRT",
+            site="Prostate",
+            technique="IMRT",
+            prescription_type="STANDARD",
+            dose=78.0,
+            fractions=39,
+            targets={
+                "PTV": {"dose": 78.0, "dose_unit": "Gy", "volume": 95, "volume_unit": "%"}
+            }
+        )
+        
+        # Add clinical goals for prostate
+        ptv_coverage = ClinicalGoal(name="PTV Coverage", description="PTV dose coverage")
+        ptv_coverage.add_constraint(DoseConstraint(
+            structure_name="PTV",
+            constraint_type="D_95",
+            dose_value=74.1,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
+        
+        rectum_constraint = ClinicalGoal(name="Rectum Dose", description="Rectum dose limits")
+        rectum_constraint.add_constraint(DoseConstraint(
+            structure_name="Rectum",
+            constraint_type="V_70Gy",
+            volume_value=15,
+            volume_unit="%",
+            priority="PRIORITY_HIGH"
+        ))
+        rectum_constraint.add_constraint(DoseConstraint(
+            structure_name="Rectum",
+            constraint_type="V_50Gy",
+            volume_value=50,
+            volume_unit="%",
+            priority="PRIORITY_MEDIUM"
+        ))
+        
+        bladder_constraint = ClinicalGoal(name="Bladder Dose", description="Bladder dose limits")
+        bladder_constraint.add_constraint(DoseConstraint(
+            structure_name="Bladder",
+            constraint_type="V_70Gy",
+            volume_value=25,
+            volume_unit="%",
+            priority="PRIORITY_HIGH"
+        ))
+        
+        prostate_imrt.clinical_goals = [ptv_coverage, rectum_constraint, bladder_constraint]
+        self.save_template(prostate_imrt)
+        
+        # Head and Neck IMRT template
+        hn_imrt = PrescriptionTemplate(
+            name="Head and Neck IMRT",
+            site="Head and Neck",
+            technique="IMRT",
+            prescription_type="SIB",  # Simultaneous Integrated Boost
+            dose=70.0,
+            fractions=35,
+            targets={
+                "PTV_High": {"dose": 70.0, "dose_unit": "Gy", "volume": 95, "volume_unit": "%"},
+                "PTV_Intermediate": {"dose": 63.0, "dose_unit": "Gy", "volume": 95, "volume_unit": "%"},
+                "PTV_Low": {"dose": 56.0, "dose_unit": "Gy", "volume": 95, "volume_unit": "%"}
+            }
+        )
+        
+        # Add clinical goals for head and neck
+        ptv_high = ClinicalGoal(name="PTV High Coverage", description="High dose PTV coverage")
+        ptv_high.add_constraint(DoseConstraint(
+            structure_name="PTV_High",
+            constraint_type="D_95",
+            dose_value=66.5,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
+        
+        ptv_int = ClinicalGoal(name="PTV Intermediate Coverage", description="Intermediate dose PTV coverage")
+        ptv_int.add_constraint(DoseConstraint(
+            structure_name="PTV_Intermediate",
+            constraint_type="D_95",
+            dose_value=59.85,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
+        
+        ptv_low = ClinicalGoal(name="PTV Low Coverage", description="Low dose PTV coverage")
+        ptv_low.add_constraint(DoseConstraint(
+            structure_name="PTV_Low",
+            constraint_type="D_95",
+            dose_value=53.2,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
+        
+        parotid = ClinicalGoal(name="Parotid Sparing", description="Parotid dose limits")
+        parotid.add_constraint(DoseConstraint(
+            structure_name="Parotid_L",
+            constraint_type="D_MEAN",
+            dose_value=26,
+            dose_unit="Gy",
+            priority="PRIORITY_HIGH"
+        ))
+        parotid.add_constraint(DoseConstraint(
+            structure_name="Parotid_R",
+            constraint_type="D_MEAN",
+            dose_value=26,
+            dose_unit="Gy",
+            priority="PRIORITY_HIGH"
+        ))
+        
+        spinal_cord = ClinicalGoal(name="Spinal Cord", description="Spinal cord maximum dose")
+        spinal_cord.add_constraint(DoseConstraint(
+            structure_name="SpinalCord",
+            constraint_type="D_MAX",
+            dose_value=45,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
+        
+        brainstem = ClinicalGoal(name="Brainstem", description="Brainstem maximum dose")
+        brainstem.add_constraint(DoseConstraint(
+            structure_name="Brainstem",
+            constraint_type="D_MAX",
+            dose_value=54,
+            dose_unit="Gy",
+            priority="REQUIRED"
+        ))
+        
+        hn_imrt.clinical_goals = [ptv_high, ptv_int, ptv_low, parotid, spinal_cord, brainstem]
+        self.save_template(hn_imrt)
+        
+        logger.info("Created standard prescription templates")

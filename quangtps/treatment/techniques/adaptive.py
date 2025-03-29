@@ -2,381 +2,288 @@
 # -*- coding: utf-8 -*-
 
 """
-Module for Adaptive Radiotherapy techniques.
+Module defining adaptive radiotherapy techniques.
 
-This module provides classes for configuring and managing Adaptive Radiotherapy (ART),
-which is a radiotherapy approach that adjusts treatment plans based on changes
-observed during the course of treatment.
+Adaptive radiotherapy (ART) involves modifying the treatment plan during
+the course of radiotherapy in response to changes in the patient's anatomy,
+tumor response, or other physiological changes.
 """
 
+from typing import Dict, List, Any, Optional, Tuple, Union
+import numpy as np
 import logging
-from typing import Dict, Any, List, Optional
-from enum import Enum
-from datetime import datetime
+import datetime
 
-from quangtps.treatment.fractionation import Fractionation
-# Remove direct import of TreatmentPlan to avoid circular import
-from quangtps.treatment.beams.beam import Beam
-from quangtps.treatment.machine.treatment_machine import TreatmentMachine
-from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
+from quangtps.treatment.techniques.treatment_technique import TreatmentTechnique
 
 logger = logging.getLogger(__name__)
 
-class AdaptationStrategy(str, Enum):
-    """Enum for different adaptive radiotherapy strategies."""
-    OFFLINE = "OFFLINE"  # Offline adaptation, between fractions
-    ONLINE = "ONLINE"  # Online adaptation, immediately before treatment
-    REAL_TIME = "REAL_TIME"  # Real-time adaptation during treatment
 
-class AdaptationTrigger(str, Enum):
-    """Enum for different triggers that initiate adaptation."""
-    DOSIMETRIC = "DOSIMETRIC"  # Dose-based triggers (e.g., changes in DVH)
-    ANATOMICAL = "ANATOMICAL"  # Anatomy-based triggers (e.g., tumor shrinkage)
-    BIOLOGICAL = "BIOLOGICAL"  # Biology-based triggers (e.g., functional imaging)
-    SCHEDULED = "SCHEDULED"  # Pre-planned adaptation at specific intervals
-    MANUAL = "MANUAL"  # Manual decision by clinician
-
-class AdaptiveRadiotherapy(BaseTreatmentTechnique):
+class AdaptiveRT(TreatmentTechnique):
     """
-    Class for Adaptive Radiotherapy (ART) technique.
+    Class representing adaptive radiotherapy techniques.
     
-    ART adjusts the treatment plan to account for changes in tumor size, shape, and position,
-    as well as changes in normal tissues during the course of radiotherapy treatment.
-    This improves treatment precision and can reduce side effects.
+    Adaptive radiotherapy modifies treatment plans during the course of treatment
+    based on anatomical or biological changes, improving treatment accuracy and
+    potentially reducing toxicity.
     """
     
-    def __init__(self, 
-                 name: str, 
-                 strategy: AdaptationStrategy = AdaptationStrategy.OFFLINE,
-                 trigger: AdaptationTrigger = AdaptationTrigger.ANATOMICAL,
-                 technique_id: Optional[str] = None):
+    def __init__(self, technique_name: str = "Adaptive Radiotherapy"):
         """
-        Initialize an Adaptive Radiotherapy treatment.
+        Initialize adaptive radiotherapy technique.
         
         Parameters
         ----------
-        name : str
-            Name of the adaptive treatment
-        strategy : AdaptationStrategy
-            Adaptation strategy (offline, online, real-time)
-        trigger : AdaptationTrigger
-            What triggers the adaptation
-        technique_id : str, optional
-            Unique ID for the adaptive plan
+        technique_name : str, optional
+            Name of the technique, default is "Adaptive Radiotherapy"
         """
-        super().__init__(
-            name=name,
-            technique_id=technique_id,
-            category=TechniqueCategory.ADVANCED
-        )
-        
-        self.strategy = strategy
-        self.trigger = trigger
-        
-        # ART-specific attributes
-        self.original_plan: Optional = None
-        self.adapted_plans: List = []
-        self.adaptation_schedule = []  # List of planned adaptation timepoints
-        self.adaptation_history = []  # List of completed adaptations
-        self.machine: Optional = None
-        self.beams: List[Beam] = []
-        
-        # Adaptation parameters
-        self.dose_trigger_threshold = 3.0  # % dose difference to trigger adaptation
-        self.volume_trigger_threshold = 10.0  # % volume change to trigger adaptation
-        self.adaptation_frequency = 5  # Number of fractions between adaptations for scheduled
-        self.image_guidance_protocol = "CBCT"  # Default image guidance for adaptation
-        self.contour_propagation_method = "DEFORMABLE"  # Method for contour propagation
-        
-        # Quality assurance
-        self.qa_required = True
-        self.qa_protocol = "STANDARD"
-        
-        logger.info("Initialized Adaptive Radiotherapy treatment: %s (ID: %s)", name, self.technique_id)
+        super().__init__(technique_name)
+        self.adaptation_strategy = None  # OFFLINE, ONLINE, HYBRID
+        self.trigger_criteria = []  # List of criteria that trigger adaptation
+        self.imaging_protocol = None  # DAILY_CBCT, WEEKLY_MRI, etc.
+        self.original_plan_id = None  # ID of the original treatment plan
+        self.adapted_plan_ids = []  # IDs of adapted plans
+        self.adaptation_schedule = []  # Schedule for planned adaptations
+        self.adaptation_history = []  # History of previous adaptations
+        self.deformation_maps = {}  # Deformation maps between imaging sessions
     
-    def get_name(self) -> str:
-        """
-        Get the name of the technique.
-        
-        Returns
-        -------
-        str
-            The name of the technique
-        """
-        return self.name
-    
-    def get_id(self) -> str:
-        """
-        Get the unique identifier of the technique.
-        
-        Returns
-        -------
-        str
-            The technique ID
-        """
-        return self.technique_id
-    
-    def get_category(self) -> TechniqueCategory:
-        """
-        Get the category of the technique.
-        
-        Returns
-        -------
-        TechniqueCategory
-            The technique category
-        """
-        return self.category
-        
-    def set_adaptation_strategy(self, strategy: AdaptationStrategy):
+    def set_adaptation_strategy(self, strategy: str):
         """
         Set the adaptation strategy.
         
         Parameters
         ----------
-        strategy : AdaptationStrategy
-            The adaptation strategy to use
+        strategy : str
+            Strategy for adaptation: "OFFLINE", "ONLINE", or "HYBRID"
         """
-        self.strategy = strategy
-        logger.info("Set adaptation strategy to %s for treatment %s", strategy, self.name)
+        valid_strategies = ["OFFLINE", "ONLINE", "HYBRID"]
+        if strategy not in valid_strategies:
+            logger.warning(f"Invalid adaptation strategy: {strategy}. Must be one of {valid_strategies}")
+            return
+        
+        self.adaptation_strategy = strategy
+        logger.info(f"Set adaptation strategy: {strategy}")
     
-    def set_adaptation_trigger(self, trigger: AdaptationTrigger):
+    def set_imaging_protocol(self, protocol: str):
         """
-        Set the trigger that will initiate adaptation.
-        
-        Parameters
-        ----------
-        trigger : AdaptationTrigger
-            The adaptation trigger to use
-        """
-        self.trigger = trigger
-        logger.info("Set adaptation trigger to %s for treatment %s", trigger, self.name)
-    
-    def set_original_plan(self, plan):
-        """
-        Set the original treatment plan that will be adapted.
-        
-        Parameters
-        ----------
-        plan 
-            The original treatment plan
-        """
-        self.original_plan = plan
-        if self.original_plan and self.original_plan.fractionation:
-            self.fractionation = self.original_plan.fractionation
-            logger.info("Using fractionation from original plan: %s fractions of %s Gy",
-                      self.fractionation.num_fractions, self.fractionation.dose_per_fraction)
-        
-    def add_adapted_plan(self, plan, reason: str, fraction_number: int):
-        """
-        Add an adapted treatment plan with the reason for adaptation.
-        
-        Parameters
-        ----------
-        plan 
-            The adapted treatment plan
-        reason : str
-            The reason for adaptation
-        fraction_number : int
-            The fraction number at which the adaptation was made
-        """
-        self.adapted_plans.append(plan)
-        
-        adaptation_record = {
-            'plan': plan,
-            'reason': reason,
-            'fraction': fraction_number,
-            'date': datetime.now().isoformat()
-        }
-        
-        self.adaptation_history.append(adaptation_record)
-        logger.info("Added adapted plan for treatment %s at fraction %s: %s",
-                   self.name, fraction_number, reason)
-    
-    def set_adaptation_schedule(self, fractions: List[int]):
-        """
-        Set the schedule for planned adaptations.
-        
-        Parameters
-        ----------
-        fractions : List[int]
-            List of fraction numbers when adaptation should occur
-        """
-        self.adaptation_schedule = fractions
-        
-        if fractions and self.trigger != AdaptationTrigger.SCHEDULED:
-            self.trigger = AdaptationTrigger.SCHEDULED
-            logger.info("Changed adaptation trigger to SCHEDULED for plan %s", self.name)
-            
-    def set_adaptation_thresholds(self, dose_threshold: float, volume_threshold: float):
-        """
-        Set thresholds for triggering adaptation.
-        
-        Parameters
-        ----------
-        dose_threshold : float
-            Dose difference threshold (%)
-        volume_threshold : float
-            Volume change threshold (%)
-        """
-        self.dose_trigger_threshold = dose_threshold
-        self.volume_trigger_threshold = volume_threshold
-        
-    def set_image_guidance_protocol(self, protocol: str):
-        """
-        Set the image guidance protocol for adaptation.
+        Set the imaging protocol for adaptation.
         
         Parameters
         ----------
         protocol : str
-            Image guidance protocol (e.g., "CBCT", "MRI", "CT")
+            Imaging protocol (e.g., "DAILY_CBCT", "WEEKLY_MRI")
         """
-        self.image_guidance_protocol = protocol
-        
-    def evaluate_adaptation_need(self, current_fraction: int, 
-                                 dose_difference: Optional[float] = None,
-                                 volume_change: Optional[float] = None) -> bool:
+        self.imaging_protocol = protocol
+        logger.info(f"Set imaging protocol: {protocol}")
+    
+    def add_trigger_criterion(self, criterion: Dict[str, Any]):
         """
-        Evaluate if adaptation is needed based on current data.
+        Add a criterion that triggers plan adaptation.
         
         Parameters
         ----------
-        current_fraction : int
-            Current fraction number
-        dose_difference : float, optional
-            Dose difference from planned (%)
-        volume_change : float, optional
-            Volume change from planning (%)
-            
+        criterion : Dict[str, Any]
+            Dictionary containing trigger criterion information
+        """
+        if not isinstance(criterion, dict):
+            logger.warning("Trigger criterion must be a dictionary")
+            return
+        
+        required_keys = ["type", "threshold"]
+        if not all(key in criterion for key in required_keys):
+            logger.warning(f"Trigger criterion must contain keys: {required_keys}")
+            return
+        
+        self.trigger_criteria.append(criterion)
+        logger.info(f"Added trigger criterion: {criterion}")
+    
+    def set_original_plan(self, plan_id: str):
+        """
+        Set the original treatment plan.
+        
+        Parameters
+        ----------
+        plan_id : str
+            ID of the original treatment plan
+        """
+        self.original_plan_id = plan_id
+        logger.info(f"Set original plan: {plan_id}")
+    
+    def add_adapted_plan(self, plan_id: str):
+        """
+        Add an adapted treatment plan.
+        
+        Parameters
+        ----------
+        plan_id : str
+            ID of the adapted treatment plan
+        """
+        if plan_id not in self.adapted_plan_ids:
+            self.adapted_plan_ids.append(plan_id)
+            logger.info(f"Added adapted plan: {plan_id}")
+    
+    def schedule_adaptation(self, fraction: int, reason: str):
+        """
+        Schedule a planned adaptation.
+        
+        Parameters
+        ----------
+        fraction : int
+            Treatment fraction number for adaptation
+        reason : str
+            Reason for adaptation
+        """
+        if fraction <= 0:
+            logger.warning(f"Invalid fraction number: {fraction}")
+            return
+        
+        schedule_item = {
+            "fraction": fraction,
+            "reason": reason,
+            "status": "SCHEDULED"
+        }
+        
+        self.adaptation_schedule.append(schedule_item)
+        logger.info(f"Scheduled adaptation for fraction {fraction}: {reason}")
+    
+    def record_adaptation(self, fraction: int, plan_id: str, changes: Dict[str, Any]):
+        """
+        Record an adaptation that has occurred.
+        
+        Parameters
+        ----------
+        fraction : int
+            Treatment fraction at which adaptation occurred
+        plan_id : str
+            ID of the adapted plan
+        changes : Dict[str, Any]
+            Description of changes made during adaptation
+        """
+        if plan_id not in self.adapted_plan_ids:
+            self.add_adapted_plan(plan_id)
+        
+        adaptation_record = {
+            "fraction": fraction,
+            "date": datetime.datetime.now().isoformat(),
+            "plan_id": plan_id,
+            "changes": changes
+        }
+        
+        self.adaptation_history.append(adaptation_record)
+        logger.info(f"Recorded adaptation at fraction {fraction} with plan {plan_id}")
+    
+    def add_deformation_map(self, reference_image_id: str, target_image_id: str, map_data: Any):
+        """
+        Add a deformation map between imaging sessions.
+        
+        Parameters
+        ----------
+        reference_image_id : str
+            ID of the reference image
+        target_image_id : str
+            ID of the target image
+        map_data : Any
+            Deformation map data
+        """
+        key = f"{reference_image_id}_{target_image_id}"
+        self.deformation_maps[key] = map_data
+        logger.info(f"Added deformation map between {reference_image_id} and {target_image_id}")
+    
+    def get_adaptation_history(self) -> List[Dict[str, Any]]:
+        """
+        Get the history of adaptations.
+        
         Returns
         -------
-        bool
-            True if adaptation is needed, False otherwise
+        List[Dict[str, Any]]
+            List of adaptation records
         """
-        # Check scheduled adaptation
-        if self.trigger == AdaptationTrigger.SCHEDULED:
-            return current_fraction in self.adaptation_schedule
-        
-        # Check dosimetric trigger
-        if self.trigger == AdaptationTrigger.DOSIMETRIC and dose_difference is not None:
-            return abs(dose_difference) > self.dose_trigger_threshold
-        
-        # Check anatomical trigger
-        if self.trigger == AdaptationTrigger.ANATOMICAL and volume_change is not None:
-            return abs(volume_change) > self.volume_trigger_threshold
-        
-        # For manual and biological triggers, adaptation is triggered externally
-        return False
+        return self.adaptation_history
     
-    def set_fractionation(self, fractionation: Fractionation) -> None:
-        """
-        Set the fractionation for the adaptive treatment.
-        
-        Parameters
-        ----------
-        fractionation : Fractionation
-            The fractionation scheme
-        """
-        self.fractionation = fractionation
-        logger.info("Set fractionation to %s Gy in %s fractions for adaptive treatment '%s'",
-                   fractionation.total_dose, fractionation.num_fractions, self.name)
-    
-    def set_machine(self, machine: TreatmentMachine) -> None:
-        """
-        Set the treatment machine for the adaptive treatment.
-        
-        Parameters
-        ----------
-        machine : TreatmentMachine
-            The treatment machine to use
-        """
-        self.machine = machine
-        logger.info("Set treatment machine to %s for adaptive treatment '%s'", machine.name, self.name)
-    
-    def add_beam(self, beam: Beam) -> None:
-        """
-        Add a beam to the adaptive plan.
-        
-        Parameters
-        ----------
-        beam : Beam
-            The beam to add to the plan
-        """
-        if beam not in self.beams:
-            self.beams.append(beam)
-            logger.info("Added beam %s to adaptive treatment '%s'", beam.beam_id, self.name)
-    
-    def get_beams(self) -> List[Beam]:
-        """
-        Get all beams in the adaptive plan.
-        
-        Returns
-        -------
-        List[Beam]
-            List of beams in the plan
-        """
-        return self.beams
-        
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert ART to dictionary.
+        Convert adaptive radiotherapy information to a dictionary.
         
         Returns
         -------
         Dict[str, Any]
-            Dictionary representation
+            Dictionary containing technique information
         """
-        return {
-            "id": self.technique_id,
-            "name": self.name,
-            "strategy": self.strategy,
-            "trigger": self.trigger,
-            "category": self.category.value,
+        data = super().to_dict()
+        data.update({
+            "adaptation_strategy": self.adaptation_strategy,
+            "trigger_criteria": self.trigger_criteria,
+            "imaging_protocol": self.imaging_protocol,
+            "original_plan_id": self.original_plan_id,
+            "adapted_plan_ids": self.adapted_plan_ids,
             "adaptation_schedule": self.adaptation_schedule,
-            "dose_trigger_threshold": self.dose_trigger_threshold,
-            "volume_trigger_threshold": self.volume_trigger_threshold,
-            "image_guidance_protocol": self.image_guidance_protocol,
-            "contour_propagation_method": self.contour_propagation_method,
-            "adaptation_history": self.adaptation_history,
-            "qa_required": self.qa_required,
-            "qa_protocol": self.qa_protocol,
-            "original_plan_id": self.original_plan.plan_id if self.original_plan else None,
-            "adapted_plan_ids": [plan.plan_id for plan in self.adapted_plans]
-        }
+            "adaptation_history": self.adaptation_history
+            # Deformation maps are typically large and stored separately
+        })
+        return data
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AdaptiveRadiotherapy':
+    def from_dict(cls, data: Dict[str, Any]) -> 'AdaptiveRT':
         """
-        Create ART from dictionary.
+        Create an AdaptiveRT object from a dictionary.
         
         Parameters
         ----------
         data : Dict[str, Any]
-            Dictionary with ART data
+            Dictionary containing technique information
             
         Returns
         -------
-        AdaptiveRadiotherapy
-            ART instance
+        AdaptiveRT
+            AdaptiveRT object
         """
-        art = cls(
-            name=data["name"],
-            strategy=AdaptationStrategy(data["strategy"]),
-            trigger=AdaptationTrigger(data["trigger"]),
-            technique_id=data["id"]
-        )
+        technique = cls(data.get("technique_name", "Adaptive Radiotherapy"))
         
-        # Set adaptation parameters
-        art.adaptation_schedule = data.get("adaptation_schedule", [])
-        art.dose_trigger_threshold = data.get("dose_trigger_threshold", 3.0)
-        art.volume_trigger_threshold = data.get("volume_trigger_threshold", 10.0)
-        art.image_guidance_protocol = data.get("image_guidance_protocol", "CBCT")
-        art.contour_propagation_method = data.get("contour_propagation_method", "DEFORMABLE")
-        art.adaptation_history = data.get("adaptation_history", [])
-        art.qa_required = data.get("qa_required", True)
-        art.qa_protocol = data.get("qa_protocol", "STANDARD")
+        # Set attributes
+        if "adaptation_strategy" in data:
+            technique.set_adaptation_strategy(data["adaptation_strategy"])
         
-        return art
+        if "imaging_protocol" in data:
+            technique.set_imaging_protocol(data["imaging_protocol"])
+        
+        if "trigger_criteria" in data and isinstance(data["trigger_criteria"], list):
+            for criterion in data["trigger_criteria"]:
+                technique.add_trigger_criterion(criterion)
+        
+        if "original_plan_id" in data:
+            technique.set_original_plan(data["original_plan_id"])
+        
+        if "adapted_plan_ids" in data and isinstance(data["adapted_plan_ids"], list):
+            for plan_id in data["adapted_plan_ids"]:
+                technique.add_adapted_plan(plan_id)
+        
+        if "adaptation_schedule" in data and isinstance(data["adaptation_schedule"], list):
+            for item in data["adaptation_schedule"]:
+                if "fraction" in item and "reason" in item:
+                    technique.schedule_adaptation(item["fraction"], item["reason"])
+        
+        if "adaptation_history" in data and isinstance(data["adaptation_history"], list):
+            technique.adaptation_history = data["adaptation_history"]
+        
+        return technique
 
-
-# Ensure proper exports
-__all__ = ['AdaptiveRadiotherapy', 'AdaptationStrategy', 'AdaptationTrigger']
+# Alias for backward compatibility
+class AdaptiveRadiotherapy(AdaptiveRT):
+    """
+    Class representing adaptive radiotherapy technique (alias for AdaptiveRT).
+    
+    This class is provided for backward compatibility with existing code that 
+    may reference AdaptiveRadiotherapy instead of AdaptiveRT.
+    """
+    
+    def __init__(self, technique_name: str = "Adaptive Radiotherapy"):
+        """
+        Initialize adaptive radiotherapy technique.
+        
+        Parameters
+        ----------
+        technique_name : str, optional
+            Name of the technique, default is "Adaptive Radiotherapy"
+        """
+        super().__init__(technique_name)
+        logger.info("AdaptiveRadiotherapy initialized (alias for AdaptiveRT)")

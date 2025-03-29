@@ -207,15 +207,15 @@ class DVHAnalysis:
     
     def get_conformity_index(self, prescription_dose: float, reference_volume: Optional[float] = None, method: str = 'paddick') -> float:
         """
-        Tính chỉ số phù hợp (Conformity Index - CI).
+        Tính chỉ số tuân thủ (Conformity Index - CI).
         
         Parameters:
             prescription_dose (float): Liều kê đơn
             reference_volume (float, optional): Thể tích tham chiếu (thường là thể tích PTV)
-            method (str, optional): Phương pháp tính CI ('paddick', 'rtog', 'lomax')
+            method (str, optional): Phương pháp tính CI ('paddick', 'rtog', 'lomax', 'knoos')
             
         Returns:
-            float: Chỉ số phù hợp
+            float: Chỉ số tuân thủ
             
         Raises:
             ValueError: Nếu phương pháp không được hỗ trợ
@@ -223,59 +223,110 @@ class DVHAnalysis:
         if self.is_empty:
             return float('nan')
             
-        # Tính thể tích nhận được ít nhất là liều kê đơn
-        v_rx = self.get_vx(prescription_dose)
+        if method.lower() not in ['paddick', 'rtog', 'lomax', 'knoos', 'van_t_riet']:
+            raise ValueError(f"Unsupported conformity index method: {method}. "
+                            f"Supported methods: 'paddick', 'rtog', 'lomax', 'knoos', 'van_t_riet'")
         
-        # Chuyển đổi từ phần trăm sang thể tích tuyệt đối nếu cần
+        # Thể tích nhận ít nhất liều kê đơn
+        v_prescription = self.get_vx(prescription_dose)
+        
+        # Chuyển đổi phần trăm thành giá trị tuyệt đối nếu cần
         if self.volume_type == 'relative':
-            v_rx_abs = v_rx * self.dvh_data['structure_volume'] / 100.0
-        else:
-            v_rx_abs = v_rx
-        
-        if method.lower() == 'rtog':
-            # CI = V_rx / V_ref
+            # Nếu không cung cấp thể tích tham chiếu, không thể chuyển đổi
             if reference_volume is None:
-                logger.warning("reference_volume not provided for RTOG CI, using structure volume")
-                reference_volume = self.dvh_data['structure_volume']
+                logger.warning("Reference volume is required for relative DVH data to calculate absolute conformity index")
+                return float('nan')
+                
+            v_prescription_absolute = reference_volume * v_prescription / 100.0
+        else:
+            # DVH đã là thể tích tuyệt đối
+            v_prescription_absolute = v_prescription
+        
+        if method.lower() == 'paddick':
+            # CI_Paddick = (TV_PIV)^2 / (TV * PIV)
+            # Cần thể tích tham chiếu (TV) và thể tích nhận liều kê đơn (PIV)
+            if reference_volume is None:
+                logger.warning("Reference volume is required for Paddick conformity index")
+                return float('nan')
+                
+            # TV_PIV là phần giao của target và thể tích nhận liều kê đơn
+            # Giả định rằng thể tích tham chiếu là PTV
+            tv_piv = min(v_prescription_absolute, reference_volume)
+            
+            # PIV là thể tích nhận liều kê đơn
+            piv = v_prescription_absolute
+            
+            if piv == 0 or reference_volume == 0:
+                return 0.0
+                
+            ci = (tv_piv ** 2) / (reference_volume * piv)
+            return ci
+            
+        elif method.lower() == 'rtog':
+            # CI_RTOG = V_RI / TV
+            # V_RI là thể tích nhận ít nhất liều kê đơn
+            if reference_volume is None:
+                logger.warning("Reference volume is required for RTOG conformity index")
+                return float('nan')
                 
             if reference_volume == 0:
                 return float('nan')
                 
-            return v_rx_abs / reference_volume
-            
-        elif method.lower() == 'paddick':
-            # CI = (TV_rx)^2 / (TV * V_rx)
-            # TV_rx: thể tích target nhận được ít nhất là liều kê đơn
-            # TV: tổng thể tích target
-            # V_rx: tổng thể tích nhận được ít nhất là liều kê đơn
-            
-            if reference_volume is None:
-                logger.warning("reference_volume not provided for Paddick CI, assuming the structure is the target")
-                tv_rx = v_rx_abs
-                tv = self.dvh_data['structure_volume']
-            else:
-                # Giả định structure_volume là thể tích nằm trong intersection của target và isodose
-                tv_rx = v_rx_abs
-                tv = reference_volume
-            
-            if tv == 0 or v_rx_abs == 0:
-                return float('nan')
-                
-            return (tv_rx ** 2) / (tv * v_rx_abs)
+            ci = v_prescription_absolute / reference_volume
+            return ci
             
         elif method.lower() == 'lomax':
-            # CI = 1 - |1 - V_rx/V_ref|
+            # CI_Lomax = TV_RI / TV
+            # TV_RI là thể tích của target nhận ít nhất liều kê đơn
+            # Giả định rằng toàn bộ target nhận liều kê đơn
             if reference_volume is None:
-                logger.warning("reference_volume not provided for Lomax CI, using structure volume")
-                reference_volume = self.dvh_data['structure_volume']
+                logger.warning("Reference volume is required for Lomax conformity index")
+                return float('nan')
                 
             if reference_volume == 0:
                 return float('nan')
                 
-            return 1 - abs(1 - v_rx_abs / reference_volume)
+            # Giả định lý tưởng tất cả target nhận đủ liều
+            tv_ri = reference_volume
             
-        else:
-            raise ValueError(f"Unsupported conformity index method: {method}")
+            ci = tv_ri / reference_volume
+            return ci
+            
+        elif method.lower() == 'knoos':
+            # CI_Knoos = V_RI / TV * TV_RI / V_RI = TV_RI / TV
+            # Tương tự như Lomax trong giả định của chúng ta
+            if reference_volume is None:
+                logger.warning("Reference volume is required for Knoos conformity index")
+                return float('nan')
+                
+            if reference_volume == 0:
+                return float('nan')
+                
+            # Giả định lý tưởng tất cả target nhận đủ liều
+            tv_ri = reference_volume
+            
+            ci = tv_ri / reference_volume
+            return ci
+            
+        elif method.lower() == 'van_t_riet':
+            # CI_van't Riet = (TV_RI / TV) * (TV_RI / V_RI)
+            # Tương tự như Paddick nhưng biểu diễn khác
+            if reference_volume is None:
+                logger.warning("Reference volume is required for van't Riet conformity index")
+                return float('nan')
+                
+            # TV_RI là phần giao của target và thể tích nhận liều kê đơn
+            # Giả định rằng thể tích tham chiếu là PTV
+            tv_ri = min(v_prescription_absolute, reference_volume)
+            
+            # V_RI là thể tích nhận liều kê đơn
+            v_ri = v_prescription_absolute
+            
+            if v_ri == 0 or reference_volume == 0:
+                return 0.0
+                
+            ci = (tv_ri / reference_volume) * (tv_ri / v_ri)
+            return ci
     
     def get_gradient_index(self, high_dose: float, low_dose: float = None, ratio: float = 0.5) -> float:
         """
@@ -309,90 +360,119 @@ class DVHAnalysis:
     
     def get_dose_spillage(self, prescription_dose: float, r50_reference_volume: Optional[float] = None) -> Dict[str, float]:
         """
-        Tính liều spillage (tràn) theo tiêu chuẩn RTOG.
+        Tính toán độ tràn liều (Dose Spillage) cho kế hoạch xạ trị.
         
         Parameters:
             prescription_dose (float): Liều kê đơn
             r50_reference_volume (float, optional): Thể tích tham chiếu cho R50% (thường là thể tích PTV)
             
         Returns:
-            Dict[str, float]: Các chỉ số liều spillage
+            Dict[str, float]: Các chỉ số độ tràn liều như R50%, D2cm, v.v.
         """
         if self.is_empty:
             return {
-                'R50%': float('nan'),
-                'R27%': float('nan'),
-                'D2cm': float('nan')
+                'r50': float('nan'),
+                'd2cm': float('nan'),
+                'gradient_measure': float('nan'),
+                'pci': float('nan'),
+                'irradiated_volume_ratio': float('nan')
             }
-            
-        # Tính thể tích nhận được các liều khác nhau
-        v_100 = self.get_vx(prescription_dose)
-        v_50 = self.get_vx(prescription_dose * 0.5)
-        v_27 = self.get_vx(prescription_dose * 0.27)
         
-        # Sử dụng structure_volume nếu không cung cấp r50_reference_volume
-        if r50_reference_volume is None:
-            r50_reference_volume = self.dvh_data['structure_volume']
+        # Thể tích nhận ít nhất liều kê đơn (100%)
+        v_prescription = self.get_vx(prescription_dose)
         
-        # Chuyển đổi từ phần trăm sang thể tích tuyệt đối nếu cần
+        # Thể tích nhận ít nhất 50% liều kê đơn
+        v_half_prescription = self.get_vx(prescription_dose / 2)
+        
+        # Chuyển đổi phần trăm thành giá trị tuyệt đối nếu cần
         if self.volume_type == 'relative':
-            v_100_abs = v_100 * self.dvh_data['structure_volume'] / 100.0
-            v_50_abs = v_50 * self.dvh_data['structure_volume'] / 100.0
-            v_27_abs = v_27 * self.dvh_data['structure_volume'] / 100.0
+            # Nếu không cung cấp thể tích tham chiếu, không thể chuyển đổi
+            if r50_reference_volume is None:
+                logger.warning("Reference volume is required for relative DVH data to calculate R50%")
+                return {
+                    'r50': float('nan'),
+                    'd2cm': float('nan'),
+                    'gradient_measure': float('nan'),
+                    'pci': float('nan'),
+                    'irradiated_volume_ratio': float('nan')
+                }
+                
+            v_prescription_absolute = r50_reference_volume * v_prescription / 100.0
+            v_half_prescription_absolute = r50_reference_volume * v_half_prescription / 100.0
         else:
-            v_100_abs = v_100
-            v_50_abs = v_50
-            v_27_abs = v_27
+            # DVH đã là thể tích tuyệt đối
+            v_prescription_absolute = v_prescription
+            v_half_prescription_absolute = v_half_prescription
         
-        # Tính các chỉ số
-        if v_100_abs == 0 or r50_reference_volume == 0:
-            r_50 = float('nan')
+        # Tính R50%
+        if v_prescription_absolute == 0:
+            r50 = float('nan')
         else:
-            r_50 = v_50_abs / r50_reference_volume
+            r50 = v_half_prescription_absolute / v_prescription_absolute
+        
+        # Tính PCI (Paddick Conformity Index)
+        if r50_reference_volume is not None:
+            pci = self.get_conformity_index(prescription_dose, r50_reference_volume, method='paddick')
+        else:
+            pci = float('nan')
+        
+        # Tính gradient measure
+        if v_prescription_absolute == 0:
+            gradient_measure = float('nan')
+        else:
+            # Sử dụng r50 để tính gradient measure
+            gradient_measure = r50
+        
+        # Tính D2cm (liều lớn nhất ở khoảng cách 2cm từ PTV)
+        # Thông tin này không có trong DVH, cần tính toán từ phân bố liều 3D
+        # Ở đây chúng ta đặt một giá trị NaN hoặc có thể ước lượng
+        d2cm = float('nan')
+        
+        # Tính tỷ lệ thể tích chiếu xạ
+        if r50_reference_volume is not None:
+            # Thể tích nhận ít nhất 20% liều kê đơn
+            v_low_dose = self.get_vx(prescription_dose * 0.2)
             
-        if v_100_abs == 0:
-            r_27 = float('nan')
+            if self.volume_type == 'relative':
+                v_low_dose_absolute = r50_reference_volume * v_low_dose / 100.0
+            else:
+                v_low_dose_absolute = v_low_dose
+                
+            irradiated_volume_ratio = v_low_dose_absolute / r50_reference_volume
         else:
-            r_27 = v_27_abs / v_100_abs
-        
-        # Chú ý: D2cm đòi hỏi thông tin không gian 3D mà không có trong DVH đơn thuần
-        # Ở đây chỉ trả về NaN
-        d_2cm = float('nan')
+            irradiated_volume_ratio = float('nan')
         
         return {
-            'R50%': r_50,
-            'R27%': r_27,
-            'D2cm': d_2cm
+            'r50': r50,
+            'd2cm': d2cm,
+            'gradient_measure': gradient_measure,
+            'pci': pci,
+            'irradiated_volume_ratio': irradiated_volume_ratio
         }
     
     def get_integral_dose(self, density: float = 1.0) -> float:
         """
-        Tính liều tích phân (Integral Dose).
-        
-        ID = Σ(Di * vi * ρ)
+        Tính liều tích phân (Integral Dose) cho cấu trúc.
         
         Parameters:
             density (float, optional): Mật độ mô (g/cm³)
             
         Returns:
-            float: Liều tích phân (Gy*cc hoặc J/kg)
+            float: Liều tích phân (Gy·cm³)
         """
         if self.is_empty:
             return 0.0
-            
-        # Lấy DVH vi phân
+        
+        # Lấy thể tích vi phân từ DVH
         diff_volumes = self.differential_dvh
         
-        # Chuyển đổi sang thể tích tuyệt đối (cc) nếu cần
         if self.volume_type == 'relative':
-            structure_volume = self.dvh_data.get('structure_volume_cc', 
-                                               self.dvh_data['structure_volume'])
-            volumes_cc = diff_volumes * structure_volume / 100.0
-        else:
-            volumes_cc = diff_volumes
+            # Không thể tính liều tích phân chính xác nếu không có thông tin thể tích tuyệt đối
+            logger.warning("Integral dose calculation requires absolute volume data")
+            return float('nan')
         
-        # Tính liều tích phân
-        integral_dose = np.sum(self.dose_bins * volumes_cc) * density
+        # Tính liều tích phân: ID = Σ(Di * vi) * ρ
+        integral_dose = np.sum(self.dose_bins * diff_volumes) * density
         
         return integral_dose
     
@@ -480,97 +560,226 @@ class DVHAnalysis:
     
     def check_dose_constraints(self, constraints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Kiểm tra ràng buộc liều cho cấu trúc.
+        Kiểm tra xem DVH có thỏa mãn các ràng buộc liều đã cho không.
         
         Parameters:
-            constraints (List[Dict]): Danh sách các ràng buộc, mỗi ràng buộc là một dict với các key:
-                - type: Loại ràng buộc ('Dx', 'Vx', 'Max', 'Mean', 'Min', 'EUD', ...)
-                - value: Giá trị giới hạn
-                - direction: Hướng so sánh ('≤', '≥', '=')
-                - priority: Độ ưu tiên ('mandatory', 'high', 'medium', 'low')
-                - unit: Đơn vị ('Gy', '%', 'cc', ...)
-                - params: Tham số bổ sung (nếu cần)
-            
+            constraints (List[Dict[str, Any]]): Danh sách các ràng buộc định nghĩa dưới dạng Dict,
+                                              mỗi Dict chứa ít nhất 'type', 'value', và tùy chọn 'priority'
+                                              
         Returns:
-            List[Dict]: Danh sách các ràng buộc với kết quả kiểm tra
+            List[Dict[str, Any]]: Danh sách các ràng buộc với thông tin về việc đáp ứng và độ lệch
         """
         if self.is_empty:
-            return [{**constraint, 'result': float('nan'), 'passed': False} 
+            return [{**constraint, 'result': False, 'deviation': float('nan'), 'actual': float('nan')} 
                     for constraint in constraints]
-            
+        
         results = []
         
         for constraint in constraints:
-            constraint_type = constraint.get('type', '')
-            constraint_value = constraint.get('value', 0)
-            constraint_direction = constraint.get('direction', '≤')
-            constraint_params = constraint.get('params', {})
+            # Clone constraint để không thay đổi constraint gốc
+            result = constraint.copy()
             
-            # Tính giá trị thực tế
-            actual_value = float('nan')
+            # Lấy thông tin cơ bản từ ràng buộc
+            constraint_type = constraint['type'].lower()
+            threshold = constraint['value']
+            priority = constraint.get('priority', 1)  # Mặc định ưu tiên 1
             
-            if constraint_type.startswith('D') and constraint_type[1:].isdigit():
-                # Dx - Liều phủ x% thể tích
-                volume_percent = float(constraint_type[1:])
-                actual_value = self.get_dx(volume_percent)
+            # Kiểm tra từng loại ràng buộc
+            if 'd' in constraint_type and '%' in constraint_type:
+                # Dạng Dx% - liều tại x% thể tích
+                volume_percent = float(constraint_type.replace('d', '').replace('%', ''))
+                actual = self.get_dx(volume_percent)
                 
-            elif constraint_type.startswith('V'):
-                # Vx - Phần trăm thể tích nhận liều >= x
-                dose_value = float(constraint_type[1:])
-                rx_dose = constraint_params.get('prescription_dose')
-                relative = constraint_params.get('relative_to_prescription', False)
-                actual_value = self.get_vx(dose_value, relative, rx_dose)
+                # Kiểm tra ràng buộc
+                if 'max' in constraint:
+                    limit = constraint['max']
+                    result['limit_type'] = 'max'
+                    result['satisfied'] = actual <= limit
+                    result['deviation'] = actual - limit if actual > limit else 0
+                else:
+                    limit = constraint['min']
+                    result['limit_type'] = 'min'
+                    result['satisfied'] = actual >= limit
+                    result['deviation'] = limit - actual if actual < limit else 0
                 
-            elif constraint_type == 'Max' or constraint_type == 'Maximum':
-                actual_value = self.dvh_data['max_dose']
+                result['actual'] = actual
                 
-            elif constraint_type == 'Mean':
-                actual_value = self.dvh_data['mean_dose']
+            elif 'v' in constraint_type and 'gy' in constraint_type:
+                # Dạng VxGy - % thể tích nhận ít nhất x Gy
+                dose = float(constraint_type.replace('v', '').replace('gy', ''))
+                actual = self.get_vx(dose)
                 
-            elif constraint_type == 'Min' or constraint_type == 'Minimum':
-                actual_value = self.dvh_data['min_dose']
+                # Kiểm tra ràng buộc
+                if 'max' in constraint:
+                    limit = constraint['max']
+                    result['limit_type'] = 'max'
+                    result['satisfied'] = actual <= limit
+                    result['deviation'] = actual - limit if actual > limit else 0
+                else:
+                    limit = constraint['min']
+                    result['limit_type'] = 'min'
+                    result['satisfied'] = actual >= limit
+                    result['deviation'] = limit - actual if actual < limit else 0
                 
-            elif constraint_type == 'Median':
-                actual_value = self.dvh_data['median_dose']
+                result['actual'] = actual
                 
-            elif constraint_type == 'EUD':
-                parameter_a = constraint_params.get('a', 1.0)
-                actual_value = self.get_equivalent_uniform_dose(parameter_a)
+            elif 'v' in constraint_type and '%' in constraint_type:
+                # Dạng Vx% - % thể tích nhận ít nhất x% liều kê đơn
+                relative_dose = float(constraint_type.replace('v', '').replace('%', ''))
                 
-            elif constraint_type == 'HI':
-                prescription_dose = constraint_params.get('prescription_dose', 0)
-                method = constraint_params.get('method', 'icru83')
-                actual_value = self.get_homogeneity_index(prescription_dose, method)
+                # Cần liều kê đơn để tính
+                if 'prescription_dose' in constraint:
+                    prescription_dose = constraint['prescription_dose']
+                    dose = prescription_dose * relative_dose / 100.0
+                    actual = self.get_vx(dose)
+                    
+                    # Kiểm tra ràng buộc
+                    if 'max' in constraint:
+                        limit = constraint['max']
+                        result['limit_type'] = 'max'
+                        result['satisfied'] = actual <= limit
+                        result['deviation'] = actual - limit if actual > limit else 0
+                    else:
+                        limit = constraint['min']
+                        result['limit_type'] = 'min'
+                        result['satisfied'] = actual >= limit
+                        result['deviation'] = limit - actual if actual < limit else 0
+                    
+                    result['actual'] = actual
+                else:
+                    logger.warning("Prescription dose is required for V%% constraint: %s", constraint_type)
+                    result['satisfied'] = False
+                    result['deviation'] = float('nan')
+                    result['actual'] = float('nan')
                 
-            elif constraint_type == 'CI':
-                prescription_dose = constraint_params.get('prescription_dose', 0)
-                ref_volume = constraint_params.get('reference_volume')
-                method = constraint_params.get('method', 'paddick')
-                actual_value = self.get_conformity_index(prescription_dose, ref_volume, method)
+            elif constraint_type == 'mean':
+                # Ràng buộc liều trung bình
+                stats = self.get_dose_statistics()
+                actual = stats['mean']
                 
-            elif constraint_type == 'GI':
-                high_dose = constraint_params.get('high_dose', 0)
-                low_dose = constraint_params.get('low_dose')
-                ratio = constraint_params.get('ratio', 0.5)
-                actual_value = self.get_gradient_index(high_dose, low_dose, ratio)
+                # Kiểm tra ràng buộc
+                if 'max' in constraint:
+                    limit = constraint['max']
+                    result['limit_type'] = 'max'
+                    result['satisfied'] = actual <= limit
+                    result['deviation'] = actual - limit if actual > limit else 0
+                else:
+                    limit = constraint['min']
+                    result['limit_type'] = 'min'
+                    result['satisfied'] = actual >= limit
+                    result['deviation'] = limit - actual if actual < limit else 0
+                
+                result['actual'] = actual
+                
+            elif constraint_type == 'max':
+                # Ràng buộc liều lớn nhất
+                stats = self.get_dose_statistics()
+                actual = stats['max']
+                
+                # Đối với ràng buộc max, chỉ có giới hạn max
+                limit = constraint['max']
+                result['limit_type'] = 'max'
+                result['satisfied'] = actual <= limit
+                result['deviation'] = actual - limit if actual > limit else 0
+                result['actual'] = actual
+                
+            elif constraint_type == 'min':
+                # Ràng buộc liều nhỏ nhất
+                stats = self.get_dose_statistics()
+                actual = stats['min']
+                
+                # Đối với ràng buộc min, chỉ có giới hạn min
+                limit = constraint['min']
+                result['limit_type'] = 'min'
+                result['satisfied'] = actual >= limit
+                result['deviation'] = limit - actual if actual < limit else 0
+                result['actual'] = actual
+                
+            elif constraint_type == 'eud':
+                # Ràng buộc EUD (Equivalent Uniform Dose)
+                if 'parameter_a' in constraint:
+                    parameter_a = constraint['parameter_a']
+                    actual = self.get_equivalent_uniform_dose(parameter_a)
+                    
+                    # Kiểm tra ràng buộc
+                    if 'max' in constraint:
+                        limit = constraint['max']
+                        result['limit_type'] = 'max'
+                        result['satisfied'] = actual <= limit
+                        result['deviation'] = actual - limit if actual > limit else 0
+                    else:
+                        limit = constraint['min']
+                        result['limit_type'] = 'min'
+                        result['satisfied'] = actual >= limit
+                        result['deviation'] = limit - actual if actual < limit else 0
+                    
+                    result['actual'] = actual
+                else:
+                    logger.warning("Parameter 'a' is required for EUD constraint")
+                    result['satisfied'] = False
+                    result['deviation'] = float('nan')
+                    result['actual'] = float('nan')
             
-            # Kiểm tra kết quả so với ràng buộc
-            passed = False
-            if constraint_direction == '≤' or constraint_direction == '<=':
-                passed = actual_value <= constraint_value
-            elif constraint_direction == '≥' or constraint_direction == '>=':
-                passed = actual_value >= constraint_value
-            elif constraint_direction == '=':
-                # Cho phép sai số nhỏ
-                tolerance = constraint_params.get('tolerance', 0.01)
-                passed = abs(actual_value - constraint_value) <= tolerance
+            elif constraint_type == 'hi':
+                # Ràng buộc chỉ số đồng nhất (Homogeneity Index)
+                if 'prescription_dose' in constraint:
+                    prescription_dose = constraint['prescription_dose']
+                    method = constraint.get('method', 'icru83')
+                    actual = self.get_homogeneity_index(prescription_dose, method)
+                    
+                    # Kiểm tra ràng buộc
+                    if 'max' in constraint:
+                        limit = constraint['max']
+                        result['limit_type'] = 'max'
+                        result['satisfied'] = actual <= limit
+                        result['deviation'] = actual - limit if actual > limit else 0
+                    else:
+                        limit = constraint['min']
+                        result['limit_type'] = 'min'
+                        result['satisfied'] = actual >= limit
+                        result['deviation'] = limit - actual if actual < limit else 0
+                    
+                    result['actual'] = actual
+                else:
+                    logger.warning("Prescription dose is required for HI constraint")
+                    result['satisfied'] = False
+                    result['deviation'] = float('nan')
+                    result['actual'] = float('nan')
             
-            # Thêm kết quả vào danh sách
-            results.append({
-                **constraint,
-                'actual': actual_value,
-                'passed': passed
-            })
+            elif constraint_type == 'ci':
+                # Ràng buộc chỉ số tuân thủ (Conformity Index)
+                if 'prescription_dose' in constraint:
+                    prescription_dose = constraint['prescription_dose']
+                    reference_volume = constraint.get('reference_volume', None)
+                    method = constraint.get('method', 'paddick')
+                    actual = self.get_conformity_index(prescription_dose, reference_volume, method)
+                    
+                    # Kiểm tra ràng buộc
+                    if 'max' in constraint:
+                        limit = constraint['max']
+                        result['limit_type'] = 'max'
+                        result['satisfied'] = actual <= limit
+                        result['deviation'] = actual - limit if actual > limit else 0
+                    else:
+                        limit = constraint['min']
+                        result['limit_type'] = 'min'
+                        result['satisfied'] = actual >= limit
+                        result['deviation'] = limit - actual if actual < limit else 0
+                    
+                    result['actual'] = actual
+                else:
+                    logger.warning("Prescription dose is required for CI constraint")
+                    result['satisfied'] = False
+                    result['deviation'] = float('nan')
+                    result['actual'] = float('nan')
+                    
+            else:
+                logger.warning("Unsupported constraint type: %s", constraint_type)
+                result['satisfied'] = False
+                result['deviation'] = float('nan')
+                result['actual'] = float('nan')
+            
+            results.append(result)
         
         return results
     
@@ -631,3 +840,274 @@ class DVHAnalysis:
         df.attrs['median_dose'] = self.dvh_data['median_dose']
         
         return df
+    
+    def get_biological_metrics(self, parameters: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Tính toán các chỉ số sinh học từ DVH.
+        
+        Parameters:
+            parameters (Dict[str, Any]): Tham số cho mô hình sinh học, bao gồm alpha/beta, rho, etc.
+            
+        Returns:
+            Dict[str, float]: Các chỉ số sinh học
+        """
+        if self.is_empty:
+            return {
+                'ntcp': float('nan'),
+                'tcp': float('nan'),
+                'eud': float('nan'),
+                'beud': float('nan')
+            }
+        
+        results = {}
+        
+        # EUD - Liều đồng nhất tương đương
+        if 'parameter_a' in parameters:
+            parameter_a = parameters['parameter_a']
+            eud = self.get_equivalent_uniform_dose(parameter_a)
+            results['eud'] = eud
+        else:
+            results['eud'] = float('nan')
+        
+        # BED - Biologically Effective Dose
+        if 'alpha_beta' in parameters and 'fraction_dose' in parameters:
+            alpha_beta = parameters['alpha_beta']
+            fraction_dose = parameters['fraction_dose']
+            
+            # Tính BED cho từng bin liều
+            bed_bins = self.dose_bins * (1 + fraction_dose / alpha_beta)
+            
+            # Tính biologically effective uniform dose (BEUD) sử dụng cùng công thức như EUD
+            if 'parameter_a' in parameters:
+                parameter_a = parameters['parameter_a']
+                
+                # Lấy thể tích vi phân từ DVH
+                diff_volumes = self.differential_dvh
+                
+                # Chuẩn hóa thể tích vi phân để tổng = 1
+                if self.volume_type == 'relative':
+                    norm_volumes = diff_volumes / 100.0
+                else:
+                    norm_volumes = diff_volumes / np.sum(diff_volumes)
+                
+                # Tính BEUD
+                if parameter_a == 0:
+                    # Trường hợp đặc biệt: lim(a->0) = exp(Σ(vi * ln(BEDi)))
+                    # Tránh log(0) bằng cách chỉ tính các bin có BED > 0
+                    mask = bed_bins > 0
+                    if np.any(mask):
+                        log_bed = np.log(bed_bins[mask])
+                        beud = np.exp(np.sum(norm_volumes[mask] * log_bed))
+                    else:
+                        beud = 0.0
+                else:
+                    # Công thức thông thường
+                    beud = np.power(np.sum(norm_volumes * np.power(bed_bins, parameter_a)), 1.0/parameter_a)
+                
+                results['beud'] = beud
+            else:
+                results['beud'] = float('nan')
+        else:
+            results['beud'] = float('nan')
+        
+        # NTCP - Normal Tissue Complication Probability
+        if all(k in parameters for k in ['td50', 'n', 'm']):
+            td50 = parameters['td50']  # Liều gây ra 50% biến chứng
+            n = parameters['n']        # Thông số mô hình LKB
+            m = parameters['m']        # Thông số dốc
+            
+            # Tính EUD nếu chưa tính
+            if 'eud' not in results and 'parameter_a' in parameters:
+                parameter_a = parameters['parameter_a']
+                eud = self.get_equivalent_uniform_dose(parameter_a)
+                results['eud'] = eud
+            elif 'eud' in results:
+                eud = results['eud']
+            else:
+                eud = float('nan')
+            
+            if not np.isnan(eud):
+                # Áp dụng mô hình LKB (Lyman-Kutcher-Burman)
+                t = (eud - td50) / (m * td50)
+                ntcp = 0.5 * (1 + np.tanh(t * np.sqrt(2 * np.pi)))
+                results['ntcp'] = ntcp
+            else:
+                results['ntcp'] = float('nan')
+        else:
+            results['ntcp'] = float('nan')
+        
+        # TCP - Tumor Control Probability
+        if all(k in parameters for k in ['tcd50', 'gamma50']):
+            tcd50 = parameters['tcd50']  # Liều kiểm soát 50% khối u
+            gamma50 = parameters['gamma50']  # Độ dốc của đường cong tại 50%
+            
+            # Tính EUD nếu chưa tính
+            if 'eud' not in results and 'parameter_a' in parameters:
+                parameter_a = parameters['parameter_a']
+                eud = self.get_equivalent_uniform_dose(parameter_a)
+                results['eud'] = eud
+            elif 'eud' in results:
+                eud = results['eud']
+            else:
+                eud = float('nan')
+            
+            if not np.isnan(eud):
+                # Áp dụng mô hình sống sót tế bào
+                tcp = 1.0 / (1.0 + np.exp(-4 * gamma50 * (eud / tcd50 - 1)))
+                results['tcp'] = tcp
+            else:
+                results['tcp'] = float('nan')
+        else:
+            results['tcp'] = float('nan')
+        
+        return results
+    
+    def compare_with(self, other_dvh: 'DVHAnalysis', metrics: List[str] = None) -> Dict[str, Any]:
+        """
+        So sánh DVH hiện tại với một DVH khác.
+        
+        Parameters:
+            other_dvh (DVHAnalysis): DVH khác để so sánh
+            metrics (List[str], optional): Danh sách các chỉ số cần so sánh
+            
+        Returns:
+            Dict[str, Any]: Kết quả so sánh
+        """
+        if self.is_empty or other_dvh.is_empty:
+            return {'error': 'One or both DVHs are empty'}
+        
+        # Xác định chỉ số cần so sánh
+        if metrics is None:
+            metrics = ['d95', 'd90', 'd50', 'mean', 'max', 'min', 'v80', 'v50', 'v20']
+        
+        results = {}
+        
+        for metric in metrics:
+            metric_lower = metric.lower()
+            
+            if metric_lower.startswith('d') and metric_lower[1:].isdigit():
+                # Dx metric
+                volume_percent = float(metric_lower[1:])
+                self_value = self.get_dx(volume_percent)
+                other_value = other_dvh.get_dx(volume_percent)
+                
+                diff = self_value - other_value
+                relative_diff = diff / other_value if other_value != 0 else float('nan')
+                
+                results[metric] = {
+                    'self': self_value,
+                    'other': other_value,
+                    'absolute_difference': diff,
+                    'relative_difference': relative_diff
+                }
+                
+            elif metric_lower.startswith('v') and metric_lower[1:].isdigit():
+                # Vx metric
+                dose = float(metric_lower[1:])
+                self_value = self.get_vx(dose)
+                other_value = other_dvh.get_vx(dose)
+                
+                diff = self_value - other_value
+                relative_diff = diff / other_value if other_value != 0 else float('nan')
+                
+                results[metric] = {
+                    'self': self_value,
+                    'other': other_value,
+                    'absolute_difference': diff,
+                    'relative_difference': relative_diff
+                }
+                
+            elif metric_lower == 'mean':
+                # Mean dose
+                self_stats = self.get_dose_statistics()
+                other_stats = other_dvh.get_dose_statistics()
+                
+                self_value = self_stats['mean']
+                other_value = other_stats['mean']
+                
+                diff = self_value - other_value
+                relative_diff = diff / other_value if other_value != 0 else float('nan')
+                
+                results['mean'] = {
+                    'self': self_value,
+                    'other': other_value,
+                    'absolute_difference': diff,
+                    'relative_difference': relative_diff
+                }
+                
+            elif metric_lower == 'max':
+                # Max dose
+                self_stats = self.get_dose_statistics()
+                other_stats = other_dvh.get_dose_statistics()
+                
+                self_value = self_stats['max']
+                other_value = other_stats['max']
+                
+                diff = self_value - other_value
+                relative_diff = diff / other_value if other_value != 0 else float('nan')
+                
+                results['max'] = {
+                    'self': self_value,
+                    'other': other_value,
+                    'absolute_difference': diff,
+                    'relative_difference': relative_diff
+                }
+                
+            elif metric_lower == 'min':
+                # Min dose
+                self_stats = self.get_dose_statistics()
+                other_stats = other_dvh.get_dose_statistics()
+                
+                self_value = self_stats['min']
+                other_value = other_stats['min']
+                
+                diff = self_value - other_value
+                relative_diff = diff / other_value if other_value != 0 else float('nan')
+                
+                results['min'] = {
+                    'self': self_value,
+                    'other': other_value,
+                    'absolute_difference': diff,
+                    'relative_difference': relative_diff
+                }
+                
+            elif metric_lower == 'eud' and 'parameter_a' in metrics:
+                # EUD
+                parameter_a = metrics['parameter_a']
+                self_value = self.get_equivalent_uniform_dose(parameter_a)
+                other_value = other_dvh.get_equivalent_uniform_dose(parameter_a)
+                
+                diff = self_value - other_value
+                relative_diff = diff / other_value if other_value != 0 else float('nan')
+                
+                results['eud'] = {
+                    'self': self_value,
+                    'other': other_value,
+                    'absolute_difference': diff,
+                    'relative_difference': relative_diff,
+                    'parameter_a': parameter_a
+                }
+        
+        # Tính độ khác biệt tổng thể giữa hai DVH
+        # Sử dụng khoảng cách Euclidean bình phương giữa các đường cumulative DVH
+        if (len(self.dose_bins) == len(other_dvh.dose_bins) and 
+            np.allclose(self.dose_bins, other_dvh.dose_bins)):
+            # Nếu các bin liều giống nhau, đơn giản là khoảng cách giữa các vector
+            sq_diff = np.sum((self.cumulative_dvh - other_dvh.cumulative_dvh) ** 2)
+            norm = np.sum(other_dvh.cumulative_dvh ** 2)
+            if norm > 0:
+                relative_sq_diff = sq_diff / norm
+            else:
+                relative_sq_diff = float('nan')
+        else:
+            # Nếu các bin liều khác nhau, tính toán phức tạp hơn
+            # Đơn giản hóa bằng cách lấy mẫu lại các DVH với bin liều giống nhau
+            logger.warning("DVHs have different dose bins, comparison may be inaccurate")
+            relative_sq_diff = float('nan')
+        
+        results['overall_difference'] = {
+            'squared_diff': sq_diff,
+            'relative_squared_diff': relative_sq_diff
+        }
+        
+        return results

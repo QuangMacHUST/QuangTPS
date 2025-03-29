@@ -13,8 +13,8 @@ import SimpleITK as sitk
 from typing import List, Dict, Tuple, Optional, Union, Any
 from dataclasses import dataclass
 
-from ...core.types import Image, Structure, Dose
-from ...core.exceptions import DeformationError
+from quangtps.core.types import Image, Structure, Dose
+from quangtps.core.exceptions import DeformationError
 
 logger = logging.getLogger(__name__)
 

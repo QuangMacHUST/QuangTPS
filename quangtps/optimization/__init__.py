@@ -123,6 +123,15 @@ except (TypeError, ImportError):
     # Nếu có lỗi trong file objectives, bỏ qua
     pass
 
+# Import thuật toán tối ưu hóa mới
+try:
+    from quangtps.optimization.gradient_descent import GradientDescent
+    from quangtps.optimization.simulated_annealing import SimulatedAnnealing
+    from quangtps.optimization.genetic_algorithm import GeneticAlgorithm
+except (TypeError, ImportError) as e:
+    import logging
+    logging.getLogger(__name__).error(f"Error importing optimization algorithms: {e}")
+
 try:
     # Import từ optimization_engine.py
     from quangtps.optimization.optimization_engine import (
@@ -200,5 +209,10 @@ __all__ = [
     'LBFGSOptimizer',
     'SimulatedAnnealingOptimizer',
     'create_optimizer',
-    'optimize_plan'
+    'optimize_plan',
+    
+    # New Optimization Algorithms
+    'GradientDescent',
+    'SimulatedAnnealing',
+    'GeneticAlgorithm'
 ]

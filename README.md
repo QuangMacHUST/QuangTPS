@@ -1,197 +1,193 @@
-# QuangTPS - Hệ thống Lập kế hoạch Xạ trị Mã nguồn Mở
+# QuangTPS - Open Source Radiotherapy Treatment Planning System
 
-QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở và độc lập, được thiết kế để cung cấp các công cụ lập kế hoạch xạ trị 3D hiện đại, dễ sử dụng và miễn phí cho cộng đồng y tế toàn cầu.
+QuangTPS is a comprehensive, open-source radiotherapy treatment planning system inspired by commercial systems like Eclipse™ (Varian Medical Systems).
 
-![QuangTPS Logo](./quangtps/ui/icons/logo.png)
+## Features
 
-## Giới thiệu
+### Eclipse-Like User Interface
+- **Object Explorer**: Hierarchical view of patients, plans, structures, and images, similar to Eclipse's Object Explorer
+- **Clinical Protocol System**: Standardized template-based planning for consistent treatment approaches
+- **Multi-Tab Workflow**: Organized workflow with dedicated tabs for each planning stage
+- **Plan Evaluation Tab**: Dedicated tab for comprehensive plan evaluation with DVH analysis and clinical goal assessment
+- **Modern Look and Feel**: Clean, professional interface designed for clinical use
 
-QuangTPS là một dự án phần mềm mã nguồn mở nhằm cung cấp một giải pháp toàn diện cho việc lập kế hoạch xạ trị 3D. Nó được thiết kế để làm việc với hình ảnh y tế DICOM, cho phép bác sĩ và nhà vật lý y học tạo, tối ưu hóa và đánh giá các kế hoạch điều trị xạ trị. Tạo ra để trở thành một giải pháp thay thế miễn phí và mạnh mẽ cho các hệ thống lập kế hoạch thương mại đắt tiền.
+### Advanced Planning Capabilities
+- **Interactive DVH Display**: Comprehensive DVH analysis with comparison capabilities
+- **Clinical Goals Evaluation**: Automated evaluation and reporting of plan quality
+- **Robust Optimization**: Advanced optimization including target coverage constraints and OAR sparing
+- **Image Registration**: Multi-modality image fusion for precise target delineation
 
-## Tính năng
+### Treatment Techniques
+- **IMRT/VMAT Planning**: Support for intensity-modulated and volumetric arc therapy
+- **Stereotactic Planning**: Support for SRS and SBRT treatments
+- **Electron Therapy**: Electron beam planning capabilities
+- **Specialized Techniques**: Support for TBI, TSET, and other specialized techniques
 
-### Tính năng hiện có:
+### Quality Assurance
+- **Plan QA**: Tools for quality assurance of treatment plans
+- **Collision Detection**: Automated collision detection and reporting
+- **Plan Robustness**: Evaluation of plan robustness to setup errors and anatomical changes
 
-- **Quản lý bệnh nhân**: Nhập và lưu trữ thông tin bệnh nhân, bao gồm dữ liệu nhân khẩu học và lịch sử y tế.
-- **Nhập/xuất DICOM**: Nhập hình ảnh DICOM, cấu trúc, kế hoạch và xuất dữ liệu DICOM cần thiết.
-- **Phân đoạn hình ảnh**: Tạo và chỉnh sửa cấu trúc roi trên CT, MRI và các dữ liệu hình ảnh khác.
-- **Lập kế hoạch 3D**: Tạo kế hoạch xạ trị 3D với nhiều chùm tia và điểm kiểm soát.
-- **Tính toán liều**: Tính toán phân bố liều bằng thuật toán Pencil Beam, Collapsed Cone và Monte Carlo.
-- **Tối ưu hóa kế hoạch**: Công cụ tối ưu hóa kế hoạch dựa trên các chỉ tiêu và ràng buộc.
-- **Đánh giá kế hoạch**: Đánh giá kế hoạch sử dụng DVH (Biểu đồ thể tích liều) và các chỉ số lâm sàng.
-- **Hỗ trợ mô hình máy gia tốc**: Hỗ trợ mô hình dữ liệu chùm tia từ TrueBeam.
+### Interoperability
+- **DICOM Support**: Full integration with DICOM standard for RT planning
+- **Multi-System Compatibility**: Compatible with various treatment delivery systems
+- **Data Import/Export**: Tools for transferring data to and from other systems
 
-### Tính năng đang phát triển:
+## System Requirements
 
-- **Xạ trị điều biến cường độ (IMRT)**: Nâng cao khả năng lập kế hoạch IMRT.
-- **Xạ trị điều biến thể tích (VMAT)**: Hỗ trợ xạ trị cung xoay với điều biến cường độ.
-- **Lập kế hoạch thích ứng**: Cập nhật kế hoạch dựa trên hình ảnh mới trong quá trình điều trị.
-- **Xạ phẫu**: Công cụ đặc biệt cho kế hoạch xạ phẫu.
-- **Liên kết hình ảnh đa phương thức**: Hỗ trợ đăng ký và chồng chéo CT, MRI, PET.
-- **Trí tuệ nhân tạo**: Hỗ trợ tự động phân đoạn và đề xuất kế hoạch.
+- **Operating System**: Windows 10 or newer
+- **RAM**: 8GB minimum, 16GB or more recommended
+- **Processor**: Multi-core CPU (Intel i5/i7 or equivalent)
+- **Graphics**: Dedicated GPU with 2GB+ VRAM recommended
+- **Storage**: 10GB minimum for application, additional space needed for patient data
 
-## Recent Improvements
+## Installation
 
-QuangTPS has undergone significant enhancements to improve system stability, error handling, and overall robustness:
-
-### Imaging and DICOM
-* Enhanced DICOM loading capabilities that handle non-uniform slice spacing
-* Improved handling of diverse image datasets with better error recovery
-* Automatic detection and adaptation to inconsistent DICOM orientation data
-* Added progress dialogs for large DICOM datasets to enhance user experience
-* Implemented comprehensive validation for image data before processing
-
-### Dose Calculation
-* Significantly improved error handling in dose calculation algorithms
-* Enhanced beam weight assignment with better validation of monitor units
-* Added fallback options when encountering beam calculation issues
-* Improved metadata tracking for dose calculation results
-* Better validation of CT data and plan parameters before calculation
-
-### Treatment Planning & Evaluation
-* Enhanced DVH calculation with proper structure mask validation
-* Improved structure handling with automatic binary mask conversion
-* Better error recovery in plan evaluation when encountering partial data issues
-* Enhanced dose statistics calculation with proper error handling
-* Improved JSON metadata handling for plan and structure information
-
-### System Architecture
-* Implemented comprehensive attribute validation throughout the codebase
-* Enhanced error logging with detailed traceback information
-* Improved database schema compatibility and update mechanisms
-* Better memory management with proper object copying to prevent reference errors
-* Enhanced user feedback with more detailed and helpful error messages
-
-These improvements make QuangTPS more stable, reliable, and user-friendly when working with diverse clinical datasets.
-
-## Yêu cầu hệ thống
-
-- **Hệ điều hành**: Windows 10/11, Linux, macOS
-- **RAM**: 8GB trở lên (khuyến nghị 16GB)
-- **CPU**: Bộ xử lý đa nhân
-- **GPU**: Hỗ trợ OpenGL 3.3 hoặc cao hơn (khuyến nghị CUDA cho tính toán Monte Carlo)
-- **Dung lượng đĩa**: Tối thiểu 5GB để cài đặt, khuyến nghị 20GB cho dữ liệu bệnh nhân
-- **Độ phân giải màn hình**: Tối thiểu 1920x1080
-
-## Cài đặt
-
-### Cài đặt từ mã nguồn
-
-```bash
-# Tải mã nguồn
+1. Clone the repository:
+```
 git clone https://github.com/username/quangtps.git
-cd quangtps
-
-# Cài đặt các thư viện phụ thuộc
-pip install -r requirements.txt
-
-# Chạy ứng dụng
-python scripts/run_quangtps.py
 ```
 
-### Yêu cầu phần mềm
+2. Install the required dependencies:
+```
+pip install -r requirements.txt
+```
 
-QuangTPS yêu cầu các thư viện Python sau:
-- NumPy
-- SciPy
-- pandas
-- PyQt5
-- pydicom
-- matplotlib
-- scikit-image
-- dicompyler-core
-- cairosvg (cho biểu tượng và đồ họa)
+3. Run the application:
+```
+python -m quangtps
+```
 
-## Cách sử dụng
+## Contributing
 
-### Khởi động ứng dụng
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Disclaimer
+
+QuangTPS is intended for research and educational purposes. It is not FDA-approved or CE-marked for clinical use. Always validate results independently before clinical use.
+
+## Acknowledgements
+
+- The developers of open-source projects used by QuangTPS
+- The radiotherapy community for ongoing feedback and support
+
+## Contact
+
+For questions, suggestions, or collaboration requests, please open an issue on GitHub or contact the project maintainers directly.
+
+## Recent Updates
+
+### Version 0.4.3: System Analysis and Improvement Roadmap
+We've conducted a comprehensive analysis of QuangTPS and created a detailed improvement plan to guide future development. Key updates include:
+
+- **Comprehensive System Analysis** identifying strengths and areas for improvement
+- **New IMPROVEMENT_PLAN.md** with detailed roadmap for system development
+- **Enhanced Error Handling** for more reliable operation across modules
+- **Diagnostic Tools** for analyzing system stability and performance
+- **Improved Documentation** reflecting current status and development plans
+
+Our top priorities for upcoming development include:
+- Completing the IMRT/VMAT optimization module
+- Fixing dependency issues (particularly WeasyPrint)
+- Enhancing multi-modality image registration
+- Extending robust optimization for respiratory motion
+
+For details, see the [Improvement Plan](IMPROVEMENT_PLAN.md) and the latest [changelog](changelog.txt).
+
+### Version 0.4.2: Plan Evaluation Tab Enhancements
+We have significantly improved the Plan Evaluation module to ensure robust handling of DVH data and better integration with the treatment planning workflow. Key improvements include:
+
+- **Enhanced DVH visualization** with support for multiple data formats (tuple and dictionary formats)
+- **Improved structure management** with better list population and state preservation
+- **Robust metrics calculation** with proper error handling for missing or invalid data
+- **Fixed plan indices calculation** for accurate assessment of plan quality
+- **Better prescription integration** for more relevant DVH analysis against prescribed dose
+- **Improved user feedback** with informative status updates and error messages
+
+For detailed documentation on the Plan Evaluation module, see [Plan Evaluation Documentation](docs/plan_evaluation.md).
+
+### DVH Module and Plan Evaluation Improvements
+We have significantly enhanced the Dose-Volume Histogram (DVH) module and added comprehensive plan evaluation functionality to QuangTPS. Key improvements include:
+
+- **Enhanced DVH calculation accuracy** with proper interpolation for metrics
+- **Robust metrics calculation** including Dx/Vx values and plan quality indices
+- **New PlanEvaluation class** for comprehensive radiotherapy plan assessment
+- **Clinical constraints evaluation system** for treatment plan validation
+- **Improved visualization** with customizable DVH plots and comprehensive reports
+
+#### New Plan Evaluation Tab
+A dedicated Plan Evaluation tab has been added to the UI, providing:
+- Interactive DVH visualization with structure filtering
+- Comprehensive metrics tables displaying dose and volume statistics
+- Plan quality indices (Homogeneity Index, Conformity Index)
+- Clinical constraints evaluation (coming soon)
+- Seamless integration with the planning workflow
+
+For a detailed list of improvements, see [DVH Module Improvements](dvh_module_improvements.md).
+
+## Contributing to the Development Roadmap
+
+We welcome contributions to help advance the QuangTPS system according to our development roadmap. Here's how you can contribute:
+
+### Priority Areas for Contribution
+
+1. **IMRT/VMAT Optimization**
+   - Implementing and testing optimization algorithms
+   - Developing leaf sequencing algorithms
+   - Creating validation tools for optimization results
+
+2. **Visualization Improvements**
+   - Enhancing DVH visualization
+   - Implementing 3D visualization of treatment plans
+   - Creating intuitive user interfaces for plan evaluation
+
+3. **Documentation and Testing**
+   - Creating detailed user documentation
+   - Writing automated tests for system components
+   - Developing test cases for treatment planning features
+
+### Getting Started as a Contributor
+
+1. Review the [Improvement Plan](IMPROVEMENT_PLAN.md) to identify areas where you can contribute
+2. Check the [Issues](https://github.com/username/quangtps/issues) for specific tasks that need attention
+3. Fork the repository and create a feature branch for your contribution
+4. Follow the coding standards and documentation practices established in the codebase
+5. Submit a pull request with a clear description of your changes and how they advance the roadmap
+
+For more detailed contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Development Timeline
+
+QuangTPS is following a phased development approach:
+
+- **Phase 1 (Current)**: Core functionality and stability improvements
+- **Phase 2**: Advanced optimization and image registration
+- **Phase 3**: Knowledge-based planning and machine learning integration
+- **Phase 4**: Specialized techniques and external system integration
+
+See the [Improvement Plan](IMPROVEMENT_PLAN.md) for detailed timeline and milestones.
+
+## Demo Commands
 
 ```bash
-python scripts/run_quangtps.py
+# Run the basic DVH test
+python test_dvh_basic.py
+
+# Run the comprehensive plan evaluation demo
+python run_plan_evaluation.py
+
+# View DVH results with interactive visualization
+python view_results.py
+
+# Launch QuangTPS with Plan Evaluation tab focused (with test data)
+python demo_plan_evaluation.py
+
+# Launch a simplified Plan Evaluation demo with synthetic data (more stable)
+python demo_plan_evaluation_simple.py
 ```
 
-Các tùy chọn dòng lệnh:
-- `--verbose` hoặc `-v`: Hiển thị thông tin chi tiết (debug)
-- `--no-splash`: Không hiển thị màn hình chào
-- `--console` hoặc `-c`: Chạy ở chế độ console (không giao diện đồ họa)
-- `--demo` hoặc `-d`: Chạy với dữ liệu mẫu
-
-### Nhập dữ liệu bệnh nhân
-
-1. Chọn "File > New Patient" hoặc nhấn Ctrl+N để tạo một hồ sơ bệnh nhân mới.
-2. Để nhập dữ liệu DICOM, chọn "File > Import DICOM" hoặc nhấn Ctrl+I.
-3. Chọn thư mục chứa dữ liệu DICOM và nhấp vào "Import".
-
-### Phân đoạn cấu trúc
-
-1. Mở tab "Structures" trong không gian làm việc.
-2. Sử dụng các công cụ vẽ để tạo hoặc chỉnh sửa cấu trúc.
-3. Lưu cấu trúc bằng cách nhấp vào "Save Structure Set".
-
-### Tạo kế hoạch
-
-1. Chọn "Planning > New Plan" để tạo một kế hoạch mới.
-2. Thêm chùm tia và thiết lập các tham số cần thiết.
-3. Tính toán liều bằng cách nhấp vào "Calculate Dose".
-4. Đánh giá kế hoạch sử dụng DVH và các phân tích khác.
-
-### Lưu và xuất
-
-1. Lưu kế hoạch bằng cách chọn "File > Save Plan".
-2. Xuất dữ liệu DICOM bằng cách chọn "File > Export DICOM".
-3. Tạo báo cáo bằng cách chọn "Report > Generate Report".
-
-## Cấu trúc dự án
-
-```
-quangtps/
-├── adaptive/           # Mô-đun xạ trị thích nghi
-├── api/                # API cho tích hợp với các hệ thống khác
-├── common/             # Tiện ích chung
-├── core/               # Các thành phần cốt lõi
-├── database/           # Quản lý cơ sở dữ liệu
-├── dicom/              # Xử lý dữ liệu DICOM
-├── dose/               # Tính toán và phân tích liều
-├── evaluation/         # Đánh giá kế hoạch
-├── imaging/            # Xử lý hình ảnh y khoa
-├── optimization/       # Tối ưu hóa kế hoạch
-├── planning/           # Lập kế hoạch điều trị
-├── reporting/          # Tạo báo cáo
-├── scripts/            # Script hỗ trợ
-├── segmentation/       # Phân đoạn cấu trúc
-├── specialized/        # Tính năng đặc biệt
-├── treatment/          # Mô-đun điều trị
-├── ui/                 # Giao diện người dùng
-└── tests/              # Kiểm thử tự động
-```
-
-## Đóng góp
-
-Chúng tôi chào đón mọi đóng góp từ cộng đồng! Nếu bạn muốn đóng góp, vui lòng:
-
-1. Fork dự án
-2. Tạo nhánh tính năng mới (`git checkout -b feature/AmazingFeature`)
-3. Commit các thay đổi của bạn (`git commit -m 'Add some AmazingFeature'`)
-4. Push lên nhánh (`git push origin feature/AmazingFeature`)
-5. Mở Pull Request
-
-Hãy đảm bảo đọc [Hướng dẫn đóng góp](CONTRIBUTING.md) trước khi bắt đầu.
-
-## Giấy phép
-
-Dự án này được cấp phép theo Giấy phép GNU Affero General Public License v3.0 - xem tệp [LICENSE](LICENSE) để biết chi tiết.
-
-## Liên hệ
-
-- Email dự án: project@example.com
-- GitHub Issues: [https://github.com/username/quangtps/issues](https://github.com/username/quangtps/issues)
-
-## Lời cảm ơn
-
-- Các thư viện mã nguồn mở mà chúng tôi sử dụng
-- Cộng đồng vật lý y học và bác sĩ xạ trị
-- Tất cả những người đóng góp cho dự án
-
----
-
-*QuangTPS - Hệ thống Lập kế hoạch Xạ trị Mã nguồn Mở - Phiên bản 0.1.0*
+For detailed information about these demo scripts, including troubleshooting tips and guidance for creating your own custom demos, see the [Demo Guide](./DEMO_GUIDE.md).

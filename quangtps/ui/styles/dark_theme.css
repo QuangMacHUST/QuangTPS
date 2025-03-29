@@ -1,0 +1,358 @@
+/* 
+ * Eclipse-inspired Dark Blue Theme for QuangTPS
+ * Based on Varian Eclipse's color scheme
+ */
+
+QMainWindow {
+    background-color: #1e3a5f;
+    color: #ffffff;
+}
+
+QTabWidget {
+    background-color: #1e3a5f;
+}
+
+QTabWidget::pane {
+    border: 1px solid #304b73;
+    background-color: #263e63;
+}
+
+QTabBar::tab {
+    background-color: #2c4569;
+    color: #d0d0d0;
+    padding: 8px 15px;
+    min-width: 100px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border: 1px solid #304b73;
+    border-bottom: none;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background-color: #3a5683;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QTabBar::tab:hover:selected {
+    background-color: #344e77;
+}
+
+/* Toolbar styling */
+QToolBar {
+    background-color: #213d64;
+    border-bottom: 1px solid #304b73;
+    spacing: 4px;
+    padding: 2px;
+}
+
+QToolButton {
+    background-color: transparent;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QToolButton:hover {
+    background-color: #3a5683;
+}
+
+QToolButton:pressed {
+    background-color: #304b73;
+}
+
+/* Menu styling */
+QMenuBar {
+    background-color: #213d64;
+    color: #ffffff;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 6px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: #3a5683;
+}
+
+QMenu {
+    background-color: #2c4569;
+    color: #ffffff;
+    border: 1px solid #304b73;
+}
+
+QMenu::item {
+    padding: 5px 20px 5px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #3a5683;
+}
+
+/* Dock widget styling */
+QDockWidget {
+    titlebar-close-icon: url(close.png);
+    titlebar-normal-icon: url(undock.png);
+}
+
+QDockWidget::title {
+    background-color: #213d64;
+    padding-left: 10px;
+    padding-top: 4px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+/* Status bar styling */
+QStatusBar {
+    background-color: #213d64;
+    color: #d0d0d0;
+    border-top: 1px solid #304b73;
+}
+
+/* Object Explorer and structure tree styling */
+QTreeView {
+    background-color: #263e63;
+    alternate-background-color: #2c4569;
+    color: #ffffff;
+    border: 1px solid #304b73;
+}
+
+QTreeView::item {
+    padding: 4px;
+}
+
+QTreeView::item:selected {
+    background-color: #3a5683;
+}
+
+QTreeView::branch {
+    background-color: transparent;
+}
+
+/* Image viewers and panels */
+QLabel {
+    color: #ffffff;
+}
+
+QGroupBox {
+    background-color: #263e63;
+    border: 1px solid #304b73;
+    border-radius: 5px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 5px;
+}
+
+/* Input widgets */
+QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+    background-color: #1d3354;
+    color: #ffffff;
+    border: 1px solid #304b73;
+    border-radius: 3px;
+    padding: 4px;
+}
+
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #4a76b8;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #304b73;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #2c4569;
+    color: #ffffff;
+    border: 1px solid #304b73;
+    border-radius: 3px;
+    padding: 6px 12px;
+    min-width: 80px;
+}
+
+QPushButton:hover {
+    background-color: #3a5683;
+}
+
+QPushButton:pressed {
+    background-color: #213d64;
+}
+
+QPushButton:disabled {
+    background-color: #1d3354;
+    color: #6e6e6e;
+}
+
+/* Scroll bars */
+QScrollBar:vertical {
+    background-color: #1d3354;
+    width: 14px;
+    margin: 14px 0 14px 0;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #3a5683;
+    min-height: 30px;
+    border-radius: 7px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #4a76b8;
+}
+
+QScrollBar::add-line:vertical {
+    background-color: #213d64;
+    height: 14px;
+    subcontrol-position: bottom;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::sub-line:vertical {
+    background-color: #213d64;
+    height: 14px;
+    subcontrol-position: top;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::horizontal {
+    background-color: #1d3354;
+    height: 14px;
+    margin: 0 14px 0 14px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #3a5683;
+    min-width: 30px;
+    border-radius: 7px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #4a76b8;
+}
+
+/* Progress bar */
+QProgressBar {
+    background-color: #1d3354;
+    border: 1px solid #304b73;
+    border-radius: 3px;
+    text-align: center;
+    color: #ffffff;
+}
+
+QProgressBar::chunk {
+    background-color: #4a76b8;
+}
+
+/* Sliders */
+QSlider::groove:horizontal {
+    border: 1px solid #304b73;
+    height: 6px;
+    background-color: #1d3354;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background-color: #3a5683;
+    border: 1px solid #4a76b8;
+    width: 18px;
+    margin: -8px 0;
+    border-radius: 9px;
+}
+
+QSlider::handle:horizontal:hover {
+    background-color: #4a76b8;
+}
+
+/* Table view */
+QTableView {
+    background-color: #263e63;
+    alternate-background-color: #2c4569;
+    color: #ffffff;
+    border: 1px solid #304b73;
+    gridline-color: #304b73;
+}
+
+QTableView::item:selected {
+    background-color: #3a5683;
+}
+
+QHeaderView::section {
+    background-color: #213d64;
+    color: #ffffff;
+    padding: 5px;
+    border: 1px solid #304b73;
+    font-weight: bold;
+}
+
+/* Dialogs */
+QDialog {
+    background-color: #263e63;
+}
+
+QDialogButtonBox {
+    button-layout: 3;
+}
+
+/* Tool panels */
+QToolBox::tab {
+    background-color: #2c4569;
+    color: #ffffff;
+    border-radius: 3px;
+    padding: 5px;
+}
+
+QToolBox::tab:selected {
+    background-color: #3a5683;
+    font-weight: bold;
+}
+
+/* Split panels */
+QSplitter::handle {
+    background-color: #304b73;
+}
+
+QSplitter::handle:horizontal {
+    width: 4px;
+}
+
+QSplitter::handle:vertical {
+    height: 4px;
+}
+
+/* Planning specific styles */
+#PlanningTab QToolBar {
+    background-color: #1e3a5f;
+}
+
+#ImagingTab {
+    background-color: #1d3354;
+}
+
+#DVHPlot {
+    background-color: #263e63;
+    border: 1px solid #304b73;
+}
+
+/* Plan evaluation colors */
+.pass-constraint {
+    color: #00e074;
+}
+
+.fail-constraint {
+    color: #ff304f;
+}
+
+.warning-constraint {
+    color: #ffb700;
+} 

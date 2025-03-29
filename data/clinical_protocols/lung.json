@@ -1,0 +1,184 @@
+{
+  "protocol_name": "Lung Standard",
+  "version": "1.0",
+  "description": "Standard dose constraints for lung cancer IMRT/VMAT treatment",
+  "source": "Based on RTOG 0617/1308 protocols with institutional modifications",
+  "prescription": {
+    "primary_target": {
+      "name": "PTV",
+      "dose": 60.0,
+      "fractions": 30,
+      "priority": 1,
+      "coverage_goal": 95,
+      "hotspot_limit": 107
+    },
+    "secondary_targets": [
+      {
+        "name": "PTV_Boost",
+        "dose": 66.0,
+        "fractions": 33,
+        "priority": 2,
+        "coverage_goal": 95,
+        "hotspot_limit": 110,
+        "notes": "Optional simultaneous integrated boost for selected cases"
+      },
+      {
+        "name": "PTV_Nodes",
+        "dose": 50.0,
+        "fractions": 30,
+        "priority": 3,
+        "coverage_goal": 95,
+        "hotspot_limit": 107,
+        "notes": "Elective nodal irradiation when indicated"
+      }
+    ]
+  },
+  "dose_constraints": {
+    "organs_at_risk": [
+      {
+        "name": "Lungs - Combined",
+        "constraint_type": "mean",
+        "dose_limit": 20.0,
+        "volume_limit": null,
+        "priority": "high",
+        "notes": "Mean dose should be < 20 Gy"
+      },
+      {
+        "name": "Spinal Cord",
+        "constraint_type": "maximum",
+        "dose_limit": 45.0,
+        "volume_limit": 0,
+        "priority": "high",
+        "notes": "Planning risk volume (PRV): cord + 5mm should not exceed 50 Gy"
+      },
+      {
+        "name": "Heart",
+        "constraint_type": "mean",
+        "dose_limit": 26.0,
+        "volume_limit": null,
+        "priority": "high",
+        "notes": "Keep mean dose < 26 Gy"
+      },
+      {
+        "name": "Esophagus",
+        "constraint_type": "mean",
+        "dose_limit": 34.0,
+        "volume_limit": null,
+        "priority": "medium",
+        "notes": "Keep mean dose < 34 Gy when possible"
+      },
+      {
+        "name": "Brachial Plexus",
+        "constraint_type": "maximum",
+        "dose_limit": 60.0,
+        "volume_limit": 0,
+        "priority": "medium",
+        "notes": "Keep max dose < 60 Gy"
+      },
+      {
+        "name": "Trachea",
+        "constraint_type": "maximum",
+        "dose_limit": 60.0,
+        "volume_limit": 0,
+        "priority": "medium",
+        "notes": "Keep max dose < 60 Gy"
+      }
+    ],
+    "dvh_constraints": [
+      {
+        "structure": "Lungs - Combined",
+        "volume_percent": 20,
+        "dose_limit": 30.0,
+        "priority": "high",
+        "notes": "V30Gy < 20% (percentage of lungs receiving 30 Gy or higher should be less than 20%)"
+      },
+      {
+        "structure": "Lungs - Combined",
+        "volume_percent": 35,
+        "dose_limit": 20.0,
+        "priority": "high",
+        "notes": "V20Gy < 35% (percentage of lungs receiving 20 Gy or higher should be less than 35%)"
+      },
+      {
+        "structure": "Lungs - Combined",
+        "volume_percent": 50,
+        "dose_limit": 10.0,
+        "priority": "medium",
+        "notes": "V10Gy < 50% (percentage of lungs receiving 10 Gy or higher should be less than 50%)"
+      },
+      {
+        "structure": "Heart",
+        "volume_percent": 33,
+        "dose_limit": 45.0,
+        "priority": "high",
+        "notes": "V45Gy < 33%"
+      },
+      {
+        "structure": "Heart",
+        "volume_percent": 67,
+        "dose_limit": 30.0,
+        "priority": "medium",
+        "notes": "V30Gy < 67%"
+      },
+      {
+        "structure": "Esophagus",
+        "volume_percent": 50,
+        "dose_limit": 35.0,
+        "priority": "medium",
+        "notes": "V35Gy < 50%"
+      }
+    ]
+  },
+  "planning_parameters": {
+    "technique": "VMAT",
+    "energy": "6MV",
+    "optimization_type": "MCO",
+    "fraction_schedule": "Daily",
+    "immobilization": "Wing board or vacuum cushion",
+    "setup_margins": {
+      "PTV_standard": 0.5,
+      "PTV_with_motion": {
+        "superior_inferior": 1.0,
+        "anterior_posterior": 0.7,
+        "lateral": 0.7,
+        "notes": "Consider ITV approach for tumors with significant respiratory motion"
+      }
+    },
+    "4DCT": {
+      "required": true,
+      "phases": 10,
+      "notes": "Use for tumors with significant respiratory motion, consider ITV or mid-ventilation approach"
+    },
+    "beam_arrangement": {
+      "suggested_angles": [
+        [181, 179],
+        [210, 330]
+      ],
+      "notes": "Dual arc VMAT recommended. Partial arcs may be used to spare contralateral lung."
+    },
+    "motion_management": {
+      "options": ["ITV", "Mid-ventilation", "Breath-hold", "Gating"],
+      "recommendation": "Choose based on tumor location and patient ability",
+      "notes": "For significant motion (>1cm), consider breath-hold technique if patient can tolerate"
+    }
+  },
+  "evaluation_criteria": {
+    "conformity_index": {
+      "target": "PTV",
+      "acceptable": 1.2,
+      "ideal": 1.1,
+      "notes": "Volume of 95% isodose / target volume"
+    },
+    "homogeneity_index": {
+      "target": "PTV",
+      "acceptable": 0.15,
+      "ideal": 0.1,
+      "notes": "(D2% - D98%) / D50%"
+    },
+    "gradient_measure": {
+      "acceptable": 0.6,
+      "ideal": 0.5,
+      "notes": "R50 - ratio of 50% isodose volume to PTV volume"
+    }
+  }
+} 

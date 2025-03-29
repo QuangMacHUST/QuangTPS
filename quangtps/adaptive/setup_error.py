@@ -16,9 +16,9 @@ from typing import List, Dict, Tuple, Optional, Union, Any
 from enum import Enum, auto
 from dataclasses import dataclass
 
-from ..core.types import Patient, Image, Structure, Dose
-from ..core.exceptions import SetupErrorAnalysisError
-from .deformation.registration import RegistrationType
+from quangtps.core.types import Patient, Image, Structure, Dose
+from quangtps.core.exceptions import SetupErrorAnalysisError
+from quangtps.adaptive.deformation.registration import RegistrationType
 
 logger = logging.getLogger(__name__)
 

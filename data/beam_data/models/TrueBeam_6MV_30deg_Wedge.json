@@ -1,0 +1,189 @@
+{
+  "energy_name": "6MV",
+  "machine_name": "TrueBeam",
+  "wedge_name": "30deg",
+  "wedge_angle": 30,
+  "source_file": "E:\\hoctap\\QuangTPS\\Truebeam representative Beam Data for eclipse\\6MV 30deg Wedge Data.xlsx",
+  "pdd_data": {
+    "field_sizes": [4, 6, 8, 10, 12, 15, 20],
+    "depths": [0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0],
+    "reference_field_size": 10,
+    "ssd": 100.0,
+    "dmax": 1.4,
+    "values": {
+      "4": [0, 42.1, 82.5, 97.3, 100.0, 98.3, 93.8, 88.9, 84.1, 79.6, 75.4, 67.7, 60.8, 52.3, 41.0, 32.1, 25.2],
+      "6": [0, 43.6, 83.6, 97.8, 100.0, 98.1, 93.6, 88.6, 83.8, 79.4, 75.2, 67.5, 60.6, 52.0, 40.8, 31.9, 25.0],
+      "8": [0, 45.1, 84.7, 98.2, 100.0, 97.9, 93.3, 88.3, 83.5, 79.1, 75.0, 67.3, 60.4, 51.8, 40.6, 31.7, 24.8],
+      "10": [0, 46.6, 85.8, 98.7, 100.0, 97.7, 93.1, 88.0, 83.2, 78.8, 74.7, 67.0, 60.2, 51.6, 40.4, 31.6, 24.7],
+      "12": [0, 48.1, 86.9, 99.1, 100.0, 97.4, 92.8, 87.7, 82.9, 78.5, 74.4, 66.8, 59.9, 51.4, 40.2, 31.4, 24.5],
+      "15": [0, 49.6, 88.0, 99.6, 100.0, 97.2, 92.5, 87.4, 82.6, 78.2, 74.1, 66.5, 59.7, 51.2, 40.0, 31.2, 24.3],
+      "20": [0, 51.1, 89.1, 100.0, 99.8, 96.9, 92.2, 87.1, 82.3, 77.9, 73.9, 66.3, 59.4, 50.9, 39.8, 31.0, 24.2]
+    }
+  },
+  "profile_data": {
+    "field_sizes": [4, 6, 8, 10, 12, 15, 20],
+    "depths": [1.4, 5.0, 10.0, 20.0],
+    "reference_depth": 1.4,
+    "ssd": 100.0,
+    "values": {
+      "4": {
+        "1.4": [
+          {"position": -10.0, "value": 0.3},
+          {"position": -3.0, "value": 1.8},
+          {"position": -2.5, "value": 7.0},
+          {"position": -2.0, "value": 27.3},
+          {"position": -1.5, "value": 53.6},
+          {"position": -1.0, "value": 72.1},
+          {"position": -0.5, "value": 86.4},
+          {"position": 0.0, "value": 100.0},
+          {"position": 0.5, "value": 116.8},
+          {"position": 1.0, "value": 133.5},
+          {"position": 1.5, "value": 149.5},
+          {"position": 2.0, "value": 100.2},
+          {"position": 2.5, "value": 39.8},
+          {"position": 3.0, "value": 5.9},
+          {"position": 10.0, "value": 0.4}
+        ]
+      },
+      "10": {
+        "1.4": [
+          {"position": -15.0, "value": 0.2},
+          {"position": -6.0, "value": 1.5},
+          {"position": -5.5, "value": 6.2},
+          {"position": -5.0, "value": 24.8},
+          {"position": -4.5, "value": 48.3},
+          {"position": -4.0, "value": 64.7},
+          {"position": -3.0, "value": 76.3},
+          {"position": -2.0, "value": 85.5},
+          {"position": -1.0, "value": 93.1},
+          {"position": 0.0, "value": 100.0},
+          {"position": 1.0, "value": 108.3},
+          {"position": 2.0, "value": 116.5},
+          {"position": 3.0, "value": 124.2},
+          {"position": 4.0, "value": 131.5},
+          {"position": 4.5, "value": 137.1},
+          {"position": 5.0, "value": 87.6},
+          {"position": 5.5, "value": 34.3},
+          {"position": 6.0, "value": 5.5},
+          {"position": 15.0, "value": 0.3}
+        ],
+        "5.0": [
+          {"position": -15.0, "value": 0.5},
+          {"position": -6.0, "value": 2.4},
+          {"position": -5.5, "value": 8.7},
+          {"position": -5.0, "value": 28.5},
+          {"position": -4.5, "value": 50.8},
+          {"position": -4.0, "value": 67.0},
+          {"position": -3.0, "value": 78.1},
+          {"position": -2.0, "value": 86.8},
+          {"position": -1.0, "value": 93.9},
+          {"position": 0.0, "value": 100.0},
+          {"position": 1.0, "value": 107.2},
+          {"position": 2.0, "value": 114.6},
+          {"position": 3.0, "value": 122.5},
+          {"position": 4.0, "value": 129.3},
+          {"position": 4.5, "value": 134.2},
+          {"position": 5.0, "value": 85.3},
+          {"position": 5.5, "value": 32.5},
+          {"position": 6.0, "value": 7.2},
+          {"position": 15.0, "value": 0.6}
+        ],
+        "10.0": [
+          {"position": -15.0, "value": 0.7},
+          {"position": -6.0, "value": 3.0},
+          {"position": -5.5, "value": 10.4},
+          {"position": -5.0, "value": 31.0},
+          {"position": -4.5, "value": 52.7},
+          {"position": -4.0, "value": 68.5},
+          {"position": -3.0, "value": 79.4},
+          {"position": -2.0, "value": 87.7},
+          {"position": -1.0, "value": 94.5},
+          {"position": 0.0, "value": 100.0},
+          {"position": 1.0, "value": 106.3},
+          {"position": 2.0, "value": 113.2},
+          {"position": 3.0, "value": 120.3},
+          {"position": 4.0, "value": 126.8},
+          {"position": 4.5, "value": 131.0},
+          {"position": 5.0, "value": 83.7},
+          {"position": 5.5, "value": 31.2},
+          {"position": 6.0, "value": 8.4},
+          {"position": 15.0, "value": 0.8}
+        ]
+      }
+    }
+  },
+  "output_factors": {
+    "field_sizes": [4, 6, 8, 10, 12, 15, 20],
+    "reference_field_size": 10,
+    "depth": 10.0,
+    "ssd": 100.0,
+    "values": {
+      "4": 1.042,
+      "6": 1.026,
+      "8": 1.014,
+      "10": 1.000,
+      "12": 0.986,
+      "15": 0.967,
+      "20": 0.944
+    }
+  },
+  "wedge_factors": {
+    "field_sizes": [4, 6, 8, 10, 12, 15, 20],
+    "depths": [1.4, 5.0, 10.0, 20.0],
+    "values": {
+      "4": {
+        "1.4": 0.723,
+        "5.0": 0.754,
+        "10.0": 0.792,
+        "20.0": 0.851
+      },
+      "6": {
+        "1.4": 0.715,
+        "5.0": 0.746,
+        "10.0": 0.785,
+        "20.0": 0.845
+      },
+      "8": {
+        "1.4": 0.707,
+        "5.0": 0.738,
+        "10.0": 0.777,
+        "20.0": 0.839
+      },
+      "10": {
+        "1.4": 0.699,
+        "5.0": 0.730,
+        "10.0": 0.769,
+        "20.0": 0.833
+      },
+      "12": {
+        "1.4": 0.691,
+        "5.0": 0.722,
+        "10.0": 0.761,
+        "20.0": 0.827
+      },
+      "15": {
+        "1.4": 0.683,
+        "5.0": 0.714,
+        "10.0": 0.754,
+        "20.0": 0.821
+      },
+      "20": {
+        "1.4": 0.675,
+        "5.0": 0.706,
+        "10.0": 0.747,
+        "20.0": 0.815
+      }
+    }
+  },
+  "wedge_transmission": {
+    "transmission_factor": 0.699,
+    "hardening_coefficient": 0.017
+  },
+  "metadata": {
+    "created": "2025-03-30",
+    "version": "1.0",
+    "description": "TrueBeam 6MV with 30-degree wedge filter",
+    "commissioned_by": "QuangTPS",
+    "measurement_equipment": "PTW MP3-XS water phantom, PTW 31010 Semiflex 0.125cc ionization chamber"
+  }
+} 

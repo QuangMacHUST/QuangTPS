@@ -12,7 +12,10 @@ from enum import Enum, auto
 import SimpleITK as sitk
 import numpy as np
 import uuid
-from datetime import datetime
+from datetime import datetime, date
+import os
+import sys
+import enum
 
 
 @dataclass
@@ -284,5 +287,330 @@ class BeamEnergyType(Enum):
     PHOTON = "photon"
     ELECTRON = "electron"
     PROTON = "proton"
-    OTHER = "other"
+    NEUTRON = "neutron"
+    CARBON = "carbon"
+    UNKNOWN = "unknown"
+
+
+class TechniqueType(Enum):
+    """Loại kỹ thuật xạ trị."""
+    CONFORMAL = "3D-CRT"
+    IMRT = "IMRT"
+    VMAT = "VMAT"
+    SRS = "SRS"
+    SBRT = "SBRT"
+    ELECTRON = "Electron"
+    UNKNOWN = "Unknown"
+
+
+class BeamType(Enum):
+    """Loại chùm tia xạ trị."""
+    STATIC = "static"
+    ARC = "arc"
+    DYNAMIC = "dynamic"
+    
+
+class StructureType(Enum):
+    """Loại cấu trúc."""
+    PTV = "ptv"
+    CTV = "ctv"
+    GTV = "gtv"
+    OAR = "oar"
+    EXTERNAL = "external"
+    IMPLANT = "implant"
+    COUCH = "couch"
+    BOLUS = "bolus"
+    SUPPORT = "support"
+    ISOCENTER = "isocenter"
+    MARKER = "marker"
+    CONTRAST = "contrast"
+    CAVITY = "cavity"
+    UNDEFINED = "undefined"
+    
+
+class PatientPosition(Enum):
+    """Vị trí của bệnh nhân."""
+    HFS = "HFS"  # Head First-Supine
+    HFP = "HFP"  # Head First-Prone
+    FFS = "FFS"  # Feet First-Supine
+    FFP = "FFP"  # Feet First-Prone
+    HFDR = "HFDR"  # Head First-Decubitus Right
+    HFDL = "HFDL"  # Head First-Decubitus Left
+    FFDR = "FFDR"  # Feet First-Decubitus Right
+    FFDL = "FFDL"  # Feet First-Decubitus Left
+    UNKNOWN = "Unknown"
+
+
+class ImageModality(Enum):
+    """Các loại hình thức hình ảnh."""
+    CT = "CT"
+    MRI = "MR"
+    PET = "PT"
+    RTDOSE = "RTDOSE"
+    CBCT = "CBCT"
+    RTPLAN = "RTPLAN"
+    RTSTRUCT = "RTSTRUCT"
+    RTIMAGE = "RTIMAGE"
+    US = "US"
+    UNKNOWN = "UNKNOWN"
+    
+
+class Orientation(Enum):
+    """Hướng của hình ảnh."""
+    AXIAL = "axial"
+    SAGITTAL = "sagittal"
+    CORONAL = "coronal"
+    OBLIQUE = "oblique"
+    
+
+class BinaryOperation(Enum):
+    """Các phép toán binary."""
+    AND = "and"
+    OR = "or"
+    SUB = "sub"
+    XOR = "xor"
+    
+
+class DoseUnit(Enum):
+    """Đơn vị liều."""
+    GY = "Gy"
+    CGY = "cGy"
+    
+
+class VolumeUnit(Enum):
+    """Đơn vị thể tích."""
+    CC = "cm³"
+    ML = "ml"
+    
+
+class LengthUnit(Enum):
+    """Đơn vị độ dài."""
+    MM = "mm"
+    CM = "cm"
+    
+
+class TimeUnit(Enum):
+    """Đơn vị thời gian."""
+    S = "s"
+    MIN = "min"
+    H = "h"
+    
+
+class BeamStatus(Enum):
+    """Trạng thái của chùm tia."""
+    PLANNING = "planning"
+    APPROVED = "approved"
+    DELIVERED = "delivered"
+    INTERRUPTED = "interrupted"
+    CANCELED = "canceled"
+    
+
+class PlanStatus(Enum):
+    """Trạng thái của kế hoạch."""
+    PLANNING = "planning"
+    APPROVED = "approved"
+    DELIVERED = "delivered"
+    INTERRUPTED = "interrupted"
+    CANCELED = "canceled"
+    
+
+class TreatmentStatus(Enum):
+    """Trạng thái của điều trị."""
+    PLANNING = "planning"
+    READY = "ready"
+    ONGOING = "ongoing"
+    COMPLETED = "completed"
+    INTERRUPTED = "interrupted"
+    CANCELED = "canceled"
+    
+
+class FractionStatus(Enum):
+    """Trạng thái của phân liều."""
+    PLANNED = "planned"
+    DELIVERED = "delivered"
+    PARTIAL = "partial"
+    CANCELED = "canceled"
+    
+
+class TaskStatus(Enum):
+    """Trạng thái của nhiệm vụ."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELED = "canceled"
+    
+
+class RoleType(Enum):
+    """Loại vai trò người dùng."""
+    ADMIN = "admin"
+    PHYSICIST = "physicist"
+    PHYSICIAN = "physician"
+    THERAPIST = "therapist"
+    DOSIMETRIST = "dosimetrist"
+    RESEARCHER = "researcher"
+    GUEST = "guest"
+
+
+class DataType:
+    """Base class for data types with serialization capabilities."""
+    
+    def __init__(self):
+        """Initialize the data type."""
+        pass
+    
+    def to_dict(self) -> Dict:
+        """
+        Convert the object to a dictionary for serialization.
+        
+        Returns:
+            Dict: Dictionary representation of the object
+        """
+        # Get all attributes that don't start with underscore
+        attrs = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        
+        # Handle special types
+        for key, value in attrs.items():
+            if isinstance(value, Enum):
+                attrs[key] = value.value
+            elif isinstance(value, np.ndarray):
+                attrs[key] = value.tolist()
+            elif isinstance(value, (datetime, date)):
+                attrs[key] = value.isoformat()
+            elif hasattr(value, 'to_dict') and callable(getattr(value, 'to_dict')):
+                attrs[key] = value.to_dict()
+        
+        return attrs
+    
+    def from_dict(self, data: Dict) -> None:
+        """
+        Update the object from a dictionary.
+        
+        Args:
+            data: Dictionary with attribute values
+        """
+        for key, value in data.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+    
+    def validate(self) -> bool:
+        """
+        Validate the object.
+        
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        return True
+
+
+@dataclass
+class Patient(DataType):
+    """
+    Patient information.
+    
+    This class represents a patient in the radiation therapy planning system,
+    including demographic and medical information.
+    """
+    patient_id: str  # Hospital ID of the patient
+    name: str  # Full name of the patient
+    birth_date: Optional[Union[date, str]] = None  # Birth date
+    gender: Optional[str] = None  # M, F, O (Other)
+    
+    # Additional demographics and medical information
+    height: Optional[float] = None  # Height in cm
+    weight: Optional[float] = None  # Weight in kg
+    allergies: List[str] = field(default_factory=list)  # List of allergies
+    conditions: List[str] = field(default_factory=list)  # List of medical conditions
+    
+    # Treatment-related information
+    diagnosis: Optional[str] = None  # Diagnosis/reason for treatment
+    diagnosis_date: Optional[Union[date, str]] = None  # Date of diagnosis
+    
+    # Additional metadata
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Additional information
+    
+    def __post_init__(self):
+        """Process values after initialization."""
+        # Ensure patient_id is a string
+        self.patient_id = str(self.patient_id)
+        
+        # Convert date strings to date objects if needed
+        if isinstance(self.birth_date, str):
+            try:
+                self.birth_date = datetime.fromisoformat(self.birth_date).date()
+            except ValueError:
+                pass  # Keep as string if invalid format
+        
+        if isinstance(self.diagnosis_date, str):
+            try:
+                self.diagnosis_date = datetime.fromisoformat(self.diagnosis_date).date()
+            except ValueError:
+                pass  # Keep as string if invalid format
+    
+    def get_age(self) -> Optional[int]:
+        """
+        Calculate the patient's age.
+        
+        Returns:
+            Optional[int]: Age in years, or None if birth date is not set
+        """
+        if not self.birth_date:
+            return None
+        
+        if isinstance(self.birth_date, str):
+            return None  # Can't calculate from string
+        
+        today = date.today()
+        age = today.year - self.birth_date.year
+        
+        # Adjust age if birthday hasn't occurred yet this year
+        if (today.month, today.day) < (self.birth_date.month, self.birth_date.day):
+            age -= 1
+            
+        return age
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary.
+        
+        Returns:
+            Dict[str, Any]: Dictionary representation of patient
+        """
+        data = super().to_dict()
+        
+        # Ensure dates are converted to strings
+        if isinstance(data.get('birth_date'), date):
+            data['birth_date'] = data['birth_date'].isoformat()
+        
+        if isinstance(data.get('diagnosis_date'), date):
+            data['diagnosis_date'] = data['diagnosis_date'].isoformat()
+            
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Patient':
+        """
+        Create from dictionary.
+        
+        Args:
+            data: Dictionary with patient data
+            
+        Returns:
+            Patient: New patient object
+        """
+        # Create a copy of the data to avoid modifying the original
+        data_copy = data.copy()
+        
+        # Handle nested structures
+        if 'allergies' in data_copy and not isinstance(data_copy['allergies'], list):
+            data_copy['allergies'] = []
+        
+        if 'conditions' in data_copy and not isinstance(data_copy['conditions'], list):
+            data_copy['conditions'] = []
+            
+        if 'metadata' in data_copy and not isinstance(data_copy['metadata'], dict):
+            data_copy['metadata'] = {}
+            
+        # Create patient object
+        return cls(**data_copy)
 

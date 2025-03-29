@@ -437,219 +437,33 @@ class ImageViewer(QWidget):
             return
             
         try:
-            # Lấy dữ liệu hình ảnh và vị trí hiện tại
-            image_data = self.primary_image.data
-            x, y, z = self.current_position
+            # Get current slices from the 3D volume
+            z_idx = min(max(0, self.current_position[2]), self.primary_image.data.shape[0] - 1)
+            y_idx = min(max(0, self.current_position[1]), self.primary_image.data.shape[1] - 1)
+            x_idx = min(max(0, self.current_position[0]), self.primary_image.data.shape[2] - 1)
             
-            # Kiểm tra dữ liệu hình ảnh có hợp lệ không
-            if not isinstance(image_data, np.ndarray):
-                logger.error(f"Dữ liệu hình ảnh không phải là mảng NumPy: {type(image_data)}")
-                return
-                
-            # Kiểm tra kích thước mảng có hợp lệ
-            if image_data.ndim < 2:
-                logger.error(f"Dữ liệu hình ảnh không đủ chiều để hiển thị: {image_data.ndim}D")
-                return
-
-            logger.debug(f"Cập nhật hiển thị với dữ liệu hình ảnh kích thước {image_data.shape}, vị trí hiện tại: [{z}, {y}, {x}]")
+            # Extract 2D slices from the 3D volume
+            axial_slice = self.primary_image.data[z_idx, :, :]
+            sagittal_slice = self.primary_image.data[:, :, x_idx]
+            coronal_slice = self.primary_image.data[:, y_idx, :]
             
-            # Giới hạn vị trí trong phạm vi hình ảnh
-            if len(image_data.shape) >= 3:
-                z = min(max(0, z), image_data.shape[0] - 1) if image_data.shape[0] > 0 else 0
-                if len(image_data.shape) > 1:
-                    y = min(max(0, y), image_data.shape[1] - 1) if image_data.shape[1] > 0 else 0
-                    if len(image_data.shape) > 2:
-                        x = min(max(0, x), image_data.shape[2] - 1) if image_data.shape[2] > 0 else 0
+            # Update image displays
+            self.axial_view.set_image_data(axial_slice)
+            self.sagittal_view.set_image_data(sagittal_slice)
+            self.coronal_view.set_image_data(coronal_slice)
             
-            # Cập nhật vị trí hiện tại sau khi giới hạn
-            self.current_position = [x, y, z]
-            logger.debug(f"Vị trí sau khi giới hạn: [{z}, {y}, {x}]")
-            
-            # Cập nhật giá trị của thanh trượt lát cắt
-            if hasattr(self, 'slice_slider') and self.slice_slider is not None:
-                if self.slice_slider.value() != z:
-                    self.slice_slider.blockSignals(True)
-                    self.slice_slider.setValue(z)
-                    self.slice_slider.blockSignals(False)
-                
-            # Lấy lát cắt hình ảnh
-            try:
-                # Xác định slice dựa trên số chiều của mảng
-                if image_data.ndim == 2:  # Ảnh 2D
-                    axial_slice = image_data
-                    sagittal_slice = None
-                    coronal_slice = None
-                    logger.debug("Dữ liệu 2D: Chỉ hiển thị lát cắt axial")
-                elif image_data.ndim == 3:  # Ảnh 3D
-                    # Kiểm tra shape hợp lệ
-                    if 0 in image_data.shape:
-                        logger.error(f"Kích thước dữ liệu hình ảnh không hợp lệ: {image_data.shape}")
-                        return
-                        
-                    # Lát cắt Axial (Z)
-                    if 0 <= z < image_data.shape[0]:
-                        axial_slice = image_data[z, :, :]
-                        logger.debug(f"Lát cắt Axial tại z={z}, kích thước: {axial_slice.shape}")
-                    else:
-                        logger.warning(f"Chỉ số z={z} nằm ngoài phạm vi [0, {image_data.shape[0]-1}]")
-                        z = max(0, min(image_data.shape[0]-1, z))  # Giới hạn lại z
-                        axial_slice = image_data[z, :, :] if image_data.shape[0] > 0 else None
-                        self.current_position[2] = z  # Cập nhật vị trí sau khi giới hạn
-                    
-                    # Lát cắt Sagittal (X)
-                    if 0 <= x < image_data.shape[2]:
-                        try:
-                            sagittal_slice = image_data[:, :, x]
-                            logger.debug(f"Lát cắt Sagittal tại x={x}, kích thước: {sagittal_slice.shape}")
-                        except IndexError as e:
-                            logger.error(f"Lỗi khi lấy lát cắt Sagittal: {str(e)}")
-                            x = max(0, min(image_data.shape[2]-1, x))  # Giới hạn lại x
-                            try:
-                                sagittal_slice = image_data[:, :, x] if image_data.shape[2] > 0 else None
-                                self.current_position[0] = x  # Cập nhật vị trí sau khi giới hạn
-                            except Exception:
-                                sagittal_slice = None
-                    else:
-                        logger.warning(f"Chỉ số x={x} nằm ngoài phạm vi [0, {image_data.shape[2]-1}]")
-                        x = max(0, min(image_data.shape[2]-1, x))  # Giới hạn lại x
-                        try:
-                            sagittal_slice = image_data[:, :, x] if image_data.shape[2] > 0 else None
-                            self.current_position[0] = x  # Cập nhật vị trí sau khi giới hạn
-                        except Exception:
-                            sagittal_slice = None
-                    
-                    # Lát cắt Coronal (Y)
-                    if 0 <= y < image_data.shape[1]:
-                        try:
-                            coronal_slice = image_data[:, y, :]
-                            logger.debug(f"Lát cắt Coronal tại y={y}, kích thước: {coronal_slice.shape}")
-                        except IndexError as e:
-                            logger.error(f"Lỗi khi lấy lát cắt Coronal: {str(e)}")
-                            y = max(0, min(image_data.shape[1]-1, y))  # Giới hạn lại y
-                            try:
-                                coronal_slice = image_data[:, y, :] if image_data.shape[1] > 0 else None
-                                self.current_position[1] = y  # Cập nhật vị trí sau khi giới hạn
-                            except Exception:
-                                coronal_slice = None
-                    else:
-                        logger.warning(f"Chỉ số y={y} nằm ngoài phạm vi [0, {image_data.shape[1]-1}]")
-                        y = max(0, min(image_data.shape[1]-1, y))  # Giới hạn lại y
-                        try:
-                            coronal_slice = image_data[:, y, :] if image_data.shape[1] > 0 else None
-                            self.current_position[1] = y  # Cập nhật vị trí sau khi giới hạn
-                        except Exception:
-                            coronal_slice = None
-                else:  # Ảnh >= 4D (hiếm gặp)
-                    logger.warning(f"Dữ liệu hình ảnh có {image_data.ndim} chiều, chỉ hỗ trợ tối đa 3 chiều")
-                    # Lấy lát cắt từ 3 chiều đầu tiên
-                    try:
-                        if z < image_data.shape[0]:
-                            axial_slice = image_data[z, :, :, 0]  # Lấy slice đầu tiên ở chiều thứ 4
-                        else:
-                            z = max(0, min(image_data.shape[0]-1, z))  # Giới hạn lại z
-                            axial_slice = image_data[z, :, :, 0] if image_data.shape[0] > 0 else None
-                            self.current_position[2] = z  # Cập nhật vị trí sau khi giới hạn
-                            
-                        if x < image_data.shape[2]:
-                            sagittal_slice = image_data[:, :, x, 0]
-                        else:
-                            x = max(0, min(image_data.shape[2]-1, x))  # Giới hạn lại x
-                            sagittal_slice = image_data[:, :, x, 0] if image_data.shape[2] > 0 else None
-                            self.current_position[0] = x  # Cập nhật vị trí sau khi giới hạn
-                            
-                        if y < image_data.shape[1]:
-                            coronal_slice = image_data[:, y, :, 0]
-                        else:
-                            y = max(0, min(image_data.shape[1]-1, y))  # Giới hạn lại y
-                            coronal_slice = image_data[:, y, :, 0] if image_data.shape[1] > 0 else None
-                            self.current_position[1] = y  # Cập nhật vị trí sau khi giới hạn
-                    except IndexError as e:
-                        logger.error(f"Lỗi truy cập chiều không tồn tại: {str(e)}")
-                        # Fallback to safe values
-                        axial_slice = image_data[0, :, :, 0] if image_data.shape[0] > 0 else None
-                        sagittal_slice = None
-                        coronal_slice = None
-            except IndexError as e:
-                logger.error(f"Lỗi chỉ số khi lấy lát cắt: z={z}, y={y}, x={x}, shape={image_data.shape}, lỗi={str(e)}")
-                # Thử lấy giá trị an toàn
-                try:
-                    # Kiểm tra lại các chỉ số
-                    safe_z = min(max(0, z), image_data.shape[0]-1) if image_data.shape[0] > 0 else 0
-                    safe_y = min(max(0, y), image_data.shape[1]-1) if len(image_data.shape) > 1 and image_data.shape[1] > 0 else 0
-                    safe_x = min(max(0, x), image_data.shape[2]-1) if len(image_data.shape) > 2 and image_data.shape[2] > 0 else 0
-                    
-                    # Cập nhật vị trí hiện tại với các chỉ số an toàn
-                    self.current_position = [safe_x, safe_y, safe_z]
-                    logger.info(f"Đã điều chỉnh vị trí sang giá trị an toàn: [{safe_z}, {safe_y}, {safe_x}]")
-                    
-                    # Lấy lát cắt với các chỉ số an toàn
-                    axial_slice = image_data[safe_z, :, :] if image_data.shape[0] > 0 else None
-                    sagittal_slice = image_data[:, :, safe_x] if len(image_data.shape) > 2 and image_data.shape[2] > 0 else None
-                    coronal_slice = image_data[:, safe_y, :] if len(image_data.shape) > 1 and image_data.shape[1] > 0 else None
-                    logger.info("Đã lấy lát cắt mặc định thay thế với chỉ số an toàn")
-                except Exception as e2:
-                    logger.error(f"Lỗi khi thử lấy lát cắt an toàn: {str(e2)}")
-                    # Fallback to simplest case
-                    try:
-                        axial_slice = image_data[0, :, :] if image_data.shape[0] > 0 else None
-                    except Exception:
-                        axial_slice = None
-                    sagittal_slice = None
-                    coronal_slice = None
-            except Exception as e:
-                logger.error(f"Lỗi không xác định khi lấy lát cắt: {str(e)}")
-                import traceback
-                logger.debug(traceback.format_exc())
-                axial_slice = None
-                sagittal_slice = None
-                coronal_slice = None
-            
-            # Cập nhật hiển thị nếu có lát cắt hợp lệ
-            try:
-                # Kiểm tra lát cắt trước khi cập nhật hiển thị
-                if axial_slice is not None and isinstance(axial_slice, np.ndarray) and axial_slice.size > 0:
-                    self.axial_view.set_image(axial_slice, plane="axial")
-                    logger.debug("Đã cập nhật hiển thị lát cắt Axial")
-                else:
-                    logger.warning("Không thể hiển thị lát cắt Axial: dữ liệu không hợp lệ")
-                    
-                if sagittal_slice is not None and isinstance(sagittal_slice, np.ndarray) and sagittal_slice.size > 0:
-                    self.sagittal_view.set_image(sagittal_slice, plane="sagittal")
-                    logger.debug("Đã cập nhật hiển thị lát cắt Sagittal")
-                else:
-                    logger.warning("Không thể hiển thị lát cắt Sagittal: dữ liệu không hợp lệ")
-                    
-                if coronal_slice is not None and isinstance(coronal_slice, np.ndarray) and coronal_slice.size > 0:
-                    self.coronal_view.set_image(coronal_slice, plane="coronal")
-                    logger.debug("Đã cập nhật hiển thị lát cắt Coronal")
-                else:
-                    logger.warning("Không thể hiển thị lát cắt Coronal: dữ liệu không hợp lệ")
-            except Exception as e:
-                logger.error(f"Lỗi khi cập nhật hiển thị lát cắt: {str(e)}")
-                import traceback
-                logger.debug(traceback.format_exc())
-                
             # Cập nhật thông tin vị trí
-            try:
-                # Kiểm tra vị trí nằm trong phạm vi hợp lệ
-                x, y, z = self.current_position  # Lấy lại giá trị đã được cập nhật
-                if (0 <= z < image_data.shape[0] and
-                    0 <= y < image_data.shape[1] and
-                    0 <= x < image_data.shape[2]):
-                    value = image_data[z, y, x]
-                    self._update_position_info(x, y, value)
-                    logger.debug(f"Giá trị tại vị trí [{z},{y},{x}] = {value}")
-                else:
-                    logger.warning(f"Vị trí [{z},{y},{x}] nằm ngoài phạm vi dữ liệu")
-                    # Hiển thị giá trị NaN hoặc 0 cho các vị trí không hợp lệ
-                    self._update_position_info(x, y, float('nan'))
-            except IndexError as e:
-                logger.error(f"Lỗi truy cập vị trí [{z}, {y}, {x}] trong mảng shape={image_data.shape}: {str(e)}")
-                self._update_position_info(x, y, 0)
-            except Exception as e:
-                logger.error(f"Lỗi không xác định khi cập nhật thông tin vị trí: {str(e)}")
-                self._update_position_info(x, y, 0)
+            if self.primary_image.data.ndim >= 3 and 0 <= z_idx < self.primary_image.data.shape[0] and 0 <= y_idx < self.primary_image.data.shape[1] and 0 <= x_idx < self.primary_image.data.shape[2]:
+                value = self.primary_image.data[z_idx, y_idx, x_idx]
+                self._update_position_info(x_idx, y_idx, value)
+                logger.debug(f"Giá trị tại vị trí [{z_idx},{y_idx},{x_idx}] = {value}")
+            else:
+                logger.warning(f"Vị trí [{z_idx},{y_idx},{x_idx}] nằm ngoài phạm vi dữ liệu")
+                self._update_position_info(x_idx, y_idx, float('nan'))
                 
+        except IndexError as e:
+            logger.error(f"Lỗi chỉ số khi cập nhật hiển thị: {str(e)}")
+            self._update_position_info(0, 0, float('nan'))
         except Exception as e:
             logger.error(f"Lỗi khi cập nhật hiển thị: {str(e)}")
             import traceback
@@ -685,7 +499,7 @@ class ImageViewer(QWidget):
         
         # Phát tín hiệu thay đổi vị trí
         self.position_changed.emit(x, y, z)
-    
+        
     def eventFilter(self, source, event):
         """
         Lọc sự kiện từ các widget con để xử lý sự kiện wheel từ các màn hình hiển thị.

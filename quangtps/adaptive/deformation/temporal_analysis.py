@@ -16,10 +16,10 @@ from datetime import datetime
 from enum import Enum, auto
 from dataclasses import dataclass
 
-from ...core.types import Image, Structure, Dose, Patient
-from ...core.exceptions import AnalysisError
-from .registration import ImageRegistration, RegistrationType
-from .displacement_field import DisplacementField
+from quangtps.core.types import Image, Structure, Dose, Patient
+from quangtps.core.exceptions import AnalysisError
+from quangtps.adaptive.deformation.registration import ImageRegistration, RegistrationType
+from quangtps.adaptive.deformation.displacement_field import DisplacementField
 
 logger = logging.getLogger(__name__)
 

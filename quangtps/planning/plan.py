@@ -2,26 +2,35 @@
 # -*- coding: utf-8 -*-
 
 """
-Module quản lý kế hoạch điều trị (Plan).
+Module quản lý kế hoạch điều trị trong hệ thống lập kế hoạch xạ trị QuangTPS.
 
 Module này cung cấp các lớp và phương thức để quản lý kế hoạch điều trị,
-bao gồm các thông tin về bệnh nhân, loại kế hoạch, và các thông số điều trị.
+bao gồm thông tin về bệnh nhân, liều kê đơn, và cài đặt chùm tia.
 """
 
-import uuid
 import logging
-import datetime
+import uuid
+import json
+import os
+from typing import Dict, Optional, Any, List, Tuple, Union, TYPE_CHECKING
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Tuple
+from datetime import datetime
 
-from quangtps.treatment.beams.beam import Beam
-from quangtps.planning.beam import BeamArrangement
-from quangtps.planning.optimization import OptimizationSettings
-from quangtps.planning.evaluation import PlanEvaluation
-from quangtps.planning.prescription import Prescription
+from quangtps.core.services import ServiceRegistry
+from quangtps.core.constants import DOSE_UNITS
+
+# Import within TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from quangtps.planning.beam import BeamArrangement
+    from quangtps.planning.evaluation import PlanEvaluation
+    from quangtps.planning.prescription import Prescription
+    from quangtps.planning.optimization import OptimizationSettings
+    from quangtps.treatment.beams.beam import Beam
+
+# Don't import anything outside TYPE_CHECKING that would cause circular imports
+# We'll import them locally in methods as needed
 
 logger = logging.getLogger(__name__)
-
 
 class PlanType(str, Enum):
     """Enum cho các loại kế hoạch điều trị."""
@@ -89,8 +98,8 @@ class Plan:
         # Thông tin cơ bản
         self.description = ""
         self.notes = ""
-        self.created_date = datetime.datetime.now()
-        self.last_modified = datetime.datetime.now()
+        self.created_date = datetime.now()
+        self.last_modified = datetime.now()
         self.created_by = ""
         self.approved_by = ""
         self.approval_date = None
@@ -132,7 +141,7 @@ class Plan:
             Loại kế hoạch điều trị
         """
         self.plan_type = plan_type
-        self.last_modified = datetime.datetime.now()
+        self.last_modified = datetime.now()
     
     def set_status(self, status: PlanStatus):
         """
@@ -144,13 +153,13 @@ class Plan:
             Trạng thái của kế hoạch điều trị
         """
         self.status = status
-        self.last_modified = datetime.datetime.now()
+        self.last_modified = datetime.now()
         
         # Cập nhật các trường liên quan nếu trạng thái là Approved
         if status == PlanStatus.APPROVED:
-            self.approval_date = datetime.datetime.now()
+            self.approval_date = datetime.now()
     
-    def set_beam_arrangement(self, beam_arrangement: BeamArrangement):
+    def set_beam_arrangement(self, beam_arrangement):
         """
         Đặt sắp xếp chùm tia cho kế hoạch.
         
@@ -160,9 +169,9 @@ class Plan:
             Đối tượng sắp xếp chùm tia
         """
         self.beam_arrangement = beam_arrangement
-        self.last_modified = datetime.datetime.now()
+        self.last_modified = datetime.now()
     
-    def set_prescription(self, prescription: Prescription):
+    def set_prescription(self, prescription):
         """
         Đặt đơn điều trị cho kế hoạch.
         
@@ -172,9 +181,9 @@ class Plan:
             Đối tượng đơn điều trị
         """
         self.prescription = prescription
-        self.last_modified = datetime.datetime.now()
+        self.last_modified = datetime.now()
     
-    def set_optimization_settings(self, settings: OptimizationSettings):
+    def set_optimization_settings(self, settings: 'OptimizationSettings'):
         """
         Đặt thiết lập tối ưu hóa cho kế hoạch.
         
@@ -184,7 +193,7 @@ class Plan:
             Đối tượng thiết lập tối ưu hóa
         """
         self.optimization_settings = settings
-        self.last_modified = datetime.datetime.now()
+        self.last_modified = datetime.now()
     
     def calculate_dose(self) -> bool:
         """
@@ -203,7 +212,7 @@ class Plan:
             logger.error("Không thể tính toán liều - đơn điều trị chưa được thiết lập")
             return False
         
-        start_time = datetime.datetime.now()
+        start_time = datetime.now()
         
         try:
             # Giả lập quá trình tính toán liều
@@ -216,7 +225,7 @@ class Plan:
             
             # Đánh dấu tính toán hoàn thành
             self.calculation_complete = True
-            self.calculation_time = (datetime.datetime.now() - start_time).total_seconds()
+            self.calculation_time = (datetime.now() - start_time).total_seconds()
             self.calculation_status = "Complete"
             self.status = PlanStatus.REVIEW
             
@@ -226,7 +235,7 @@ class Plan:
             self.calculation_status = f"Error: {str(e)}"
             return False
     
-    def evaluate(self) -> Optional[PlanEvaluation]:
+    def evaluate(self) -> Optional['PlanEvaluation']:
         """
         Đánh giá kế hoạch điều trị.
         
@@ -240,16 +249,64 @@ class Plan:
             return None
         
         try:
+            # Import PlanEvaluation here to avoid circular imports
+            from quangtps.planning.evaluation import PlanEvaluation
+            
             # Tạo đối tượng đánh giá kế hoạch
             self.evaluation = PlanEvaluation(
-                dose_grid=self.dose_grid,
-                structures=self.structures,
-                prescription=self.prescription
+                plan_id=self.plan_id,
+                dose_grid=self.dose_grid
             )
+            
+            # Thêm cấu trúc vào đánh giá
+            for struct_id, struct_data in self.structures.items():
+                if 'mask' in struct_data and 'name' in struct_data:
+                    self.evaluation.add_structure(
+                        structure_id=struct_id,
+                        structure_name=struct_data['name'],
+                        structure_mask=struct_data['mask'],
+                        structure_type=struct_data.get('type', '')
+                    )
             
             # Tính toán DVH và các chỉ số chất lượng
             self.evaluation.calculate_dvh()
-            self.evaluation.calculate_quality_metrics()
+            
+            # Tạo dictionary chứa liều kê toa cho mỗi cấu trúc target
+            prescription_doses = {}
+            if self.prescription and hasattr(self.prescription, 'targets'):
+                try:
+                    # Handle case where targets is a dictionary
+                    if isinstance(self.prescription.targets, dict):
+                        for target_id, target in self.prescription.targets.items():
+                            if isinstance(target, dict) and 'structure_id' in target and 'dose' in target:
+                                struct_id = target['structure_id'] 
+                                if struct_id in self.structures:
+                                    prescription_doses[struct_id] = target['dose']
+                            elif hasattr(target, 'structure_id') and hasattr(target, 'dose'):
+                                if target.structure_id in self.structures:
+                                    prescription_doses[target.structure_id] = target.dose
+                    # Handle case where targets might be a list or other iterable
+                    elif hasattr(self.prescription.targets, '__iter__'):
+                        for target in self.prescription.targets:
+                            if isinstance(target, dict) and 'structure_id' in target and 'dose' in target:
+                                struct_id = target['structure_id']
+                                if struct_id in self.structures:
+                                    prescription_doses[struct_id] = target['dose']
+                            elif hasattr(target, 'structure_id') and hasattr(target, 'dose'):
+                                if target.structure_id in self.structures:
+                                    prescription_doses[target.structure_id] = target.dose
+                except Exception as e:
+                    logger.warning(f"Error processing prescription targets: {str(e)}")
+                        
+                # Tính toán các chỉ số chất lượng với liều kê toa
+                if prescription_doses:
+                    self.evaluation.calculate_quality_metrics(prescription_dose=prescription_doses)
+                else:
+                    # Tính toán các chỉ số chất lượng không có liều kê toa
+                    self.evaluation.calculate_quality_metrics()
+            else:
+                # Tính toán các chỉ số chất lượng không có liều kê toa
+                self.evaluation.calculate_quality_metrics()
             
             return self.evaluation
         except Exception as e:
@@ -285,8 +342,8 @@ class Plan:
         # Cập nhật trạng thái và thông tin phê duyệt
         self.status = PlanStatus.APPROVED
         self.approved_by = approver
-        self.approval_date = datetime.datetime.now()
-        self.last_modified = datetime.datetime.now()
+        self.approval_date = datetime.now()
+        self.last_modified = datetime.now()
         
         return True
     
@@ -383,13 +440,13 @@ class Plan:
         
         # Chuyển đổi các trường datetime
         if "created_date" in data:
-            plan.created_date = datetime.datetime.fromisoformat(data["created_date"])
+            plan.created_date = datetime.fromisoformat(data["created_date"])
         
         if "last_modified" in data:
-            plan.last_modified = datetime.datetime.fromisoformat(data["last_modified"])
+            plan.last_modified = datetime.fromisoformat(data["last_modified"])
         
         if "approval_date" in data and data["approval_date"]:
-            plan.approval_date = datetime.datetime.fromisoformat(data["approval_date"])
+            plan.approval_date = datetime.fromisoformat(data["approval_date"])
         
         # Tái tạo các thành phần phức tạp nếu có
         if "beam_arrangement" in data:
@@ -397,6 +454,7 @@ class Plan:
             plan.beam_arrangement = BeamArrangement.from_dict(data["beam_arrangement"])
         
         if "prescription" in data:
+            # Import locally to avoid circular import
             from quangtps.planning.prescription import Prescription
             plan.prescription = Prescription.from_dict(data["prescription"])
         

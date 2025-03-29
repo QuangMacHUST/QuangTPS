@@ -40,11 +40,25 @@ from quangtps.evaluation.dvh import (
     calculate_dvh,
     calculate_dvh_metrics,
     calculate_dvh_from_dose_grid,
-    DVHAnalysis,
     plot_dvh,
     plot_multiple_dvh,
     create_dvh_report
 )
+
+# Import plan evaluation module
+from quangtps.evaluation.plan_evaluation import (
+    PlanEvaluation,
+    evaluate_plan
+)
+
+# Import robustness evaluation if available
+try:
+    from .robustness import (
+        RobustnessAnalyzer, RobustnessResult, ScenarioResult,
+        analyze_plan_robustness, RobustOptimizer, optimize_robust_plan
+    )
+except ImportError:
+    pass
 
 __all__ = [
     # Phân tích liều
@@ -75,12 +89,16 @@ __all__ = [
     'calculate_dvh',
     'calculate_dvh_metrics',
     'calculate_dvh_from_dose_grid',
-    'DVHAnalysis',
     'plot_dvh',
     'plot_multiple_dvh',
     'create_dvh_report',
     
+    # Đánh giá kế hoạch
+    'PlanEvaluation',
+    'evaluate_plan',
+    
     # Đánh giá và so sánh kế hoạch
     'EvaluationReport',
-    'PlanComparison'
+    'PlanComparison',
+    'RobustnessAnalyzer', 'RobustnessResult', 'analyze_plan_robustness'
 ]

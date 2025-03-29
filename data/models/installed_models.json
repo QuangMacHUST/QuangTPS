@@ -1,0 +1,13 @@
+{
+    "lung_segmentation": {
+        "name": "Lung Segmentation",
+        "version": "1.0.0",
+        "path": "E:\\hoctap\\QuangTPS\\data\\models\\lung_segmentation",
+        "date_installed": "2025-03-28T09:20:17.928455",
+        "structures": [
+            "left_lung",
+            "right_lung",
+            "lungs"
+        ]
+    }
+}

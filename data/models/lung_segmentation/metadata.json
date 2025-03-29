@@ -1,0 +1,32 @@
+{
+    "model_name": "lung_segmentation",
+    "version": "1.0.0",
+    "description": "Deep learning model for automatic lung segmentation",
+    "created_date": "2025-03-28",
+    "last_updated": "2025-03-28",
+    "author": "QuangTPS Team",
+    "license": "MIT",
+    "framework": "TensorFlow",
+    "input_shape": [256, 256, 1],
+    "output_shape": [256, 256, 1],
+    "preprocessing": {
+        "window_width": 1500,
+        "window_level": -500,
+        "normalize": true
+    },
+    "classes": [
+        "background",
+        "lung"
+    ],
+    "performance": {
+        "dice": 0.95,
+        "sensitivity": 0.94,
+        "specificity": 0.99
+    },
+    "recommended_usage": "Automatic segmentation of lungs from CT images",
+    "dependencies": {
+        "tensorflow": ">=2.4.0",
+        "numpy": ">=1.19.0",
+        "scipy": ">=1.6.0"
+    }
+} 

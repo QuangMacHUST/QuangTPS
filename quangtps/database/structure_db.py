@@ -694,58 +694,6 @@ class StructureDatabase:
             logger.error("Error importing structure from imaging: %s", str(e), exc_info=True)
             raise DatabaseError(f"Failed to import structure from imaging: {str(e)}") from e
             
-    def export_structure_to_imaging(self, structure_id):
-        """
-        Export a structure from the database to the imaging module format.
-        
-        Args:
-            structure_id (str): ID of the structure to export
-            
-        Returns:
-            ImagingStructure: Structure object in imaging module format or None if not found
-        """
-        try:
-            # Load the structure from database (segmentation format)
-            segmentation_structure = self.load_structure(structure_id)
-            if not segmentation_structure:
-                logger.warning("Structure with ID %s not found for export", structure_id)
-                return None
-                
-            # Convert to imaging format
-            imaging_structure = segmentation_to_imaging_structure(segmentation_structure)
-            return imaging_structure
-            
-        except Exception as e:
-            logger.error("Error exporting structure to imaging: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Failed to export structure to imaging: {str(e)}") from e
-            
-    def export_structure_set_to_imaging(self, structure_set_id):
-        """
-        Export a structure set from the database to the imaging module format.
-        
-        Args:
-            structure_set_id (str): ID of the structure set to export
-            
-        Returns:
-            ImagingStructureSet: Structure set object in imaging module format or None if not found
-        """
-        try:
-            # Load the structure set (will be in segmentation format)
-            patient_id = None  # We're using structure_set_id directly, not patient_id
-            segmentation_structure_set = self.load_structure_set(patient_id, structure_set_id)
-            
-            if not segmentation_structure_set:
-                logger.warning("Structure set with ID %s not found for export", structure_set_id)
-                return None
-                
-            # Convert to imaging format
-            imaging_structure_set = segmentation_to_imaging_structure_set(segmentation_structure_set)
-            return imaging_structure_set
-            
-        except Exception as e:
-            logger.error("Error exporting structure set to imaging: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Failed to export structure set to imaging: {str(e)}") from e
-
     def save_structure_set(self, structure_set: StructureSet) -> str:
         """
         Lưu tập hợp cấu trúc vào cơ sở dữ liệu.
@@ -833,84 +781,6 @@ class StructureDatabase:
             logger.error("Lỗi khi lưu tập hợp cấu trúc: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi khi lưu tập hợp cấu trúc: %s" % str(e)) from e
 
-    def load_structure_set(self, patient_id: str, structure_set_id: str = None) -> Optional[StructureSet]:
-        """
-        Nạp tập hợp cấu trúc từ cơ sở dữ liệu.
-        
-        Args:
-            patient_id: ID của bệnh nhân
-            structure_set_id: ID của tập hợp cấu trúc (nếu None, lấy tập hợp đầu tiên)
-            
-        Returns:
-            StructureSet: Đối tượng StructureSet chứa tất cả cấu trúc
-        """
-        try:
-            # Query to get structure sets for a patient
-            if structure_set_id:
-                query = """
-                    SELECT id, name, created_at, updated_at, metadata 
-                    FROM structure_sets 
-                    WHERE id = ?
-                """
-                result = self.db.execute_query(query, (structure_set_id,))
-            else:
-                query = """
-                    SELECT ss.id, ss.name, ss.created_at, ss.updated_at, ss.metadata 
-                    FROM structure_sets ss
-                    JOIN structure_set_structures sss ON ss.id = sss.structure_set_id
-                    JOIN structures s ON sss.structure_id = s.id
-                    WHERE s.patient_id = ?
-                    LIMIT 1
-                """
-                result = self.db.execute_query(query, (patient_id,))
-            
-            if not result:
-                logger.warning("Không tìm thấy tập hợp cấu trúc cho bệnh nhân ID: %s", patient_id)
-                return None
-            
-            set_id = result['id']
-            name = result['name']
-            
-            # Load metadata
-            try:
-                metadata = json.loads(result['metadata']) if result['metadata'] else {}
-            except json.JSONDecodeError:
-                metadata = {}
-            
-            # Create a new StructureSet from segmentation module
-            from quangtps.segmentation.structures import StructureSet as SegStructureSet
-            structure_set = SegStructureSet(id=set_id, name=name)
-            
-            # Add metadata
-            structure_set.meta = metadata.get('other_meta', {})
-            structure_set.associated_image_id = metadata.get('associated_image_id')
-            
-            # Get list of structures in this set
-            query = """
-                SELECT structure_id 
-                FROM structure_set_structures 
-                WHERE structure_set_id = ?
-            """
-            structure_ids = self.db.execute_query(query, (set_id,), fetch_all=True)
-            
-            # Load each structure and add to set
-            for item in structure_ids:
-                structure_id = item['structure_id']
-                structure = self.load_structure(structure_id)
-                if structure:
-                    structure_set.add_structure(structure)
-            
-            logger.info("Đã nạp tập hợp cấu trúc có ID: %s với %d cấu trúc", 
-                       set_id, len(structure_set.structures))
-            
-            # Return the appropriate type based on caller's need
-            # For database ops, we'll use the segmentation version
-            return structure_set
-            
-        except Exception as e:
-            logger.error("Lỗi khi nạp tập hợp cấu trúc: %s", str(e), exc_info=True)
-            raise DatabaseError("Lỗi khi nạp tập hợp cấu trúc: %s" % str(e)) from e
-    
     def get_patient_structures(self, patient_id: str) -> List[Dict[str, Any]]:
         """
         Lấy danh sách tất cả cấu trúc của một bệnh nhân.
@@ -1047,43 +917,6 @@ class StructureDatabase:
             logger.error("Lỗi khi xóa tập hợp cấu trúc: %s", str(e), exc_info=True)
             raise DatabaseError("Lỗi khi xóa tập hợp cấu trúc: %s" % str(e)) from e
 
-    def get_structure(self, structure_id):
-        """
-        Lấy thông tin cấu trúc theo ID.
-
-        Args:
-            structure_id (str): ID của cấu trúc.
-
-        Returns:
-            dict: Thông tin cấu trúc hoặc None nếu không tìm thấy.
-
-        Raises:
-            DatabaseError: Nếu có lỗi xảy ra trong quá trình truy vấn.
-        """
-        try:
-            query = "SELECT * FROM structures WHERE id = ?"
-            result = self.db.execute_query(query, (structure_id,), fetchall=False)
-            
-            if not result:
-                logger.warning(f"Không tìm thấy cấu trúc với ID: {structure_id}")
-                return None
-            
-            structure = {
-                'id': result[0],
-                'study_id': result[1],
-                'name': result[2],
-                'type': result[3],
-                'color': result[4],
-                'created_at': result[5],
-                'updated_at': result[6],
-                'metadata': json.loads(result[7]) if result[7] else None
-            }
-            
-            return structure
-        except Exception as e:
-            logger.error(f"Lỗi khi lấy thông tin cấu trúc: {str(e)}")
-            raise DatabaseError(f"Không thể lấy thông tin cấu trúc: {str(e)}")
-
     def get_structure_set(self, structure_set_id):
         """
         Lấy thông tin tập hợp cấu trúc theo ID.
@@ -1198,102 +1031,8 @@ class StructureDatabase:
             logger.error("Lỗi khi nạp cấu trúc từ file: %s", str(e), exc_info=True)
             raise DatabaseError(f"Không thể nạp cấu trúc từ file: {str(e)}") from e
 
-    def export_structure_to_imaging(self, structure_id):
-        """
-        Export a structure from the database to the imaging module format.
+# Add alias for StructureDatabase class to fix import errors
+StructureDB = StructureDatabase
 
-        Args:
-            structure_id (str): ID of the structure to export
-
-        Returns:
-            ImagingStructure: Structure object in imaging module format or None if not found
-        """
-        try:
-            # Load segmentation format structure
-            segmentation_structure = self.load_structure_from_file(structure_id)
-            
-            if not segmentation_structure:
-                logger.warning("Structure with ID %s not found for export", structure_id)
-                return None
-                
-            # Convert to imaging format
-            imaging_structure = segmentation_to_imaging_structure(segmentation_structure)
-            return imaging_structure
-            
-        except Exception as e:
-            logger.error("Error exporting structure to imaging: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Failed to export structure to imaging: {str(e)}") from e
-            
-    def export_structure_set_to_imaging(self, structure_set_id):
-        """
-        Export a structure set from the database to the imaging module format.
-
-        Args:
-            structure_set_id (str): ID of the structure set to export
-
-        Returns:
-            ImagingStructureSet: Structure set object in imaging module format or None if not found
-        """
-        try:
-            # Load the structure set (will be in segmentation format)
-            segmentation_structure_set = self.load_structure_set(structure_set_id)
-            
-            if not segmentation_structure_set:
-                logger.warning("Structure set with ID %s not found for export", structure_set_id)
-                return None
-                
-            # Convert to imaging format
-            imaging_structure_set = segmentation_to_imaging_structure_set(segmentation_structure_set)
-            return imaging_structure_set
-            
-        except Exception as e:
-            logger.error("Error exporting structure set to imaging: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Failed to export structure set to imaging: {str(e)}") from e
-            
-    def load_structure_set(self, structure_set_id):
-        """
-        Load a structure set from the database.
-
-        Parameters:
-            structure_set_id (str): ID of the structure set to load
-
-        Returns:
-            StructureSet: Structure set object or None if not found
-        """
-        try:
-            # Query structure set information
-            query = "SELECT * FROM structure_sets WHERE id = ?"
-            structure_set_data = self.db.execute_query(query, (structure_set_id,), fetchall=False)
-            
-            if not structure_set_data:
-                logger.warning("Structure set with ID %s not found", structure_set_id)
-                return None
-            
-            # Create structure set object
-            structure_set = StructureSet(
-                name=structure_set_data['name']
-            )
-            
-            # Query all structures in this set
-            query = """
-                SELECT s.id FROM structures s
-                JOIN structure_set_structures sss ON s.id = sss.structure_id
-                WHERE sss.structure_set_id = ?
-            """
-            structure_records = self.db.execute_query(query, (structure_set_id,), fetchall=True)
-            
-            # Load each structure
-            for record in structure_records:
-                structure_id = record['id']
-                structure = self.load_structure_from_file(structure_id)
-                
-                if structure:
-                    structure_set.add_structure(structure)
-            
-            logger.info("Loaded structure set: %s with %d structures", 
-                        structure_set_data['name'], len(structure_set.structures))
-            return structure_set
-            
-        except Exception as e:
-            logger.error("Error loading structure set: %s", str(e), exc_info=True)
-            raise DatabaseError(f"Failed to load structure set: {str(e)}") from e
+# Export both classes
+__all__ = ["StructureDatabase", "StructureDB"]

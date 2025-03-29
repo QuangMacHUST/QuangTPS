@@ -316,3 +316,216 @@ class Structure:
         z_count = len(self.contours)
         contour_count = sum(len(contours) for contours in self.contours.values())
         return f"Structure(name='{self.name}', type={self.type.name}, {z_count} slices, {contour_count} contours)"
+
+class StructureData(Structure):
+    """
+    Enhanced structure class with additional properties and methods for segmentation.
+    
+    This class extends the base Structure class with functionality needed for
+    the segmentation module, including additional metadata, statistical properties,
+    and segmentation-specific operations.
+    
+    Attributes:
+        All attributes from Structure class
+        segmentation_method (str): Method used to create this structure
+        creation_timestamp (str): When the structure was created
+        last_modified_timestamp (str): When the structure was last modified
+        confidence_score (float): Confidence score if created by AI segmentation
+        is_generated (bool): Whether this structure was auto-generated
+        parent_structures (List[str]): IDs of parent structures if derived
+    """
+    
+    def __init__(self, name: str, 
+                 structure_type: StructureType = StructureType.UNKNOWN,
+                 priority: StructurePriority = StructurePriority.NONE,
+                 color: Optional[Tuple[int, int, int]] = None,
+                 contours: Optional[Dict[float, List[Contour]]] = None,
+                 structure_id: Optional[str] = None,
+                 metadata: Optional[Dict[str, Any]] = None,
+                 segmentation_method: str = "manual",
+                 confidence_score: float = 1.0,
+                 is_generated: bool = False,
+                 parent_structures: Optional[List[str]] = None):
+        """
+        Initialize StructureData object.
+        
+        Parameters:
+            name (str): Name of the structure
+            structure_type (StructureType): Type of structure
+            priority (StructurePriority): Priority level
+            color (Optional[Tuple[int, int, int]]): RGB color
+            contours (Optional[Dict[float, List[Contour]]]): Dictionary of contours by z position
+            structure_id (Optional[str]): Unique ID (auto-generated if None)
+            metadata (Optional[Dict[str, Any]]): Additional metadata
+            segmentation_method (str): Method used to create this structure
+            confidence_score (float): Confidence score (0.0-1.0) for AI generated structures
+            is_generated (bool): Whether structure was auto-generated
+            parent_structures (Optional[List[str]]): IDs of parent structures if derived
+        """
+        super().__init__(name, structure_type, priority, color, contours, structure_id, metadata)
+        
+        # Add segmentation-specific metadata
+        import datetime
+        
+        self.segmentation_method = segmentation_method
+        self.creation_timestamp = datetime.datetime.now().isoformat()
+        self.last_modified_timestamp = self.creation_timestamp
+        self.confidence_score = confidence_score
+        self.is_generated = is_generated
+        self.parent_structures = parent_structures or []
+        
+        # Add this info to metadata too for serialization
+        self.metadata.update({
+            "segmentation_method": segmentation_method,
+            "creation_timestamp": self.creation_timestamp,
+            "last_modified_timestamp": self.last_modified_timestamp,
+            "confidence_score": confidence_score,
+            "is_generated": is_generated,
+            "parent_structures": self.parent_structures
+        })
+    
+    def update_modified_timestamp(self):
+        """Update the last modified timestamp."""
+        import datetime
+        self.last_modified_timestamp = datetime.datetime.now().isoformat()
+        self.metadata["last_modified_timestamp"] = self.last_modified_timestamp
+    
+    def add_contour(self, contour: Contour) -> None:
+        """
+        Add a contour and update the modified timestamp.
+        
+        Parameters:
+            contour (Contour): Contour to add
+        """
+        super().add_contour(contour)
+        self.update_modified_timestamp()
+    
+    def remove_contour(self, z: float, contour_id: str) -> bool:
+        """
+        Remove a contour and update the modified timestamp.
+        
+        Parameters:
+            z (float): Z position of the contour
+            contour_id (str): ID of the contour to remove
+            
+        Returns:
+            bool: True if successfully removed, False otherwise
+        """
+        result = super().remove_contour(z, contour_id)
+        if result:
+            self.update_modified_timestamp()
+        return result
+    
+    def clear_contours(self) -> None:
+        """Clear all contours and update the modified timestamp."""
+        super().clear_contours()
+        self.update_modified_timestamp()
+    
+    def get_centroid(self) -> Optional[Tuple[float, float, float]]:
+        """
+        Calculate the centroid (center of mass) of the structure.
+        
+        Returns:
+            Optional[Tuple[float, float, float]]: (x, y, z) coordinates of centroid, 
+            or None if structure is empty
+        """
+        if self.is_empty:
+            return None
+            
+        total_points = 0
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+        
+        for z, contours_at_z in self.contours.items():
+            for contour in contours_at_z:
+                for point in contour.points:
+                    sum_x += point.x
+                    sum_y += point.y
+                    sum_z += z
+                    total_points += 1
+        
+        if total_points == 0:
+            return None
+            
+        return (sum_x / total_points, sum_y / total_points, sum_z / total_points)
+    
+    @classmethod
+    def from_structure(cls, structure: Structure, 
+                       segmentation_method: str = "manual",
+                       confidence_score: float = 1.0,
+                       is_generated: bool = False,
+                       parent_structures: Optional[List[str]] = None) -> 'StructureData':
+        """
+        Create a StructureData object from a Structure object.
+        
+        Parameters:
+            structure (Structure): Base structure object
+            segmentation_method (str): Method used to create this structure
+            confidence_score (float): Confidence score (0.0-1.0) for AI generated structures
+            is_generated (bool): Whether structure was auto-generated
+            parent_structures (Optional[List[str]]): IDs of parent structures if derived
+            
+        Returns:
+            StructureData: New StructureData object with the same basic properties
+        """
+        return cls(
+            name=structure.name,
+            structure_type=structure.type,
+            priority=structure.priority,
+            color=structure.color,
+            contours=structure.contours.copy(),
+            structure_id=structure.id,
+            metadata=structure.metadata.copy(),
+            segmentation_method=segmentation_method,
+            confidence_score=confidence_score,
+            is_generated=is_generated,
+            parent_structures=parent_structures
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary with all properties.
+        
+        Returns:
+            Dict[str, Any]: Dictionary representation of this object
+        """
+        data = super().to_dict()
+        data.update({
+            "segmentation_method": self.segmentation_method,
+            "creation_timestamp": self.creation_timestamp,
+            "last_modified_timestamp": self.last_modified_timestamp,
+            "confidence_score": self.confidence_score,
+            "is_generated": self.is_generated,
+            "parent_structures": self.parent_structures
+        })
+        return data
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'StructureData':
+        """
+        Create StructureData object from dictionary.
+        
+        Parameters:
+            data (Dict[str, Any]): Dictionary with structure data
+            
+        Returns:
+            StructureData: New StructureData object
+        """
+        # Create base Structure object
+        structure = Structure.from_dict(data)
+        
+        # Create StructureData with additional properties
+        structure_data = cls.from_structure(
+            structure=structure,
+            segmentation_method=data.get('segmentation_method', 'manual'),
+            confidence_score=data.get('confidence_score', 1.0),
+            is_generated=data.get('is_generated', False),
+            parent_structures=data.get('parent_structures', [])
+        )
+        
+        # Set timestamps if available
+        if 'creation_timestamp' in data:
+            structure_data.creation_timestamp = data['creation_timestamp']
+        if 'last_modified_timestamp' in data:
+            structure_data.last_modified_timestamp = data['last_modified_timestamp']
+            
+        return structure_data

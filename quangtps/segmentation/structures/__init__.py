@@ -11,7 +11,7 @@ StructureTemplate (mẫu cấu trúc), và các đối tượng liên quan.
 
 from quangtps.segmentation.structures.geometry import Point, Contour
 from quangtps.segmentation.structures.structure import Structure, StructureType, StructurePriority
-from quangtps.segmentation.structures.structure_set import StructureSet
+from quangtps.segmentation.structures.structure_set import StructureSet, StructureSetData
 from quangtps.segmentation.structures.structure_templates import StructureTemplate, template_library
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     'StructureType',
     'StructurePriority',
     'StructureSet',
+    'StructureSetData',
     'StructureTemplate',
     'template_library',
 ]

@@ -1,0 +1,27 @@
+{
+    "name": "Lung Segmentation",
+    "version": "1.0.0",
+    "model_type": "unet",
+    "input_shape": [
+        256,
+        256,
+        1
+    ],
+    "output_shape": [
+        256,
+        256,
+        1
+    ],
+    "weights_file": "model.h5",
+    "preprocessing": {
+        "window_width": 1500,
+        "window_level": -600,
+        "normalize": true
+    },
+    "structures": [
+        "left_lung",
+        "right_lung",
+        "lungs"
+    ],
+    "description": "Segments both lungs from CT images"
+}

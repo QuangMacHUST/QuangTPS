@@ -11,6 +11,7 @@ trọng số của các tiêu chí khác nhau và xem kết quả theo thời gi
 import os
 import logging
 import time
+import json
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 import matplotlib.pyplot as plt
@@ -21,8 +22,10 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
                             QPushButton, QGroupBox, QSplitter, QTabWidget, 
                             QWidget, QComboBox, QFrame, QRadioButton, 
                             QButtonGroup, QMessageBox, QGridLayout, QScrollArea,
-                            QSpacerItem, QSizePolicy, QCheckBox, QFileDialog)
+                            QSpacerItem, QSizePolicy, QCheckBox, QFileDialog,
+                            QInputDialog)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from PyQt5.QtGui import QIcon, QPixmap
 
 from quangtps.optimization.methods.mco import MCOEngine, MCONavigator, MCOTrade
 from quangtps.evaluation.dvh.dvh_visualization import plot_dvh
@@ -30,86 +33,401 @@ from quangtps.imaging.image_viewer import ImageViewer
 from quangtps.dose.dose_visualization import DoseColorwash
 from quangtps.core.exceptions import OptimizationError
 from quangtps.dose.dose_grid import DoseGrid
+from quangtps.ui.widgets.dvh_widget import DVHWidget
+from quangtps.ui.styles import get_icon, Colors
 
 logger = logging.getLogger(__name__)
 
 class MCOTradeoffPlot(FigureCanvasQTAgg):
-    """Biểu đồ đánh đổi giữa các tiêu chí tối ưu."""
+    """Interactive tradeoff plot for multi-criteria optimization.
     
-    def __init__(self, width=5, height=4, dpi=100):
+    Displays the Pareto front and allows users to interactively explore
+    the trade-offs between different objectives.
+    """
+    
+    pointSelected = pyqtSignal(int)  # Signal emitted when a point is selected
+    
+    def __init__(self, width=6, height=5, dpi=100):
+        plt.style.use('ggplot')  # Use a clean, modern style
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
         super().__init__(self.fig)
-        self.fig.tight_layout()
+        
+        # Enable better antialiasing for prettier plots
+        self.fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+        
+        # Interactive features
+        self.point_details = []  # Store details about each point
+        self.current_point_idx = None
+        self.selected_point = None
+        self.hover_annotation = None
+        
+        # Connect events for interaction
+        self.mpl_connect('motion_notify_event', self.on_hover)
+        self.mpl_connect('button_press_event', self.on_click)
+        
+        self.setMinimumSize(400, 300)
         
     def plot_tradeoff(self, x_values, y_values, x_label, y_label, 
-                     current_point=None, title=None):
-        """Vẽ biểu đồ đánh đổi."""
+                     current_point=None, point_details=None, title=None):
+        """Plot the tradeoff between two objectives.
+        
+        Args:
+            x_values: Values for the x-axis objective
+            y_values: Values for the y-axis objective
+            x_label: Label for x-axis
+            y_label: Label for y-axis
+            current_point: Current selected point (x,y)
+            point_details: List of dictionaries with point metadata
+            title: Plot title
+        """
         self.axes.clear()
+        self.point_details = point_details or []
         
-        # Vẽ các điểm trên mặt Pareto
-        self.axes.scatter(x_values, y_values, s=50, alpha=0.7, c='blue')
+        # Create color gradient for Pareto front
+        n_points = len(x_values)
+        if n_points > 0:
+            # Create gradient from blue to green to represent domination
+            colors = plt.cm.viridis(np.linspace(0, 0.8, n_points))
+            
+            # Plot Pareto front points with gradient coloring
+            scatter = self.axes.scatter(x_values, y_values, s=60, alpha=0.8, 
+                               c=colors, edgecolor='w', linewidth=1.5)
+            
+            # Plot connecting lines for Pareto front
+            if n_points > 1:
+                # Sort points by x value for proper line connection
+                xy_points = np.array(list(zip(x_values, y_values)))
+                sorted_idx = np.argsort(xy_points[:, 0])
+                sorted_points = xy_points[sorted_idx]
+                
+                self.axes.plot(sorted_points[:, 0], sorted_points[:, 1], 
+                              'k--', alpha=0.5, linewidth=1)
         
-        # Nếu có điểm hiện tại, đánh dấu nó
+        # Mark current point if provided
+        self.current_point_idx = None
         if current_point:
-            self.axes.scatter([current_point[0]], [current_point[1]], 
-                             s=100, c='red', marker='*')
+            # Find the index of the current point
+            if n_points > 0:
+                distances = [(x-current_point[0])**2 + (y-current_point[1])**2 
+                            for x, y in zip(x_values, y_values)]
+                self.current_point_idx = np.argmin(distances)
+            
+            # Mark the current point with a star
+            self.selected_point = self.axes.scatter(
+                [current_point[0]], [current_point[1]], 
+                s=140, c='gold', marker='*', edgecolor='k', linewidth=1.5,
+                zorder=10
+            )
         
-        # Đặt nhãn và tiêu đề
-        self.axes.set_xlabel(x_label)
-        self.axes.set_ylabel(y_label)
+        # Set labels with larger font
+        self.axes.set_xlabel(x_label, fontsize=10, fontweight='bold')
+        self.axes.set_ylabel(y_label, fontsize=10, fontweight='bold')
+        
+        # Set title
         if title:
-            self.axes.set_title(title)
+            self.axes.set_title(title, fontsize=12, fontweight='bold')
         else:
-            self.axes.set_title(f"Tradeoff: {x_label} vs {y_label}")
+            self.axes.set_title(f"Tradeoff: {x_label} vs {y_label}", 
+                              fontsize=12, fontweight='bold')
         
-        self.axes.grid(True, linestyle='--', alpha=0.7)
+        # Add grid with specific styling
+        self.axes.grid(True, linestyle='--', alpha=0.6, color='gray')
+        
+        # Set background color for the plotting area
+        self.axes.set_facecolor('#f8f8f8')
+        
+        # Add a legend
+        if n_points > 0:
+            self.axes.legend(['Pareto Front', 'Current Selection'], 
+                           loc='best', framealpha=0.7)
+        
+        # Add text explanations for better usability
+        self.axes.text(0.01, 0.01, "Click a point to select it", 
+                     transform=self.axes.transAxes, fontsize=8, 
+                     verticalalignment='bottom', color='#555555')
+        
+        # Apply styling to axes
+        for spine in self.axes.spines.values():
+            spine.set_edgecolor('#cccccc')
+        
         self.fig.tight_layout()
         self.draw()
+        
+    def on_hover(self, event):
+        """Handle mouse hover events to show tooltips."""
+        if event.inaxes != self.axes or len(self.point_details) == 0:
+            # Clear any existing annotation when mouse leaves axes
+            if self.hover_annotation:
+                self.hover_annotation.remove()
+                self.hover_annotation = None
+                self.draw_idle()
+            return
+        
+        # Get data coordinates
+        x, y = event.xdata, event.ydata
+        
+        # Find closest point
+        min_dist = float('inf')
+        closest_idx = -1
+        
+        for i, (xi, yi) in enumerate(zip(self.axes.get_lines()[0].get_xdata(), 
+                                       self.axes.get_lines()[0].get_ydata())):
+            dist = (xi - x)**2 + (yi - y)**2
+            if dist < min_dist:
+                min_dist = dist
+                closest_idx = i
+        
+        # Show tooltip if close enough
+        if min_dist < 0.01 and closest_idx >= 0 and closest_idx < len(self.point_details):
+            # Remove existing annotation
+            if self.hover_annotation:
+                self.hover_annotation.remove()
+            
+            # Create new annotation with point details
+            details = self.point_details[closest_idx]
+            text = "\n".join([f"{k}: {v:.3f}" for k, v in details.items()])
+            self.hover_annotation = self.axes.annotate(
+                text, xy=(self.axes.get_lines()[0].get_xdata()[closest_idx],
+                         self.axes.get_lines()[0].get_ydata()[closest_idx]),
+                xytext=(10, 10), textcoords="offset points",
+                bbox=dict(boxstyle="round,pad=0.5", fc="white", alpha=0.8),
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0")
+            )
+            self.draw_idle()
+    
+    def on_click(self, event):
+        """Handle mouse click events to select points."""
+        if event.inaxes != self.axes:
+            return
+        
+        # Get data coordinates
+        x, y = event.xdata, event.ydata
+        
+        # Find closest point
+        min_dist = float('inf')
+        closest_idx = -1
+        
+        if not hasattr(self.axes, 'lines') or len(self.axes.lines) == 0:
+            return
+            
+        for i, (xi, yi) in enumerate(zip(self.axes.get_lines()[0].get_xdata(), 
+                                       self.axes.get_lines()[0].get_ydata())):
+            dist = (xi - x)**2 + (yi - y)**2
+            if dist < min_dist:
+                min_dist = dist
+                closest_idx = i
+        
+        # Emit signal if close enough to a point
+        if min_dist < 0.02 and closest_idx >= 0:
+            self.pointSelected.emit(closest_idx)
 
 
 class ObjectiveSlider(QWidget):
-    """Widget thanh trượt cho một tiêu chí tối ưu."""
+    """Interactive slider widget for controlling objective weights in MCO.
+    
+    This widget provides a slider with detailed information display and visual feedback
+    about the importance of each objective in the multi-criteria optimization.
+    """
     
     valueChanged = pyqtSignal(str, float)
     
     def __init__(self, objective_name, min_value=0, max_value=100, 
-                default_value=50, description=None, parent=None):
+                default_value=50, description=None, objective_type=None, parent=None):
         super().__init__(parent)
         
         self.objective_name = objective_name
         self.description = description or objective_name
+        self.objective_type = objective_type or "Generic"
         
-        # Tạo layout
+        # Create the main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(3)
         
-        # Tạo label hiển thị tên và giá trị
-        self.value_label = QLabel(f"{self.description}: {default_value}%")
-        layout.addWidget(self.value_label)
+        # Create frame for better visual appearance
+        self.frame = QFrame()
+        self.frame.setFrameShape(QFrame.StyledPanel)
+        self.frame.setFrameShadow(QFrame.Raised)
+        frame_layout = QVBoxLayout(self.frame)
+        frame_layout.setContentsMargins(8, 8, 8, 8)
+        frame_layout.setSpacing(4)
         
-        # Tạo thanh trượt
+        # Header with name and type
+        header_layout = QHBoxLayout()
+        
+        # Icon based on objective type
+        self.type_icon = QLabel()
+        icon_size = 16
+        
+        # Set icon based on objective type
+        if "Target" in self.objective_type:
+            self.type_icon.setPixmap(get_icon("target").pixmap(icon_size, icon_size))
+            self.color = "#E63946"  # Red for targets
+        elif "OAR" in self.objective_type:
+            self.type_icon.setPixmap(get_icon("shield").pixmap(icon_size, icon_size))
+            self.color = "#457B9D"  # Blue for OARs
+        else:
+            self.type_icon.setPixmap(get_icon("objective").pixmap(icon_size, icon_size))
+            self.color = "#2A9D8F"  # Green for others
+        
+        header_layout.addWidget(self.type_icon)
+        
+        # Objective name label with styling
+        self.name_label = QLabel(self.description)
+        self.name_label.setStyleSheet(f"font-weight: bold; color: {self.color};")
+        self.name_label.setToolTip(f"Objective: {self.description}\nType: {self.objective_type}")
+        header_layout.addWidget(self.name_label, 1)
+        
+        # Value display
+        self.value_label = QLabel(f"{default_value}%")
+        self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.value_label.setStyleSheet("font-weight: bold;")
+        self.value_label.setMinimumWidth(45)
+        header_layout.addWidget(self.value_label)
+        
+        frame_layout.addLayout(header_layout)
+        
+        # Slider with tick marks
+        slider_layout = QHBoxLayout()
+        
+        # Min value label
+        min_label = QLabel(f"{min_value}")
+        min_label.setAlignment(Qt.AlignLeft)
+        slider_layout.addWidget(min_label)
+        
+        # Slider
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(min_value)
         self.slider.setMaximum(max_value)
         self.slider.setValue(default_value)
         self.slider.setTickPosition(QSlider.TicksBelow)
         self.slider.setTickInterval(10)
-        self.slider.valueChanged.connect(self._value_changed)
-        layout.addWidget(self.slider)
         
+        # Set custom stylesheet for the slider
+        self.slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                border: 1px solid #bbb;
+                background: white;
+                height: 10px;
+                border-radius: 4px;
+            }}
+            
+            QSlider::sub-page:horizontal {{
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #F2F2F2, stop: 1 {self.color});
+                border: 1px solid #777;
+                height: 10px;
+                border-radius: 4px;
+            }}
+            
+            QSlider::add-page:horizontal {{
+                background: #fff;
+                border: 1px solid #777;
+                height: 10px;
+                border-radius: 4px;
+            }}
+            
+            QSlider::handle:horizontal {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #eee, stop:1 #ccc);
+                border: 1px solid #777;
+                width: 18px;
+                margin-top: -5px;
+                margin-bottom: -5px;
+                border-radius: 9px;
+            }}
+        """)
+        
+        self.slider.valueChanged.connect(self._value_changed)
+        slider_layout.addWidget(self.slider, 1)
+        
+        # Max value label
+        max_label = QLabel(f"{max_value}")
+        max_label.setAlignment(Qt.AlignRight)
+        slider_layout.addWidget(max_label)
+        
+        frame_layout.addLayout(slider_layout)
+        
+        # Preset buttons for quick adjustment
+        presets_layout = QHBoxLayout()
+        presets_layout.setSpacing(4)
+        
+        # Create preset buttons with styling
+        for preset_value, label in [(0, "Off"), (25, "Low"), (50, "Med"), (75, "High"), (100, "Max")]:
+            btn = QPushButton(label)
+            btn.setProperty("preset_value", preset_value)
+            btn.setFixedHeight(22)
+            btn.setFixedWidth(40)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #F8F9FA;
+                    border: 1px solid #DEE2E6;
+                    border-radius: 3px;
+                    font-size: 9px;
+                }}
+                QPushButton:hover {{
+                    background-color: #E9ECEF;
+                }}
+                QPushButton:pressed {{
+                    background-color: {self.color};
+                    color: white;
+                }}
+            """)
+            btn.clicked.connect(self._preset_clicked)
+            presets_layout.addWidget(btn)
+        
+        frame_layout.addLayout(presets_layout)
+        
+        # Add the frame to the main layout
+        layout.addWidget(self.frame)
+    
     def _value_changed(self, value):
-        """Xử lý khi giá trị thanh trượt thay đổi."""
-        self.value_label.setText(f"{self.description}: {value}%")
-        self.valueChanged.emit(self.objective_name, value / 100.0)  # Chuẩn hóa về [0, 1]
+        """Handle slider value changes."""
+        self.value_label.setText(f"{value}%")
+        
+        # Update slider colors
+        weight = value / 100.0
+        # Update the tooltip with more detailed information
+        self.slider.setToolTip(f"Weight: {weight:.2f}\nRelative importance: {self._get_importance_text(weight)}")
+        
+        # Emit the value change signal
+        self.valueChanged.emit(self.objective_name, weight)
+    
+    def _preset_clicked(self):
+        """Handle preset button clicks."""
+        preset_value = self.sender().property("preset_value")
+        self.set_value(preset_value / 100.0)
+    
+    def _get_importance_text(self, weight):
+        """Convert weight to text representation of importance."""
+        if weight < 0.1:
+            return "Very Low"
+        elif weight < 0.3:
+            return "Low"
+        elif weight < 0.6:
+            return "Medium"
+        elif weight < 0.8:
+            return "High"
+        else:
+            return "Very High"
         
     def get_value(self):
-        """Lấy giá trị hiện tại."""
+        """Get the current normalized value (0-1)."""
         return self.slider.value() / 100.0
     
     def set_value(self, value):
-        """Đặt giá trị."""
+        """Set the slider value from a normalized value (0-1)."""
         self.slider.setValue(int(value * 100))
+        
+    def set_color(self, color):
+        """Set the color theme for this slider."""
+        self.color = color
+        self.name_label.setStyleSheet(f"font-weight: bold; color: {color};")
+        # Update slider stylesheet
+        self.slider.setStyleSheet(self.slider.styleSheet().replace(
+            self.color, color))
+        self.color = color
 
 
 class MCONavigationDialog(QDialog):
@@ -151,152 +469,314 @@ class MCONavigationDialog(QDialog):
         self.update_pending = False
         
     def init_ui(self):
-        """Khởi tạo giao diện người dùng."""
-        # Layout chính
+        """Initialize the user interface with an Eclipse-like design."""
+        # Main layout
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(6)
         
-        # Splitter chính chia đôi giao diện
+        # Title bar with logo and information
+        title_bar = QFrame()
+        title_bar.setStyleSheet("background-color: #f0f0f0; border-radius: 5px;")
+        title_bar.setMaximumHeight(60)
+        title_layout = QHBoxLayout(title_bar)
+        
+        # Logo or icon
+        logo_label = QLabel()
+        try:
+            logo_pixmap = get_icon("mco_icon").pixmap(48, 48)
+            logo_label.setPixmap(logo_pixmap)
+        except:
+            logo_label.setText("MCO")
+            logo_label.setStyleSheet("font-weight: bold; font-size: 24px; color: #1976D2;")
+        title_layout.addWidget(logo_label)
+        
+        # Title and description
+        title_text = QLabel("<b>Multi-Criteria Optimization Navigator</b><br>"
+                           "<span style='font-size: 11px; color: #555;'>Explore trade-offs between competing objectives</span>")
+        title_layout.addWidget(title_text, 1)
+        
+        # Help button
+        help_button = QPushButton()
+        help_button.setIcon(QIcon.fromTheme("help-contents"))
+        help_button.setToolTip("Show Help")
+        help_button.setFixedSize(32, 32)
+        help_button.clicked.connect(self.show_help)
+        title_layout.addWidget(help_button)
+        
+        main_layout.addWidget(title_bar)
+        
+        # Main content splitter
         main_splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(main_splitter)
+        main_splitter.setHandleWidth(2)
+        main_splitter.setChildrenCollapsible(False)
         
-        # Phần điều khiển bên trái
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
+        # Left panel for controls
+        left_panel = QWidget()
+        left_panel.setMinimumWidth(350)
+        left_panel.setMaximumWidth(500)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(10)
         
-        # Phần điều chỉnh trọng số
-        weights_group = QGroupBox("Điều Chỉnh Trọng Số")
+        # Objective weights section
+        weights_group = QGroupBox("Objective Weights")
+        weights_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #cccccc;
+                border-radius: 6px;
+                margin-top: 12px;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                background-color: #ffffff;
+            }
+        """)
         weights_layout = QVBoxLayout(weights_group)
         
-        # Tạo scroll area cho các thanh trượt
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
+        # Buttons for weight management
+        weight_buttons_layout = QHBoxLayout()
         
-        # Khởi tạo các thanh trượt cho các mục tiêu
+        self.reset_button = QPushButton("Reset")
+        self.reset_button.setIcon(QIcon.fromTheme("edit-undo"))
+        self.reset_button.clicked.connect(self.reset_weights)
+        self.reset_button.setToolTip("Reset all weights to their original values")
+        weight_buttons_layout.addWidget(self.reset_button)
+        
+        self.balance_button = QPushButton("Balance")
+        self.balance_button.setIcon(QIcon.fromTheme("edit-clear"))
+        self.balance_button.clicked.connect(self.balance_weights)
+        self.balance_button.setToolTip("Set all weights to equal values")
+        weight_buttons_layout.addWidget(self.balance_button)
+        
+        self.save_weights_button = QPushButton("Save")
+        self.save_weights_button.setIcon(QIcon.fromTheme("document-save"))
+        self.save_weights_button.clicked.connect(self.save_weights)
+        self.save_weights_button.setToolTip("Save current weights as a preset")
+        weight_buttons_layout.addWidget(self.save_weights_button)
+        
+        self.load_weights_button = QPushButton("Load")
+        self.load_weights_button.setIcon(QIcon.fromTheme("document-open"))
+        self.load_weights_button.clicked.connect(self.load_weights)
+        self.load_weights_button.setToolTip("Load weights from a saved preset")
+        weight_buttons_layout.addWidget(self.load_weights_button)
+        
+        weights_layout.addLayout(weight_buttons_layout)
+        
+        # Scroll area for sliders
+        slider_scroll = QScrollArea()
+        slider_scroll.setWidgetResizable(True)
+        slider_scroll.setFrameShape(QFrame.NoFrame)
+        slider_widget = QWidget()
+        self.slider_layout = QVBoxLayout(slider_widget)
+        self.slider_layout.setContentsMargins(0, 0, 0, 0)
+        self.slider_layout.setSpacing(8)
+        
+        # Filter controls
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filter:"))
+        
+        self.objective_filter = QComboBox()
+        self.objective_filter.addItem("All Objectives")
+        self.objective_filter.addItem("Target Objectives")
+        self.objective_filter.addItem("OAR Objectives")
+        self.objective_filter.addItem("Other Objectives")
+        self.objective_filter.currentIndexChanged.connect(self.filter_objectives)
+        filter_layout.addWidget(self.objective_filter, 1)
+        
+        self.slider_layout.addLayout(filter_layout)
+        
+        # Add sliders for each objective
         for obj in self.mco_engine.objectives:
             if obj.show_in_navigation:
+                # Determine the objective type
+                obj_type = "Other"
+                if hasattr(obj, 'structure') and obj.structure:
+                    if hasattr(obj.structure, 'type'):
+                        obj_type = obj.structure.type
+                
                 slider = ObjectiveSlider(
                     obj.name, 
                     default_value=int(obj.current_weight * 100),
-                    description=obj.name
+                    description=obj.name,
+                    objective_type=obj_type
                 )
                 slider.valueChanged.connect(self.on_weight_changed)
                 
                 self.objective_sliders[obj.name] = slider
-                scroll_layout.addWidget(slider)
+                self.slider_layout.addWidget(slider)
         
-        scroll_area.setWidget(scroll_content)
-        weights_layout.addWidget(scroll_area)
+        # Add spacer at the end
+        self.slider_layout.addStretch(1)
+        slider_scroll.setWidget(slider_widget)
+        weights_layout.addWidget(slider_scroll)
         
-        # Nút Reset và Cân bằng
-        buttons_layout = QHBoxLayout()
+        left_layout.addWidget(weights_group, 3)
         
-        self.reset_button = QPushButton("Đặt Lại")
-        self.reset_button.clicked.connect(self.reset_weights)
-        buttons_layout.addWidget(self.reset_button)
+        # Tradeoff visualization controls
+        tradeoff_group = QGroupBox("Tradeoff Visualization")
+        tradeoff_group.setStyleSheet(weights_group.styleSheet())
+        tradeoff_layout = QVBoxLayout(tradeoff_group)
         
-        self.balance_button = QPushButton("Cân Bằng")
-        self.balance_button.clicked.connect(self.balance_weights)
-        buttons_layout.addWidget(self.balance_button)
+        # Objective selection for X and Y axes
+        axes_layout = QGridLayout()
+        axes_layout.addWidget(QLabel("X-Axis:"), 0, 0)
         
-        weights_layout.addLayout(buttons_layout)
-        left_layout.addWidget(weights_group)
-        
-        # Phần lựa chọn tiêu chí để hiển thị
-        objectives_group = QGroupBox("Hiển Thị Đánh Đổi")
-        objectives_layout = QVBoxLayout(objectives_group)
-        
-        # Combobox cho X và Y
-        x_layout = QHBoxLayout()
-        x_layout.addWidget(QLabel("Trục X:"))
         self.x_combo = QComboBox()
-        x_layout.addWidget(self.x_combo)
-        objectives_layout.addLayout(x_layout)
+        axes_layout.addWidget(self.x_combo, 0, 1)
         
-        y_layout = QHBoxLayout()
-        y_layout.addWidget(QLabel("Trục Y:"))
+        axes_layout.addWidget(QLabel("Y-Axis:"), 1, 0)
+        
         self.y_combo = QComboBox()
-        y_layout.addWidget(self.y_combo)
-        objectives_layout.addLayout(y_layout)
+        axes_layout.addWidget(self.y_combo, 1, 1)
         
-        # Nút cập nhật biểu đồ
-        self.update_plot_button = QPushButton("Cập Nhật Biểu Đồ")
+        tradeoff_layout.addLayout(axes_layout)
+        
+        # Update plot button
+        update_plot_layout = QHBoxLayout()
+        
+        self.update_plot_button = QPushButton("Update Plot")
+        self.update_plot_button.setIcon(QIcon.fromTheme("view-refresh"))
         self.update_plot_button.clicked.connect(self.update_plot)
-        objectives_layout.addWidget(self.update_plot_button)
+        update_plot_layout.addWidget(self.update_plot_button)
         
-        left_layout.addWidget(objectives_group)
+        self.export_plot_button = QPushButton("Export")
+        self.export_plot_button.setIcon(QIcon.fromTheme("document-save-as"))
+        self.export_plot_button.clicked.connect(self.export_tradeoff_plot)
+        update_plot_layout.addWidget(self.export_plot_button)
         
-        # Nút điều khiển chính
-        controls_layout = QHBoxLayout()
+        tradeoff_layout.addLayout(update_plot_layout)
         
-        self.accept_plan_button = QPushButton("Chấp Nhận Kế Hoạch")
+        left_layout.addWidget(tradeoff_group, 1)
+        
+        # Action buttons
+        action_layout = QHBoxLayout()
+        
+        self.accept_plan_button = QPushButton("Accept Plan")
+        self.accept_plan_button.setIcon(QIcon.fromTheme("dialog-ok-apply"))
         self.accept_plan_button.clicked.connect(self.accept_plan)
-        controls_layout.addWidget(self.accept_plan_button)
+        self.accept_plan_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        action_layout.addWidget(self.accept_plan_button)
         
-        self.cancel_button = QPushButton("Hủy")
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setIcon(QIcon.fromTheme("dialog-cancel"))
         self.cancel_button.clicked.connect(self.reject)
-        controls_layout.addWidget(self.cancel_button)
+        action_layout.addWidget(self.cancel_button)
         
-        left_layout.addLayout(controls_layout)
+        left_layout.addLayout(action_layout)
         
-        # Thêm spacer để đẩy các widget lên trên
-        left_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        # Right panel for visualizations
+        right_panel = QWidget()
+        right_panel.setMinimumWidth(650)
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Phần hiển thị bên phải
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
+        # Tab widget for different visualizations
+        self.visual_tabs = QTabWidget()
+        self.visual_tabs.setTabPosition(QTabWidget.North)
+        right_layout.addWidget(self.visual_tabs)
         
-        # Tab widget để chứa các visualizations
-        self.results_tabs = QTabWidget()
-        
-        # Tab đánh đổi
+        # Trade-off plot tab
         tradeoff_tab = QWidget()
-        tradeoff_layout = QVBoxLayout(tradeoff_tab)
+        tradeoff_tab_layout = QVBoxLayout(tradeoff_tab)
         
+        # Create the tradeoff plot
         self.tradeoff_plot = MCOTradeoffPlot(width=6, height=5)
-        tradeoff_layout.addWidget(self.tradeoff_plot)
+        self.tradeoff_plot.pointSelected.connect(self.on_plot_point_selected)
+        tradeoff_tab_layout.addWidget(self.tradeoff_plot)
         
-        self.results_tabs.addTab(tradeoff_tab, "Biểu Đồ Đánh Đổi")
+        self.visual_tabs.addTab(tradeoff_tab, "Tradeoff Plot")
         
-        # Tab DVH
+        # DVH tab
         dvh_tab = QWidget()
-        self.results_tabs.addTab(dvh_tab, "DVH")
         dvh_layout = QVBoxLayout(dvh_tab)
         
-        # Tạo figure matplotlib cho DVH
-        self.dvh_fig = Figure(figsize=(5, 4), dpi=100)
-        self.dvh_canvas = FigureCanvasQTAgg(self.dvh_fig)
-        self.dvh_axes = self.dvh_fig.add_subplot(111)
-        dvh_layout.addWidget(self.dvh_canvas)
+        # Create DVH widget
+        self.dvh_widget = DVHWidget()
+        dvh_layout.addWidget(self.dvh_widget)
         
-        # Tab Dose
+        dvh_buttons = QHBoxLayout()
+        self.refresh_dvh_button = QPushButton("Refresh")
+        self.refresh_dvh_button.clicked.connect(self.update_dvh)
+        dvh_buttons.addWidget(self.refresh_dvh_button)
+        
+        self.export_dvh_button = QPushButton("Export")
+        self.export_dvh_button.clicked.connect(self.export_dvh_plot)
+        dvh_buttons.addWidget(self.export_dvh_button)
+        
+        dvh_buttons.addStretch(1)
+        dvh_layout.addLayout(dvh_buttons)
+        
+        self.visual_tabs.addTab(dvh_tab, "DVH")
+        
+        # Dose visualization tab
         dose_tab = QWidget()
         dose_layout = QVBoxLayout(dose_tab)
         
-        # Widget hiển thị liều
+        self.dose_viewer = ImageViewer()
+        dose_layout.addWidget(self.dose_viewer)
+        
         self.dose_colorwash = DoseColorwash()
-        self.dose_img = ImageViewer()
-        dose_layout.addWidget(self.dose_img)
+        dose_buttons = QHBoxLayout()
         
-        self.results_tabs.addTab(dose_tab, "Phân Bố Liều")
+        self.refresh_dose_button = QPushButton("Refresh")
+        self.refresh_dose_button.clicked.connect(self.update_dose_view)
+        dose_buttons.addWidget(self.refresh_dose_button)
         
-        # Thêm tabs vào layout bên phải
-        right_layout.addWidget(self.results_tabs)
+        dose_buttons.addStretch(1)
+        dose_layout.addLayout(dose_buttons)
         
-        # Thêm widgets vào splitter
-        main_splitter.addWidget(left_widget)
-        main_splitter.addWidget(right_widget)
+        self.visual_tabs.addTab(dose_tab, "Dose")
         
-        # Thiết lập kích thước khởi tạo cho splitter
-        main_splitter.setSizes([400, 800])
+        # Add panels to splitter
+        main_splitter.addWidget(left_panel)
+        main_splitter.addWidget(right_panel)
+        main_splitter.setSizes([350, 650])  # Initial sizes
         
-        # Thêm các mục tiêu vào combo boxes
+        main_layout.addWidget(main_splitter, 1)
+        
+        # Status bar
+        status_bar = QFrame()
+        status_bar.setFrameShape(QFrame.StyledPanel)
+        status_bar.setStyleSheet("background-color: #f0f0f0; border-radius: 3px;")
+        status_layout = QHBoxLayout(status_bar)
+        status_layout.setContentsMargins(5, 2, 5, 2)
+        
+        self.status_label = QLabel("Ready")
+        status_layout.addWidget(self.status_label, 1)
+        
+        self.auto_update_check = QCheckBox("Auto-update")
+        self.auto_update_check.setChecked(True)
+        self.auto_update_check.setToolTip("Automatically update the plan when weights change")
+        status_layout.addWidget(self.auto_update_check)
+        
+        main_layout.addWidget(status_bar)
+        
+        # Populate the objective combo boxes
         self.populate_objective_combos()
         
-        # Khởi tạo biểu đồ ban đầu nếu có dữ liệu
-        if self.mco_engine.trades:
-            self.update_plot()
+        # Initial plot update
+        self.update_plot()
+        
+        # Set window properties
+        self.setWindowTitle("Multi-Criteria Optimization Navigator")
+        self.setMinimumSize(1200, 800)
+        self.resize(1200, 800)
     
     def populate_objective_combos(self):
         """Thêm các mục tiêu vào combo boxes."""
@@ -441,21 +921,7 @@ class MCONavigationDialog(QDialog):
         if not self.current_trade or not self.current_trade.dvh_data:
             return
         
-        self.dvh_axes.clear()
-        
-        # Thêm các đường DVH
-        for struct_name, dvh_data in self.current_trade.dvh_data.items():
-            self.dvh_axes.plot(
-                dvh_data['dose'],
-                dvh_data['volume_percent'],
-                label=struct_name
-            )
-        
-        self.dvh_axes.legend()
-        self.dvh_axes.set_xlabel('Dose (Gy)')
-        self.dvh_axes.set_ylabel('Volume Percent')
-        self.dvh_axes.set_title('DVH')
-        self.dvh_canvas.draw()
+        self.dvh_widget.update_dvh(self.current_trade.dvh_data)
     
     def update_dose_view(self):
         """Cập nhật hiển thị phân bố liều."""
@@ -492,8 +958,8 @@ class MCONavigationDialog(QDialog):
             buf.shape = (h, w, 3)
             
             # Hiển thị hình ảnh trong ImageViewer
-            self.dose_img.set_image(buf)
-            self.dose_img.update_view()
+            self.dose_viewer.set_image(buf)
+            self.dose_viewer.update_view()
     
     def accept_plan(self):
         """Chấp nhận kế hoạch hiện tại."""
@@ -524,5 +990,172 @@ class MCONavigationDialog(QDialog):
         )
         
         if file_path:
-            self.dvh_fig.savefig(file_path, dpi=300, bbox_inches='tight')
-            QMessageBox.information(self, "Thông Báo", f"Đã lưu biểu đồ DVH vào {file_path}") 
+            self.dvh_widget.fig.savefig(file_path, dpi=300, bbox_inches='tight')
+            QMessageBox.information(self, "Thông Báo", f"Đã lưu biểu đồ DVH vào {file_path}")
+    
+    def filter_objectives(self, index):
+        """Filter the objective sliders based on the selected filter."""
+        filter_text = self.objective_filter.currentText()
+        
+        for name, slider in self.objective_sliders.items():
+            # Get the objective type
+            obj_type = slider.objective_type.lower() if hasattr(slider, 'objective_type') else "other"
+            
+            if filter_text == "All Objectives":
+                slider.setVisible(True)
+            elif filter_text == "Target Objectives" and "target" in obj_type:
+                slider.setVisible(True)
+            elif filter_text == "OAR Objectives" and "oar" in obj_type:
+                slider.setVisible(True)
+            elif filter_text == "Other Objectives" and "target" not in obj_type and "oar" not in obj_type:
+                slider.setVisible(True)
+            else:
+                slider.setVisible(False)
+    
+    def on_plot_point_selected(self, index):
+        """Handle selection of a point on the tradeoff plot."""
+        if index >= 0 and index < len(self.navigator.trade_history):
+            # Get the selected trade
+            trade = self.navigator.trade_history[index]
+            
+            # Update sliders to match the selected trade's weights
+            for name, weight in trade.weights.items():
+                if name in self.objective_sliders:
+                    self.objective_sliders[name].set_value(weight)
+            
+            # Update the current trade
+            self.current_trade = trade
+            
+            # Update visualizations
+            self._update_visualizations()
+            
+            # Update status
+            self.status_label.setText(f"Selected solution {index+1}")
+    
+    def save_weights(self):
+        """Save current weights as a preset."""
+        # Get current weights
+        weights = {name: slider.get_value() for name, slider in self.objective_sliders.items()}
+        
+        # Ask for a name
+        name, ok = QInputDialog.getText(self, "Save Weights", 
+                                                 "Enter a name for this preset:")
+        if ok and name:
+            # Create a preset dictionary
+            preset = {
+                'name': name,
+                'weights': weights,
+                'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            # Get existing presets
+            presets = []
+            preset_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
+                                     "optimization", "mco", "presets.json")
+            try:
+                if os.path.exists(preset_path):
+                    with open(preset_path, 'r') as f:
+                        presets = json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading presets: {e}")
+                presets = []
+            
+            # Add new preset
+            presets.append(preset)
+            
+            # Save presets
+            try:
+                with open(preset_path, 'w') as f:
+                    json.dump(presets, f, indent=2)
+                self.status_label.setText(f"Saved preset: {name}")
+            except Exception as e:
+                logger.error(f"Error saving preset: {e}")
+                QMessageBox.warning(self, "Save Error", 
+                                  f"Could not save preset: {str(e)}")
+    
+    def load_weights(self):
+        """Load weights from a saved preset."""
+        # Get existing presets
+        preset_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
+                                 "optimization", "mco", "presets.json")
+        presets = []
+        
+        try:
+            if os.path.exists(preset_path):
+                with open(preset_path, 'r') as f:
+                    presets = json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading presets: {e}")
+            QMessageBox.warning(self, "Load Error", 
+                              f"Could not load presets: {str(e)}")
+            return
+        
+        if not presets:
+            QMessageBox.information(self, "No Presets", 
+                                   "No saved presets found.")
+            return
+        
+        # Show selection dialog
+        preset_names = [p['name'] for p in presets]
+        name, ok = QInputDialog.getItem(self, "Load Preset", 
+                                                "Select a preset to load:", 
+                                                preset_names, 0, False)
+        
+        if ok and name:
+            # Find the selected preset
+            selected_preset = next((p for p in presets if p['name'] == name), None)
+            
+            if selected_preset and 'weights' in selected_preset:
+                # Apply the weights
+                for obj_name, weight in selected_preset['weights'].items():
+                    if obj_name in self.objective_sliders:
+                        self.objective_sliders[obj_name].set_value(weight)
+                
+                self.status_label.setText(f"Loaded preset: {name}")
+                
+                # Trigger an update based on the new weights
+                self.delayed_update_plan()
+    
+    def show_help(self):
+        """Show help information for the MCO Navigator."""
+        help_text = """
+        <h3>Multi-Criteria Optimization Navigator</h3>
+        <p>This tool allows you to interactively explore trade-offs between competing 
+        treatment planning objectives.</p>
+        
+        <h4>Key Features:</h4>
+        <ul>
+          <li><b>Objective Weights</b>: Adjust the importance of each planning objective</li>
+          <li><b>Tradeoff Plot</b>: Visualize the Pareto frontier of optimal plans</li>
+          <li><b>DVH Display</b>: See the dose-volume histogram for the current plan</li>
+          <li><b>Dose Visualization</b>: View the dose distribution</li>
+        </ul>
+        
+        <h4>How to Use:</h4>
+        <ol>
+          <li>Adjust the sliders to change the importance of each objective</li>
+          <li>The plan will update automatically (if auto-update is enabled)</li>
+          <li>Click on points in the tradeoff plot to select different Pareto-optimal plans</li>
+          <li>When satisfied with a plan, click "Accept Plan" to finalize it</li>
+        </ol>
+        
+        <p>For more information, please refer to the user manual.</p>
+        """
+        
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("MCO Navigator Help")
+        msg_box.setTextFormat(Qt.RichText)
+        msg_box.setText(help_text)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.exec_()
+    
+    def _update_visualizations(self):
+        """Update all visualizations with the current plan."""
+        # Update the current point on the tradeoff plot
+        self.update_current_point()
+        
+        # Update the DVH
+        self.update_dvh()
+        
+        # Update the dose view
+        self.update_dose_view() 

@@ -1,0 +1,155 @@
+{
+  "protocol_name": "Prostate Standard",
+  "version": "1.0",
+  "description": "Standard dose constraints for prostate IMRT/VMAT treatment",
+  "source": "Based on RTOG 0415 protocols with institutional modifications",
+  "prescription": {
+    "primary_target": {
+      "name": "PTV_Prostate",
+      "dose": 78.0,
+      "fractions": 39,
+      "priority": 1,
+      "coverage_goal": 95,
+      "hotspot_limit": 107
+    },
+    "secondary_targets": [
+      {
+        "name": "PTV_SV",
+        "dose": 56.0,
+        "fractions": 39,
+        "priority": 2,
+        "coverage_goal": 95,
+        "hotspot_limit": 107
+      },
+      {
+        "name": "PTV_Nodes",
+        "dose": 50.0,
+        "fractions": 39,
+        "priority": 3,
+        "coverage_goal": 95,
+        "hotspot_limit": 107
+      }
+    ]
+  },
+  "dose_constraints": {
+    "organs_at_risk": [
+      {
+        "name": "Rectum",
+        "constraint_type": "dvh",
+        "priority": "high",
+        "points": [
+          {"dose": 75.0, "volume_percent": 15},
+          {"dose": 70.0, "volume_percent": 20},
+          {"dose": 65.0, "volume_percent": 25},
+          {"dose": 60.0, "volume_percent": 35},
+          {"dose": 50.0, "volume_percent": 50}
+        ],
+        "notes": "V75Gy < 15%, V70Gy < 20%, V65Gy < 25%, V60Gy < 35%, V50Gy < 50%"
+      },
+      {
+        "name": "Bladder",
+        "constraint_type": "dvh",
+        "priority": "high",
+        "points": [
+          {"dose": 80.0, "volume_percent": 15},
+          {"dose": 75.0, "volume_percent": 25},
+          {"dose": 70.0, "volume_percent": 35},
+          {"dose": 65.0, "volume_percent": 50}
+        ],
+        "notes": "V80Gy < 15%, V75Gy < 25%, V70Gy < 35%, V65Gy < 50%"
+      },
+      {
+        "name": "Femoral Heads",
+        "constraint_type": "maximum",
+        "dose_limit": 50.0,
+        "volume_limit": 10,
+        "priority": "medium",
+        "notes": "V50Gy < 10%"
+      },
+      {
+        "name": "Penile Bulb",
+        "constraint_type": "mean",
+        "dose_limit": 50.0,
+        "volume_limit": null,
+        "priority": "low",
+        "notes": "Mean dose < 50 Gy when possible"
+      },
+      {
+        "name": "Small Bowel",
+        "constraint_type": "maximum",
+        "dose_limit": 50.0,
+        "volume_limit": 0,
+        "priority": "medium",
+        "notes": "Keep max dose < 50 Gy"
+      },
+      {
+        "name": "Sigmoid Colon",
+        "constraint_type": "dvh",
+        "priority": "medium",
+        "points": [
+          {"dose": 70.0, "volume_percent": 10},
+          {"dose": 50.0, "volume_percent": 50}
+        ],
+        "notes": "V70Gy < 10%, V50Gy < 50%"
+      }
+    ],
+    "dvh_constraints": [
+      {
+        "structure": "Rectum",
+        "volume_percent": 15,
+        "dose_limit": 75.0,
+        "priority": "high",
+        "notes": "No more than 15% of rectum should receive 75 Gy"
+      },
+      {
+        "structure": "Bladder",
+        "volume_percent": 25,
+        "dose_limit": 75.0,
+        "priority": "high",
+        "notes": "No more than 25% of bladder should receive 75 Gy"
+      }
+    ]
+  },
+  "planning_parameters": {
+    "technique": "VMAT",
+    "energy": "6MV",
+    "optimization_type": "MCO",
+    "fraction_schedule": "Daily",
+    "immobilization": "Prostate board with leg immobilization",
+    "setup_margins": {
+      "PTV_Prostate": 0.5,
+      "PTV_SV": 0.7,
+      "PTV_Nodes": 0.7
+    },
+    "beam_arrangement": {
+      "suggested_angles": [
+        [181, 179],
+        [210, 150]
+      ],
+      "notes": "Dual arc VMAT configuration, full arcs recommended"
+    },
+    "preparation": {
+      "bladder_filling": "Comfortably full bladder (patient should drink 500ml of water 30 minutes before treatment)",
+      "rectal_preparation": "Empty rectum (consider use of laxative evening before planning CT)"
+    }
+  },
+  "evaluation_criteria": {
+    "conformity_index": {
+      "target": "PTV_Prostate",
+      "acceptable": 1.2,
+      "ideal": 1.1,
+      "notes": "Volume of 95% isodose / target volume"
+    },
+    "homogeneity_index": {
+      "target": "PTV_Prostate",
+      "acceptable": 0.1,
+      "ideal": 0.07,
+      "notes": "(D2% - D98%) / D50%"
+    },
+    "gradient_measure": {
+      "acceptable": 0.5,
+      "ideal": 0.4,
+      "notes": "R50 - ratio of 50% isodose volume to PTV volume"
+    }
+  }
+} 

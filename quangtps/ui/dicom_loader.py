@@ -137,7 +137,10 @@ class DicomSeries:
                     # File thuộc series này
                     if file_path not in self.files:  # Tránh trùng lặp
                         self.files.append(file_path)
-                    return True
+                        return True
+                    else:
+                        # File đã tồn tại trong series
+                        return True
                 else:
                     # File không thuộc series này
                     return False
@@ -386,8 +389,8 @@ class DicomSeries:
                 
                 # Tạo metadata cơ bản
                 self.image.metadata = {}
-                
-                # Lưu metadata
+            
+            # Lưu metadata
                 try:
                     # Lưu thông tin pixel spacing và slice thickness
                     if image.GetDimension() >= 2:
@@ -409,8 +412,8 @@ class DicomSeries:
                     else:
                         self.slice_thickness = 1.0  # Giá trị mặc định
                         self.image.metadata['slice_thickness'] = self.slice_thickness
-                        
-                    # Lưu thông tin vị trí và hướng
+            
+            # Lưu thông tin vị trí và hướng
                     if image.GetOrigin():
                         self.image_position = image.GetOrigin()
                         self.image.metadata.update({
@@ -515,31 +518,30 @@ class DicomSeries:
             
             # Sắp xếp các lát cắt theo vị trí
             try:
+                # Kiểm tra xem slices có cùng hướng
+                if len(slices) > 1 and all(hasattr(s, 'ImageOrientationPatient') for s in slices):
+                    orientations = set(tuple(s.ImageOrientationPatient) for s in slices)
+                    if len(orientations) > 1:
+                        logger.warning("Phát hiện các lát cắt có hướng không đồng nhất")
+                
+                # Xác định trục Z dựa vào hướng của hình ảnh
+                z_axis = 2  # Mặc định là trục z
+                if hasattr(slices[0], 'ImageOrientationPatient'):
+                    orientation = slices[0].ImageOrientationPatient
+                    if len(orientation) >= 6:
+                        normal = [
+                            orientation[1] * orientation[5] - orientation[2] * orientation[4],
+                            orientation[2] * orientation[3] - orientation[0] * orientation[5],
+                            orientation[0] * orientation[4] - orientation[1] * orientation[3]
+                        ]
+                        
+                        # Xác định chỉ số của phần tử lớn nhất (theo giá trị tuyệt đối)
+                        max_idx = max(range(3), key=lambda i: abs(normal[i]))
+                        z_axis = max_idx
+                
+                # Sắp xếp theo vị trí dọc theo trục z
                 if all(hasattr(s, 'ImagePositionPatient') for s in slices):
-                    # Kiểm tra xem slices có cùng hướng
-                    if len(slices) > 1 and all(hasattr(s, 'ImageOrientationPatient') for s in slices):
-                        orientations = set(tuple(s.ImageOrientationPatient) for s in slices)
-                        if len(orientations) > 1:
-                            logger.warning("Phát hiện các lát cắt có hướng không đồng nhất")
-                    
-                    # Xác định trục Z dựa vào hướng của hình ảnh
-                    z_axis = 2  # Mặc định là trục z
-                    if hasattr(slices[0], 'ImageOrientationPatient'):
-                        orientation = slices[0].ImageOrientationPatient
-                        if len(orientation) >= 6:
-                            normal = [
-                                orientation[1] * orientation[5] - orientation[2] * orientation[4],
-                                orientation[2] * orientation[3] - orientation[0] * orientation[5],
-                                orientation[0] * orientation[4] - orientation[1] * orientation[3]
-                            ]
-                            
-                            # Xác định chỉ số của phần tử lớn nhất (theo giá trị tuyệt đối)
-                            max_idx = max(range(3), key=lambda i: abs(normal[i]))
-                            z_axis = max_idx
-                    
-                    # Sắp xếp theo vị trí dọc theo trục z
                     slices = sorted(slices, key=lambda s: s.ImagePositionPatient[z_axis])
-                    
                 elif hasattr(slices[0], 'SliceLocation'):
                     # Sắp xếp theo vị trí lát cắt
                     slices = sorted(slices, key=lambda s: s.SliceLocation)
@@ -733,7 +735,7 @@ class DicomSeries:
                 import traceback
                 logger.debug(traceback.format_exc())
                 return False
-            
+
             # Lưu base_directory (thư mục gốc của series)
             self.base_directory = os.path.dirname(self.files[0]) if self.files else ""
             
@@ -799,7 +801,7 @@ class DicomSeries:
         if self.image_data is None:
             logger.warning("Không thể lấy lát cắt: dữ liệu hình ảnh không tồn tại")
             return None
-            
+        
         if not isinstance(self.image_data, np.ndarray):
             logger.warning(f"Không thể lấy lát cắt: dữ liệu hình ảnh không phải là np.ndarray, mà là {type(self.image_data)}")
             return None
@@ -1422,13 +1424,13 @@ class DicomLoaderWidget(QWidget):
             if not patient:
                 logger.info("Tạo bệnh nhân mới với ID: %s", patient_id)
                 patient_metadata = {k: v for k, v in metadata.items() if k.startswith('Patient')}
-                patient_id = self.patient_db.create_patient(
-                    patient_id=patient_id,
-                    name=patient_name,
-                    birth_date=birth_date,
-                    gender=gender,
-                    metadata=patient_metadata
-                )
+                patient_id = self.patient_db.create_patient({
+                    'id': patient_id,
+                    'name': patient_name,
+                    'birth_date': birth_date,
+                    'gender': gender,
+                    'metadata': patient_metadata
+                })
                 if not patient_id:
                     raise ValueError("Không thể tạo bệnh nhân mới")
             
@@ -1440,14 +1442,14 @@ class DicomLoaderWidget(QWidget):
                 study_desc = metadata.get('StudyDescription', '')
                 study_date = metadata.get('StudyDate', '')
                 study_time = metadata.get('StudyTime', '')
-                study_id = self.patient_db.create_study(
-                    study_id=study_uid,
-                    patient_id=patient_id,
-                    description=study_desc,
-                    study_date=study_date,
-                    study_time=study_time,
-                    metadata=study_metadata
-                )
+                study_id = self.patient_db.create_study({
+                    'id': study_uid,
+                    'patient_id': patient_id,
+                    'description': study_desc,
+                    'study_date': study_date,
+                    'study_time': study_time,
+                    'metadata': study_metadata
+                })
                 if not study_id:
                     raise ValueError("Không thể tạo nghiên cứu mới")
             

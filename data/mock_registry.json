@@ -1,0 +1,32 @@
+{
+    "lung_segmentation": {
+        "name": "Lung Segmentation",
+        "description": "Segments both lungs from CT images",
+        "version": "1.0.0",
+        "size": 10485760,
+        "date_added": "2023-01-15",
+        "category": "thorax",
+        "structures": [
+            "left_lung",
+            "right_lung",
+            "lungs"
+        ],
+        "license": "MIT",
+        "url": "https://quangtps-models.example.com/models/lung_segmentation.zip"
+    },
+    "brain_segmentation": {
+        "name": "Brain Segmentation",
+        "description": "Segments brain structures from MRI images",
+        "version": "1.0.0",
+        "size": 15728640,
+        "date_added": "2023-02-10",
+        "category": "neuro",
+        "structures": [
+            "brain",
+            "brainstem",
+            "cerebellum"
+        ],
+        "license": "MIT",
+        "url": "https://quangtps-models.example.com/models/brain_segmentation.zip"
+    }
+}

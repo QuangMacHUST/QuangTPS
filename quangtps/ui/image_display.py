@@ -99,7 +99,7 @@ class ImageSliceWidget(QWidget):
             'body': QColor(0, 0, 255, 128)    # Xanh dương bán trong suốt
         }
     
-    def set_image_data(self, image_data):
+    def set_image_data(self, image_data, plane=None):
         """
         Thiết lập dữ liệu hình ảnh 3D.
         
@@ -107,8 +107,17 @@ class ImageSliceWidget(QWidget):
         ----------
         image_data : ndarray
             Dữ liệu hình ảnh 3D (z, y, x) kiểu numpy array
+        plane : str, optional
+            Mặt phẳng xem ('axial', 'coronal', 'sagittal')
         """
         self.image_data = image_data
+        
+        # Set the view plane if provided
+        if plane is not None and plane in ['axial', 'coronal', 'sagittal']:
+            self.view_plane = plane
+        elif not hasattr(self, 'view_plane'):
+            self.view_plane = 'axial'  # Default plane
+        
         if image_data is not None:
             max_slice = image_data.shape[0] - 1
             self.slice_idx = max_slice // 2  # Mặc định slice giữa
@@ -941,22 +950,35 @@ class ImageDisplay(QWidget):
         
     def set_image(self, image_data, window_center=None, window_width=None, plane=None):
         """
-        Thiết lập hình ảnh hiển thị.
+        Thiết lập dữ liệu hình ảnh mới.
         
-        Args:
-            image_data: Mảng NumPy 2D chứa dữ liệu hình ảnh
-            window_center: Tâm cửa sổ (level)
-            window_width: Chiều rộng cửa sổ
-            plane: Mặt phẳng hiển thị ('axial', 'coronal', 'sagittal'), không ảnh hưởng đến hiển thị
+        Parameters
+        ----------
+        image_data : ndarray
+            Dữ liệu hình ảnh 3D (z, y, x)
+        window_center : int, optional
+            Tâm cửa sổ Hounsfield
+        window_width : int, optional
+            Độ rộng cửa sổ Hounsfield
+        plane : str, optional
+            Mặt phẳng xem ('axial', 'coronal', 'sagittal')
         """
+        # Thiết lập dữ liệu hình ảnh
         self.image_data = image_data
         
-        if window_center is not None:
-            self.window_level = window_center
+        # Lưu thông tin mặt phẳng xem nếu được cung cấp
+        if plane is not None and plane in ['axial', 'coronal', 'sagittal']:
+            self.view_plane = plane
+        elif not hasattr(self, 'view_plane'):
+            self.view_plane = 'axial'  # Mặt phẳng mặc định
         
-        if window_width is not None:
-            self.window_width = window_width
-            
+        # Thiết lập cửa sổ nếu được cung cấp
+        if window_center is not None and window_width is not None:
+            window_min = window_center - window_width // 2
+            window_max = window_center + window_width // 2
+            self.set_window(window_max - window_min, (window_max + window_min) // 2)
+        
+        # Cập nhật hiển thị
         self._update_display()
         
     def set_window(self, width, level):

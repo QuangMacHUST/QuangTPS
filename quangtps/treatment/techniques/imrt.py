@@ -211,10 +211,17 @@ class IMRT(BaseTreatmentTechnique):
             self.name, delivery_type.value
         )
         
-    def optimize_fluence_maps(self):
+    def optimize_fluence_maps(self, patient_ct=None, structures=None):
         """
-        Tối ưu hóa fluence maps cho các chùm tia.
+        Tối ưu hóa fluence maps cho các chùm tia dựa trên hàm mục tiêu và ràng buộc.
         
+        Parameters
+        ----------
+        patient_ct : DicomSeries hoặc Image, optional
+            Dữ liệu CT của bệnh nhân để tính toán liều
+        structures : Dict[str, Structure], optional
+            Từ điển cấu trúc với tên là khóa
+            
         Returns
         -------
         bool
@@ -227,24 +234,121 @@ class IMRT(BaseTreatmentTechnique):
             )
             return False
         
-        # Tối ưu hóa fluence map cho mỗi chùm tia
-        for beam in self.beams:
-            beam_id = beam.beam_id
-            # Giả lập tối ưu hóa fluence map
-            fluence_size = (20, 20)  # kích thước của fluence map
-            self.fluence_maps[beam_id] = np.random.rand(*fluence_size)
-            
-            # Làm mịn fluence map
-            self._smooth_fluence_map(beam_id)
+        # Khởi tạo các tham số tối ưu hóa
+        if not hasattr(self, 'parameters'):
+            self.parameters = {}
         
-        # Ghi log với định dạng lazy %
+        # Thiết lập các tham số mặc định
+        self.parameters.setdefault('optimization_iterations', self.optimization_iterations)
+        self.parameters.setdefault('convergence_threshold', self.convergence_threshold)
+        self.parameters.setdefault('smoothing_factor', self.smoothing_factor)
+        self.parameters.setdefault('learning_rate', 0.1)
+        self.parameters.setdefault('fluence_resolution', 5.0)  # mm
+        
+        # Khởi tạo lịch sử cost
+        self.cost_history = []
+        
+        # Khởi tạo fluence maps nếu chưa có
+        self._initialize_fluence_maps()
+        
         logger.info(
-            "Đã tối ưu hóa fluence maps cho %d chùm tia trong kế hoạch IMRT '%s'",
-            len(self.beams), self.name
+            "Bắt đầu tối ưu hóa fluence maps cho kế hoạch IMRT '%s' với %d chùm tia, %d lần lặp",
+            self.name, len(self.beams), self.parameters['optimization_iterations']
         )
         
-        return True
+        try:
+            # Theo dõi tiến trình
+            progress_interval = max(1, self.parameters['optimization_iterations'] // 10)
+            current_iteration = 0
+            best_cost = float('inf')
+            best_fluence_maps = self._copy_fluence_maps()
+            
+            # Vòng lặp tối ưu hóa
+            while current_iteration < self.parameters['optimization_iterations']:
+                # Tính cost hiện tại
+                current_cost = self._calculate_objective_cost(patient_ct, structures)
+                self.cost_history.append(current_cost)
+                
+                # Cập nhật giải pháp tốt nhất
+                if current_cost < best_cost:
+                    best_cost = current_cost
+                    best_fluence_maps = self._copy_fluence_maps()
+                
+                # Thực hiện bước tối ưu hóa - điều chỉnh fluence maps
+                self._optimization_step()
+                
+                # Áp dụng smoothing cho fluence maps
+                if self.parameters['smoothing_factor'] > 0:
+                    for beam_id in self.fluence_maps:
+                        self._smooth_fluence_map(beam_id)
+                
+                # Ghi log tiến trình
+                if current_iteration % progress_interval == 0 or current_iteration == self.parameters['optimization_iterations'] - 1:
+                    logger.info(
+                        "Tiến trình tối ưu hóa IMRT: lần lặp %d/%d, cost=%.4f",
+                        current_iteration + 1, self.parameters['optimization_iterations'], current_cost
+                    )
+                
+                current_iteration += 1
+                
+                # Kiểm tra hội tụ
+                if self._check_convergence():
+                    logger.info(
+                        "Tối ưu hóa IMRT hội tụ sau %d lần lặp với cost=%.4f",
+                        current_iteration, current_cost
+                    )
+                    break
+            
+            # Khôi phục fluence maps tốt nhất
+            self.fluence_maps = best_fluence_maps
+            
+            # Tính toán liều cuối cùng
+            if patient_ct is not None and structures is not None:
+                self._calculate_final_dose(patient_ct, structures)
+            
+            logger.info(
+                "Hoàn thành tối ưu hóa fluence maps cho %d chùm tia trong kế hoạch IMRT '%s', cost cuối cùng: %.4f",
+                len(self.beams), self.name, best_cost
+            )
+            
+            return True
         
+        except Exception as e:
+            logger.error(f"Lỗi trong quá trình tối ưu hóa IMRT: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    def _initialize_fluence_maps(self):
+        """Khởi tạo fluence maps cho tất cả các chùm tia nếu chưa tồn tại."""
+        if not hasattr(self, 'fluence_maps'):
+            self.fluence_maps = {}
+        
+        for beam in self.beams:
+            beam_id = beam.beam_id
+            
+            # Tạo fluence map cho chùm tia này nếu chưa tồn tại
+            if beam_id not in self.fluence_maps:
+                # Xác định kích thước fluence map từ kích thước field
+                field_width, field_height = beam.field_size  # cm
+                resolution = self.parameters.get('fluence_resolution', 5.0) / 10.0  # cm
+                
+                width_pixels = int(field_width / resolution)
+                height_pixels = int(field_height / resolution)
+                
+                # Tạo fluence map đồng nhất ban đầu
+                self.fluence_maps[beam_id] = np.ones((height_pixels, width_pixels))
+                
+                logger.info(
+                    "Khởi tạo fluence map %dx%d cho chùm tia '%s' trong kế hoạch IMRT '%s'",
+                    width_pixels, height_pixels, beam_id, self.name
+                )
+
+    def _copy_fluence_maps(self):
+        """Tạo bản sao của fluence maps hiện tại."""
+        import copy
+        return copy.deepcopy(self.fluence_maps)
+
     def _smooth_fluence_map(self, beam_id: str):
         """
         Làm mịn fluence map cho một chùm tia.
@@ -252,28 +356,350 @@ class IMRT(BaseTreatmentTechnique):
         Parameters
         ----------
         beam_id : str
-            ID của chùm tia
+            ID của chùm tia cần làm mịn fluence map
         """
         if beam_id not in self.fluence_maps:
             return
+        
+        # Lấy tham số smoothing
+        smoothing_factor = self.parameters.get('smoothing_factor', 0.5)
+        
+        # Tạo bản sao của fluence map
+        fluence = self.fluence_maps[beam_id].copy()
+        
+        # Áp dụng bộ lọc Gaussian để làm mịn
+        from scipy.ndimage import gaussian_filter
+        sigma = smoothing_factor * 2  # Điều chỉnh sigma dựa trên hệ số làm mịn
+        smoothed_fluence = gaussian_filter(fluence, sigma=sigma)
+        
+        # Kết hợp fluence gốc và fluence đã làm mịn
+        self.fluence_maps[beam_id] = (1.0 - smoothing_factor) * fluence + smoothing_factor * smoothed_fluence
+        
+        # Chuẩn hóa lại để giữ nguyên tổng fluence
+        if np.sum(fluence) > 0:
+            self.fluence_maps[beam_id] *= np.sum(fluence) / np.sum(self.fluence_maps[beam_id])
+
+    def _calculate_objective_cost(self, patient_ct=None, structures=None):
+        """
+        Tính toán giá trị hàm mục tiêu dựa trên các mục tiêu và ràng buộc.
+        
+        Parameters
+        ----------
+        patient_ct : DicomSeries hoặc Image, optional
+            Dữ liệu CT của bệnh nhân để tính toán liều
+        structures : Dict[str, Structure], optional
+            Từ điển cấu trúc với tên là khóa
             
-        # Giả lập làm mịn bằng bộ lọc trung bình
-        fluence = self.fluence_maps[beam_id]
-        smoothed = np.zeros_like(fluence)
+        Returns
+        -------
+        float
+            Giá trị hàm mục tiêu (càng thấp càng tốt)
+        """
+        # Đây là bản mẫu cho hàm tính toán cost thực tế
+        # Trong triển khai thực tế, cần tính toán liều và đánh giá
+        # các hàm mục tiêu và ràng buộc
+        total_cost = 0.0
         
-        for i in range(1, fluence.shape[0]-1):
-            for j in range(1, fluence.shape[1]-1):
-                smoothed[i, j] = (fluence[i-1:i+2, j-1:j+2].mean() + 
-                                fluence[i, j]) / 2
+        # Trường hợp có đủ thông tin để tính toán liều
+        if patient_ct is not None and structures is not None:
+            # Tính toán liều sử dụng fluence maps hiện tại
+            dose_grid = self._calculate_dose(patient_ct)
+            
+            # Thêm thành phần cost cho mỗi mục tiêu
+            for objective in self.dose_objectives:
+                # Tính cost của mục tiêu dựa trên loại
+                cost = self._calculate_single_objective_cost(objective, dose_grid, structures)
+                total_cost += cost * objective['weight']
+            
+            # Thêm thành phần cost cho mỗi ràng buộc (với phạt cao hơn)
+            for constraint in self.constraints:
+                cost = self._calculate_single_constraint_cost(constraint, dose_grid, structures)
+                # Ràng buộc được xem là yêu cầu cứng với phạt cao
+                total_cost += cost * 10.0
+        else:
+            # Nếu không có dữ liệu bệnh nhân, sử dụng một mô hình đơn giản
+            # Tính độ mịn của fluence maps
+            smoothness_penalty = 0.0
+            for beam_id, fluence in self.fluence_maps.items():
+                # Tính đạo hàm bậc 2 theo cả hai hướng
+                dx2 = np.diff(fluence, n=2, axis=1)
+                dy2 = np.diff(fluence, n=2, axis=0)
                 
-        # Giữ nguyên các giá trị biên
-        smoothed[0, :] = fluence[0, :]
-        smoothed[-1, :] = fluence[-1, :]
-        smoothed[:, 0] = fluence[:, 0]
-        smoothed[:, -1] = fluence[:, -1]
+                # Tính tổng bình phương của đạo hàm bậc 2
+                if dx2.size > 0:
+                    smoothness_penalty += np.sum(dx2 ** 2)
+                if dy2.size > 0:
+                    smoothness_penalty += np.sum(dy2 ** 2)
+            
+            # Phạt cho độ phức tạp của fluence maps
+            complexity_penalty = 0.0
+            for beam_id, fluence in self.fluence_maps.items():
+                # Tính độ phức tạp dựa trên số lần thay đổi độ dốc
+                dx = np.diff(fluence, axis=1)
+                dy = np.diff(fluence, axis=0)
+                
+                sign_changes_x = np.sum(np.abs(np.diff(np.sign(dx), axis=1)))
+                sign_changes_y = np.sum(np.abs(np.diff(np.sign(dy), axis=0)))
+                
+                complexity_penalty += sign_changes_x + sign_changes_y
+            
+            # Tổng hợp các thành phần hàm mục tiêu
+            total_cost = smoothness_penalty + complexity_penalty
+            
+            # Thêm thành phần ngẫu nhiên để mô phỏng vận tối
+            import random
+            random_factor = random.uniform(0.0, 0.1) * (1.0 - self.parameters.get('convergence_progress', 0.0))
+            total_cost *= (1.0 + random_factor)
         
-        self.fluence_maps[beam_id] = (1 - self.smoothing_factor) * fluence + self.smoothing_factor * smoothed
-    
+        return total_cost
+
+    def _calculate_single_objective_cost(self, objective, dose_grid, structures):
+        """
+        Tính cost cho một mục tiêu đơn lẻ.
+        
+        Parameters
+        ----------
+        objective : Dict
+            Định nghĩa mục tiêu
+        dose_grid : DoseGrid
+            Phân bố liều
+        structures : Dict[str, Structure]
+            Từ điển cấu trúc
+            
+        Returns
+        -------
+        float
+            Cost cho mục tiêu này (càng thấp càng tốt)
+        """
+        # Đây là bản mẫu cho hàm tính toán cost thực tế
+        # Trong triển khai thực tế, cần tính toán chính xác phân bố liều
+        # và đánh giá với các mục tiêu
+        
+        # Để mô phỏng quá trình tối ưu hóa, trả về một giá trị ngẫu nhiên
+        # mà giảm dần theo tiến trình hội tụ
+        import random
+        return random.uniform(0, 1) * (1.0 - self.parameters.get('convergence_progress', 0.0))
+
+    def _calculate_single_constraint_cost(self, constraint, dose_grid, structures):
+        """
+        Tính cost cho một ràng buộc đơn lẻ.
+        
+        Parameters
+        ----------
+        constraint : Dict
+            Định nghĩa ràng buộc
+        dose_grid : DoseGrid
+            Phân bố liều
+        structures : Dict[str, Structure]
+            Từ điển cấu trúc
+            
+        Returns
+        -------
+        float
+            Cost cho ràng buộc này (càng thấp càng tốt, 0 nếu thỏa mãn)
+        """
+        # Đây là bản mẫu cho hàm tính toán cost thực tế
+        # Trong triển khai thực tế, cần tính toán chính xác phân bố liều
+        # và đánh giá với các ràng buộc
+        
+        # Để mô phỏng quá trình tối ưu hóa, trả về một giá trị ngẫu nhiên
+        # mà giảm dần theo tiến trình hội tụ
+        import random
+        return random.uniform(0, 1) * (1.0 - self.parameters.get('convergence_progress', 0.0))
+
+    def _optimization_step(self):
+        """
+        Thực hiện một bước tối ưu hóa, điều chỉnh fluence maps.
+        """
+        if not hasattr(self, 'parameters'):
+            self.parameters = {}
+        
+        # Khởi tạo lịch sử cost nếu chưa tồn tại
+        if not hasattr(self, 'cost_history'):
+            self.cost_history = []
+        
+        # Tính learning rate (bước) dựa trên tiến trình
+        # Bắt đầu với bước lớn, sau đó giảm dần khi gần hội tụ
+        base_learning_rate = self.parameters.get('learning_rate', 0.1)
+        convergence_progress = self.parameters.get('convergence_progress', 0.0)
+        
+        # Giảm learning rate theo tiến trình
+        current_learning_rate = base_learning_rate * (1.0 - convergence_progress * 0.9)
+        
+        # Sử dụng phương pháp gradient descent
+        for beam_id, fluence in self.fluence_maps.items():
+            # Tính gradient gần đúng cho fluence map
+            gradient = self._approximate_gradient(beam_id)
+            
+            # Cập nhật fluence map
+            updated_fluence = fluence - current_learning_rate * gradient
+            
+            # Đảm bảo fluence không âm
+            updated_fluence = np.maximum(0.0, updated_fluence)
+            
+            # Chuẩn hóa lại
+            if np.sum(updated_fluence) > 0:
+                updated_fluence *= np.sum(fluence) / np.sum(updated_fluence)
+            
+            # Cập nhật fluence map
+            self.fluence_maps[beam_id] = updated_fluence
+        
+        # Cập nhật tiến trình hội tụ
+        iteration_progress = 1.0 / self.parameters.get('optimization_iterations', 100)
+        self.parameters['convergence_progress'] = min(
+            0.99, 
+            self.parameters.get('convergence_progress', 0.0) + iteration_progress
+        )
+
+    def _approximate_gradient(self, beam_id):
+        """
+        Tính gần đúng gradient của hàm mục tiêu đối với fluence map.
+        
+        Parameters
+        ----------
+        beam_id : str
+            ID của chùm tia
+            
+        Returns
+        -------
+        np.ndarray
+            Gradient của hàm mục tiêu
+        """
+        if beam_id not in self.fluence_maps:
+            return None
+        
+        fluence = self.fluence_maps[beam_id]
+        
+        # Trong triển khai thực tế, cần tính gradient chính xác bằng cách
+        # đánh giá sự thay đổi của hàm mục tiêu khi thay đổi từng giá trị fluence
+        
+        # Mô phỏng gradient với mẫu ngẫu nhiên
+        import random
+        rand_factor = random.uniform(0.0, 0.2)
+        
+        # Tạo gradient đơn giản dẫn đến fluence mịn hơn
+        dy, dx = np.gradient(fluence)
+        d2y, _ = np.gradient(dy)
+        _, d2x = np.gradient(dx)
+        
+        # Kết hợp đạo hàm bậc 2 để tạo gradient hướng đến fluence mịn
+        gradient = d2y + d2x
+        
+        # Thêm thành phần ngẫu nhiên để tránh tối ưu cục bộ
+        gradient += np.random.normal(0, rand_factor, fluence.shape)
+        
+        return gradient
+
+    def _check_convergence(self):
+        """
+        Kiểm tra xem quá trình tối ưu hóa đã hội tụ chưa.
+        
+        Returns
+        -------
+        bool
+            True nếu đã hội tụ, False nếu chưa
+        """
+        # Kiểm tra xem có ngưỡng hội tụ không
+        if not hasattr(self, 'parameters') or 'convergence_threshold' not in self.parameters:
+            return False
+        
+        # Cần ít nhất 2 lần lặp để kiểm tra hội tụ
+        if not hasattr(self, 'cost_history') or len(self.cost_history) < 5:
+            return False
+        
+        # Lấy các giá trị cost gần đây nhất
+        window_size = min(5, len(self.cost_history))
+        recent_costs = self.cost_history[-window_size:]
+        
+        # Tính thay đổi tương đối
+        if recent_costs[0] == 0:  # Tránh chia cho 0
+            return False
+        
+        relative_change = abs((recent_costs[-1] - recent_costs[0]) / recent_costs[0])
+        
+        # Kiểm tra xem thay đổi có dưới ngưỡng không
+        return relative_change < self.parameters['convergence_threshold']
+
+    def _calculate_dose(self, patient_ct):
+        """
+        Tính toán phân bố liều dựa trên fluence maps hiện tại.
+        
+        Parameters
+        ----------
+        patient_ct : DicomSeries hoặc Image
+            Dữ liệu CT của bệnh nhân
+            
+        Returns
+        -------
+        DoseGrid
+            Phân bố liều tính toán
+        """
+        # Đây là bản mẫu cho hàm tính toán liều thực tế
+        # Trong triển khai thực tế, cần sử dụng thuật toán tính liều chính xác
+        
+        logger.info("Tính toán phân bố liều cho kế hoạch IMRT '%s'", self.name)
+        
+        # Tạo đối tượng DoseGrid mẫu
+        from quangtps.dose.dose_grid import DoseGrid
+        dose_grid = DoseGrid()
+        
+        # Trong triển khai thực tế, sẽ gọi hàm tính liều dựa trên thuật toán đã chọn
+        # dose_grid = dose_calculator.calculate(patient_ct, self.beams, self.fluence_maps)
+        
+        return dose_grid
+
+    def _calculate_final_dose(self, patient_ct, structures):
+        """
+        Tính toán phân bố liều cuối cùng cho kế hoạch được tối ưu hóa.
+        
+        Parameters
+        ----------
+        patient_ct : DicomSeries hoặc Image
+            Dữ liệu CT của bệnh nhân
+        structures : Dict[str, Structure]
+            Từ điển cấu trúc
+        """
+        # Đây là bản mẫu cho hàm tính toán liều thực tế
+        logger.info("Tính toán phân bố liều cuối cùng cho kế hoạch IMRT '%s'", self.name)
+        
+        # Trong triển khai thực tế, sẽ gọi hàm tính liều với độ chính xác cao hơn
+        # dose_grid = dose_calculator.calculate_final(patient_ct, self.beams, self.fluence_maps)
+        
+        # Lưu phân bố liều cuối cùng
+        # self.final_dose = dose_grid
+        
+        # Tính các chỉ số đánh giá kế hoạch
+        self._calculate_plan_metrics(structures)
+
+    def _calculate_plan_metrics(self, structures):
+        """
+        Tính toán các chỉ số đánh giá kế hoạch.
+        
+        Parameters
+        ----------
+        structures : Dict[str, Structure]
+            Từ điển cấu trúc
+        """
+        logger.info("Tính toán chỉ số đánh giá cho kế hoạch IMRT '%s'", self.name)
+        
+        # Trong triển khai thực tế, cần tính:
+        # - Chỉ số DVH (D95, D90, V95, v.v.)
+        # - Chỉ số tuân thủ (Conformity index)
+        # - Chỉ số đồng nhất (Homogeneity index)
+        # - Chỉ số độ dốc (Gradient index)
+        # - Monitor units
+        # - Thời gian điều trị ước tính
+        # - Kiểm tra chất lượng (như ràng buộc chuyển động MLC)
+        
+        # Lưu chỉ số trong từ điển
+        self.plan_metrics = {
+            "conformity_index": 0.0,
+            "homogeneity_index": 0.0,
+            "gradient_index": 0.0,
+            "total_monitor_units": 0.0,
+            "estimated_treatment_time": 0.0
+        }
+
     def segment_beams(self):
         """
         Phân đoạn chùm tia từ fluence maps.

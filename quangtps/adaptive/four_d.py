@@ -16,10 +16,10 @@ from enum import Enum, auto
 import pandas as pd
 from dataclasses import dataclass
 
-from ..core.types import Patient, Image, Structure, Dose
-from ..core.exceptions import FourDProcessingError
-from .deformation.displacement_field import DisplacementField
-from .deformation.registration import RegistrationType, ImageRegistration, create_registration
+from quangtps.core.types import Patient, Image, Structure, Dose
+from quangtps.core.exceptions import FourDProcessingError
+from quangtps.adaptive.deformation.displacement_field import DisplacementField
+from quangtps.adaptive.deformation.registration import RegistrationType, ImageRegistration, create_registration
 
 logger = logging.getLogger(__name__)
 

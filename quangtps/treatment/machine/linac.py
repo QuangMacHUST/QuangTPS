@@ -2,232 +2,194 @@
 # -*- coding: utf-8 -*-
 
 """
-Module quản lý máy gia tốc tuyến tính (Linear Accelerator - Linac).
-
-Module này cung cấp các lớp và phương thức để định nghĩa và quản lý các máy gia tốc
-tuyến tính được sử dụng trong xạ trị.
+Module định nghĩa lớp Linac (máy gia tốc tuyến tính).
 """
 
-import uuid
+import os
+import json
 import logging
+import datetime
+import numpy as np
 from typing import Dict, Any, List, Optional, Tuple, Union
 from enum import Enum
 
 from quangtps.treatment.machine.accelerator import Accelerator
 from quangtps.treatment.machine.machine_specs import MachineSpecification
 from quangtps.treatment.mlc.mlc_model import MLCModel
+from quangtps.treatment.machine.machine_type import MachineType
+from quangtps.treatment.machine.machine_status import MachineStatus
+from quangtps.treatment.machine.energy_mode import EnergyMode
 
 logger = logging.getLogger(__name__)
 
-
-class BeamLimitingDeviceType(str, Enum):
-    """Enum đại diện cho các loại thiết bị giới hạn chùm tia."""
-    JAW = "JAW"
-    MLC = "MLC"
-    APPLICATOR = "APPLICATOR"
-    CONE = "CONE"
-
-
 class Linac(Accelerator):
     """
-    Lớp đại diện cho một máy gia tốc tuyến tính (Linac).
+    Lớp đại diện cho một máy gia tốc tuyến tính (Linear Accelerator - Linac).
     
-    Lớp này chứa thông tin về một máy Linac, bao gồm thông số kỹ thuật,
-    năng lượng chùm, và các thiết bị phụ trợ như MLC.
+    Linac là loại máy xạ trị phổ biến nhất, sử dụng sóng điện từ tần số cao
+    để tạo ra các chùm tia phát tán qua một cấu trúc gia tốc để tạo ra chùm
+    tia có năng lượng cao có thể nhắm vào khối u.
     """
     
-    def __init__(self, 
-                machine_name: str, 
-                manufacturer: str = "Generic", 
-                machine_id: Optional[str] = None):
+    def __init__(self, name: str, machine_id: str, 
+                 manufacturer: str = None, model: str = None,
+                 installation_date: datetime.date = None,
+                 status: MachineStatus = MachineStatus.OPERATIONAL,
+                 energy_modes: List[EnergyMode] = None,
+                 max_dose_rate: float = None):
         """
-        Khởi tạo một máy Linac.
+        Khởi tạo một máy gia tốc tuyến tính.
         
         Parameters
         ----------
-        machine_name : str
-            Tên của máy Linac
+        name : str
+            Tên của máy
+        machine_id : str
+            ID duy nhất của máy
         manufacturer : str, optional
-            Nhà sản xuất của máy Linac
-        machine_id : str, optional
-            ID duy nhất của máy Linac. Nếu không cung cấp, một ID mới sẽ được tạo.
+            Nhà sản xuất, mặc định là None
+        model : str, optional
+            Model, mặc định là None
+        installation_date : datetime.date, optional
+            Ngày lắp đặt, mặc định là None
+        status : MachineStatus, optional
+            Trạng thái hiện tại, mặc định là OPERATIONAL
+        energy_modes : List[EnergyMode], optional
+            Các chế độ năng lượng, mặc định là None
+        max_dose_rate : float, optional
+            Tốc độ liều tối đa (MU/min), mặc định là None
         """
-        super().__init__(machine_name, manufacturer, machine_id)
-        self.accelerator_type = "LINAC"
+        super().__init__(name, machine_id, MachineType.LINAC,
+                        manufacturer, model, installation_date, status)
         
-        # Các chùm photon và electron có sẵn
-        self.photon_energies = []  # MV
-        self.electron_energies = []  # MeV
+        self.energy_modes = energy_modes or []
+        self.max_dose_rate = max_dose_rate
+        self.mlc = None
+        self.jaw = None
         
-        # Thiết bị giới hạn chùm
-        self.beam_limiting_devices = {}
+        # Cập nhật hình học 3D dựa trên model cụ thể
+        self._update_model_specific_geometry()
         
-        # Độ chuẩn cho từng năng lượng (Output factor)
-        self.output_factors = {}
-        
-        # MLC
-        self.mlc_model = None
-        
-        # Thông số kỹ thuật
-        self.specs = MachineSpecification()
-        
-    def add_photon_energy(self, energy: float, output_factor: float = 1.0):
+    def _update_model_specific_geometry(self):
         """
-        Thêm năng lượng photon cho máy Linac.
-        
-        Parameters
-        ----------
-        energy : float
-            Năng lượng photon (MV)
-        output_factor : float, optional
-            Hệ số đầu ra cho năng lượng này, mặc định là 1.0
+        Cập nhật thông tin hình học 3D dựa trên model cụ thể của máy Linac.
         """
-        if energy not in self.photon_energies:
-            self.photon_energies.append(energy)
-            self.output_factors[f"PHOTON_{energy}MV"] = output_factor
-    
-    def add_electron_energy(self, energy: float, output_factor: float = 1.0):
-        """
-        Thêm năng lượng electron cho máy Linac.
-        
-        Parameters
-        ----------
-        energy : float
-            Năng lượng electron (MeV)
-        output_factor : float, optional
-            Hệ số đầu ra cho năng lượng này, mặc định là 1.0
-        """
-        if energy not in self.electron_energies:
-            self.electron_energies.append(energy)
-            self.output_factors[f"ELECTRON_{energy}MeV"] = output_factor
-    
-    def set_mlc_model(self, mlc_model: MLCModel):
-        """
-        Thiết lập mô hình MLC cho máy Linac.
-        
-        Parameters
-        ----------
-        mlc_model : MLCModel
-            Mô hình MLC
-        """
-        self.mlc_model = mlc_model
-        self.beam_limiting_devices["MLC"] = {
-            "type": BeamLimitingDeviceType.MLC,
-            "model": mlc_model.model_name,
-            "num_leaves": mlc_model.num_leaves,
-            "leaf_width": mlc_model.leaf_width
-        }
-    
-    def add_beam_limiting_device(self, device_type: BeamLimitingDeviceType, 
-                                device_name: str, device_specs: Dict[str, Any]):
-        """
-        Thêm thiết bị giới hạn chùm tia cho máy Linac.
-        
-        Parameters
-        ----------
-        device_type : BeamLimitingDeviceType
-            Loại thiết bị
-        device_name : str
-            Tên của thiết bị
-        device_specs : Dict[str, Any]
-            Thông số kỹ thuật của thiết bị
-        """
-        self.beam_limiting_devices[device_name] = {
-            "type": device_type,
-            **device_specs
-        }
-    
-    def get_beam_limiting_device(self, device_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Lấy thông tin về thiết bị giới hạn chùm tia.
-        
-        Parameters
-        ----------
-        device_name : str
-            Tên của thiết bị
+        # Cập nhật thông tin dựa trên model
+        if self.model and self.manufacturer:
+            model_lower = self.model.lower()
+            manufacturer_lower = self.manufacturer.lower()
             
-        Returns
-        -------
-        Optional[Dict[str, Any]]
-            Thông tin về thiết bị, None nếu không tìm thấy
-        """
-        return self.beam_limiting_devices.get(device_name)
-    
-    def get_output_factor(self, beam_type: str, energy: float) -> float:
-        """
-        Lấy hệ số đầu ra cho một loại chùm và năng lượng cụ thể.
-        
-        Parameters
-        ----------
-        beam_type : str
-            Loại chùm ("PHOTON" hoặc "ELECTRON")
-        energy : float
-            Năng lượng (MV cho photon, MeV cho electron)
+            # Varian TrueBeam
+            if "truebeam" in model_lower and "varian" in manufacturer_lower:
+                self.update_geometry("gantry", {
+                    "radius": 650,
+                    "head_dimensions": np.array([320, 220, 510])
+                })
+                self.update_geometry("collimator", {
+                    "dimensions": np.array([220, 220, 160]),
+                    "distance_to_isocenter": 520
+                })
+                self.update_geometry("couch", {
+                    "top_dimensions": np.array([2300, 70, 570]),
+                    "rotation_center": np.array([0, -270, 0])
+                })
             
-        Returns
-        -------
-        float
-            Hệ số đầu ra
-        """
-        key = f"{beam_type}_{energy}{'MV' if beam_type == 'PHOTON' else 'MeV'}"
-        return self.output_factors.get(key, 1.0)
+            # Elekta Versa HD
+            elif "versa" in model_lower and "elekta" in manufacturer_lower:
+                self.update_geometry("gantry", {
+                    "radius": 680,
+                    "head_dimensions": np.array([340, 230, 530])
+                })
+                self.update_geometry("collimator", {
+                    "dimensions": np.array([240, 240, 170]),
+                    "distance_to_isocenter": 550
+                })
+                self.update_geometry("couch", {
+                    "top_dimensions": np.array([2400, 75, 580]),
+                    "rotation_center": np.array([0, -280, 0])
+                })
+            
+            # Siemens Artiste
+            elif "artiste" in model_lower and "siemens" in manufacturer_lower:
+                self.update_geometry("gantry", {
+                    "radius": 660,
+                    "head_dimensions": np.array([330, 220, 520])
+                })
+                self.update_geometry("collimator", {
+                    "dimensions": np.array([230, 230, 165]),
+                    "distance_to_isocenter": 530
+                })
+                self.update_geometry("couch", {
+                    "top_dimensions": np.array([2350, 72, 560]),
+                    "rotation_center": np.array([0, -275, 0])
+                })
     
-    def to_dict(self) -> Dict[str, Any]:
+    def get_collision_geometry(self) -> Dict[str, Any]:
         """
-        Chuyển đổi thông tin máy Linac thành dictionary.
+        Lấy thông tin hình học 3D cho kiểm tra va chạm, cụ thể cho từng model Linac.
         
         Returns
         -------
         Dict[str, Any]
-            Dictionary chứa thông tin máy Linac
+            Thông tin hình học 3D của máy Linac
         """
-        data = super().to_dict()
-        data.update({
-            "photon_energies": self.photon_energies,
-            "electron_energies": self.electron_energies,
-            "beam_limiting_devices": self.beam_limiting_devices,
-            "output_factors": self.output_factors,
-            "mlc_model": self.mlc_model.to_dict() if self.mlc_model else None,
-            "specs": self.specs.to_dict()
-        })
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Linac':
-        """
-        Tạo đối tượng Linac từ dictionary.
+        # Lấy thông tin hình học cơ bản
+        geometry = self.get_geometry()
         
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Dictionary chứa thông tin máy Linac
+        # Nếu có MLC, cập nhật thông tin collimator
+        if self.mlc:
+            mlc_geometry = {
+                "type": self.mlc.model if hasattr(self.mlc, "model") else "Generic MLC",
+                "leaf_width": self.mlc.leaf_width if hasattr(self.mlc, "leaf_width") else 5.0,  # mm
+                "number_of_leaves": self.mlc.number_of_leaves if hasattr(self.mlc, "number_of_leaves") else 120,
+                "max_field_size": self.mlc.max_field_size if hasattr(self.mlc, "max_field_size") else [400, 400],  # mm
+                "collision_boundary": np.array([
+                    geometry["collimator"]["dimensions"][0] + 50,  # Thêm biên an toàn
+                    geometry["collimator"]["dimensions"][1],
+                    geometry["collimator"]["dimensions"][2] + 50
+                ])
+            }
             
-        Returns
-        -------
-        Linac
-            Đối tượng Linac
-        """
-        linac = cls(
-            machine_name=data["machine_name"],
-            manufacturer=data["manufacturer"],
-            machine_id=data["machine_id"]
-        )
+            # Cập nhật thông tin vào geometry
+            geometry["mlc"] = mlc_geometry
         
-        # Cập nhật các thuộc tính
-        linac.accelerator_type = data["accelerator_type"]
-        linac.photon_energies = data["photon_energies"]
-        linac.electron_energies = data["electron_energies"]
-        linac.beam_limiting_devices = data["beam_limiting_devices"]
-        linac.output_factors = data["output_factors"]
+        # Bổ sung thông tin vật liệu và mật độ cho tính toán tương tác vật lý
+        geometry["materials"] = {
+            "gantry_head": {
+                "density": 7.8,  # g/cm³ (thép)
+                "material": "Steel"
+            },
+            "collimator": {
+                "density": 19.3,  # g/cm³ (tungsten)
+                "material": "Tungsten"
+            },
+            "couch_top": {
+                "density": 1.2,  # g/cm³ (carbon fiber)
+                "material": "Carbon Fiber"
+            },
+            "couch_base": {
+                "density": 7.8,  # g/cm³ (thép)
+                "material": "Steel"
+            }
+        }
         
-        # Cập nhật MLC model nếu có
-        if data.get("mlc_model"):
-            from quangtps.treatment.mlc.mlc_model import MLCModel
-            linac.mlc_model = MLCModel.from_dict(data["mlc_model"])
+        # Bổ sung thông tin về các phụ kiện
+        geometry["accessories"] = {
+            "wedges": [],
+            "blocks": [],
+            "applicators": [],
+            "cones": []
+        }
         
-        # Cập nhật thông số kỹ thuật
-        if data.get("specs"):
-            from quangtps.treatment.machine.machine_specs import MachineSpecification
-            linac.specs = MachineSpecification.from_dict(data["specs"])
+        # Nếu có wedge, thêm vào danh sách phụ kiện
+        if hasattr(self, "wedges") and self.wedges:
+            for wedge in self.wedges:
+                wedge_info = {
+                    "id": wedge.id if hasattr(wedge, "id") else "Unknown",
+                    "angle": wedge.angle if hasattr(wedge, "angle") else 45,  # độ
+                    "dimensions": np.array([150, 50, 150]) if not hasattr(wedge, "dimensions") else wedge.dimensions,  # mm
+                    "distance_to_isocenter": 300  # mm
+                }
+                geometry["accessories"]["wedges"].append(wedge_info)
         
-        return linac
+        return geometry

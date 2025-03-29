@@ -30,6 +30,23 @@ class DICOMTypes(Enum):
     DX = auto()  # Digital Radiography
     SR = auto()  # Structured Report
 
+class PRESCRIPTION_TYPES(str, Enum):
+    """Các loại đơn điều trị trong QuangTPS."""
+    SINGLE_PHASE = "Single Phase"           # Một pha điều trị
+    MULTI_PHASE = "Multi Phase"             # Nhiều pha điều trị
+    SEQUENTIAL_BOOST = "Sequential Boost"   # Tăng cường tuần tự
+    SIMULTANEOUS_BOOST = "Simultaneous Boost" # Tăng cường đồng thời
+    CUSTOM = "Custom"                       # Tùy chỉnh
+
+class DOSE_UNITS(str, Enum):
+    """Các đơn vị liều trong QuangTPS."""
+    GY = "Gy"                # Gray
+    CGY = "cGy"              # Centigray
+    RELATIVE = "%"           # Relative - phần trăm
+    MU = "MU"                # Monitor Units
+    EQD2 = "EQD2"            # Equivalent Dose in 2 Gy fractions
+    BED = "BED"              # Biologically Effective Dose
+
 class ContourOperations(Enum):
     """Các phép toán trên contour."""
     UNION = auto()  # Phép hợp

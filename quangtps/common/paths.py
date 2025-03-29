@@ -134,3 +134,41 @@ def get_beam_data_dir() -> str:
     beam_data_dir = os.path.join(get_project_root(), "data", "beam_data")
     os.makedirs(beam_data_dir, exist_ok=True)
     return beam_data_dir
+
+
+def get_icon_path(icon_name: str) -> str:
+    """
+    Lấy đường dẫn đến một biểu tượng trong thư mục icons.
+    
+    Parameters
+    ----------
+    icon_name : str
+        Tên tệp tin biểu tượng (có hoặc không có đuôi file)
+    
+    Returns
+    -------
+    str
+        Đường dẫn đầy đủ đến tệp tin biểu tượng
+    """
+    # Thêm đuôi .svg nếu không có đuôi tệp
+    if not any(icon_name.endswith(ext) for ext in ['.svg', '.png', '.jpg', '.jpeg']):
+        icon_name = f"{icon_name}.svg"
+    
+    # Đầu tiên tìm trong thư mục biểu tượng mới
+    icon_path = os.path.join(get_project_root(), "quangtps", "ui", "icons", "new_icons", icon_name)
+    if os.path.exists(icon_path):
+        return icon_path
+    
+    # Nếu không tìm thấy, kiểm tra trong thư mục biểu tượng gốc
+    icon_path = os.path.join(get_project_root(), "quangtps", "ui", "icons", icon_name)
+    if os.path.exists(icon_path):
+        return icon_path
+    
+    # Cuối cùng, thử tìm trong thư mục dữ liệu
+    icon_path = os.path.join(get_project_root(), "data", "icons", icon_name)
+    if os.path.exists(icon_path):
+        return icon_path
+    
+    # Nếu không tìm thấy, trả về None
+    logger.warning(f"Cannot find icon: {icon_name}")
+    return None

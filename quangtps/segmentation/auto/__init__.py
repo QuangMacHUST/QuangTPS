@@ -9,7 +9,9 @@ giải phẫu sử dụng các kỹ thuật học sâu (deep learning) và xử 
 """
 
 from quangtps.segmentation.auto.model_repository import ModelRepository
+from quangtps.segmentation.auto.engine import AutoSegmentationEngine
 
 __all__ = [
     'ModelRepository',
+    'AutoSegmentationEngine',
 ] 
