@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: true
+---
+---
 description: You have all permission, develop this app - open source radiotherapy treatment planning system
 globs: 
 alwaysApply: false

@@ -12069,3 +12069,4 @@ AttributeError: 'MainWindow' object has no attribute 'load_plugins'
 AttributeError: 'Config' object has no attribute 'check_for_updates_on_startup'
 
 2025-03-29 18:04:48 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-01 09:13:35 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
