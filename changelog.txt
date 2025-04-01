@@ -1,3 +1,50 @@
+## [0.4.5] - 2025-04-05
+
+### Added
+- Thêm giao diện mới giống Eclipse của Varian:
+  - Tạo tab Structure mới với giao diện tương tự Eclipse, hỗ trợ vẽ và quản lý cấu trúc
+  - Thêm tab External Beam Planning tích hợp các tính năng của Planning và Dose vào một giao diện thống nhất
+  - Cải thiện giao diện người dùng với bố cục 3 panel (Object Explorer, Planning/Evaluation, Dose Visualization)
+  - Thêm khả năng hiển thị và thao tác với contour trong nhiều mặt phẳng (axial, sagittal, coronal)
+  - Thêm công cụ vẽ nâng cao: brush, polygon, threshold, và các công cụ hình học
+  - Cải thiện hiển thị DVH tương tự Eclipse với màu sắc và định dạng chuẩn
+  - Tăng cường Object Explorer để quản lý structure, plan, và beam trong một panel
+
+### Improved
+- Cách tiếp cận tích hợp đối với lập kế hoạch xạ trị, tương tự như trong hệ thống thương mại Eclipse:
+  - Kết hợp các tính năng lập kế hoạch, tính toán liều và đánh giá kế hoạch vào một quy trình làm việc thống nhất
+  - Hiển thị thông tin liều xuyên suốt quá trình lập kế hoạch thay vì chỉ ở cuối quy trình
+  - Cải thiện khả năng đánh giá kế hoạch với các công cụ trực quan (DVH, isodose lines, plan metrics)
+  - Triển khai giao diện contour với mô hình MPR (Multi-Planar Reconstruction) giống Eclipse
+  - Chuẩn hóa luồng công việc lập kế hoạch theo các bước: chuẩn bị, lập kế hoạch, tối ưu hóa, đánh giá
+
+## [0.4.4] - 2025-04-05
+
+### Added
+- Triển khai đầy đủ lớp DVHCalculator với nhiều phương thức phân tích liều lượng:
+  - Thêm phương thức tính toán các chỉ số lâm sàng như V20, D95 và homogeneity index
+  - Thêm các phương thức để truy vấn thể tích tại liều cụ thể và liều tại thể tích cụ thể
+  - Bổ sung tích hợp tạo biểu đồ DVH trực quan với các tùy chỉnh tùy theo nhu cầu lâm sàng
+  - Hỗ trợ cả liều tuyệt đối (Gy) và liều tương đối (%)
+
+### Improved
+- Cải thiện đáng kể thuật toán tối ưu hóa VMAT:
+  - Triển khai thuật toán tính toán gradient thực tế cho vị trí lá MLC
+  - Thêm các phương thức để xác định cấu trúc mục tiêu và OARs tự động
+  - Cải thiện kiểm soát vị trí lá MLC với các ràng buộc vật lý chính xác hơn
+  - Thêm mô hình dựa trên fluence để tối ưu hóa nhanh chóng khi cần thiết
+  - Cải thiện cơ chế học của thuật toán với việc điều chỉnh dựa trên quá trình hội tụ
+- Triển khai thuật toán phân đoạn chùm tia IMRT cải tiến:
+  - Sử dụng thuật toán phân đoạn dựa trên ngưỡng thích ứng
+  - Tối ưu hóa số lượng phân đoạn trong khi duy trì độ chính xác liều
+  - Thêm các kỹ thuật làm mịn để giảm phức tạp của MLC
+  - Tăng cường độ chính xác với phương pháp phân đoạn dựa trên khu vực liên kết
+  - Đánh giá liều tái tạo từ các phân đoạn để đảm bảo chất lượng
+
+### Fixed
+- Sửa các lỗi linter trong DVHCalculator bằng cách thêm các import cần thiết
+- Cải thiện xử lý lỗi trong quá trình tính toán DVH và tối ưu hóa kế hoạch
+
 ## [0.4.3] - 2025-04-03
 
 ### Analysis
@@ -280,3 +327,38 @@
 - Improved application startup performance by resolving import bottlenecks
 - Enhanced system stability with proper dependency management
 - Added detailed error messages for debugging difficult import scenarios 
+
+## [0.5.0] - 2025-04-15
+
+### Added
+- Implemented comprehensive Multi-Criteria Optimization (MCO) module similar to Eclipse's MCO functionality:
+  - Created core MCO engine (`mco_interface.py`) with Pareto front generation and navigation
+  - Implemented MCO Solution class to represent and compare optimization solutions
+  - Added MCO Navigator for exploring the solution space with undo/redo capabilities
+  - Created interactive MCO Navigator Dialog with visualization of Pareto fronts
+  - Implemented objective sliders for intuitive navigation through the solution space
+  - Added DVH comparison tools to evaluate different treatment plan options
+  - Integrated metrics display for quantitative plan evaluation
+  - Supported multiple objectives including PTV coverage and OAR sparing
+  - Added functionality for interpolation between solutions
+
+### Fixed
+- Fixed linter errors in `external_beam_planning_tab.py`:
+  - Added missing imports including QInputDialog
+  - Updated Plan constructor parameters to match current API
+  - Fixed service registry access for database connections
+  - Updated method names to match current API (create_plan vs add_plan, etc)
+  - Added proper error handling for plan creation and management
+
+### Improved
+- Enhanced service registry integration with better error handling
+- Improved user interface for plan creation with interactive dialogs
+- Added more informative error messages throughout the planning workflow
+- Updated dose calculation and optimization integration in External Beam Planning tab
+- Improved structure management in the planning workflow
+
+# Changelog for QuangTPS Improvements
+
+## [0.4.4] - 2025-04-01
+
+### Enhanced Monte Carlo Dose Calculation 

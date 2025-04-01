@@ -24,6 +24,8 @@ import logging
 from pathlib import Path
 import importlib.util
 import shutil
+import requests
+import tempfile
 
 # Configure logging
 logging.basicConfig(
@@ -264,8 +266,75 @@ class DependencyChecker:
         """Fix WeasyPrint installation on Windows."""
         logger.info("WeasyPrint requires GTK3 on Windows.")
         
-        # Try to install with the appropriate options
         try:
+            # Try to import requests
+            try:
+                import requests
+                import tempfile
+            except ImportError:
+                logger.warning("The 'requests' package is required for automatic GTK installation.")
+                logger.info("Installing requests package...")
+                try:
+                    subprocess.check_call([
+                        sys.executable, "-m", "pip", "install", "requests"
+                    ])
+                    logger.info("Requests package installed. Please run this script again.")
+                except Exception as e:
+                    logger.error(f"Failed to install requests package: {e}")
+                return False
+            
+            # Create temporary directory
+            temp_dir = tempfile.mkdtemp()
+            temp_file = os.path.join(temp_dir, "gtk3-runtime-installer.exe")
+            
+            # Latest GTK3 installer URL (as of script creation)
+            gtk_url = "https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases/download/2023-03-01/gtk3-runtime-3.24.38-2023-03-01-ts-win64.exe"
+            
+            logger.info(f"Downloading GTK3 Runtime from {gtk_url}...")
+            response = requests.get(gtk_url, stream=True)
+            response.raise_for_status()
+            
+            # Write the installer to a temporary file
+            with open(temp_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            logger.info("Download complete. Installing GTK3 Runtime...")
+            
+            # Run the installer silently with default options
+            subprocess.check_call([temp_file, "/S"])
+            
+            # Update PATH to include GTK bin directory
+            gtk_bin_path = "C:\\Program Files\\GTK3-Runtime Win64\\bin"
+            
+            # Check if the path exists
+            if os.path.exists(gtk_bin_path):
+                # Add to PATH environment variable
+                current_path = os.environ.get('PATH', '')
+                if gtk_bin_path not in current_path:
+                    os.environ['PATH'] = f"{gtk_bin_path};{current_path}"
+                    logger.info(f"Added {gtk_bin_path} to PATH environment variable")
+                    
+                    # Also modify system PATH for future sessions
+                    try:
+                        # Using PowerShell to update system PATH
+                        ps_command = f'[Environment]::SetEnvironmentVariable("PATH", "{gtk_bin_path};" + [Environment]::GetEnvironmentVariable("PATH", "Machine"), "Machine")'
+                        subprocess.check_call(["powershell", "-Command", ps_command])
+                        logger.info("Updated system PATH environment variable")
+                    except Exception as e:
+                        logger.warning(f"Could not update system PATH: {e}")
+                        logger.warning("You may need to manually add GTK to your PATH")
+            else:
+                logger.warning(f"GTK installation path {gtk_bin_path} not found. Installation may have failed or used a different path.")
+            
+            # Clean up temporary files
+            try:
+                os.remove(temp_file)
+                os.rmdir(temp_dir)
+            except:
+                pass
+                
+            # Reinstall WeasyPrint
             logger.info("Reinstalling WeasyPrint...")
             subprocess.check_call([
                 sys.executable, "-m", "pip", "uninstall", "-y", "weasyprint"
@@ -274,13 +343,16 @@ class DependencyChecker:
                 sys.executable, "-m", "pip", "install", "--upgrade", "weasyprint"
             ])
             
-            logger.info("Opening the GTK installation guide in your web browser...")
-            import webbrowser
-            webbrowser.open("https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows")
+            logger.info("WeasyPrint setup completed. Please restart your application for changes to take effect.")
+            return True
             
-            logger.info("Please follow the instructions to install GTK3 on Windows.")
         except Exception as e:
             logger.error(f"Failed to fix WeasyPrint: {e}")
+            logger.info("Opening the GTK installation guide in your web browser as fallback...")
+            import webbrowser
+            webbrowser.open("https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows")
+            logger.info("Please follow the instructions to install GTK3 on Windows manually.")
+            return False
     
     def _fix_weasyprint_linux(self):
         """Fix WeasyPrint installation on Linux."""

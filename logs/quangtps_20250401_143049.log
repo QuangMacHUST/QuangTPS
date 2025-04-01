@@ -1,0 +1,16 @@
+2025-04-01 14:30:49,774 - QuangTPS - INFO - Starting QuangTPS. Log file: E:\hoctap\QuangTPS\logs\quangtps_20250401_143049.log
+2025-04-01 14:30:51,263 - QuangTPS - INFO - Starting QuangTPS GUI
+2025-04-01 14:31:01,301 - quangtps.ui.main_window - WARNING - PlanningTab not available, features will be limited
+2025-04-01 14:31:02,039 - quangtps.dose.algorithms.monte_carlo - WARNING - CUDA GPU acceleration not available - falling back to CPU for Monte Carlo calculations
+2025-04-01 14:31:02,261 - quangtps.ui.main_window - INFO - Loading dark theme stylesheet from: E:\hoctap\QuangTPS\quangtps\ui\styles\dark_theme.css
+2025-04-01 14:31:02,266 - quangtps.ui.main_window - ERROR - Failed to load stylesheet: 'MainWindow' object has no attribute 'workflow_tabs'
+2025-04-01 14:31:02,285 - quangtps.dicom.pacs_client - INFO - Initialized AE with title QUANGTPS and 10 contexts
+2025-04-01 14:31:02,595 - quangtps.ui.main_window - INFO - Dose tab initialized successfully
+2025-04-01 14:31:02,596 - quangtps.ui.main_window - INFO - Initializing Plan Evaluation tab
+2025-04-01 14:31:02,659 - quangtps.ui.main_window - ERROR - Failed to initialize Plan Evaluation tab: 'MainWindow' object has no attribute 'plan_changed'
+2025-04-01 14:31:02,666 - quangtps.ui.main_window - INFO - Treatment tab initialized successfully
+2025-04-01 14:31:02,680 - quangtps.ui.main_window - INFO - QA tab initialized successfully
+2025-04-01 14:31:02,693 - quangtps.ui.main_window - INFO - Reporting tab initialized successfully
+2025-04-01 14:31:02,769 - quangtps.ui.main_window - INFO - Set up simplified UI without Object Explorer
+2025-04-01 14:31:02,782 - quangtps.ui.main_window - INFO - Checking for plugins...
+2025-04-01 14:31:02,782 - quangtps.ui.main_window - INFO - No plugins found.

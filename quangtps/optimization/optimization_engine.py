@@ -309,121 +309,179 @@ class OptimizationEngine:
     
     def optimize(self) -> OptimizationResults:
         """
-        Chạy quá trình tối ưu hóa.
+        Thực hiện quá trình tối ưu hóa.
         
-        Returns:
-            OptimizationResults: Kết quả tối ưu hóa
+        Returns
+        -------
+        OptimizationResults
+            Kết quả của quá trình tối ưu hóa
         """
-        if self.status != OptimizationStatus.READY:
-            logger.warning(f"Trạng thái hiện tại là {self.status}, reset trước khi tối ưu hóa.")
-            return self._get_current_results("Trạng thái không hợp lệ")
-        
-        if self.dose_grid is None:
-            raise ValueError("Chưa thiết lập trạng thái ban đầu.")
+        if not self.dose_grid or not self.structures:
+            logger.error("Không thể tối ưu hóa: dose_grid hoặc structures chưa được khởi tạo")
+            raise ValueError("Dose grid and structures must be set before optimization")
         
         # Khởi tạo
         self.status = OptimizationStatus.RUNNING
+        self.start_time = time.time()
+        self.current_iteration = 0
+        self.current_objective_value = self._evaluate_objective()
+        self.best_objective_value = self.current_objective_value
+        self.best_dose_grid = self.dose_grid.copy()
+        self.best_control_parameters = self.control_parameters.copy() if self.control_parameters is not None else None
+        self.objective_values_history = [self.current_objective_value]
         self.stop_flag.clear()
         self.pause_flag.clear()
-        self.start_time = time.time()
+        
         initial_objective_value = self.current_objective_value
+        logger.info(f"Starting optimization with {self.solver_name}, initial objective value: {initial_objective_value:.4f}")
         
-        logger.info("Bắt đầu tối ưu hóa...")
+        # Tiến trình và báo cáo
+        last_report_time = time.time()
+        report_interval = 2.0  # seconds
+        stalled_count = 0
+        improvement_threshold = self.parameters.convergence_threshold * 10  # For stall detection
+        last_significant_improvement = 0
+        max_stalls = 5  # Maximum number of allowed stalls before early termination
         
-        # Vòng lặp tối ưu hóa chính
-        while self.status == OptimizationStatus.RUNNING or self.status == OptimizationStatus.PAUSED:
-            # Kiểm tra điều kiện dừng
-            if self.stop_flag.is_set():
-                self.status = OptimizationStatus.STOPPED
-                break
-            
-            # Xử lý tạm dừng
-            if self.pause_flag.is_set():
-                self.status = OptimizationStatus.PAUSED
-                time.sleep(0.1)  # Tránh chiếm dụng CPU quá nhiều
-                continue
-            
-            # Kiểm tra điều kiện dừng theo thời gian
-            current_time = time.time()
-            self.elapsed_time = current_time - self.start_time
-            if self.elapsed_time >= self.parameters.max_time_seconds:
-                self.status = OptimizationStatus.MAX_TIME_REACHED
-                break
-            
-            # Kiểm tra điều kiện dừng theo số lần lặp
-            if self.current_iteration >= self.parameters.max_iterations:
-                self.status = OptimizationStatus.MAX_ITERATIONS_REACHED
-                break
-            
-            # Cập nhật tham số điều khiển
-            try:
-                self._update_parameters()
-            except Exception as e:
-                logger.error(f"Lỗi trong cập nhật tham số: {e}")
-                self.status = OptimizationStatus.FAILED
-                self._trigger_event(OptimizationEvent.ERROR_OCCURRED, {"error": str(e)})
-                break
-            
-            # Cập nhật phân bố liều
-            self._update_dose_grid()
-            
-            # Đánh giá hàm mục tiêu
-            previous_objective_value = self.current_objective_value
-            self.current_objective_value = self._evaluate_objective()
-            self.objective_values_history.append(self.current_objective_value)
-            
-            # Kiểm tra ràng buộc
-            constraint_results = self.constraints.check_all(self.dose_grid, self.structures)
-            self.constraint_violations_history.append(constraint_results)
-            
-            # Trigger sự kiện hoàn thành lần lặp
-            self._trigger_event(OptimizationEvent.ITERATION_COMPLETED, {
-                "previous_value": previous_objective_value,
-                "current_value": self.current_objective_value,
-                "constraint_results": constraint_results
-            })
-            
-            # Lưu trạng thái tốt nhất
-            if self.current_objective_value < self.best_objective_value:
-                self.best_objective_value = self.current_objective_value
-                self.best_dose_grid = self.dose_grid.copy()
-                self.best_control_parameters = self.control_parameters.copy()
+        # Vòng lặp tối ưu hóa
+        try:
+            while not self.stop_flag.is_set() and self.current_iteration < self.parameters.max_iterations:
+                # Kiểm tra tạm dừng
+                if self.pause_flag.is_set():
+                    time.sleep(0.1)
+                    continue
                 
-                self._trigger_event(OptimizationEvent.OBJECTIVE_VALUE_REDUCED, {
-                    "reduction": previous_objective_value - self.current_objective_value
-                })
+                # Cập nhật thời gian
+                current_time = time.time()
+                self.elapsed_time = current_time - self.start_time
+                
+                # Kiểm tra thời gian tối ưu hóa
+                if self.elapsed_time > self.parameters.max_time_seconds:
+                    logger.info(f"Maximum time reached ({self.parameters.max_time_seconds:.1f}s), stopping optimization")
+                    self.status = OptimizationStatus.MAX_TIME_REACHED
+                    break
+                
+                # Thực hiện một bước tối ưu hóa
+                previous_value = self.current_objective_value
+                
+                # Cập nhật tham số dựa trên thuật toán
+                if self.solver_name == "gradient_descent":
+                    self._gradient_descent_update()
+                elif self.solver_name == "lbfgs":
+                    self._lbfgs_update()
+                elif self.solver_name == "simulated_annealing":
+                    self._simulated_annealing_update()
+                else:
+                    logger.error(f"Unknown optimizer: {self.solver_name}")
+                    self.status = OptimizationStatus.FAILED
+                    break
+                
+                # Cập nhật dose grid với control parameters mới
+                self._update_dose_grid()
+                
+                # Tính objective value mới
+                self.current_objective_value = self._evaluate_objective()
+                self.objective_values_history.append(self.current_objective_value)
+                
+                # Cập nhật solution tốt nhất
+                if self.current_objective_value < self.best_objective_value:
+                    improvement = self.best_objective_value - self.current_objective_value
+                    self.best_objective_value = self.current_objective_value
+                    self.best_dose_grid = self.dose_grid.copy()
+                    self.best_control_parameters = self.control_parameters.copy() if self.control_parameters is not None else None
+                    
+                    # Kiểm tra cải thiện đáng kể
+                    if improvement > improvement_threshold:
+                        last_significant_improvement = self.current_iteration
+                        stalled_count = 0
+                
+                # Tăng stall counter nếu không có cải thiện đáng kể
+                improvement = previous_value - self.current_objective_value
+                if improvement < improvement_threshold:
+                    stalled_count += 1
+                else:
+                    stalled_count = 0
+                
+                # Kiểm tra hội tụ
+                rel_improvement = improvement / previous_value if previous_value != 0 else 0
+                has_converged = rel_improvement < self.parameters.convergence_threshold
+                
+                # Kết thúc sớm nếu tối ưu hóa bị đình trệ
+                if stalled_count > max_stalls and self.current_iteration - last_significant_improvement > 20:
+                    logger.info(f"Optimization stalled after {self.current_iteration} iterations, no significant improvement for {self.current_iteration - last_significant_improvement} iterations")
+                    self.status = OptimizationStatus.CONVERGED
+                    break
+                
+                # Xuất báo cáo tiến độ
+                if current_time - last_report_time > report_interval:
+                    progress = (self.current_iteration / self.parameters.max_iterations) * 100
+                    time_per_iter = self.elapsed_time / (self.current_iteration + 1)
+                    remaining = time_per_iter * (self.parameters.max_iterations - self.current_iteration)
+                    
+                    logger.info(
+                        f"Iteration {self.current_iteration}/{self.parameters.max_iterations} "
+                        f"({progress:.1f}%), objective: {self.current_objective_value:.6f}, "
+                        f"improvement: {improvement:.6f} ({rel_improvement:.6f}), "
+                        f"elapsed: {self.elapsed_time:.1f}s, remaining: {remaining:.1f}s"
+                    )
+                    
+                    # Trigger event for UI updates
+                    self._trigger_event(OptimizationEvent.ITERATION_COMPLETED, {
+                        'iteration': self.current_iteration,
+                        'objective_value': self.current_objective_value,
+                        'best_objective_value': self.best_objective_value,
+                        'improvement': improvement,
+                        'progress_percent': progress,
+                        'time_elapsed': self.elapsed_time,
+                        'time_remaining': remaining
+                    })
+                    
+                    last_report_time = current_time
+                
+                # Kiểm tra hội tụ
+                if has_converged and self.current_iteration > 10:
+                    logger.info(f"Convergence reached after {self.current_iteration} iterations")
+                    self.status = OptimizationStatus.CONVERGED
+                    self._trigger_event(OptimizationEvent.CONVERGENCE_REACHED, {
+                        'iteration': self.current_iteration,
+                        'objective_value': self.current_objective_value
+                    })
+                    break
+                
+                # Tăng iteration counter
+                self.current_iteration += 1
             
-            # In thông tin nếu cần
-            if self.parameters.verbose and (self.current_iteration % 10 == 0 or self.current_iteration < 10):
-                logger.info(f"Lần lặp {self.current_iteration}: cost = {self.current_objective_value:.6f}")
+            # Kết thúc vòng lặp tối ưu hóa
+            if self.status == OptimizationStatus.RUNNING:
+                if self.current_iteration >= self.parameters.max_iterations:
+                    self.status = OptimizationStatus.MAX_ITERATIONS_REACHED
+                else:
+                    self.status = OptimizationStatus.STOPPED
             
-            # Kiểm tra điều kiện hội tụ
-            if (previous_objective_value - self.current_objective_value) < self.parameters.convergence_threshold:
-                self.status = OptimizationStatus.CONVERGED
-                self._trigger_event(OptimizationEvent.CONVERGENCE_REACHED, {})
-                break
+            # Thu thập kết quả
+            termination_reason = self._get_termination_reason()
+            results = self._get_current_results(termination_reason)
             
-            # Tăng số lần lặp
-            self.current_iteration += 1
-        
-        # Thời gian kết thúc
-        end_time = time.time()
-        self.elapsed_time = end_time - self.start_time
-        
-        # Sử dụng kết quả tốt nhất
-        self.dose_grid = self.best_dose_grid
-        self.control_parameters = self.best_control_parameters
-        self.current_objective_value = self.best_objective_value
-        
-        # Tạo thông tin kết quả
-        termination_reason = self._get_termination_reason()
-        logger.info(f"Tối ưu hóa kết thúc: {termination_reason}")
-        logger.info(f"  Số lần lặp: {self.current_iteration}")
-        logger.info(f"  Thời gian: {self.elapsed_time:.2f} giây")
-        logger.info(f"  Cải thiện: {initial_objective_value:.6f} -> {self.best_objective_value:.6f}")
-        
-        # Trả về kết quả
-        return self._get_current_results(termination_reason)
+            # Ghi log kết quả
+            improvement_percent = ((initial_objective_value - self.best_objective_value) / initial_objective_value) * 100 if initial_objective_value != 0 else 0
+            
+            logger.info(
+                f"Optimization completed: {termination_reason}, "
+                f"iterations: {self.current_iteration}, time: {self.elapsed_time:.2f}s, "
+                f"initial value: {initial_objective_value:.4f}, "
+                f"final value: {self.best_objective_value:.4f}, "
+                f"improvement: {improvement_percent:.2f}%"
+            )
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error during optimization: {str(e)}", exc_info=True)
+            self.status = OptimizationStatus.FAILED
+            
+            # Create result object even in case of failure
+            termination_reason = f"Error: {str(e)}"
+            return self._get_current_results(termination_reason)
     
     def stop(self):
         """Dừng quá trình tối ưu hóa."""

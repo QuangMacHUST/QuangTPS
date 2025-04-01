@@ -1270,3 +1270,119 @@ class BeamDataManager:
         
         logger.info(f"Đã tìm thấy {len(models)} mô hình cho loại chùm tia {beam_type}")
         return models 
+
+class BeamProfileData:
+    """
+    Class for storing and processing beam profile data.
+    
+    This class handles beam profile data, including cross-profiles and depth doses,
+    and provides methods for interpolation and data access.
+    """
+    
+    def __init__(self, profile_type: str, data: np.ndarray, coordinates: Dict[str, np.ndarray]):
+        """
+        Initialize beam profile data.
+        
+        Parameters
+        ----------
+        profile_type : str
+            Type of profile ("pdd", "cross_profile", "depth_dose", etc.)
+        data : np.ndarray
+            Profile data values
+        coordinates : Dict[str, np.ndarray]
+            Dictionary of coordinate arrays for each dimension (e.g., "depth", "off_axis")
+        """
+        self.profile_type = profile_type
+        self.data = data
+        self.coordinates = coordinates
+        
+        # Create interpolator based on dimensions
+        self._create_interpolator()
+    
+    def _create_interpolator(self):
+        """Create interpolator for the profile data."""
+        # Get dimensions in the correct order
+        dims = list(self.coordinates.keys())
+        points = tuple(self.coordinates[dim] for dim in dims)
+        
+        # Create interpolator based on number of dimensions
+        if len(dims) == 1:
+            self.interpolator = interp.interp1d(
+                points[0], self.data, 
+                kind='cubic', bounds_error=False, fill_value="extrapolate"
+            )
+        else:
+            self.interpolator = interp.RegularGridInterpolator(
+                points, self.data, 
+                method='linear', bounds_error=False, fill_value=None
+            )
+    
+    def get_value(self, **coords) -> float:
+        """
+        Get interpolated value at specific coordinates.
+        
+        Parameters
+        ----------
+        **coords : dict
+            Coordinates for interpolation (e.g., depth=10, off_axis=5)
+            
+        Returns
+        -------
+        float
+            Interpolated value
+        """
+        # Verify all required dimensions are provided
+        dims = list(self.coordinates.keys())
+        for dim in dims:
+            if dim not in coords:
+                raise ValueError(f"Missing coordinate: {dim}")
+        
+        # Create point for interpolation
+        if len(dims) == 1:
+            return float(self.interpolator(coords[dims[0]]))
+        else:
+            point = np.array([coords[dim] for dim in dims])
+            return float(self.interpolator(point))
+    
+    def get_profile(self, dimension: str, **fixed_coords) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Get a profile along a specific dimension with other dimensions fixed.
+        
+        Parameters
+        ----------
+        dimension : str
+            Dimension along which to get the profile
+        **fixed_coords : dict
+            Fixed coordinates for other dimensions
+            
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Arrays of coordinate values and corresponding data values
+        """
+        # Verify the dimension exists
+        if dimension not in self.coordinates:
+            raise ValueError(f"Invalid dimension: {dimension}")
+        
+        # Get coordinate array for the requested dimension
+        coords = self.coordinates[dimension]
+        
+        # For multi-dimensional data, verify all other dimensions have fixed values
+        other_dims = [dim for dim in self.coordinates if dim != dimension]
+        for dim in other_dims:
+            if dim not in fixed_coords:
+                raise ValueError(f"Missing fixed coordinate for dimension: {dim}")
+        
+        # Create interpolated profile
+        values = np.zeros_like(coords)
+        
+        # Interpolate at each point along the dimension
+        for i, c in enumerate(coords):
+            point_coords = {dimension: c, **fixed_coords}
+            values[i] = self.get_value(**point_coords)
+        
+        return coords, values
+    
+    def __repr__(self):
+        dims = list(self.coordinates.keys())
+        return f"BeamProfileData(type='{self.profile_type}', dimensions={dims})" 

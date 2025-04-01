@@ -54,6 +54,13 @@ except ImportError:
     from quangtps.ui.simple_imaging_tab import ImagingTab
     logger.warning("Using simplified ImagingTab implementation")
 
+# Try to import the external beam planning tab
+try:
+    from quangtps.ui.external_beam_planning_tab import ExternalBeamPlanningTab
+except ImportError:
+    logger.warning("ExternalBeamPlanningTab not available, will use separate planning and dose tabs")
+    ExternalBeamPlanningTab = None
+
 # Try to import the planning tab, with fallback options
 try:
     from quangtps.ui.planning_tab import PlanningTab
@@ -264,11 +271,11 @@ class MainWindow(QMainWindow):
         # Khởi tạo cơ sở dữ liệu
         try:
             if ServiceRegistry:
-                self.patient_db = ServiceRegistry.get_service('PatientDB')
+                self.service_registry = ServiceRegistry.get_instance()
+                self.patient_db = self.service_registry.get_service('PatientDB')
                 if not self.patient_db and PatientDB:
                     self.patient_db = PatientDB()
-                    if ServiceRegistry:
-                        ServiceRegistry.register('PatientDB', self.patient_db)
+                    self.service_registry.register_service('PatientDB', self.patient_db)
             elif PatientDB:
                 self.patient_db = PatientDB()
             else:
@@ -342,49 +349,112 @@ class MainWindow(QMainWindow):
         
         # Structure tab (Eclipse adds a separate structure tab)
         try:
-            if hasattr(self, 'structure_editor') and self.structure_editor is not None:
-                self.workflow_tabs.addTab(self.structure_editor, "Structure")
-                self.tab_indexes['structure'] = tab_index
-                tab_index += 1
-            else:
-                # Create a simple placeholder tab
-                placeholder = QWidget()
-                placeholder_layout = QVBoxLayout(placeholder)
-                placeholder_layout.addWidget(QLabel("Structure Tab - Not Available"))
-                placeholder_layout.addWidget(QLabel("Please implement structure editing functionality"))
-                self.structure_tab = placeholder
-                self.workflow_tabs.addTab(placeholder, "Structure")
-                self.tab_indexes['structure'] = tab_index
-                tab_index += 1
+            from quangtps.ui.structure_tab import StructureTab
+            self.structure_tab = StructureTab()
+            self.workflow_tabs.addTab(self.structure_tab, "Structure")
+            self.tab_indexes['structure'] = tab_index
+            tab_index += 1
+            logger.info("Structure tab initialized successfully")
         except Exception as e:
-            logger.error(f"Could not initialize Structure Tab: {e}")
-        
-        try:
-            if PlanningTab is not None:
-                self.planning_tab = PlanningTab()
-                self.workflow_tabs.addTab(self.planning_tab, "Planning")
-                self.tab_indexes['planning'] = tab_index
-                tab_index += 1
-            else:
-                raise ImportError("PlanningTab class is not defined")
-        except Exception as e:
-            logger.error(f"Could not initialize PlanningTab: {e}")
-            # Create a simple placeholder tab if PlanningTab fails
+            logger.error(f"Could not initialize StructureTab: {e}")
             placeholder = QWidget()
             placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Planning Tab - Not Available"))
+            placeholder_layout.addWidget(QLabel("Structure Tab - Not Available"))
             placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.planning_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Planning")
-            self.tab_indexes['planning'] = tab_index
+            self.structure_tab = placeholder
+            self.workflow_tabs.addTab(placeholder, "Structure")
+            self.tab_indexes['structure'] = tab_index
             tab_index += 1
-
-        # Initialize remaining tabs with error handling
-        self._init_dose_tab()
-        self.tab_indexes['dose'] = tab_index
-        tab_index += 1
         
-        self._init_plan_evaluation_tab()  # Eclipse has a dedicated Plan Evaluation tab
+        try:
+            if ExternalBeamPlanningTab is not None:
+                self.external_beam_planning_tab = ExternalBeamPlanningTab()
+                self.workflow_tabs.addTab(self.external_beam_planning_tab, "External Beam Planning")
+                self.tab_indexes['external_beam_planning'] = tab_index
+                tab_index += 1
+                
+                # Kết nối tín hiệu
+                if hasattr(self.patient_tab, 'patient_loaded'):
+                    self.patient_tab.patient_loaded.connect(self.external_beam_planning_tab.set_patient)
+                
+                if hasattr(self.external_beam_planning_tab, 'plan_created'):
+                    self.external_beam_planning_tab.plan_created.connect(self._on_plan_selected)
+                    
+                if hasattr(self.external_beam_planning_tab, 'plan_updated'):
+                    self.external_beam_planning_tab.plan_updated.connect(self._on_plan_selected)
+                    
+                logger.info("External Beam Planning tab initialized successfully")
+            else:
+                # Nếu không tải được, sử dụng tách biệt Planning và Dose tabs thay thế
+                try:
+                    if PlanningTab is not None:
+                        self.planning_tab = PlanningTab()
+                        self.workflow_tabs.addTab(self.planning_tab, "Planning")
+                        self.tab_indexes['planning'] = tab_index
+                        tab_index += 1
+                        
+                        # Kết nối tín hiệu
+                        if hasattr(self.patient_tab, 'patient_loaded'):
+                            self.patient_tab.patient_loaded.connect(self.planning_tab.set_patient)
+                        
+                        if hasattr(self.planning_tab, 'plan_created'):
+                            self.planning_tab.plan_created.connect(self._on_plan_selected)
+                            
+                        if hasattr(self.planning_tab, 'plan_updated'):
+                            self.planning_tab.plan_updated.connect(self._on_plan_selected)
+                        
+                        logger.info("Planning tab initialized successfully as fallback")
+                    else:
+                        raise ImportError("PlanningTab class is not defined")
+                except Exception as e2:
+                    logger.error(f"Could not initialize PlanningTab as fallback: {e2}")
+                    placeholder = QWidget()
+                    placeholder_layout = QVBoxLayout(placeholder)
+                    placeholder_layout.addWidget(QLabel("Planning Tab - Not Available"))
+                    placeholder_layout.addWidget(QLabel(f"Error: {str(e2)}"))
+                    self.planning_tab = placeholder
+                    self.workflow_tabs.addTab(placeholder, "Planning")
+                    self.tab_indexes['planning'] = tab_index
+                    tab_index += 1
+
+                # Thêm tab Dose
+                try:
+                    if DoseTab is not None:
+                        self.dose_tab = DoseTab()
+                        self.workflow_tabs.addTab(self.dose_tab, "Dose")
+                        self.tab_indexes['dose'] = tab_index
+                        tab_index += 1
+                        
+                        # Kết nối tín hiệu
+                        if hasattr(self.patient_tab, 'patient_loaded'):
+                            self.patient_tab.patient_loaded.connect(self.dose_tab.set_patient)
+                        
+                        if hasattr(self.planning_tab, 'plan_created'):
+                            self.planning_tab.plan_created.connect(self.dose_tab.set_plan)
+                            
+                        if hasattr(self.planning_tab, 'plan_updated'):
+                            self.planning_tab.plan_updated.connect(self.dose_tab.set_plan)
+                        
+                        logger.info("Dose tab initialized successfully as fallback")
+                    else:
+                        raise ImportError("DoseTab class is not defined")
+                except Exception as e3:
+                    logger.error(f"Could not initialize DoseTab as fallback: {e3}")
+                    placeholder = QWidget()
+                    placeholder_layout = QVBoxLayout(placeholder)
+                    placeholder_layout.addWidget(QLabel("Dose Tab - Not Available"))
+                    placeholder_layout.addWidget(QLabel(f"Error: {str(e3)}"))
+                    self.dose_tab = placeholder
+                    self.workflow_tabs.addTab(placeholder, "Dose")
+                    self.tab_indexes['dose'] = tab_index
+                    tab_index += 1
+
+        except Exception as e:
+            logger.error(f"Error in _init_tabs: {e}")
+            logger.debug("Exception details:", exc_info=True)
+
+        # Chỉ tạo một tab Plan Evaluation 
+        self._init_plan_evaluation_tab()
         self.tab_indexes['plan_evaluation'] = tab_index
         tab_index += 1
         

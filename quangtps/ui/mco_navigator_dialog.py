@@ -2,813 +2,780 @@
 # -*- coding: utf-8 -*-
 
 """
-Multi-criteria optimization (MCO) navigator dialog.
+Module giao diện người dùng cho Multi-Criteria Optimization (MCO) Navigator.
 
-This module provides a dialog for navigating the trade-off space of
-Pareto-optimal treatment plans. It allows users to interactively
-explore different treatment plans by adjusting weights for different
-clinical objectives.
+Module này triển khai giao diện người dùng cho công cụ MCO Navigator,
+mô phỏng theo giao diện MCO của Eclipse. Cho phép người dùng khám phá 
+không gian lời giải Pareto và tương tác trực quan với các lời giải.
 """
 
 import os
+import sys
 import logging
-from typing import Dict, List, Optional, Tuple, Union, Any
-
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer
-from PyQt5.QtGui import QIcon, QPixmap, QColor, QPainter, QPen, QFont
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QSlider, QCheckBox, QGroupBox, 
-    QPushButton, QComboBox, QTabWidget, QWidget,
-    QSpinBox, QDoubleSpinBox, QLineEdit, QFrame,
-    QScrollArea, QSplitter, QFileDialog, QMessageBox
-)
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+from typing import Dict, List, Optional, Tuple, Any, Set, Union
 
-from quangtps.optimization.mco.mco_engine import MCOEngine, ParetoSolution
-from quangtps.core.types import Plan, DoseGrid
-from quangtps.planning.evaluation import PlanEvaluator
-from quangtps.ui.dose_tab import DVHWidget
-from quangtps.evaluation.dvh.dvh_visualization import DVHPlot
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, 
+    QListWidgetItem, QSplitter, QDialog, QDialogButtonBox, QComboBox, 
+    QLineEdit, QFormLayout, QMessageBox, QFileDialog, QTabWidget,
+    QTreeWidget, QTreeWidgetItem, QHeaderView, QProgressDialog, QMenu, QAction,
+    QToolBar, QGroupBox, QRadioButton, QButtonGroup, QCheckBox, QSlider,
+    QSpinBox, QDoubleSpinBox, QToolButton, QFrame, QScrollArea, QTableWidget,
+    QTableWidgetItem, QApplication, QSizePolicy, QGridLayout
+)
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QFont
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRectF, QTimer
 
-from quangtps.core.logging import get_logger
+# Import matplotlib for visualization
+try:
+    import matplotlib
+    matplotlib.use('Qt5Agg')
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.figure import Figure
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    logging.warning("Matplotlib not available, using simplified visualization")
 
-logger = get_logger(__name__)
+# Import from QuangTPS modules
+from quangtps.core.services import ServiceRegistry
+from quangtps.planning.plan import Plan
+from quangtps.optimization.mco.mco_interface import (
+    MCOEngine, MCOSolution, MCOObjectiveSpace, MCONavigator, calculate_mco_metrics
+)
+from quangtps.evaluation.dvh.dvh_calculation import DVHCalculator
+from quangtps.evaluation.dvh.dvh_visualization import plot_dvh
 
+logger = logging.getLogger(__name__)
 
 class ObjectiveSlider(QWidget):
     """
-    Custom slider widget for adjusting objective weights.
-    
-    This widget includes a slider, label, and value display.
+    Widget slider cho điều chỉnh giá trị của một hàm mục tiêu.
     """
     
     valueChanged = pyqtSignal(str, float)
     
-    def __init__(self, objective_name: str, label: str, initial_value: float = 0.0, parent=None):
-        """Initialize the objective slider."""
+    def __init__(self, objective_name, min_value, max_value, current_value, parent=None):
         super().__init__(parent)
+        
         self.objective_name = objective_name
-        self.label_text = label
-        self.initial_value = initial_value
-        self._setup_ui()
-    
-    def _setup_ui(self):
-        """Set up the UI for the slider."""
-        # Create layout
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 2, 5, 2)
+        self.min_value = min_value
+        self.max_value = max_value
         
-        # Create label
-        self.label = QLabel(self.label_text)
-        self.label.setMinimumWidth(150)
-        layout.addWidget(self.label)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create slider
+        # Title
+        self.title_label = QLabel(objective_name)
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setFont(QFont("Arial", 10, QFont.Bold))
+        layout.addWidget(self.title_label)
+        
+        # Slider layout
+        slider_layout = QHBoxLayout()
+        
+        # Min label
+        self.min_label = QLabel(f"{min_value:.1f}")
+        slider_layout.addWidget(self.min_label)
+        
+        # Slider
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(0)
-        self.slider.setMaximum(100)  # 0.0 to 1.0 with 0.01 steps
-        self.slider.setValue(int(self.initial_value * 100))
-        self.slider.setTickInterval(10)
+        self.slider.setMaximum(100)
+        self.slider.setValue(self._value_to_slider(current_value))
         self.slider.setTickPosition(QSlider.TicksBelow)
-        self.slider.valueChanged.connect(self._on_slider_changed)
-        layout.addWidget(self.slider, 1)  # 1 is the stretch factor
+        self.slider.setTickInterval(10)
+        slider_layout.addWidget(self.slider)
         
-        # Create value display
-        self.value_label = QLabel(f"{self.initial_value:.2f}")
-        self.value_label.setMinimumWidth(40)
-        self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # Max label
+        self.max_label = QLabel(f"{max_value:.1f}")
+        slider_layout.addWidget(self.max_label)
+        
+        layout.addLayout(slider_layout)
+        
+        # Value display
+        self.value_label = QLabel(f"Current: {current_value:.2f}")
+        self.value_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.value_label)
         
-        self.setLayout(layout)
+        # Connect signals
+        self.slider.valueChanged.connect(self._on_slider_value_changed)
     
-    def _on_slider_changed(self, value: int):
-        """Handle slider value changes."""
-        # Convert slider value (0-100) to objective weight (0.0-1.0)
-        weight = value / 100.0
-        self.value_label.setText(f"{weight:.2f}")
-        self.valueChanged.emit(self.objective_name, weight)
+    def _value_to_slider(self, value):
+        """Chuyển đổi giá trị thực tế sang giá trị trên thanh trượt"""
+        # Normalize to 0-100 range
+        normalized = (value - self.min_value) / (self.max_value - self.min_value)
+        return int(normalized * 100)
     
-    def get_value(self) -> float:
-        """Get the current slider value as a weight (0.0-1.0)."""
-        return self.slider.value() / 100.0
+    def _slider_to_value(self, slider_value):
+        """Chuyển đổi giá trị thanh trượt sang giá trị thực tế"""
+        # Convert from 0-100 range to actual value
+        normalized = slider_value / 100
+        return self.min_value + normalized * (self.max_value - self.min_value)
     
-    def set_value(self, value: float):
-        """Set the slider value from a weight (0.0-1.0)."""
-        self.slider.setValue(int(value * 100))
+    def _on_slider_value_changed(self, slider_value):
+        value = self._slider_to_value(slider_value)
+        self.value_label.setText(f"Current: {value:.2f}")
+        self.valueChanged.emit(self.objective_name, value)
+    
+    def set_value(self, value):
+        """Thiết lập giá trị cho thanh trượt"""
+        self.slider.setValue(self._value_to_slider(value))
+    
+    def get_value(self):
+        """Lấy giá trị hiện tại của thanh trượt"""
+        return self._slider_to_value(self.slider.value())
+
+
+class DVHComparisonWidget(QWidget):
+    """
+    Widget so sánh DVH giữa các lời giải.
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        
+        if MATPLOTLIB_AVAILABLE:
+            # Create matplotlib figure
+            self.figure = Figure(figsize=(6, 4), dpi=100)
+            self.canvas = FigureCanvas(self.figure)
+            self.ax = self.figure.add_subplot(111)
+            self.ax.set_xlabel('Dose (Gy)')
+            self.ax.set_ylabel('Volume (%)')
+            self.ax.set_title('DVH Comparison')
+            self.ax.grid(True)
+            
+            layout.addWidget(self.canvas)
+        else:
+            layout.addWidget(QLabel("Matplotlib is not available. Cannot display DVH comparison."))
+        
+        # Controls
+        controls_layout = QHBoxLayout()
+        
+        self.structure_combo = QComboBox()
+        self.structure_combo.setMinimumWidth(150)
+        
+        self.reference_combo = QComboBox()
+        self.reference_combo.addItem("No Reference")
+        self.reference_combo.setMinimumWidth(150)
+        
+        controls_layout.addWidget(QLabel("Structure:"))
+        controls_layout.addWidget(self.structure_combo)
+        controls_layout.addWidget(QLabel("Reference:"))
+        controls_layout.addWidget(self.reference_combo)
+        
+        layout.addLayout(controls_layout)
+        
+        # Connect signals
+        if MATPLOTLIB_AVAILABLE:
+            self.structure_combo.currentIndexChanged.connect(self.update_plot)
+            self.reference_combo.currentIndexChanged.connect(self.update_plot)
+    
+    def clear(self):
+        """Clear the plot"""
+        if MATPLOTLIB_AVAILABLE:
+            self.ax.clear()
+            self.ax.set_xlabel('Dose (Gy)')
+            self.ax.set_ylabel('Volume (%)')
+            self.ax.set_title('DVH Comparison')
+            self.ax.grid(True)
+            self.canvas.draw()
+    
+    def update_structures(self, structures):
+        """Update the structure list"""
+        self.structure_combo.clear()
+        for structure in structures:
+            self.structure_combo.addItem(structure.name)
+    
+    def update_references(self, references):
+        """Update reference plan list"""
+        current_text = self.reference_combo.currentText()
+        
+        self.reference_combo.clear()
+        self.reference_combo.addItem("No Reference")
+        
+        for ref in references:
+            self.reference_combo.addItem(ref)
+        
+        # Try to restore the previous selection
+        index = self.reference_combo.findText(current_text)
+        if index >= 0:
+            self.reference_combo.setCurrentIndex(index)
+    
+    def update_plot(self):
+        """Update the DVH plot"""
+        if not MATPLOTLIB_AVAILABLE:
+            return
+        
+        # This would be implemented to update the DVH plot
+        # based on the current solution and reference
+        pass
+    
+    def plot_dvh_comparison(self, current_solution, reference_solution=None, structure_name=None):
+        """Plot DVH comparison between solutions"""
+        if not MATPLOTLIB_AVAILABLE:
+            return
+        
+        # Clear the plot
+        self.ax.clear()
+        
+        # If no structure specified, use the currently selected one
+        if structure_name is None:
+            if self.structure_combo.count() > 0:
+                structure_name = self.structure_combo.currentText()
+            else:
+                return
+        
+        # Find the structure
+        current_plan = current_solution.plan
+        structure = None
+        for s in current_plan.get_structures():
+            if s.name == structure_name:
+                structure = s
+                break
+        
+        if structure is None:
+            return
+        
+        # Plot current solution DVH
+        try:
+            dvh_data = DVHCalculator.calculate_dvh(current_plan, structure)
+            self.ax.plot(dvh_data.doses, dvh_data.volumes, 'b-', label=f"Current Solution")
+            
+            # Plot reference DVH if available
+            if reference_solution:
+                ref_plan = reference_solution.plan
+                ref_dvh_data = DVHCalculator.calculate_dvh(ref_plan, structure)
+                self.ax.plot(ref_dvh_data.doses, ref_dvh_data.volumes, 'r--', label=f"Reference")
+            
+            self.ax.set_xlabel('Dose (Gy)')
+            self.ax.set_ylabel('Volume (%)')
+            self.ax.set_title(f'DVH Comparison - {structure_name}')
+            self.ax.grid(True)
+            self.ax.legend()
+            
+            self.canvas.draw()
+        except Exception as e:
+            logger.error(f"Error plotting DVH comparison: {e}")
+
+
+class ParetoFrontWidget(QWidget):
+    """
+    Widget hiển thị không gian Pareto và cho phép người dùng chọn lời giải.
+    """
+    
+    solutionSelected = pyqtSignal(int)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        
+        if MATPLOTLIB_AVAILABLE:
+            # Create matplotlib figure
+            self.figure = Figure(figsize=(6, 4), dpi=100)
+            self.canvas = FigureCanvas(self.figure)
+            self.ax = self.figure.add_subplot(111)
+            self.ax.set_xlabel('Objective 1')
+            self.ax.set_ylabel('Objective 2')
+            self.ax.set_title('Pareto Front')
+            self.ax.grid(True)
+            
+            layout.addWidget(self.canvas)
+            
+            # Connect click event
+            self.canvas.mpl_connect('button_press_event', self._on_click)
+        else:
+            layout.addWidget(QLabel("Matplotlib is not available. Cannot display Pareto front."))
+        
+        # Controls
+        controls_layout = QHBoxLayout()
+        
+        self.x_axis_combo = QComboBox()
+        self.y_axis_combo = QComboBox()
+        
+        controls_layout.addWidget(QLabel("X Axis:"))
+        controls_layout.addWidget(self.x_axis_combo)
+        controls_layout.addWidget(QLabel("Y Axis:"))
+        controls_layout.addWidget(self.y_axis_combo)
+        
+        layout.addLayout(controls_layout)
+        
+        # Connect signals
+        if MATPLOTLIB_AVAILABLE:
+            self.x_axis_combo.currentIndexChanged.connect(self.update_plot)
+            self.y_axis_combo.currentIndexChanged.connect(self.update_plot)
+        
+        self.objective_space = None
+        self.points = []  # Store the points for mouse click detection
+    
+    def set_objective_space(self, objective_space):
+        """Set the objective space"""
+        self.objective_space = objective_space
+        
+        # Update objective lists
+        self.x_axis_combo.clear()
+        self.y_axis_combo.clear()
+        
+        objective_names = list(objective_space.objectives.keys())
+        
+        for name in objective_names:
+            self.x_axis_combo.addItem(name)
+            self.y_axis_combo.addItem(name)
+        
+        # Set default selections if possible
+        if len(objective_names) >= 2:
+            self.x_axis_combo.setCurrentIndex(0)
+            self.y_axis_combo.setCurrentIndex(1)
+        
+        self.update_plot()
+    
+    def update_plot(self):
+        """Update the Pareto front plot"""
+        if not MATPLOTLIB_AVAILABLE or self.objective_space is None:
+            return
+        
+        if self.x_axis_combo.count() == 0 or self.y_axis_combo.count() == 0:
+            return
+        
+        x_objective = self.x_axis_combo.currentText()
+        y_objective = self.y_axis_combo.currentText()
+        
+        # Use the objective space's plotting method
+        self.ax.clear()
+        self.objective_space.plot_pareto_front(x_objective, y_objective, self.ax)
+        
+        self.canvas.draw()
+    
+    def _on_click(self, event):
+        """Handle mouse click events on the plot"""
+        if not self.objective_space:
+            return
+        
+        if event.xdata is None or event.ydata is None:
+            return
+        
+        # Find the closest solution point
+        closest_index = None
+        min_distance = float('inf')
+        
+        x_objective = self.x_axis_combo.currentText()
+        y_objective = self.y_axis_combo.currentText()
+        
+        for i, solution in enumerate(self.objective_space.solutions):
+            x = solution.get_objective_value(x_objective)
+            y = solution.get_objective_value(y_objective)
+            
+            # Calculate distance in data coordinates
+            distance = np.sqrt((x - event.xdata)**2 + (y - event.ydata)**2)
+            
+            if distance < min_distance:
+                min_distance = distance
+                closest_index = i
+        
+        if closest_index is not None:
+            self.solutionSelected.emit(closest_index)
+            self.update_plot()  # Refresh to show the new current solution
+
+
+class SolutionMetricsWidget(QWidget):
+    """
+    Widget hiển thị các chỉ số của lời giải hiện tại.
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        
+        # Metrics table
+        self.metrics_table = QTableWidget()
+        self.metrics_table.setColumnCount(3)
+        self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value", "Unit"])
+        self.metrics_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.metrics_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.metrics_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        
+        layout.addWidget(self.metrics_table)
+    
+    def update_metrics(self, solution):
+        """Update the metrics display for a solution"""
+        self.metrics_table.setRowCount(0)
+        
+        if solution is None:
+            return
+        
+        # Calculate metrics
+        metrics = calculate_mco_metrics(solution)
+        
+        # Add objective values
+        for name, value in solution.objectives.items():
+            self.add_metric(name, value)
+        
+        # Add calculated metrics
+        for name, value in metrics.items():
+            if name == 'CI':
+                self.add_metric("Conformity Index", value, "")
+            elif name == 'HI':
+                self.add_metric("Homogeneity Index", value, "")
+            elif name == 'GI':
+                self.add_metric("Gradient Index", value, "")
+    
+    def add_metric(self, name, value, unit=""):
+        """Add a metric to the table"""
+        row = self.metrics_table.rowCount()
+        self.metrics_table.insertRow(row)
+        
+        self.metrics_table.setItem(row, 0, QTableWidgetItem(name))
+        self.metrics_table.setItem(row, 1, QTableWidgetItem(f"{value:.3f}"))
+        self.metrics_table.setItem(row, 2, QTableWidgetItem(unit))
 
 
 class MCONavigatorDialog(QDialog):
     """
-    Dialog for navigating the trade-off space of Pareto-optimal plans.
+    Hộp thoại chính cho Multi-Criteria Optimization Navigator.
     
-    This dialog allows users to interactively explore different treatment
-    plans by adjusting weights for different clinical objectives.
+    Cung cấp giao diện người dùng tương tác để khám phá không gian lời giải Pareto,
+    so sánh các lời giải, và chọn lời giải tối ưu dựa trên ưu tiên lâm sàng.
     """
     
-    planAccepted = pyqtSignal(Plan)
+    solutionAccepted = pyqtSignal(MCOSolution)
     
-    def __init__(self, mco_engine: MCOEngine, parent=None):
-        """Initialize the MCO navigator dialog."""
-        super().__init__(parent)
-        self.mco_engine = mco_engine
-        self.plan = mco_engine.plan
-        self.current_solution = None
-        self.sliders = {}
-        self.updating_sliders = False
-        self.dvh_plot = None
-        self.pareto_plot = None
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self._delayed_update)
+    def __init__(self, plan, parent=None):
+        """
+        Khởi tạo hộp thoại MCO Navigator.
         
+        Parameters
+        ----------
+        plan : Plan
+            Kế hoạch xạ trị cần tối ưu hóa
+        parent : QWidget, optional
+            Widget cha
+        """
+        super().__init__(parent)
+        
+        self.plan = plan
+        self.setWindowTitle("Multi-Criteria Optimization Navigator")
+        self.resize(1200, 800)
+        
+        # Initialize MCO Engine
+        self.mco_engine = MCOEngine(plan)
+        self.solution_sliders = {}
+        
+        # Setup UI
         self._setup_ui()
-        self._initialize_pareto_surface()
+        
+        # Generate initial solutions
+        QTimer.singleShot(100, self._initialize_solutions)
     
     def _setup_ui(self):
-        """Set up the dialog UI."""
-        # Set window properties
-        self.setWindowTitle("Multi-Criteria Optimization Navigator")
-        self.setMinimumSize(1200, 800)
-        self.setAttribute(Qt.WA_DeleteOnClose)
-        
-        # Create main layout
+        """Setup the user interface"""
         main_layout = QVBoxLayout(self)
         
-        # Create splitter for top and bottom sections
-        splitter = QSplitter(Qt.Vertical)
+        # Main splitter
+        self.main_splitter = QSplitter(Qt.Vertical)
         
-        # Create top widget (objectives and visualization)
-        top_widget = QWidget()
-        top_layout = QHBoxLayout(top_widget)
+        # Upper section (visual navigation)
+        self.upper_widget = QWidget()
+        upper_layout = QHBoxLayout(self.upper_widget)
         
-        # Create left panel (objectives)
-        left_panel = QGroupBox("Objectives")
-        left_layout = QVBoxLayout(left_panel)
+        # Pareto front visualization
+        self.pareto_widget = ParetoFrontWidget()
+        upper_layout.addWidget(self.pareto_widget)
         
-        # Create scroll area for sliders
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        slider_widget = QWidget()
-        self.sliders_layout = QVBoxLayout(slider_widget)
+        # DVH comparison
+        self.dvh_widget = DVHComparisonWidget()
+        upper_layout.addWidget(self.dvh_widget)
         
-        # Add objective sliders
-        self._create_objective_sliders()
+        self.main_splitter.addWidget(self.upper_widget)
         
-        # Complete left panel
-        scroll_area.setWidget(slider_widget)
-        left_layout.addWidget(scroll_area)
+        # Lower section (sliders and metrics)
+        self.lower_widget = QWidget()
+        lower_layout = QHBoxLayout(self.lower_widget)
         
-        # Add buttons for presets
-        presets_layout = QHBoxLayout()
+        # Sliders for objectives
+        self.sliders_widget = QWidget()
+        self.sliders_layout = QVBoxLayout(self.sliders_widget)
         
-        reset_button = QPushButton("Reset Weights")
-        reset_button.clicked.connect(self._reset_weights)
-        presets_layout.addWidget(reset_button)
+        sliders_scroll = QScrollArea()
+        sliders_scroll.setWidgetResizable(True)
+        sliders_scroll.setWidget(self.sliders_widget)
         
-        balanced_button = QPushButton("Balanced Plan")
-        balanced_button.clicked.connect(self._set_balanced_weights)
-        presets_layout.addWidget(balanced_button)
+        # Metrics
+        self.metrics_widget = SolutionMetricsWidget()
         
-        left_layout.addLayout(presets_layout)
+        lower_layout.addWidget(sliders_scroll)
+        lower_layout.addWidget(self.metrics_widget)
         
-        # Create right panel (visualization)
-        right_panel = QTabWidget()
+        self.main_splitter.addWidget(self.lower_widget)
         
-        # Create DVH tab
-        dvh_tab = QWidget()
-        dvh_layout = QVBoxLayout(dvh_tab)
-        self.dvh_widget = DVHWidget()
-        dvh_layout.addWidget(self.dvh_widget)
-        right_panel.addTab(dvh_tab, "DVH")
+        # Set initial splitter sizes
+        self.main_splitter.setSizes([500, 300])
         
-        # Create Pareto front tab
-        pareto_tab = QWidget()
-        pareto_layout = QVBoxLayout(pareto_tab)
+        main_layout.addWidget(self.main_splitter)
         
-        # matplotlib figure for Pareto front
-        fig = Figure(figsize=(8, 6), dpi=100)
-        self.pareto_canvas = FigureCanvas(fig)
-        pareto_layout.addWidget(self.pareto_canvas)
+        # Control buttons
+        button_layout = QHBoxLayout()
         
-        # Controls for Pareto plot
-        pareto_controls = QHBoxLayout()
+        self.generate_btn = QPushButton("Generate Solutions")
+        self.undo_btn = QPushButton("Undo")
+        self.redo_btn = QPushButton("Redo")
         
-        self.x_objective_combo = QComboBox()
-        pareto_controls.addWidget(QLabel("X-Axis:"))
-        pareto_controls.addWidget(self.x_objective_combo)
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         
-        self.y_objective_combo = QComboBox()
-        pareto_controls.addWidget(QLabel("Y-Axis:"))
-        pareto_controls.addWidget(self.y_objective_combo)
+        button_layout.addWidget(self.generate_btn)
+        button_layout.addWidget(self.undo_btn)
+        button_layout.addWidget(self.redo_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(button_box)
         
-        update_plot_button = QPushButton("Update Plot")
-        update_plot_button.clicked.connect(self._update_pareto_plot)
-        pareto_controls.addWidget(update_plot_button)
+        main_layout.addLayout(button_layout)
         
-        pareto_layout.addLayout(pareto_controls)
-        right_panel.addTab(pareto_tab, "Pareto Front")
+        # Connect signals
+        self.generate_btn.clicked.connect(self._generate_solutions)
+        self.undo_btn.clicked.connect(self._undo)
+        self.redo_btn.clicked.connect(self._redo)
         
-        # Create Dose tab
-        dose_tab = QWidget()
-        dose_layout = QVBoxLayout(dose_tab)
-        # Placeholder for dose display (should be replaced with actual dose viewer)
-        dose_label = QLabel("Dose visualization will be displayed here.")
-        dose_label.setAlignment(Qt.AlignCenter)
-        dose_layout.addWidget(dose_label)
-        right_panel.addTab(dose_tab, "Dose")
+        button_box.accepted.connect(self._on_accept)
+        button_box.rejected.connect(self.reject)
         
-        # Create Statistics tab
-        stats_tab = QWidget()
-        stats_layout = QVBoxLayout(stats_tab)
-        self.stats_text = QLabel("Generate plans to see statistics.")
-        self.stats_text.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        stats_layout.addWidget(self.stats_text)
-        right_panel.addTab(stats_tab, "Statistics")
+        self.pareto_widget.solutionSelected.connect(self._on_solution_selected)
+    
+    def _initialize_solutions(self):
+        """Initialize the MCO solutions"""
+        try:
+            # Add objectives based on the plan
+            self._setup_objectives()
+            
+            # Generate initial solutions
+            progress = QProgressDialog("Generating initial solutions...", "Cancel", 0, 100, self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
+            
+            # Generate solutions
+            solutions = self.mco_engine.generate_initial_solutions(10)
+            
+            # Update UI
+            self.pareto_widget.set_objective_space(self.mco_engine.objective_space)
+            
+            # Select the first solution
+            if solutions:
+                self.mco_engine.navigator.select_solution(0)
+                self._update_ui_for_current_solution()
+            
+            progress.close()
+            
+        except Exception as e:
+            logger.error(f"Error initializing MCO solutions: {e}")
+            QMessageBox.critical(self, "Error", f"Could not initialize MCO solutions: {str(e)}")
+    
+    def _setup_objectives(self):
+        """Setup objectives based on the plan"""
+        # This would be implemented to add objectives based on the plan's structures
+        # For example, adding objectives for PTV coverage, OAR sparing, etc.
         
-        # Add panels to top layout
-        top_layout.addWidget(left_panel, 1)  # 1 is the stretch factor
-        top_layout.addWidget(right_panel, 3)  # 3 is the stretch factor
+        # For demonstration, add some sample objectives
+        from quangtps.optimization.objectives import DVHObjective, MeanDoseObjective
         
-        # Create bottom widget (controls)
-        bottom_widget = QWidget()
-        bottom_layout = QHBoxLayout(bottom_widget)
+        # Find PTV and OARs
+        ptv = None
+        oars = []
         
-        # Create generation controls
-        generation_group = QGroupBox("Pareto Surface Generation")
-        generation_layout = QGridLayout()
+        for structure in self.plan.get_structures():
+            if "PTV" in structure.name.upper():
+                ptv = structure
+            elif any(oar_name in structure.name.upper() for oar_name in ["HEART", "LUNG", "SPINAL", "CORD", "LIVER", "KIDNEY"]):
+                oars.append(structure)
         
-        generation_layout.addWidget(QLabel("Number of Plans:"), 0, 0)
-        self.num_plans_spin = QSpinBox()
-        self.num_plans_spin.setMinimum(5)
-        self.num_plans_spin.setMaximum(100)
-        self.num_plans_spin.setValue(10)
-        generation_layout.addWidget(self.num_plans_spin, 0, 1)
+        # Add PTV coverage objective
+        if ptv:
+            ptv_obj = DVHObjective(structure=ptv, dose=self.plan.prescription.dose * 0.95, 
+                                 volume=95, direction="greater", weight=100)
+            self.mco_engine.add_objective(ptv_obj, 100, "PTV Coverage")
         
-        generation_layout.addWidget(QLabel("Method:"), 1, 0)
-        self.method_combo = QComboBox()
-        self.method_combo.addItems(["Weight Sampling", "Constraint Sampling", "Normal Constraint"])
-        generation_layout.addWidget(self.method_combo, 1, 1)
-        
-        generate_button = QPushButton("Generate Pareto Surface")
-        generate_button.clicked.connect(self._generate_pareto_surface)
-        generation_layout.addWidget(generate_button, 2, 0, 1, 2)
-        
-        generation_group.setLayout(generation_layout)
-        bottom_layout.addWidget(generation_group)
-        
-        # Create navigation controls
-        navigation_group = QGroupBox("Navigation Controls")
-        navigation_layout = QVBoxLayout()
-        
-        nav_buttons_layout = QHBoxLayout()
-        
-        update_button = QPushButton("Update Plan")
-        update_button.clicked.connect(self._update_plan)
-        nav_buttons_layout.addWidget(update_button)
-        
-        interpolate_check = QCheckBox("Auto-Interpolate")
-        interpolate_check.setChecked(True)
-        interpolate_check.stateChanged.connect(self._on_auto_interpolate_changed)
-        nav_buttons_layout.addWidget(interpolate_check)
-        
-        navigation_layout.addLayout(nav_buttons_layout)
-        
-        # Show status
-        self.status_label = QLabel("Ready.")
-        navigation_layout.addWidget(self.status_label)
-        
-        navigation_group.setLayout(navigation_layout)
-        bottom_layout.addWidget(navigation_group)
-        
-        # Create action buttons
-        action_group = QGroupBox("Actions")
-        action_layout = QVBoxLayout()
-        
-        accept_button = QPushButton("Accept Plan")
-        accept_button.clicked.connect(self._accept_plan)
-        action_layout.addWidget(accept_button)
-        
-        save_button = QPushButton("Save Solutions")
-        save_button.clicked.connect(self._save_solutions)
-        action_layout.addWidget(save_button)
-        
-        action_group.setLayout(action_layout)
-        bottom_layout.addWidget(action_group)
-        
-        # Add widgets to splitter
-        splitter.addWidget(top_widget)
-        splitter.addWidget(bottom_widget)
-        splitter.setSizes([600, 200])  # Initial sizes
-        
-        # Add splitter to main layout
-        main_layout.addWidget(splitter)
-        
-        # Add close button
-        close_button = QPushButton("Close")
-        close_button.clicked.connect(self.reject)
-        main_layout.addWidget(close_button)
-        
-        self.setLayout(main_layout)
-        
-        # Fill objective comboboxes
-        self._update_objective_combos()
+        # Add OAR sparing objectives
+        for oar in oars:
+            if "HEART" in oar.name.upper():
+                heart_obj = MeanDoseObjective(structure=oar, dose=15, weight=50)
+                self.mco_engine.add_objective(heart_obj, 50, "Heart Mean Dose")
+            elif "LUNG" in oar.name.upper():
+                lung_obj = DVHObjective(structure=oar, dose=20, volume=30, 
+                                      direction="less", weight=50)
+                self.mco_engine.add_objective(lung_obj, 50, "Lung V20")
+            elif "SPINAL" in oar.name.upper() or "CORD" in oar.name.upper():
+                cord_obj = DVHObjective(structure=oar, dose=45, volume=0, 
+                                      direction="less", weight=80)
+                self.mco_engine.add_objective(cord_obj, 80, "Cord Max Dose")
     
     def _create_objective_sliders(self):
-        """Create sliders for each objective."""
+        """Create sliders for adjusting objective values"""
         # Clear existing sliders
-        while self.sliders_layout.count():
-            item = self.sliders_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        for i in reversed(range(self.sliders_layout.count())):
+            widget = self.sliders_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
         
-        self.sliders = {}
+        self.solution_sliders = {}
         
-        # Get objective names and add sliders
-        for name, objective in self.mco_engine.objectives.items():
-            # Create a friendly label from the objective name
-            label = name.replace("_", " ").title()
+        # Get current solution to determine value ranges
+        current_solution = self.mco_engine.objective_space.get_current_solution()
+        if not current_solution:
+            return
+        
+        # Create a slider for each objective
+        for name in self.mco_engine.objective_space.objectives.keys():
+            # Get min/max values across all solutions
+            min_value = float('inf')
+            max_value = float('-inf')
             
-            # Add the objective type to the label
-            objective_type = objective.objective_type.name.replace("_", " ").title()
-            label = f"{label} ({objective_type})"
+            for solution in self.mco_engine.objective_space.solutions:
+                value = solution.get_objective_value(name)
+                min_value = min(min_value, value)
+                max_value = max(max_value, value)
+            
+            # Add some padding to the range
+            range_padding = 0.1 * (max_value - min_value)
+            min_value -= range_padding
+            max_value += range_padding
             
             # Create the slider
-            slider = ObjectiveSlider(name, label)
-            slider.valueChanged.connect(self._on_slider_changed)
+            current_value = current_solution.get_objective_value(name)
+            slider = ObjectiveSlider(name, min_value, max_value, current_value)
+            slider.valueChanged.connect(self._on_slider_value_changed)
+            
             self.sliders_layout.addWidget(slider)
-            self.sliders[name] = slider
+            self.solution_sliders[name] = slider
         
-        # Add stretch to push sliders to the top
+        # Add a stretch at the end
         self.sliders_layout.addStretch()
     
-    def _update_objective_combos(self):
-        """Update the objective comboboxes for the Pareto plot."""
-        self.x_objective_combo.clear()
-        self.y_objective_combo.clear()
-        
-        objectives = list(self.mco_engine.objectives.keys())
-        
-        for name in objectives:
-            label = name.replace("_", " ").title()
-            self.x_objective_combo.addItem(label, name)
-            self.y_objective_combo.addItem(label, name)
-        
-        # Set defaults if we have at least 2 objectives
-        if len(objectives) >= 2:
-            self.x_objective_combo.setCurrentIndex(0)
-            self.y_objective_combo.setCurrentIndex(1)
-    
-    def _initialize_pareto_surface(self):
-        """Initialize the Pareto surface by generating anchor plans."""
-        self.status_label.setText("Generating anchor plans...")
-        QTimer.singleShot(100, self._generate_anchor_plans)
-    
-    def _generate_anchor_plans(self):
-        """Generate anchor plans for each objective."""
-        try:
-            # Prepare the MCO engine
-            if not self.mco_engine.prepare():
-                self.status_label.setText("Failed to prepare MCO engine.")
-                QMessageBox.warning(self, "Error", "Failed to prepare MCO engine.")
-                return
-            
-            # Generate anchor plans
-            self.mco_engine.generate_anchor_plans()
-            
-            # Generate a balanced plan
-            self.mco_engine.generate_balanced_plan()
-            
-            # Update status
-            self.status_label.setText(f"Generated {len(self.mco_engine.solutions)} plans.")
-            
-            # Set the balanced plan as current
-            if self.mco_engine.solutions:
-                # Find the balanced plan (the one with most equal weights)
-                balanced_index = self._find_balanced_plan()
-                if balanced_index >= 0:
-                    self.current_solution = self.mco_engine.solutions[balanced_index]
-                    self._update_slider_values_from_solution(self.current_solution)
-                    self._update_displays()
-        except Exception as e:
-            logger.error(f"Error generating anchor plans: {e}", exc_info=True)
-            self.status_label.setText(f"Error: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to generate plans: {str(e)}")
-    
-    def _find_balanced_plan(self) -> int:
-        """Find the index of the most balanced plan."""
-        if not self.mco_engine.solutions:
-            return -1
-        
-        # Find the plan with the most balanced weights
-        min_std = float('inf')
-        min_idx = -1
-        
-        for i, solution in enumerate(self.mco_engine.solutions):
-            weights = list(solution.weights.values())
-            if not weights:
-                continue
-            
-            # Calculate standard deviation of weights
-            std = np.std(weights)
-            if std < min_std:
-                min_std = std
-                min_idx = i
-        
-        return min_idx
-    
-    def _generate_pareto_surface(self):
-        """Generate additional Pareto-optimal plans."""
-        try:
-            # Get parameters
-            num_plans = self.num_plans_spin.value()
-            method_idx = self.method_combo.currentIndex()
-            method = ['weight_sampling', 'constraint_sampling', 'normal_constraint'][method_idx]
-            
-            # Update status
-            self.status_label.setText(f"Generating {num_plans} Pareto-optimal plans...")
-            
-            # Generate plans
-            self.mco_engine.generate_pareto_surface(num_plans, method)
-            
-            # Update status
-            self.status_label.setText(f"Generated {len(self.mco_engine.solutions)} plans total.")
-            
-            # Update displays
-            self._update_pareto_plot()
-        except Exception as e:
-            logger.error(f"Error generating Pareto surface: {e}", exc_info=True)
-            self.status_label.setText(f"Error: {str(e)}")
-            QMessageBox.warning(self, "Error", f"Failed to generate Pareto surface: {str(e)}")
-    
-    def _on_slider_changed(self, objective_name: str, weight: float):
-        """Handle slider value changes."""
-        if self.updating_sliders:
+    def _update_ui_for_current_solution(self):
+        """Update all UI components for the current solution"""
+        current_solution = self.mco_engine.objective_space.get_current_solution()
+        if not current_solution:
             return
         
-        # If auto-interpolate is checked, update after a short delay
-        interpolate_check = self.findChild(QCheckBox, "Auto-Interpolate")
-        if interpolate_check and interpolate_check.isChecked():
-            # Reset timer to prevent multiple rapid updates
-            self.timer.stop()
-            self.timer.start(300)  # 300 ms delay
+        # Create sliders if not already created
+        if not self.solution_sliders:
+            self._create_objective_sliders()
+        
+        # Update slider values
+        for name, slider in self.solution_sliders.items():
+            value = current_solution.get_objective_value(name)
+            slider.set_value(value)
+        
+        # Update metrics display
+        self.metrics_widget.update_metrics(current_solution)
+        
+        # Update DVH display
+        structures = self.plan.get_structures()
+        self.dvh_widget.update_structures(structures)
+        
+        # Update references
+        references = ["Original Plan"]
+        for i, solution in enumerate(self.mco_engine.objective_space.solutions):
+            if solution is not current_solution:
+                references.append(f"Solution {i+1}")
+        
+        self.dvh_widget.update_references(references)
+        
+        # Update DVH plot
+        self.dvh_widget.plot_dvh_comparison(current_solution)
+        
+        # Update Pareto plot
+        self.pareto_widget.update_plot()
     
-    def _delayed_update(self):
-        """Update the plan after a delay (for auto-interpolate)."""
-        self.timer.stop()
-        self._update_plan()
-    
-    def _on_auto_interpolate_changed(self, state: int):
-        """Handle auto-interpolate checkbox changes."""
-        # Nothing to do here - the checking happens in _on_slider_changed
-        pass
-    
-    def _update_plan(self):
-        """Update the plan based on current slider values."""
+    def _generate_solutions(self):
+        """Generate a new set of solutions"""
         try:
-            # Get weights from sliders
-            weights = {name: slider.get_value() for name, slider in self.sliders.items()}
+            progress = QProgressDialog("Generating solutions...", "Cancel", 0, 100, self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
             
-            # Check if we have any non-zero weights
-            if sum(weights.values()) == 0:
-                self.status_label.setText("Error: All weights are zero.")
-                return
+            # Generate solutions
+            solutions = self.mco_engine.generate_initial_solutions(10)
             
-            # Update status
-            self.status_label.setText("Updating plan...")
+            # Update UI
+            self.pareto_widget.update_plot()
             
-            # Navigate to the new solution
-            solution = self.mco_engine.navigate(weights)
+            # Select the first solution
+            if solutions:
+                self.mco_engine.navigator.select_solution(0)
+                self._update_ui_for_current_solution()
             
-            if solution:
-                self.current_solution = solution
-                # Update displays
-                self._update_displays()
-                
-                # Update status
-                if 'interpolated' in solution.metadata and solution.metadata['interpolated']:
-                    self.status_label.setText("Updated plan (interpolated).")
-                else:
-                    self.status_label.setText("Updated plan (re-optimized).")
-            else:
-                self.status_label.setText("Failed to update plan.")
+            progress.close()
+            
         except Exception as e:
-            logger.error(f"Error updating plan: {e}", exc_info=True)
-            self.status_label.setText(f"Error: {str(e)}")
+            logger.error(f"Error generating MCO solutions: {e}")
+            QMessageBox.critical(self, "Error", f"Could not generate MCO solutions: {str(e)}")
     
-    def _update_slider_values_from_solution(self, solution: ParetoSolution):
-        """Update slider values from a solution."""
-        # Set flag to prevent recursive updates
-        self.updating_sliders = True
-        
+    def _on_solution_selected(self, index):
+        """Handle selection of a solution from the Pareto plot"""
         try:
-            # Get total sum of weights for normalization
-            total_weight = sum(solution.weights.values())
-            if total_weight == 0:
-                return
-            
-            # Update sliders
-            for name, slider in self.sliders.items():
-                weight = solution.weights.get(name, 0.0) / total_weight
-                slider.set_value(weight)
-        finally:
-            # Clear flag
-            self.updating_sliders = False
-    
-    def _update_displays(self):
-        """Update all displays with the current solution."""
-        if not self.current_solution:
-            return
-        
-        try:
-            # Update DVH
-            if self.current_solution.dose_grid:
-                structures = self.plan.structure_set.get_structure_names()
-                self.dvh_widget.update_dvh(self.current_solution.dose_grid, structures)
-            
-            # Update statistics
-            self._update_statistics()
-            
-            # Update Pareto plot (if open)
-            if self.pareto_canvas.isVisible():
-                self._update_pareto_plot()
+            self.mco_engine.navigator.select_solution(index)
+            self._update_ui_for_current_solution()
         except Exception as e:
-            logger.error(f"Error updating displays: {e}", exc_info=True)
+            logger.error(f"Error selecting solution: {e}")
     
-    def _update_statistics(self):
-        """Update the statistics display."""
-        if not self.current_solution:
-            return
-        
+    def _on_slider_value_changed(self, objective_name, target_value):
+        """Handle changes in objective sliders"""
         try:
-            # Create a string with all stats
-            stats = []
+            # For now, just find the closest solution
+            closest_solution_index = None
+            min_difference = float('inf')
             
-            # Add plan info
-            stats.append("<b>Plan Information:</b>")
-            stats.append(f"Plan: {self.plan.name}" if hasattr(self.plan, 'name') else "Unnamed Plan")
+            for i, solution in enumerate(self.mco_engine.objective_space.solutions):
+                value = solution.get_objective_value(objective_name)
+                difference = abs(value - target_value)
+                
+                if difference < min_difference:
+                    min_difference = difference
+                    closest_solution_index = i
             
-            # Add objective values
-            stats.append("<br><b>Objective Values:</b>")
-            for name, value in self.current_solution.objective_values.items():
-                name_formatted = name.replace("_", " ").title()
-                stats.append(f"{name_formatted}: {value:.4f}")
-            
-            # Add metadata
-            stats.append("<br><b>Solution Information:</b>")
-            if 'optimization_time' in self.current_solution.metadata:
-                stats.append(f"Optimization Time: {self.current_solution.metadata['optimization_time']:.2f} seconds")
-            if 'iterations' in self.current_solution.metadata:
-                stats.append(f"Iterations: {self.current_solution.metadata['iterations']}")
-            if 'interpolated' in self.current_solution.metadata and self.current_solution.metadata['interpolated']:
-                stats.append("Solution Type: Interpolated")
-            else:
-                stats.append("Solution Type: Optimized")
-            
-            # Update the stats text
-            self.stats_text.setText("<p>" + "<br>".join(stats) + "</p>")
+            if closest_solution_index is not None:
+                self.mco_engine.navigator.select_solution(closest_solution_index)
+                self._update_ui_for_current_solution()
         except Exception as e:
-            logger.error(f"Error updating statistics: {e}", exc_info=True)
+            logger.error(f"Error handling slider change: {e}")
     
-    def _update_pareto_plot(self):
-        """Update the Pareto front plot."""
-        if not self.mco_engine.solutions:
-            return
-        
-        try:
-            # Get selected objectives
-            x_idx = self.x_objective_combo.currentIndex()
-            y_idx = self.y_objective_combo.currentIndex()
-            
-            if x_idx < 0 or y_idx < 0:
-                return
-            
-            x_name = self.x_objective_combo.itemData(x_idx)
-            y_name = self.y_objective_combo.itemData(y_idx)
-            
-            # Generate plot
-            plot = self.mco_engine.plot_pareto_front(x_name, y_name, True)
-            
-            if plot:
-                # Clear current plot
-                self.pareto_canvas.figure.clear()
-                
-                # Draw the new plot on the canvas
-                ax = self.pareto_canvas.figure.add_subplot(111)
-                
-                # Extract data from the Pareto solutions
-                x_values = []
-                y_values = []
-                
-                for solution in self.mco_engine.solutions:
-                    if x_name in solution.objective_values and y_name in solution.objective_values:
-                        x_values.append(solution.objective_values[x_name])
-                        y_values.append(solution.objective_values[y_name])
-                
-                # Plot points
-                ax.scatter(x_values, y_values, c='blue', s=50, label='Pareto Solutions')
-                
-                # Highlight current solution if available
-                if self.current_solution and x_name in self.current_solution.objective_values and y_name in self.current_solution.objective_values:
-                    current_x = self.current_solution.objective_values[x_name]
-                    current_y = self.current_solution.objective_values[y_name]
-                    ax.scatter([current_x], [current_y], c='red', s=100, label='Current Solution')
-                
-                # Add labels and title
-                x_label = x_name.replace("_", " ").title()
-                y_label = y_name.replace("_", " ").title()
-                ax.set_xlabel(f"{x_label}")
-                ax.set_ylabel(f"{y_label}")
-                ax.set_title(f"Pareto Front: {x_label} vs {y_label}")
-                ax.grid(True)
-                ax.legend()
-                
-                # Refresh canvas
-                self.pareto_canvas.draw()
-        except Exception as e:
-            logger.error(f"Error updating Pareto plot: {e}", exc_info=True)
+    def _undo(self):
+        """Undo the last navigation action"""
+        previous_index = self.mco_engine.navigator.undo()
+        if previous_index is not None:
+            self._update_ui_for_current_solution()
     
-    def _reset_weights(self):
-        """Reset all weights to zero."""
-        for slider in self.sliders.values():
-            slider.set_value(0.0)
+    def _redo(self):
+        """Redo the last undone navigation action"""
+        next_index = self.mco_engine.navigator.redo()
+        if next_index is not None:
+            self._update_ui_for_current_solution()
     
-    def _set_balanced_weights(self):
-        """Set equal weights for all objectives."""
-        if not self.sliders:
-            return
-        
-        weight = 1.0 / len(self.sliders)
-        for slider in self.sliders.values():
-            slider.set_value(weight)
-        
-        # Update plan
-        self._update_plan()
-    
-    def _accept_plan(self):
-        """Accept the current plan and close the dialog."""
-        if not self.current_solution:
-            QMessageBox.warning(self, "No Solution", "No solution available to accept.")
-            return
-        
-        try:
-            # Apply the current solution to the plan
-            updated_plan = self.mco_engine.accept_current_solution()
-            
-            if updated_plan:
-                # Emit the plan accepted signal
-                self.planAccepted.emit(updated_plan)
-                
-                # Close the dialog
-                self.accept()
-            else:
-                QMessageBox.warning(self, "Error", "Failed to apply solution to plan.")
-        except Exception as e:
-            logger.error(f"Error accepting plan: {e}", exc_info=True)
-            QMessageBox.warning(self, "Error", f"Failed to accept plan: {str(e)}")
-    
-    def _save_solutions(self):
-        """Save the generated solutions to a file."""
-        if not self.mco_engine.solutions:
-            QMessageBox.warning(self, "No Solutions", "No solutions available to save.")
-            return
-        
-        try:
-            # Get file path from user
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save MCO Solutions", "", "JSON Files (*.json)"
-            )
-            
-            if not file_path:
-                return
-            
-            # Add .json extension if missing
-            if not file_path.lower().endswith('.json'):
-                file_path += '.json'
-            
-            # Save solutions
-            success = self.mco_engine.save_solutions(file_path)
-            
-            if success:
-                QMessageBox.information(
-                    self, "Success", f"Saved {len(self.mco_engine.solutions)} solutions to {file_path}"
-                )
-            else:
-                QMessageBox.warning(self, "Error", "Failed to save solutions.")
-        except Exception as e:
-            logger.error(f"Error saving solutions: {e}", exc_info=True)
-            QMessageBox.warning(self, "Error", f"Failed to save solutions: {str(e)}")
-
-
-def show_mco_navigator(plan: Plan, parent=None) -> Optional[Plan]:
-    """
-    Show the MCO navigator dialog for the given plan.
-    
-    Args:
-        plan: The plan to optimize
-        parent: Parent widget
-    
-    Returns:
-        The updated plan if accepted, None otherwise
-    """
-    # Get objectives and constraints from the plan
-    from quangtps.optimization.objectives import get_objectives_from_plan
-    from quangtps.optimization.constraints import get_constraints_from_plan
-    
-    objectives = get_objectives_from_plan(plan)
-    constraints = get_constraints_from_plan(plan)
-    
-    if not objectives:
-        QMessageBox.warning(
-            parent, "No Objectives", 
-            "This plan has no optimization objectives. Please define objectives first."
-        )
-        return None
-    
-    # Create MCO engine
-    from quangtps.optimization.mco.mco_engine import create_mco_engine
-    mco_engine = create_mco_engine(plan, objectives, constraints)
-    
-    # Create and show dialog
-    dialog = MCONavigatorDialog(mco_engine, parent)
-    
-    # Return plan if accepted
-    if dialog.exec_() == QDialog.Accepted:
-        return dialog.mco_engine.plan
-    
-    return None
+    def _on_accept(self):
+        """Handle dialog acceptance"""
+        current_solution = self.mco_engine.objective_space.get_current_solution()
+        if current_solution:
+            self.solutionAccepted.emit(current_solution)
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Warning", "No solution is currently selected.")
 
 
 if __name__ == "__main__":
-    # Test code
-    import sys
-    from PyQt5.QtWidgets import QApplication
-    
+    """
+    Demo standalone mode for MCO Navigator Dialog.
+    """
+    # This would be used for testing the dialog independently
     app = QApplication(sys.argv)
     
-    # Create a dummy plan
-    class DummyPlan:
-        def __init__(self):
-            self.name = "Test Plan"
-            self.id = "test_plan_1"
-        
-        def clone(self):
-            return DummyPlan()
+    # Create a mock plan for testing
+    from quangtps.planning.plan import Plan
+    mock_plan = Plan()
     
-    # Create a dummy objective
-    class DummyObjective:
-        def __init__(self, name):
-            self.name = name
-            self.objective_type = type('ObjectiveType', (), {'name': 'MIN_DOSE'})
-        
-        def evaluate(self, fluence):
-            # Mock ObjectiveResult
-            result = type('ObjectiveResult', (), {'value': 0.5})
-            return result
-        
-        def to_dict(self):
-            return {'name': self.name, 'type': 'MIN_DOSE'}
-    
-    # Create a dummy MCO engine
-    class DummyMCOEngine:
-        def __init__(self):
-            self.plan = DummyPlan()
-            self.objectives = {
-                'ptv_coverage': DummyObjective('ptv_coverage'),
-                'oar_sparing': DummyObjective('oar_sparing'),
-                'conformity': DummyObjective('conformity'),
-                'homogeneity': DummyObjective('homogeneity')
-            }
-            self.constraints = []
-            self.solutions = []
-            self.current_solution = None
-        
-        def prepare(self):
-            return True
-        
-        def generate_anchor_plans(self, num_anchors=None):
-            return []
-        
-        def generate_balanced_plan(self):
-            return None
-        
-        def generate_pareto_surface(self, num_points=10, method='weight_sampling'):
-            return []
-        
-        def navigate(self, slider_values):
-            return None
-        
-        def accept_current_solution(self):
-            return self.plan
-        
-        def save_solutions(self, filename):
-            return True
-    
-    # Show the dialog
-    mco_engine = DummyMCOEngine()
-    dialog = MCONavigatorDialog(mco_engine)
+    dialog = MCONavigatorDialog(mock_plan)
     dialog.show()
     
     sys.exit(app.exec_()) 

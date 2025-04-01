@@ -10,7 +10,7 @@ Module này cung cấp các lớp và phương thức để định nghĩa và q
 
 import logging
 import numpy as np
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from enum import Enum
 
 from quangtps.treatment.mlc.mlc_controller import MLCController
@@ -728,7 +728,12 @@ class IMRT(BaseTreatmentTechnique):
             # Giả lập phân đoạn dựa trên phương pháp thực hiện
             if self.delivery_type == IMRTDeliveryType.STEP_AND_SHOOT:
                 # Giả lập tạo 5 phân đoạn cho Step-and-Shoot
-                self.segment_info[beam_id] = self._create_step_and_shoot_segments(fluence, 5)
+                self.segment_info[beam_id] = self._create_step_and_shoot_segments(
+                    fluence, 
+                    self.max_segments_per_beam,
+                    self.min_segment_area,
+                    self.min_segment_mu
+                )
             else:
                 # Giả lập tạo 10 phân đoạn cho Sliding Window
                 self.segment_info[beam_id] = self._create_sliding_window_segments(fluence, 10)
@@ -741,46 +746,178 @@ class IMRT(BaseTreatmentTechnique):
         
         return True
     
-    def _create_step_and_shoot_segments(self, fluence: np.ndarray, num_segments: int):
+    def _create_step_and_shoot_segments(self, fluence_map, max_segments=10, min_segment_area=2.0, min_segment_weight=0.05):
         """
-        Tạo các phân đoạn cho phương pháp Step-and-Shoot.
+        Tạo các phân đoạn Step-and-Shoot từ fluence map.
+        
+        Sử dụng phương pháp phân đoạn dựa trên ngưỡng thích ứng để tạo ra các phân đoạn MLC
+        hiệu quả và tối ưu, giảm số lượng phân đoạn trong khi duy trì độ chính xác liều.
         
         Parameters
         ----------
-        fluence : np.ndarray
-            Fluence map
-        num_segments : int
-            Số phân đoạn cần tạo
+        fluence_map : np.ndarray
+            Fluence map cần phân đoạn
+        max_segments : int, optional
+            Số phân đoạn tối đa, mặc định là 10
+        min_segment_area : float, optional
+            Diện tích phân đoạn tối thiểu (cm²), mặc định là 2.0
+        min_segment_weight : float, optional
+            Trọng số phân đoạn tối thiểu, mặc định là 0.05
             
         Returns
         -------
-        List[Dict]
-            Danh sách các phân đoạn
+        list
+            Danh sách các phân đoạn, mỗi phân đoạn là một từ điển chứa thông tin về vị trí lá MLC và trọng số
         """
+        if fluence_map is None or fluence_map.size == 0:
+            logger.warning("Không thể tạo phân đoạn từ fluence map trống.")
+            return []
+        
+        # Chuẩn hóa fluence map về khoảng [0, 1]
+        fluence_norm = fluence_map / np.max(fluence_map) if np.max(fluence_map) > 0 else fluence_map
+        
+        logger.info(f"Tạo phân đoạn từ fluence map hình dạng {fluence_map.shape}")
+        
+        # Thiết lập thông số
+        height, width = fluence_map.shape
+        leaf_positions = []  # Danh sách các vị trí lá MLC [(left1, right1), (left2, right2), ...]
+        
+        # Khởi tạo danh sách phân đoạn
         segments = []
+        remaining_fluence = fluence_norm.copy()
         
-        # Phân đoạn đơn giản bằng cách chia fluence thành thưởng
-        max_value = fluence.max()
-        step = max_value / num_segments
+        # Áp dụng làm mịn để giảm nhiễu và tăng khả năng phân đoạn
+        from scipy import ndimage
+        smoothed_fluence = ndimage.gaussian_filter(remaining_fluence, sigma=0.5)
         
-        for i in range(num_segments):
-            threshold = step * (i + 1)
+        # Xác định các ngưỡng thích ứng
+        # Tính toán các ngưỡng dựa trên phân phối cường độ
+        intensity_values = np.sort(smoothed_fluence.flatten())
+        intensity_values = intensity_values[intensity_values > 0.05]  # Bỏ qua giá trị gần 0
+        
+        if len(intensity_values) == 0:
+            logger.warning("Không còn cường độ đáng kể trong fluence map.")
+            return []
+        
+        # Xác định các ngưỡng thích ứng dựa trên phân phối cường độ
+        thresholds = []
+        if len(intensity_values) > 1:
+            # Chia phân phối cường độ thành các ngưỡng dựa trên phần trăm
+            percentiles = np.linspace(0, 100, min(max_segments, 10))
+            thresholds = np.percentile(intensity_values, percentiles)
+            thresholds = np.unique(thresholds)  # Loại bỏ các giá trị trùng lặp
             
-            # Tạo mặt nạ phân đoạn dựa trên ngưỡng
-            segment_mask = fluence >= threshold
+            # Đảm bảo giá trị lớn nhất được đưa vào
+            if thresholds[-1] < np.max(intensity_values):
+                thresholds = np.append(thresholds, np.max(intensity_values))
+        else:
+            # Nếu chỉ có một giá trị cường độ
+            thresholds = [intensity_values[0]]
+        
+        # Đảm bảo ngưỡng nhỏ nhất > 0 để tránh tạo phân đoạn không cần thiết
+        thresholds = thresholds[thresholds > 0.05]
+        
+        logger.debug(f"Xác định {len(thresholds)} ngưỡng thích ứng: {thresholds}")
+        
+        # Tạo các phân đoạn dựa trên các ngưỡng
+        for i, threshold in enumerate(thresholds):
+            # Tạo mặt nạ nhị phân dựa trên ngưỡng
+            binary_mask = (smoothed_fluence >= threshold).astype(np.float32)
             
-            # Chuyển đổi mặt nạ thành vị trí lá MLC
-            mlc_positions = self._mask_to_mlc_positions(segment_mask)
+            # Nếu không có pixel nào vượt qua ngưỡng, bỏ qua
+            if np.sum(binary_mask) == 0:
+                continue
             
-            # Tạo thông tin phân đoạn
-            segment = {
-                'index': i,
-                'weight': 1.0 / num_segments,
-                'mlc_positions': mlc_positions,
-                'mu': max_value * (1.0 / num_segments)
-            }
+            # Làm mịn mặt nạ để giảm phức tạp MLC
+            binary_mask = ndimage.binary_opening(binary_mask, structure=np.ones((3, 3)))
+            binary_mask = ndimage.binary_closing(binary_mask, structure=np.ones((3, 3)))
             
-            segments.append(segment)
+            # Tách các khu vực không liên kết thành các phân đoạn riêng biệt
+            labeled_mask, num_features = ndimage.label(binary_mask)
+            
+            for label in range(1, num_features + 1):
+                segment_mask = (labeled_mask == label).astype(np.float32)
+                
+                # Kiểm tra diện tích phân đoạn
+                area_pixels = np.sum(segment_mask)
+                if area_pixels < min_segment_area * 4:  # Chuyển đổi cm² thành pixel
+                    continue
+                
+                # Tính trọng số phân đoạn dựa trên đóng góp vào fluence tổng
+                segment_contribution = segment_mask * remaining_fluence
+                segment_weight = np.sum(segment_contribution) / np.sum(fluence_norm)
+                
+                if segment_weight < min_segment_weight:
+                    continue
+                
+                # Chuyển đổi mặt nạ sang vị trí lá MLC
+                mlc_positions = []
+                for row in range(height):
+                    row_segment = segment_mask[row, :]
+                    if np.sum(row_segment) > 0:
+                        # Tìm vị trí lá trái và phải
+                        non_zero_indices = np.where(row_segment > 0)[0]
+                        left = np.min(non_zero_indices)
+                        right = np.max(non_zero_indices) + 1  # +1 vì lá phải là exclusive
+                        
+                        # Chuyển đổi từ chỉ số pixel sang tọa độ thực (cm)
+                        left_cm = left * 0.5  # Giả sử 1 pixel = 0.5 cm
+                        right_cm = right * 0.5
+                        
+                        mlc_positions.append((left_cm, right_cm))
+                    else:
+                        # Lá đóng hoàn toàn
+                        mlc_positions.append((0, 0))
+                
+                # Tạo phân đoạn
+                segment = {
+                    'mlc_positions': mlc_positions,
+                    'weight': segment_weight,
+                    'area': area_pixels * 0.25  # Chuyển đổi pixel² sang cm²
+                }
+                
+                segments.append(segment)
+                
+                # Cập nhật fluence còn lại
+                remaining_fluence -= segment_contribution
+            
+            # Nếu đã đạt đủ số phân đoạn tối đa, dừng lại
+            if len(segments) >= max_segments:
+                break
+        
+        # Chuẩn hóa lại trọng số để tổng bằng 1
+        total_weight = sum(segment['weight'] for segment in segments)
+        if total_weight > 0:
+            for segment in segments:
+                segment['weight'] /= total_weight
+        
+        # Đánh giá chất lượng phân đoạn
+        if segments:
+            # Tái tạo fluence map từ các phân đoạn
+            reconstructed_fluence = np.zeros_like(fluence_norm)
+            for segment in segments:
+                segment_mask = np.zeros_like(fluence_norm)
+                mlc_positions = segment['mlc_positions']
+                
+                for row, (left, right) in enumerate(mlc_positions):
+                    if left < right:  # Lá mở
+                        # Chuyển đổi từ cm sang chỉ số pixel
+                        left_idx = int(left / 0.5)
+                        right_idx = int(right / 0.5)
+                        
+                        # Đảm bảo chỉ số nằm trong khoảng hợp lệ
+                        left_idx = max(0, min(left_idx, width-1))
+                        right_idx = max(0, min(right_idx, width))
+                        
+                        segment_mask[row, left_idx:right_idx] = 1.0
+                
+                reconstructed_fluence += segment_mask * segment['weight']
+            
+            # Tính toán lỗi giữa fluence gốc và fluence tái tạo
+            error = np.sum(np.abs(fluence_norm - reconstructed_fluence)) / np.sum(fluence_norm)
+            logger.info(f"Phân đoạn tạo ra {len(segments)} phân đoạn với lỗi tương đối: {error:.4f}")
+        else:
+            logger.warning("Không tạo được phân đoạn nào từ fluence map.")
         
         return segments
     

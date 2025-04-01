@@ -681,61 +681,323 @@ class VMAT(BaseTreatmentTechnique):
         if hasattr(self, 'parameters') and 'min_leaf_gap' in self.parameters:
             min_leaf_gap = self.parameters['min_leaf_gap']
         
-        # Calculate gradient influence on each leaf position
-        # In a real implementation, this would calculate how changing each leaf
-        # position affects the cost function, using either analytical gradients
-        # or finite differences
+        # Độ học hiện tại dựa trên tiến trình hội tụ
+        learning_rate = self.parameters.get('learning_rate', 0.1)
+        convergence_progress = self.parameters.get('convergence_progress', 0.0)
+        current_learning_rate = learning_rate * (1.0 - convergence_progress * 0.9)
         
-        # For each leaf pair
+        # Lấy thông tin về các cấu trúc mục tiêu và OARs để điều hướng lá MLC
+        targets = self._get_target_structures()
+        oars = self._get_oar_structures()
+        
+        # Tính toán gradient thực tế cho mỗi vị trí lá
+        leaf_gradients = self._calculate_leaf_gradients(mlc_positions, targets, oars)
+        
+        # Cho mỗi cặp lá
         for i, leaf_pair in enumerate(mlc_positions):
-            # Check if we have both bank A and bank B positions
+            # Kiểm tra xem có cả hai vị trí bank A và bank B không
             if len(leaf_pair) != 2:
                 continue
             
-            # Get current positions
-            bank_a_pos = leaf_pair[0]
-            bank_b_pos = leaf_pair[1]
+            # Lấy vị trí hiện tại
+            bank_a_pos = leaf_pair[0]  # Lá bên trái (bank A)
+            bank_b_pos = leaf_pair[1]  # Lá bên phải (bank B)
             
-            # Calculate adjustment based on simulated gradient
-            # In a real implementation, this would use actual gradients
-            # Here we use a simplified approach that gradually narrows the aperture
-            # as the optimization progresses, simulating dose conformation
+            # Lấy gradient cho cặp lá này
+            if i < len(leaf_gradients):
+                gradient_a, gradient_b = leaf_gradients[i]
+            else:
+                # Fallback nếu không có gradient
+                logger.debug(f"Không có gradient cho cặp lá {i}, sử dụng giá trị mặc định")
+                gradient_a = 0.1
+                gradient_b = -0.1
             
-            # Scale adjustment based on convergence progress
-            convergence_scale = 1.0
-            if hasattr(self, 'parameters') and 'convergence_progress' in self.parameters:
-                # Reduce adjustments as we get closer to convergence
-                convergence_scale = max(0.1, 1.0 - self.parameters['convergence_progress'])
+            # Tính điều chỉnh dựa trên gradient
+            # Định hướng gradient: giá trị âm = di chuyển vào trong (thu hẹp khẩu độ)
+            adjustment_a = -gradient_a * current_learning_rate * max_adjustment
+            adjustment_b = -gradient_b * current_learning_rate * max_adjustment
             
-            # Simulate gradient-based adjustment
-            # We use a simple approach: move leaves to shape the aperture more tightly
-            # around target volumes while avoiding OARs
+            # Giới hạn điều chỉnh tối đa
+            adjustment_a = max(-max_adjustment, min(max_adjustment, adjustment_a))
+            adjustment_b = max(-max_adjustment, min(max_adjustment, adjustment_b))
             
-            # Simulated adjustment values (would come from actual gradient in real impl)
-            # These values move bank A to the right and bank B to the left, gradually
-            # narrowing the aperture while maintaining the min gap
-            
-            # Generate adjustments with a bit of randomness to allow exploration
-            import random
-            adjustment_a = random.uniform(0, max_adjustment) * convergence_scale
-            adjustment_b = -random.uniform(0, max_adjustment) * convergence_scale
-            
-            # Make sure we maintain minimum leaf gap after adjustment
+            # Đảm bảo duy trì khoảng cách tối thiểu giữa các lá đối diện
             new_gap = (bank_b_pos + adjustment_b) - (bank_a_pos + adjustment_a)
             if new_gap < min_leaf_gap:
-                # Reduce adjustments proportionally to maintain minimum gap
-                scale_factor = (bank_b_pos - bank_a_pos - min_leaf_gap) / (adjustment_a - adjustment_b)
-                if scale_factor > 0:
-                    adjustment_a *= scale_factor
-                    adjustment_b *= scale_factor
+                # Giảm điều chỉnh tỷ lệ thuận để duy trì khoảng cách tối thiểu
+                current_gap = bank_b_pos - bank_a_pos
+                needed_reduction = min_leaf_gap - new_gap
+                
+                # Phân phối việc giảm giữa hai lá dựa trên hướng gradient
+                total_adjustment_magnitude = abs(adjustment_a) + abs(adjustment_b)
+                if total_adjustment_magnitude > 0:
+                    a_portion = abs(adjustment_a) / total_adjustment_magnitude
+                    b_portion = abs(adjustment_b) / total_adjustment_magnitude
+                    
+                    # Điều chỉnh lại
+                    if adjustment_a > 0:  # Lá A đang di chuyển sang phải
+                        adjustment_a -= needed_reduction * a_portion
+                    else:  # Lá A đang di chuyển sang trái
+                        adjustment_a += needed_reduction * a_portion
+                        
+                    if adjustment_b < 0:  # Lá B đang di chuyển sang trái
+                        adjustment_b += needed_reduction * b_portion
+                    else:  # Lá B đang di chuyển sang phải
+                        adjustment_b -= needed_reduction * b_portion
                 else:
-                    # Can't maintain min gap with current adjustment direction
-                    # Skip this adjustment
-                    continue
+                    # Nếu không có điều chỉnh, đảm bảo khoảng cách tối thiểu
+                    mid_point = (bank_a_pos + bank_b_pos) / 2
+                    bank_a_pos = mid_point - min_leaf_gap / 2
+                    bank_b_pos = mid_point + min_leaf_gap / 2
+                    adjustment_a = 0
+                    adjustment_b = 0
             
-            # Apply adjustments
+            # Áp dụng điều chỉnh
             mlc_positions[i][0] = bank_a_pos + adjustment_a
             mlc_positions[i][1] = bank_b_pos + adjustment_b
+            
+            # Tính khoảng cách mới và log để gỡ lỗi
+            new_gap = mlc_positions[i][1] - mlc_positions[i][0]
+            if new_gap < min_leaf_gap:
+                logger.warning(f"Khoảng cách giữa cặp lá {i} ({new_gap:.2f} cm) nhỏ hơn giá trị tối thiểu ({min_leaf_gap} cm)")
+                # Sửa lỗi cuối cùng nếu vẫn vi phạm
+                mid_point = (mlc_positions[i][0] + mlc_positions[i][1]) / 2
+                mlc_positions[i][0] = mid_point - min_leaf_gap / 2
+                mlc_positions[i][1] = mid_point + min_leaf_gap / 2
+    
+    def _calculate_leaf_gradients(self, mlc_positions, targets, oars):
+        """
+        Tính toán gradient cho các vị trí lá MLC.
+        
+        Đây là nơi thực hiện tính toán gradient thực tế, đánh giá tác động của
+        việc thay đổi vị trí từng lá đến hàm mục tiêu tổng thể (đối với cả
+        target coverage và OAR sparing).
+        
+        Parameters
+        ----------
+        mlc_positions : List[List[float]]
+            Vị trí lá MLC hiện tại
+        targets : List[Dict]
+            Thông tin về các cấu trúc mục tiêu
+        oars : List[Dict]
+            Thông tin về các cơ quan nguy cấp (OARs)
+            
+        Returns
+        -------
+        List[Tuple[float, float]]
+            Danh sách gradient cho mỗi cặp lá [gradient_bank_A, gradient_bank_B]
+        """
+        # Trong triển khai thực tế, chúng ta sẽ tính gradient theo phương pháp sai phân hữu hạn:
+        # 1. Đánh giá hàm mục tiêu hiện tại
+        # 2. Thay đổi vị trí của mỗi lá MLC một chút (+epsilon)
+        # 3. Đánh giá hàm mục tiêu mới
+        # 4. Tính gradient = (new_cost - current_cost) / epsilon
+        
+        num_leaf_pairs = len(mlc_positions)
+        gradients = []
+        
+        # Hàm mục tiêu hiện tại
+        current_cost = self._calculate_objective_cost()
+        
+        # Epsilon cho phương pháp sai phân hữu hạn
+        epsilon = 0.1  # 1mm
+        
+        # Đối với mỗi cặp lá, tính gradient
+        for i in range(num_leaf_pairs):
+            if len(mlc_positions[i]) != 2:
+                gradients.append((0.0, 0.0))
+                continue
+                
+            gradient_a = 0.0
+            gradient_b = 0.0
+            
+            # Lưu vị trí ban đầu
+            original_a = mlc_positions[i][0]
+            original_b = mlc_positions[i][1]
+            
+            # Tính gradient cho lá bank A (di chuyển sang phải +epsilon)
+            mlc_positions[i][0] += epsilon
+            new_cost = self._calculate_objective_cost()
+            gradient_a = (new_cost - current_cost) / epsilon
+            mlc_positions[i][0] = original_a  # Khôi phục
+            
+            # Tính gradient cho lá bank B (di chuyển sang trái -epsilon)
+            mlc_positions[i][1] -= epsilon
+            new_cost = self._calculate_objective_cost()
+            gradient_b = (new_cost - current_cost) / epsilon
+            mlc_positions[i][1] = original_b  # Khôi phục
+            
+            # Thêm gradient vào danh sách
+            gradients.append((gradient_a, gradient_b))
+            
+            # Tối ưu hóa hiệu suất: chỉ lấy mẫu một số cặp lá ngẫu nhiên 
+            # thay vì tính toán mọi gradient nếu có nhiều cặp lá
+            if num_leaf_pairs > 20 and i % 5 != 0 and i < num_leaf_pairs - 1:
+                # Sử dụng giá trị tương tự với cặp lá tiếp theo nếu là một phần của cùng một vùng
+                gradients.append((gradient_a, gradient_b))
+                i += 1  # Bỏ qua cặp lá tiếp theo
+        
+        # Nếu tính toán gradient toàn diện quá tốn kém, thay thế bằng mô hình dựa trên fluence
+        if self.parameters.get('use_fluence_model', False):
+            gradients = self._calculate_fluence_based_gradients(mlc_positions, targets, oars)
+            
+        return gradients
+    
+    def _get_target_structures(self):
+        """
+        Lấy thông tin về các cấu trúc mục tiêu từ danh sách các mục tiêu.
+        
+        Returns
+        -------
+        List[Dict]
+            Danh sách các cấu trúc mục tiêu và thông tin liên quan
+        """
+        targets = []
+        
+        # Lấy thông tin từ các mục tiêu
+        for objective in self.dose_objectives:
+            structure_name = objective.get('structure', '')
+            structure_type = objective.get('structure_type', '')
+            
+            # Chỉ xem xét các cấu trúc mục tiêu
+            if structure_type.lower() in ['ptv', 'target', 'ctv', 'gtv']:
+                # Kiểm tra xem cấu trúc này đã được thêm vào danh sách chưa
+                existing = next((t for t in targets if t['name'] == structure_name), None)
+                if not existing:
+                    targets.append({
+                        'name': structure_name,
+                        'type': structure_type,
+                        'prescription': objective.get('dose', 0.0),
+                        'weight': objective.get('weight', 1.0)
+                    })
+        
+        return targets
+    
+    def _get_oar_structures(self):
+        """
+        Lấy thông tin về các cơ quan nguy cấp (OARs) từ các ràng buộc.
+        
+        Returns
+        -------
+        List[Dict]
+            Danh sách các OARs và thông tin liên quan
+        """
+        oars = []
+        
+        # Lấy thông tin từ các ràng buộc và mục tiêu
+        for constraint in self.constraints:
+            structure_name = constraint.get('structure', '')
+            structure_type = constraint.get('structure_type', '')
+            
+            # Chỉ xem xét các cấu trúc không phải mục tiêu
+            if structure_type.lower() not in ['ptv', 'target', 'ctv', 'gtv']:
+                # Kiểm tra xem cấu trúc này đã được thêm vào danh sách chưa
+                existing = next((o for o in oars if o['name'] == structure_name), None)
+                if not existing:
+                    oars.append({
+                        'name': structure_name,
+                        'type': structure_type,
+                        'max_dose': constraint.get('dose', 0.0),
+                        'priority': 'high' if constraint.get('priority', 'medium') == 'high' else 'medium'
+                    })
+        
+        # Thêm các OARs từ mục tiêu (thường là mục tiêu liều trung bình hoặc tối đa)
+        for objective in self.dose_objectives:
+            structure_name = objective.get('structure', '')
+            structure_type = objective.get('structure_type', '')
+            
+            if (structure_type.lower() not in ['ptv', 'target', 'ctv', 'gtv'] and 
+                not any(o['name'] == structure_name for o in oars)):
+                oars.append({
+                    'name': structure_name,
+                    'type': structure_type,
+                    'max_dose': objective.get('dose', 0.0),
+                    'weight': objective.get('weight', 1.0),
+                    'priority': 'medium'
+                })
+        
+        return oars
+    
+    def _calculate_fluence_based_gradients(self, mlc_positions, targets, oars):
+        """
+        Tính toán gradient dựa trên fluence map mục tiêu.
+        
+        Đây là một phương pháp xấp xỉ nhanh hơn khi không thể tính toán 
+        gradient từ phương pháp sai phân hữu hạn đầy đủ.
+        
+        Parameters
+        ----------
+        mlc_positions : List[List[float]]
+            Vị trí lá MLC hiện tại
+        targets : List[Dict]
+            Thông tin về các cấu trúc mục tiêu
+        oars : List[Dict]
+            Thông tin về các cơ quan nguy cấp (OARs)
+            
+        Returns
+        -------
+        List[Tuple[float, float]]
+            Danh sách gradient cho mỗi cặp lá
+        """
+        import numpy as np
+        
+        # Tạo fluence map mục tiêu lý tưởng (đơn giản hóa)
+        num_leaves = len(mlc_positions)
+        
+        # Fluence map hiện tại từ vị trí lá
+        current_fluence = np.zeros((num_leaves, 100))  # Giả sử 100 điểm mẫu theo chiều ngang
+        
+        # Fill fluence map hiện tại dựa trên vị trí lá
+        for i, leaf_pair in enumerate(mlc_positions):
+            if len(leaf_pair) != 2:
+                continue
+                
+            bank_a_pos = max(0, min(99, int(leaf_pair[0] * 10)))  # Giả sử thang đo 0.1cm
+            bank_b_pos = max(0, min(99, int(leaf_pair[1] * 10)))
+            
+            # Đặt fluence = 1.0 trong khoảng mở
+            current_fluence[i, bank_a_pos:bank_b_pos] = 1.0
+        
+        # Giả định fluence map lý tưởng (trong triển khai thực tế, điều này sẽ đến từ tính toán liều dựa trên mô hình)
+        ideal_fluence = np.ones_like(current_fluence)
+        
+        # Điều chỉnh fluence map lý tưởng dựa trên thông tin về targets và OARs
+        # (Đơn giản hóa mô hình)
+        
+        # Tính toán độ chênh lệch và hướng điều chỉnh cần thiết
+        fluence_diff = ideal_fluence - current_fluence
+        
+        # Chuyển đổi sự khác biệt fluence thành gradient cho vị trí lá
+        gradients = []
+        for i in range(num_leaves):
+            if i >= len(mlc_positions) or len(mlc_positions[i]) != 2:
+                gradients.append((0.0, 0.0))
+                continue
+                
+            bank_a_pos = max(0, min(99, int(mlc_positions[i][0] * 10)))
+            bank_b_pos = max(0, min(99, int(mlc_positions[i][1] * 10)))
+            
+            # Tính gradient theo hướng
+            # - Giá trị dương: mở rộng khẩu độ (di chuyển lá A sang trái, lá B sang phải)
+            # - Giá trị âm: thu hẹp khẩu độ (di chuyển lá A sang phải, lá B sang trái)
+            
+            gradient_a = 0.0
+            gradient_b = 0.0
+            
+            # Tính gradient cho bank A
+            left_margin = max(0, bank_a_pos - 5)
+            if bank_a_pos > 0:
+                gradient_a = -np.sum(fluence_diff[i, left_margin:bank_a_pos]) / max(1, bank_a_pos - left_margin)
+            
+            # Tính gradient cho bank B
+            right_margin = min(99, bank_b_pos + 5)
+            if bank_b_pos < 99:
+                gradient_b = np.sum(fluence_diff[i, bank_b_pos:right_margin]) / max(1, right_margin - bank_b_pos)
+            
+            # Thêm gradient vào danh sách
+            gradients.append((gradient_a, gradient_b))
+        
+        return gradients
     
     def _adjust_meterset_weight(self, control_point):
         """

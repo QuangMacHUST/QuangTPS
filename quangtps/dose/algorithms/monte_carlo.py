@@ -19,6 +19,7 @@ import random
 import multiprocessing
 from typing import Dict, List, Tuple, Optional, Union, Any
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from scipy.interpolate import interp1d
 
 from quangtps.core.exceptions import DoseCalculationError, ValidationError
 from quangtps.imaging.image import Image
@@ -184,7 +185,8 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 'photoelectric': np.zeros((len(energy_grid), len(density_grid))),
                 'compton': np.zeros((len(energy_grid), len(density_grid))),
                 'pair_production': np.zeros((len(energy_grid), len(density_grid))),
-                'total': np.zeros((len(energy_grid), len(density_grid)))
+                'total': np.zeros((len(energy_grid), len(density_grid))),
+                'rayleigh': np.zeros((len(energy_grid), len(density_grid)))
             },
             'electron': {
                 'collision': np.zeros((len(energy_grid), len(density_grid))),
@@ -237,7 +239,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 self.interaction_data['density_grid'] = data['density_grid']
                 
                 # Copy cross-section data
-                for interaction_type in ['photoelectric', 'compton', 'pair_production', 'total']:
+                for interaction_type in ['photoelectric', 'compton', 'pair_production', 'total', 'rayleigh']:
                     key = f'photon_{interaction_type}'
                     if key in data:
                         self.interaction_data['photon'][interaction_type] = data[key]
@@ -962,44 +964,46 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         return material_indices, densities
 
     def _simulate_particles(self, 
-                            num_histories: int,
-                            grid_shape: Tuple[int, int, int],
-                            grid_spacing: Tuple[float, float, float],
-                            grid_origin: Tuple[float, float, float],
-                            materials: np.ndarray,
-                            densities: np.ndarray,
-                            source_position: np.ndarray,
-                            isocenter: np.ndarray,
-                            field_size: Tuple[float, float],
-                            gantry_angle: float,
-                            collimator_angle: float,
-                            couch_angle: float,
-                            energies: np.ndarray,
-                            energy_probabilities: np.ndarray,
-                            seed_offset: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+                        num_histories: int,
+                        grid_shape: Tuple[int, int, int],
+                        grid_spacing: Tuple[float, float, float],
+                        grid_origin: Tuple[float, float, float],
+                        materials: np.ndarray,
+                        densities: np.ndarray,
+                        source_position: np.ndarray,
+                        isocenter: np.ndarray,
+                        field_size: Tuple[float, float],
+                        gantry_angle: float,
+                        collimator_angle: float,
+                        couch_angle: float,
+                        energies: np.ndarray,
+                        energy_probabilities: np.ndarray,
+                        seed_offset: int = 0) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Simulate a batch of particles for Monte Carlo dose calculation.
-
-        This is the core function that simulates individual particles through the CT geometry.
-
+        Simulate particle transport through the patient geometry.
+        
+        This is the core Monte Carlo particle transport simulation function. It simulates
+        the transport of photons and electrons through the patient geometry and scores
+        the dose deposition.
+        
         Parameters
         ----------
         num_histories : int
             Number of particle histories to simulate
         grid_shape : Tuple[int, int, int]
-            Shape of the CT/dose grid
+            Shape of the dose grid
         grid_spacing : Tuple[float, float, float]
-            Spacing of the grid in cm
+            Spacing of the dose grid in cm
         grid_origin : Tuple[float, float, float]
-            Origin of the grid in world coordinates
+            Origin of the dose grid in cm
         materials : np.ndarray
             Material indices for each voxel
         densities : np.ndarray
             Density values for each voxel
         source_position : np.ndarray
-            Source position in world coordinates
+            Position of the source in cm
         isocenter : np.ndarray
-            Isocenter position in world coordinates
+            Position of the isocenter in cm
         field_size : Tuple[float, float]
             Field size at isocenter in cm
         gantry_angle : float
@@ -1009,846 +1013,698 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         couch_angle : float
             Couch angle in degrees
         energies : np.ndarray
-            Energy bins for the spectrum
+            Energy spectrum energies in MeV
         energy_probabilities : np.ndarray
-            Probability distribution for the energy spectrum
-        seed_offset : int
+            Energy spectrum probabilities
+        seed_offset : int, optional
             Offset for the random seed
-
+            
         Returns
         -------
         Tuple[np.ndarray, np.ndarray]
-            Dose and uncertainty grids
-        """
-        # Initialize dose and uncertainty grids
-        dose_grid = np.zeros(grid_shape, dtype=np.float32)
-        # For uncertainty calculation
-        squared_dose_grid = np.zeros(grid_shape, dtype=np.float32)
-
-        # Initialize random number generator with offset seed for reproducibility
-        rng = np.random.RandomState(seed=42 + seed_offset)
-
-        # Helper variables
-        nz, ny, nx = grid_shape
-        dz, dy, dx = grid_spacing
-
-        # Get beam direction based on gantry and couch angles
-        gantry_rad = np.radians(gantry_angle)
-        couch_rad = np.radians(couch_angle)
-        collimator_rad = np.radians(collimator_angle)
-
-        # Main beam direction
-        beam_dir = np.array([
-            np.sin(gantry_rad) * np.cos(couch_rad),
-            np.sin(couch_rad),
-            -np.cos(gantry_rad) * np.cos(couch_rad)
-        ])
-
-        # Perpendicular directions (accounting for collimator rotation)
-        perp1 = np.array([
-            np.cos(gantry_rad) * np.cos(collimator_rad) +
-            np.sin(gantry_rad) * np.sin(couch_rad) * np.sin(collimator_rad),
-            -np.cos(couch_rad) * np.sin(collimator_rad),
-            np.sin(gantry_rad) * np.cos(collimator_rad) -
-            np.cos(gantry_rad) * np.sin(couch_rad) * np.sin(collimator_rad)
-        ])
-
-        perp2 = np.array([
-            -np.cos(gantry_rad) * np.sin(collimator_rad) +
-            np.sin(gantry_rad) * np.sin(couch_rad) * np.cos(collimator_rad),
-            np.cos(couch_rad) * np.cos(collimator_rad),
-            -np.sin(gantry_rad) * np.sin(collimator_rad) -
-            np.cos(gantry_rad) * np.sin(couch_rad) * np.cos(collimator_rad)
-        ])
-
-        # Source to isocenter distance (typically 100 cm)
-        SID = np.linalg.norm(source_position - isocenter)
-
-        # Half field size in cm
-        half_field_x = field_size[0] / 2
-        half_field_y = field_size[1] / 2
-
-        # Energy cutoff
-        energy_cutoff = self.parameters["energy_cutoff"]
-
-        # Simulate particles
-        for i in range(num_histories):
-            # Sample particle energy from spectrum
-            energy = rng.choice(energies, p=energy_probabilities)
-
-            # Sample initial particle position (at source, with appropriate field spread)
-            # This is the starting point of the particle at the source
-            initial_pos = source_position.copy()
-
-            # Sample initial direction (with appropriate beam divergence)
-            # First sample uniformly within field borders at isocenter plane
-            x_iso = rng.uniform(-half_field_x, half_field_x)
-            y_iso = rng.uniform(-half_field_y, half_field_y)
-
-            # Convert to a direction from source to isocenter plane
-            direction = beam_dir + (x_iso / SID) * \
-                perp1 + (y_iso / SID) * perp2
-            direction = direction / np.linalg.norm(direction)
-
-            # Add small random angular spread (simplified model of source size/angular distribution)
-            spread = 0.01  # Radians
-            theta = rng.normal(0, spread)
-            phi = rng.uniform(0, 2 * np.pi)
-
-            # Apply small rotation to direction
-            sin_theta = np.sin(theta)
-            cos_theta = np.cos(theta)
-            sin_phi = np.sin(phi)
-            cos_phi = np.cos(phi)
-
-            # Create orthogonal basis
-            v1 = direction
-            v2 = np.array([1, 0, 0]) if abs(
-                direction[0]) < 0.9 else np.array([0, 1, 0])
-            v2 = v2 - np.dot(v2, v1) * v1
-            v2 = v2 / np.linalg.norm(v2)
-            v3 = np.cross(v1, v2)
-
-            # Apply rotation
-            direction = cos_theta * v1 + sin_theta * \
-                cos_phi * v2 + sin_theta * sin_phi * v3
-
-            # Track the particle through the geometry
-            pos = initial_pos.copy()
-
-            while energy > energy_cutoff:
-                # Convert position to voxel indices
-                z_idx = int((pos[0] - grid_origin[0]) / dz)
-                y_idx = int((pos[1] - grid_origin[1]) / dy)
-                x_idx = int((pos[2] - grid_origin[2]) / dx)
-
-                # Check if we're inside the grid
-                if (0 <= z_idx < nz and 0 <= y_idx < ny and 0 <= x_idx < nx):
-                    # Get material and density at current position
-                    material = materials[z_idx, y_idx, x_idx]
-                    density = densities[z_idx, y_idx, x_idx]
-
-                    # Simplified interaction model
-                    # In a real implementation, this would use cross-section data
-
-                    # Determine step size based on mean free path
-                    # This is a simplified model - real implementation would be more complex
-                    mfp = self._calculate_mean_free_path(
-                        energy, material, density)
-                    step_size = -mfp * np.log(rng.uniform(0, 1))
-
-                    # Calculate energy deposition in this step
-                    if material > 0:  # Not air
-                        # Simplified energy deposition calculation
-                        # Real implementation would account for different interaction processes
-                        energy_dep = energy * 0.01 * density
-
-                        # Deposit energy in voxel
-                        dose_grid[z_idx, y_idx, x_idx] += energy_dep
-                        squared_dose_grid[z_idx, y_idx,
-                                          x_idx] += energy_dep ** 2
-
-                    # Update energy (simplified)
-                    energy_loss = energy * 0.01 * density
-                    energy -= energy_loss
-
-                    # Update position
-                    pos += direction * step_size
-
-                    # Small chance of scattering (simplified)
-                    if rng.uniform(0, 1) < 0.1:
-                        # Simplified isotropic scattering for demonstration
-                        theta = np.arccos(1 - 2 * rng.uniform(0, 1))
-                        phi = 2 * np.pi * rng.uniform(0, 1)
-
-                        # Apply same rotation method as above
-                        sin_theta = np.sin(theta)
-                        cos_theta = np.cos(theta)
-                        sin_phi = np.sin(phi)
-                        cos_phi = np.cos(phi)
-
-                        # Create orthogonal basis
-                        v1 = direction
-                        v2 = np.array([1, 0, 0]) if abs(
-                            direction[0]) < 0.9 else np.array([0, 1, 0])
-                        v2 = v2 - np.dot(v2, v1) * v1
-                        v2 = v2 / np.linalg.norm(v2)
-                        v3 = np.cross(v1, v2)
-
-                        # Apply rotation
-                        direction = cos_theta * v1 + sin_theta * \
-                            cos_phi * v2 + sin_theta * sin_phi * v3
-                    else:
-                        # Particle left the grid
-                        break
-
-        # Calculate uncertainty grid
-        uncertainty_grid = np.sqrt(
-            squared_dose_grid - (dose_grid ** 2) / num_histories)
-
-        return dose_grid, uncertainty_grid
-
-    def _calculate_mean_free_path(self, energy: float, material: int, density: float) -> float:
-        """
-        Calculate mean free path for a particle in a material.
-
-        Parameters
-        ----------
-        energy : float
-            Particle energy in MeV
-        material : int
-            Material index
-        density : float
-            Material density in g/cm³
-
-        Returns
-        -------
-        float
-            Mean free path in cm
-        """
-        # Simplified model - real implementation would use cross-section data
-        # and account for different interaction processes
-
-        # Base mean free path values at 1 MeV for different materials
-        base_mfp = {
-            0: 5000.0,  # Air (very long mfp)
-            1: 15.0,    # Soft tissue
-            2: 5.0      # Bone
-        }
-
-        # Energy scaling (simplified)
-        # Higher energy typically means longer mfp
-        energy_factor = energy ** 0.5
-
-        # Density scaling
-        # Higher density means shorter mfp
-        density_factor = 1.0 / density if density > 0 else 1.0
-
-        # Calculate mfp
-        mfp = base_mfp.get(material, 10.0) * energy_factor * density_factor
-
-        return mfp
-
-    def _normalize_to_isocenter(self, dose_image: Image, isocenter: np.ndarray):
-        """
-        Normalize dose so that the isocenter receives 100% dose.
-
-        Parameters
-        ----------
-        dose_image : Image
-            Dose image to normalize
-        isocenter : np.ndarray
-            Isocenter position in world coordinates
-        """
-        # Convert isocenter to voxel indices
-        iso_indices = dose_image.world_to_voxel(isocenter)
-
-        # Get dose at isocenter
-        iso_z, iso_y, iso_x = np.round(iso_indices).astype(int)
-
-        # Ensure within bounds
-        iso_z = np.clip(iso_z, 0, dose_image.data.shape[0] - 1)
-        iso_y = np.clip(iso_y, 0, dose_image.data.shape[1] - 1)
-        iso_x = np.clip(iso_x, 0, dose_image.data.shape[2] - 1)
-
-        iso_dose = dose_image.data[iso_z, iso_y, iso_x]
-
-        if iso_dose > 0:
-            # Normalize to isocenter
-            dose_image.data = dose_image.data * (100.0 / iso_dose)
-            logger.info(
-                f"Normalized dose to isocenter. Original value: {iso_dose:.2f}")
-        else:
-            logger.warning("Zero dose at isocenter, cannot normalize")
-
-    def calculate_beam_dose(self, beam: Beam, ct_image: Image) -> Image:
-        """
-        Calculate dose for a single beam.
-        
-        Parameters
-        ----------
-        beam : Beam
-            The beam to calculate dose for
-        ct_image : Image
-            The CT image for dose calculation
-            
-        Returns
-        -------
-        Image
-            The calculated dose image
-        """
-        # Call the calculate method and return the dose image
-        result = self.calculate(ct_image, beam)
-        return result.dose
-
-    def _initialize_gpu_context(self):
-        """
-        Initialize GPU context for computation.
-        
-        This method sets up the GPU environment, allocates memory,
-        and compiles necessary CUDA kernels.
-        """
-        if not HAS_GPU:
-            logger.warning("Cannot initialize GPU context - GPU not available")
-            self.parameters['use_gpu'] = False
-            return
-            
-        try:
-            # For CUDA with numba
-            if hasattr(cuda, 'is_available') and cuda.is_available():
-                # Define CUDA kernels for particle transport simulation
-                
-                @cuda.jit
-                def photon_transport_kernel(random_states, positions, directions, energies, 
-                                           ct_data, dose_grid, ct_to_grid_transform,
-                                           material_data, cutoff_energy, results_buffer):
-                    """CUDA kernel for photon transport simulation"""
-                    # Get thread index
-                    i = cuda.grid(1)
-                    if i >= len(positions):
-                        return
-                        
-                    # Local variables for particle state
-                    pos = positions[i]
-                    dir = directions[i]
-                    energy = energies[i]
-                    
-                    # Particle transport logic would go here
-                    # This is a simplified placeholder
-                    while energy > cutoff_energy:
-                        # Sample interaction distance
-                        # Move particle
-                        # Score energy deposition
-                        # Update energy
-                        # Sample scattering angle
-                        energy *= 0.9  # Simplified energy loss
-                        
-                    # Update results buffer
-                    results_buffer[i] = energy
-                
-                # Store compiled kernel for later use
-                self._cuda_kernels = {
-                    'photon_transport': photon_transport_kernel
-                }
-                
-                # Pre-allocate memory for common arrays
-                self._device_buffers = {}
-                
-                logger.info("Successfully initialized CUDA context")
-                
-            # For OpenCL fallback
-            elif (self.parameters['use_opencl_fallback'] and 
-                  'cl' in globals() and len(cl.get_platforms()) > 0):
-                # Initialize OpenCL context
-                platform = cl.get_platforms()[0]
-                device = platform.get_devices()[0]
-                context = cl.Context([device])
-                queue = cl.CommandQueue(context)
-                
-                # Store context and queue for later use
-                self._opencl_context = {
-                    'platform': platform,
-                    'device': device,
-                    'context': context,
-                    'queue': queue
-                }
-                
-                # OpenCL kernel code (simplified placeholder)
-                kernel_code = """
-                __kernel void photon_transport(
-                    __global float4* positions,
-                    __global float4* directions,
-                    __global float* energies,
-                    __global float* ct_data,
-                    __global float* dose_grid,
-                    __global float* results
-                ) {
-                    int i = get_global_id(0);
-                    if (i >= get_global_size(0)) return;
-                    
-                    // Simplified simulation logic
-                    results[i] = energies[i] * 0.9;
-                }
-                """
-                
-                # Build program
-                program = cl.Program(context, kernel_code).build()
-                self._opencl_kernels = {
-                    'photon_transport': program.photon_transport
-                }
-                
-                logger.info("Successfully initialized OpenCL context as fallback")
-                
-        except Exception as e:
-            logger.error(f"Error initializing GPU context: {e}")
-            self.parameters['use_gpu'] = False
-            logger.warning("Falling back to CPU mode")
-
-    def _simulate_gpu(self, electron_density, dose_grid, uncertainty_grid,
-                     ct_to_grid_transform, grid_to_ct_transform,
-                     energy_spectrum, fluence_map, beam, num_histories):
-        """
-        Perform Monte Carlo simulation on GPU.
-        
-        This method implements the core Monte Carlo simulation algorithm
-        using GPU acceleration for maximum performance.
-        
-        Parameters
-        ----------
-        electron_density : ndarray
-            Electron density map derived from CT
-        dose_grid : ndarray
-            Grid to accumulate dose
-        uncertainty_grid : ndarray
-            Grid to track statistical uncertainty
-        ct_to_grid_transform : ndarray
-            Transformation matrix from CT coordinates to dose grid
-        grid_to_ct_transform : ndarray
-            Transformation matrix from dose grid to CT coordinates
-        energy_spectrum : dict
-            Energy spectrum of the beam
-        fluence_map : ndarray
-            Fluence map of the beam
-        beam : Beam
-            Beam parameters
-        num_histories : int
-            Number of particle histories to simulate
-            
-        Returns
-        -------
-        tuple
             Dose grid and uncertainty grid
         """
-        try:
-            # Check if we're using CUDA or OpenCL
-            use_cuda = hasattr(cuda, 'is_available') and cuda.is_available()
-            use_opencl = (not use_cuda and 
-                          self.parameters['use_opencl_fallback'] and 
-                          hasattr(self, '_opencl_context'))
-            
-            if not (use_cuda or use_opencl):
-                logger.warning("No GPU acceleration method available. Falling back to CPU.")
-                return self._simulate_cpu(
-                    electron_density, dose_grid, uncertainty_grid,
-                    ct_to_grid_transform, grid_to_ct_transform,
-                    energy_spectrum, fluence_map, beam, num_histories
-                )
-            
-            # Get batch size for GPU processing
-            batch_size = min(self.parameters['gpu_batch_size'], num_histories)
-            num_batches = (num_histories + batch_size - 1) // batch_size
-            
-            # Start progress tracking
-            if self.parameters['report_progress']:
-                logger.info(f"GPU simulation: processing {num_batches} batches of {batch_size} particles")
-            
-            # Common pre-processing
-            # Convert numpy arrays to device memory
-            if use_cuda:
-                # Transfer data to GPU using CuPy
-                d_electron_density = cp.array(electron_density)
-                d_dose_grid = cp.array(dose_grid)
-                d_uncertainty_grid = cp.array(uncertainty_grid)
-                d_ct_to_grid = cp.array(ct_to_grid_transform)
-                d_grid_to_ct = cp.array(grid_to_ct_transform)
-                
-                # Get grid and block dimensions for CUDA
-                threads_per_block = 256
-                blocks_per_grid = (batch_size + threads_per_block - 1) // threads_per_block
-                
-                # Process batches
-                for batch in range(num_batches):
-                    # Report progress
-                    if self.parameters['report_progress'] and batch % 10 == 0:
-                        logger.info(f"Processing batch {batch+1}/{num_batches} ({(batch+1)/num_batches*100:.1f}%)")
-                    
-                    # Generate particle starting parameters
-                    positions, directions, energies = self._generate_particle_batch(
-                        batch_size, energy_spectrum, fluence_map, beam
-                    )
-                    
-                    # Transfer particle data to GPU
-                    d_positions = cp.array(positions)
-                    d_directions = cp.array(directions)
-                    d_energies = cp.array(energies)
-                    
-                    # Create results buffer
-                    d_results = cp.zeros(batch_size, dtype=cp.float32)
-                    
-                    # CUDA random states (one per thread)
-                    d_random_states = cp.random.create_random_state(batch_size, seed=42+batch)
-                    
-                    # Launch kernel
-                    self._cuda_kernels['photon_transport'][blocks_per_grid, threads_per_block](
-                        d_random_states, d_positions, d_directions, d_energies,
-                        d_electron_density, d_dose_grid, d_ct_to_grid,
-                        self.interaction_data, self.parameters['photon_cutoff'], d_results
-                    )
-                    
-                    # Synchronize
-                    cuda.synchronize()
-                    
-                # Transfer results back to host
-                dose_grid = cp.asnumpy(d_dose_grid)
-                uncertainty_grid = cp.asnumpy(d_uncertainty_grid)
-                
-            elif use_opencl:
-                # OpenCL implementation would go here
-                # Similar approach but using PyOpenCL API
-                pass
-                
-            return dose_grid, uncertainty_grid
-            
-        except Exception as e:
-            logger.error(f"GPU simulation error: {e}")
-            logger.warning("Falling back to CPU simulation")
-            return self._simulate_cpu(
-                electron_density, dose_grid, uncertainty_grid,
-                ct_to_grid_transform, grid_to_ct_transform,
-                energy_spectrum, fluence_map, beam, num_histories
-            )
+        logger.info(f"Starting Monte Carlo simulation with {num_histories} histories")
+        
+        # Initialize dose and uncertainty grids
+        dose_grid = np.zeros(grid_shape, dtype=np.float32)
+        dose_squared_grid = np.zeros(grid_shape, dtype=np.float32)
+        particle_counts = np.zeros(grid_shape, dtype=np.int32)
+        
+        # Calculate rotation matrices for beam geometry
+        gantry_rad = np.radians(gantry_angle)
+        collimator_rad = np.radians(collimator_angle)
+        couch_rad = np.radians(couch_angle)
+        
+        # Rotation matrices
+        R_gantry = np.array([
+            [np.cos(gantry_rad), 0, -np.sin(gantry_rad)],
+            [0, 1, 0],
+            [np.sin(gantry_rad), 0, np.cos(gantry_rad)]
+        ])
+        
+        R_collimator = np.array([
+            [np.cos(collimator_rad), -np.sin(collimator_rad), 0],
+            [np.sin(collimator_rad), np.cos(collimator_rad), 0],
+            [0, 0, 1]
+        ])
+        
+        R_couch = np.array([
+            [np.cos(couch_rad), 0, np.sin(couch_rad)],
+            [0, 1, 0],
+            [-np.sin(couch_rad), 0, np.cos(couch_rad)]
+        ])
+        
+        # Combined rotation matrix (order: gantry → collimator → couch)
+        R = R_couch @ R_gantry @ R_collimator
+        
+        # Set up random number generator for this thread
+        seed_value = self.parameters['seed'] + seed_offset if self.parameters['seed'] is not None else None
+        # Use numpy's Generator instead of RandomState (which is deprecated)
+        local_rng = np.random.default_rng(seed_value)
 
-    def _simulate_cpu(self, electron_density, dose_grid, uncertainty_grid,
-                     ct_to_grid_transform, grid_to_ct_transform,
-                     energy_spectrum, fluence_map, beam, num_histories):
-        """
-        Perform Monte Carlo simulation on CPU.
+        # Variance reduction parameters
+        use_importance_sampling = self.parameters['use_importance_sampling']
+        use_photon_splitting = self.parameters['use_photon_splitting']
+        use_woodcock_tracking = self.parameters.get('use_woodcock_tracking', True)
+        split_factor = self.parameters['split_factor']
+        use_russian_roulette = self.parameters['enable_russian_roulette']
+        use_track_length_estimator = self.parameters['use_track_length_estimator']
+        russian_roulette_threshold = 0.1  # Energy threshold as fraction of initial energy
         
-        This method implements the core Monte Carlo simulation algorithm
-        using multi-threaded CPU computation.
+        # Find maximum density for Woodcock tracking
+        max_density = np.max(densities)
         
-        Parameters are the same as _simulate_gpu.
-        """
-        # Implementation would be similar to GPU version but using
-        # multiprocessing or threading for parallelism
-        # This is a simplified implementation
+        # Precompute maximum cross-sections for each energy bin for Woodcock tracking
+        if use_woodcock_tracking:
+            max_cross_sections = {}
+            for energy in energies:
+                max_cross_section = 0
+                for material_idx in np.unique(materials):
+                    # Get maximum cross-section for this energy and any material
+                    xsec = self._get_max_cross_section(energy, material_idx)
+                    max_cross_section = max(max_cross_section, xsec)
+                max_cross_sections[energy] = max_cross_section
         
-        # Get number of threads
-        num_threads = self.parameters['threads']
+        # Calculate maximum cross section function for interpolation
+        energy_points = np.sort(list(max_cross_sections.keys())) if use_woodcock_tracking else None
+        cross_section_points = np.array([max_cross_sections[e] for e in energy_points]) if use_woodcock_tracking else None
+        if use_woodcock_tracking:
+            max_cross_section_func = interp1d(
+                energy_points, 
+                cross_section_points, 
+                kind='linear', 
+                bounds_error=False, 
+                fill_value=(cross_section_points[0], cross_section_points[-1])
+            )
         
-        # Check if we can use parallel processing
-        if num_threads > 1 and hasattr(multiprocessing, 'Pool'):
-            # Split work among threads
-            histories_per_thread = num_histories // num_threads
-            remaining = num_histories % num_threads
+        # Start simulation
+        start_time = time.time()
+        report_interval = max(1, num_histories // 20)  # Report progress every 5%
+        
+        for history_idx in range(num_histories):
+            # Report progress
+            if history_idx % report_interval == 0 and self.parameters['report_progress']:
+                progress = (history_idx / num_histories) * 100
+                elapsed = time.time() - start_time
+                eta = (elapsed / (history_idx + 1)) * (num_histories - history_idx - 1)
+                logger.info(f"Progress: {progress:.1f}% ({history_idx}/{num_histories}), "
+                           f"Elapsed: {elapsed:.1f}s, ETA: {eta:.1f}s")
             
-            # Create arguments for each thread
-            thread_args = []
-            for i in range(num_threads):
-                n_hist = histories_per_thread + (1 if i < remaining else 0)
-                thread_args.append((
-                    electron_density, dose_grid.shape, 
-                    ct_to_grid_transform, grid_to_ct_transform,
-                    energy_spectrum, fluence_map, beam, n_hist, 42+i
-                ))
+            # Sample initial energy from spectrum
+            energy_idx = local_rng.choice(len(energies), p=energy_probabilities)
+            initial_energy = energies[energy_idx]
             
-            # Process in parallel
-            with multiprocessing.Pool(num_threads) as pool:
-                results = pool.map(self._simulate_thread, thread_args)
+            # Sample initial position and direction
+            # For photon beams, we start at the source and aim toward a point in the field
             
-            # Combine results
-            for thread_dose, thread_uncertainty in results:
-                dose_grid += thread_dose
-                # Combining uncertainties requires proper statistical handling
-                uncertainty_grid = np.sqrt(uncertainty_grid**2 + thread_uncertainty**2)
+            # Sample a point in the field at isocenter distance
+            field_x = (local_rng.random() * 2 - 1) * field_size[0] / 2
+            field_y = (local_rng.random() * 2 - 1) * field_size[1] / 2
+            
+            # Calculate the target point (isocenter plane)
+            target_point = isocenter + np.array([field_x, field_y, 0])
+            
+            # Calculate initial direction (from source to field point)
+            direction = target_point - source_position
+            direction = direction / np.linalg.norm(direction)
+            
+            # Apply beam rotation
+            direction = R @ direction
+            
+            # Initialize particle
+            position = np.copy(source_position)
+            energy = initial_energy
+            weight = 1.0
+            
+            # Implement photon splitting if enabled (split at source)
+            num_particles = split_factor if use_photon_splitting else 1
+            particle_weight = weight / num_particles
+            
+            for _ in range(num_particles):
+                # Transport this split particle
+                current_position = np.copy(position)
+                current_direction = np.copy(direction)
+                current_energy = energy
+                current_weight = particle_weight
                 
-        else:
-            # Single-threaded fallback
-            thread_dose, thread_uncertainty = self._simulate_thread((
-                electron_density, dose_grid.shape,
-                ct_to_grid_transform, grid_to_ct_transform,
-                energy_spectrum, fluence_map, beam, num_histories, 42
-            ))
-            dose_grid = thread_dose
-            uncertainty_grid = thread_uncertainty
+                # Add small directional variation for each split particle (if more than one)
+                if use_photon_splitting and num_particles > 1:
+                    angle = 0.001  # Small angle in radians
+                    # Add small random rotation to direction
+                    theta = local_rng.random() * 2 * np.pi
+                    phi = local_rng.random() * angle
+                    
+                    # Calculate perpendicular directions
+                    if abs(current_direction[2]) < 0.9:
+                        perp1 = np.array([current_direction[1], -current_direction[0], 0])
+                    else:
+                        perp1 = np.array([1, 0, -current_direction[0]/current_direction[2]])
+                    
+                    perp1 = perp1 / np.linalg.norm(perp1)
+                    perp2 = np.cross(current_direction, perp1)
+                    
+                    # Apply small rotation
+                    rot_dir = (perp1 * np.cos(theta) + perp2 * np.sin(theta)) * np.sin(phi)
+                    current_direction = current_direction * np.cos(phi) + rot_dir
+                    current_direction = current_direction / np.linalg.norm(current_direction)
+                
+                # Transport particle until it escapes or is absorbed
+                while current_energy > self.parameters['photon_cutoff']:
+                    # Find distance to boundary
+                    t_boundary = self._distance_to_boundary(current_position, current_direction, 
+                                                      grid_origin, 
+                                                      [grid_shape[0] * grid_spacing[0],
+                                                       grid_shape[1] * grid_spacing[1],
+                                                       grid_shape[2] * grid_spacing[2]])
+                    
+                    # Convert position to voxel indices
+                    voxel_indices = self._position_to_voxel(current_position, grid_origin, grid_spacing)
+                    
+                    # Check if we're inside the grid
+                    if not self._is_inside_grid(voxel_indices, grid_shape):
+                        # Particle escaped
+                        break
+                    
+                    # Get material and density at current position
+                    material_idx = materials[tuple(voxel_indices)]
+                    density = densities[tuple(voxel_indices)]
+                    
+                    # Skip void regions or very low density
+                    if density < self.parameters['density_threshold']:
+                        # Move to boundary
+                        current_position += current_direction * (t_boundary + 1e-5)
+                        continue
+                    
+                    # Determine interaction distance using Woodcock tracking
+                    if use_woodcock_tracking:
+                        # Woodcock tracking algorithm (delta tracking)
+                        max_xsec = max_cross_section_func(current_energy)
+                        
+                        # Sample distance to collision (using maximum cross section)
+                        t_collision = -np.log(local_rng.random()) / (max_xsec * density)
+                        
+                        # Check if collision occurs before boundary
+                        if t_collision < t_boundary:
+                            # Move to collision site
+                            current_position += current_direction * t_collision
+                            
+                            # Get new voxel indices
+                            voxel_indices = self._position_to_voxel(current_position, grid_origin, grid_spacing)
+                            
+                            # Check if we're still inside
+                            if not self._is_inside_grid(voxel_indices, grid_shape):
+                                break
+                            
+                            # Get material and density at collision site
+                            material_idx = materials[tuple(voxel_indices)]
+                            density = densities[tuple(voxel_indices)]
+                            
+                            # Get actual cross section
+                            actual_xsec = self._get_total_cross_section(current_energy, material_idx)
+                            
+                            # Fictitious interaction check
+                            if local_rng.random() < (actual_xsec / max_xsec):
+                                # Real interaction - determine type
+                                self._process_photon_interaction(current_position, current_direction, current_energy,
+                                                              current_weight, material_idx, density, dose_grid, 
+                                                              dose_squared_grid, particle_counts, grid_origin, 
+                                                              grid_spacing, grid_shape, local_rng,
+                                                              use_track_length_estimator)
+                                # Photon is absorbed in this simplified model
+                                break
+                            # Else: fictitious interaction, continue
+                        else:
+                            # Move to boundary
+                            current_position += current_direction * (t_boundary + 1e-5)
+                    else:
+                        # Traditional tracking
+                        # Get mean free path
+                        mfp = self._calculate_mean_free_path(current_energy, material_idx, density)
+                        
+                        # Sample distance to collision
+                        t_collision = -mfp * np.log(local_rng.random())
+                        
+                        # Check if collision occurs before boundary
+                        if t_collision < t_boundary:
+                            # Move to collision site
+                            current_position += current_direction * t_collision
+                            
+                            # Score energy using track-length estimator if enabled
+                            if use_track_length_estimator:
+                                self._score_track_length(current_position - current_direction * t_collision,
+                                                      current_position, current_energy, current_weight,
+                                                      dose_grid, dose_squared_grid, grid_origin, grid_spacing, 
+                                                      grid_shape, density)
+                            
+                            # Get new voxel indices
+                            voxel_indices = self._position_to_voxel(current_position, grid_origin, grid_spacing)
+                            
+                            # Check if we're still inside
+                            if not self._is_inside_grid(voxel_indices, grid_shape):
+                                break
+                                
+                            # Process interaction and update particle state
+                            # This handles different interaction types and energy deposition
+                            self._process_photon_interaction(current_position, current_direction, current_energy,
+                                                          current_weight, material_idx, density, dose_grid, 
+                                                          dose_squared_grid, particle_counts, grid_origin, 
+                                                          grid_spacing, grid_shape, local_rng,
+                                                          use_track_length_estimator)
+                            break  # Photon is absorbed in this simplified model
+                        else:
+                            # Move to boundary
+                            current_position += current_direction * (t_boundary + 1e-5)
+                            
+                            # Score energy using track-length estimator if enabled
+                            if use_track_length_estimator:
+                                self._score_track_length(current_position - current_direction * t_boundary,
+                                                      current_position, current_energy, current_weight,
+                                                      dose_grid, dose_squared_grid, grid_origin, grid_spacing, 
+                                                      grid_shape, density)
+                    
+                    # Apply Russian roulette for low-energy particles to improve efficiency
+                    if use_russian_roulette and current_energy < (russian_roulette_threshold * initial_energy):
+                        survival_prob = 0.2
+                        if local_rng.random() > survival_prob:
+                            # Particle terminated by Russian roulette
+                            break
+                        else:
+                            # Survivor's weight is increased
+                            current_weight /= survival_prob
+        
+        # Calculate uncertainty
+        uncertainty_grid = np.zeros_like(dose_grid)
+        valid_indices = particle_counts > 1
+        if np.any(valid_indices):
+            # Calculate standard error of the mean
+            variance = (dose_squared_grid[valid_indices] - 
+                       (dose_grid[valid_indices]**2 / particle_counts[valid_indices])) / (particle_counts[valid_indices] - 1)
+            uncertainty_grid[valid_indices] = np.sqrt(variance) / dose_grid[valid_indices] * 100.0  # as percentage
+        
+        # Apply noise reduction if enabled
+        if self.parameters['use_denoising']:
+            dose_grid, uncertainty_grid = self._apply_denoising(dose_grid, uncertainty_grid)
+        
+        # Log simulation statistics
+        simulation_time = time.time() - start_time
+        particles_per_second = num_histories / simulation_time
+        
+        logger.info(f"Simulation completed: {num_histories} histories in {simulation_time:.2f}s "
+                   f"({particles_per_second:.1f} particles/s)")
+        logger.info(f"Maximum dose: {np.max(dose_grid):.6f}, Non-zero voxels: {np.count_nonzero(dose_grid)}")
+        logger.info(f"Mean uncertainty in non-zero regions: {np.mean(uncertainty_grid[dose_grid > 0]):.2f}%")
+        
+        # Normalize dose to Gy for a standard prescription
+        # This is a placeholder normalization - actual clinical systems use more complex calibration
+        # Typically normalized so maximum or mean dose to a target structure equals a prescription value
+        dose_grid = dose_grid / np.max(dose_grid) if np.max(dose_grid) > 0 else dose_grid
         
         return dose_grid, uncertainty_grid
-
-    def _simulate_thread(self, args):
-        """Helper method for CPU parallelization"""
-        (electron_density, grid_shape, ct_to_grid, grid_to_ct, 
-         energy_spectrum, fluence_map, beam, num_histories, seed) = args
-        
-        # Initialize local dose and uncertainty grids
-        local_dose = np.zeros(grid_shape, dtype=np.float32)
-        local_uncertainty = np.zeros(grid_shape, dtype=np.float32)
-        
-        # Set random seed for this thread
-        np.random.seed(seed)
-        
-        # Simplified simulation
-        for i in range(num_histories):
-            # Generate particle
-            pos, dir, energy = self._generate_particle(energy_spectrum, fluence_map, beam)
-            
-            # Transport particle through geometry
-            energy_deposited = self._transport_particle(
-                pos, dir, energy, electron_density, local_dose, 
-                ct_to_grid, grid_to_ct
-            )
-            
-            # Update uncertainties
-            # In a real implementation, this would track statistical variations
-            
-        return local_dose, local_uncertainty
-
-    def _transport_particle(self, position, direction, energy, density_grid, dose_grid, 
-                           ct_to_grid, grid_to_ct):
+    
+    def _score_track_length(self, start_pos, end_pos, energy, weight, dose_grid, dose_squared_grid, 
+                        grid_origin, grid_spacing, grid_shape, density):
         """
-        Transport a single particle through the geometry.
+        Score dose using the track-length estimator method.
         
-        This is the core physics engine of the Monte Carlo simulation.
-        It tracks a particle's path, simulates interactions, and deposits energy.
+        This method scores dose along the entire particle path rather than just at interaction points,
+        which improves statistical precision.
         
         Parameters
         ----------
-        position : ndarray
-            Initial position (x, y, z)
-        direction : ndarray
-            Initial direction vector (normalized)
+        start_pos : np.ndarray
+            Starting position of the track
+        end_pos : np.ndarray
+            Ending position of the track
         energy : float
-            Initial energy in MeV
-        density_grid : ndarray
-            Electron density grid
-        dose_grid : ndarray
-            Dose deposition grid
-        ct_to_grid : ndarray
-            Transformation from CT to dose grid coordinates
-        grid_to_ct : ndarray
-            Transformation from dose grid to CT coordinates
+            Particle energy in MeV
+        weight : float
+            Particle statistical weight
+        dose_grid : np.ndarray
+            Grid to score dose
+        dose_squared_grid : np.ndarray
+            Grid to score squared dose for uncertainty calculation
+        grid_origin : tuple
+            Origin coordinates of the grid
+        grid_spacing : tuple
+            Voxel spacing of the grid
+        grid_shape : tuple
+            Shape of the grid
+        density : float
+            Density at the current position
+        """
+        # Calculate track length and direction
+        track_vector = end_pos - start_pos
+        track_length = np.linalg.norm(track_vector)
+        
+        if track_length < 1e-6:
+            return
+            
+        track_direction = track_vector / track_length
+        
+        # Estimate number of samples based on track length and voxel size
+        min_spacing = min(grid_spacing)
+        num_samples = max(2, int(track_length / (min_spacing * 0.5)))
+        
+        # Sample points along the track
+        for i in range(num_samples):
+            t = i / (num_samples - 1)
+            pos = start_pos + t * track_vector
+            
+            # Convert to voxel indices
+            voxel_indices = self._position_to_voxel(pos, grid_origin, grid_spacing)
+            
+            # Check if inside grid
+            if not self._is_inside_grid(voxel_indices, grid_shape):
+                continue
+                
+            # Calculate energy deposition
+            # For photons, this is based on energy absorption coefficient
+            muen_over_mu = 0.03  # Approximate energy absorption ratio for water in MeV range
+            dose_contribution = weight * energy * track_length * density * muen_over_mu / num_samples
+            
+            # Score dose
+            voxel_indices = tuple(voxel_indices)
+            dose_grid[voxel_indices] += dose_contribution
+            dose_squared_grid[voxel_indices] += dose_contribution**2
+    
+    def _process_photon_interaction(self, position, direction, energy, weight, 
+                                 material_idx, density, dose_grid, dose_squared_grid, 
+                                 particle_counts, grid_origin, grid_spacing, grid_shape, 
+                                 rng, use_track_length_estimator):
+        """
+        Process photon interaction and update particle state.
+        
+        Parameters
+        ----------
+        position : np.ndarray
+            Current particle position
+        direction : np.ndarray
+            Current particle direction
+        energy : float
+            Current particle energy
+        weight : float
+            Current particle statistical weight
+        material_idx : int
+            Material index at the interaction site
+        density : float
+            Material density at the interaction site
+        dose_grid : np.ndarray
+            Dose scoring grid
+        dose_squared_grid : np.ndarray
+            Squared dose scoring grid for uncertainty calculation
+        particle_counts : np.ndarray
+            Particle count grid for uncertainty calculation
+        grid_origin : tuple
+            Origin of the dose grid
+        grid_spacing : tuple
+            Spacing of the dose grid
+        grid_shape : tuple
+            Shape of the dose grid
+        rng : np.random.Generator
+            Random number generator
+        use_track_length_estimator : bool
+            Whether track-length estimator is used
+        """
+        voxel_indices = self._position_to_voxel(position, grid_origin, grid_spacing)
+        
+        if not self._is_inside_grid(voxel_indices, grid_shape):
+            return
+            
+        voxel_indices = tuple(voxel_indices)
+        
+        # Sample interaction type
+        interaction_type = self._sample_interaction_type(energy, material_idx)
+        
+        # Process based on interaction type
+        if interaction_type == 'photoelectric':
+            # Photoelectric effect: photon is absorbed, energy deposited locally
+            dose_contribution = weight * energy
+            dose_grid[voxel_indices] += dose_contribution
+            dose_squared_grid[voxel_indices] += dose_contribution**2
+            particle_counts[voxel_indices] += 1
+            
+        elif interaction_type == 'compton':
+            # Compton scattering: photon scatters with energy loss
+            # Simplified model: deposit a fraction of energy locally
+            
+            # Sample scattering angle using Klein-Nishina formula (simplified)
+            cos_theta = self._sample_compton_angle(energy, rng)
+            
+            # Calculate scattered photon energy
+            alpha = energy / 0.511  # energy in units of electron rest mass
+            scattered_energy = energy / (1 + alpha * (1 - cos_theta))
+            
+            # Energy deposited locally
+            energy_deposited = energy - scattered_energy
+            
+            # Score deposited energy
+            dose_contribution = weight * energy_deposited
+            dose_grid[voxel_indices] += dose_contribution
+            dose_squared_grid[voxel_indices] += dose_contribution**2
+            particle_counts[voxel_indices] += 1
+            
+            # Update direction based on scattering angle
+            phi = 2 * np.pi * rng.random()
+            new_direction = self._rotate_direction(direction, cos_theta, phi)
+            
+            # In a full simulation, we would continue tracking the scattered photon
+            # For this simplified model, we'll terminate the history
+            # In a real implementation, create a new photon and continue tracking
+            
+        elif interaction_type == 'pair_production':
+            # Pair production: photon creates electron-positron pair
+            # Simplified model: deposit all energy locally minus 1.022 MeV
+            
+            # Only possible if energy > 1.022 MeV
+            if energy > 1.022:
+                energy_deposited = energy - 1.022
+                
+                # Score deposited energy
+                dose_contribution = weight * energy_deposited
+                dose_grid[voxel_indices] += dose_contribution
+                dose_squared_grid[voxel_indices] += dose_contribution**2
+                particle_counts[voxel_indices] += 1
+                
+                # In a full simulation, we would track the electron and positron
+                # For this simplified model, we assume all energy is deposited locally
+                
+                # Additionally, each positron produces two 0.511 MeV annihilation photons
+                # In a real implementation, create two new photons and track them
+            
+        else:  # rayleigh or coherent scattering
+            # Rayleigh (coherent) scattering: photon direction changes but energy remains the same
+            # Sample scattering angle (simplified)
+            cos_theta = 2 * rng.random() - 1  # Simplification, real distribution is more forward-peaked
+            phi = 2 * np.pi * rng.random()
+            
+            # Update direction
+            new_direction = self._rotate_direction(direction, cos_theta, phi)
+            
+            # No energy deposition
+            # In a real implementation, continue tracking with new direction
+    
+    def _sample_compton_angle(self, energy, rng):
+        """
+        Sample Compton scattering angle using Klein-Nishina formula.
+        
+        Parameters
+        ----------
+        energy : float
+            Photon energy in MeV
+        rng : np.random.Generator
+            Random number generator
             
         Returns
         -------
         float
-            Total energy deposited
+            Cosine of the scattering angle
         """
-        # Simplified particle transport implementation
-        # In a real MC implementation, this would be much more complex
-        # with detailed physics models for different interaction types
+        # Simplified implementation of Klein-Nishina sampling
+        alpha = energy / 0.511  # energy in units of electron rest mass
         
-        # Get cutoff energies
-        photon_cutoff = self.parameters['photon_cutoff']
+        # Simple rejection sampling
+        while True:
+            cos_theta = 2 * rng.random() - 1
+            if cos_theta < -1 or cos_theta > 1:
+                continue
+                
+            # Klein-Nishina probability (simplified)
+            kn_factor = (1 / (1 + alpha * (1 - cos_theta)))**2
+            kn_factor *= (1 + cos_theta**2) / 2
+            
+            if rng.random() < kn_factor:
+                return cos_theta
+    
+    def _rotate_direction(self, direction, cos_theta, phi):
+        """
+        Rotate a direction vector by polar angles.
         
-        # Track total energy deposited
-        total_energy_deposited = 0.0
+        Parameters
+        ----------
+        direction : np.ndarray
+            Original direction vector
+        cos_theta : float
+            Cosine of polar angle
+        phi : float
+            Azimuthal angle
+            
+        Returns
+        -------
+        np.ndarray
+            Rotated direction vector
+        """
+        # Create a coordinate system with direction as z-axis
+        z_axis = direction / np.linalg.norm(direction)
         
-        # Transport until energy falls below cutoff or particle exits geometry
-        while energy > photon_cutoff:
-            # Get current material properties based on position
-            density = self._get_density_at_position(position, density_grid)
+        # Find perpendicular axes
+        if abs(z_axis[2]) < 0.9:
+            x_axis = np.array([z_axis[1], -z_axis[0], 0])
+        else:
+            x_axis = np.array([1, 0, -z_axis[0]/z_axis[2]])
             
-            # If outside geometry, terminate tracking
-            if density <= 0:
-                break
-            
-            # Sample distance to next interaction
-            # This is based on the total interaction cross-section
-            mfp = self._get_mean_free_path(energy, density)
-            distance = -mfp * np.log(np.random.random())
-            
-            # Move particle to interaction site
-            new_position = position + direction * distance
-            
-            # Check if particle is still in geometry
-            new_density = self._get_density_at_position(new_position, density_grid)
-            if new_density <= 0:
-                # Particle exited geometry
-                break
-            
-            # Sample interaction type
-            interaction_type = self._sample_interaction_type(energy, density)
-            
-            # Handle interaction
-            if interaction_type == 'photoelectric':
-                # Photoelectric effect: local energy deposition
-                energy_deposited = energy
-                self._deposit_energy(new_position, energy_deposited, dose_grid, ct_to_grid)
-                total_energy_deposited += energy_deposited
-                energy = 0  # Particle absorbed
-                
-            elif interaction_type == 'compton':
-                # Compton scattering: energy transfer to electron and photon scattering
-                
-                # Sample scattering angle and energy transfer using Klein-Nishina
-                # This is a simplified model
-                cos_theta = 2 * np.random.random() - 1
-                if cos_theta < -0.99:
-                    cos_theta = -0.99  # Avoid numerical issues
-                
-                # Calculate energy transfer fraction using simplified K-N
-                e_ratio = 1.0 / (1.0 + energy / 0.511 * (1 - cos_theta))
-                new_energy = energy * e_ratio
-                energy_deposited = energy - new_energy
-                
-                # Deposit energy locally (electron energy)
-                self._deposit_energy(new_position, energy_deposited, dose_grid, ct_to_grid)
-                total_energy_deposited += energy_deposited
-                
-                # Update photon energy and direction
-                energy = new_energy
-                
-                # Calculate new direction based on scattering angle
-                # This is a simplified directional change
-                phi = 2 * np.pi * np.random.random()
-                sin_theta = np.sqrt(1 - cos_theta**2)
-                
-                # Create scattering direction in local frame
-                u_local = np.array([sin_theta * np.cos(phi), 
-                                   sin_theta * np.sin(phi), 
-                                   cos_theta])
-                
-                # Transform to global frame - would need proper coordinate transform
-                # This is simplified
-                direction = self._rotate_to_global(u_local, direction)
-                
-            elif interaction_type == 'pair_production':
-                # Pair production (simplified)
-                # Deposit most energy locally minus exit energy
-                exit_energy = max(0, energy - 1.022)  # 1.022 MeV = 2 * electron mass
-                energy_deposited = energy - exit_energy
-                
-                self._deposit_energy(new_position, energy_deposited, dose_grid, ct_to_grid)
-                total_energy_deposited += energy_deposited
-                
-                # Continue with exit energy - this is a simplification
-                energy = exit_energy
-                
-                # Might change direction based on pair production dynamics
-                # Simplified implementation
-                
-            # Update position
-            position = new_position
-            
-            # Apply Russian roulette for variance reduction
-            if self.parameters['enable_russian_roulette'] and energy < photon_cutoff * 5:
-                survival_prob = 0.3
-                if np.random.random() > survival_prob:
-                    # Particle terminated by Russian roulette
-                    break
-                else:
-                    # Surviving particles get weight increase (energy serving as weight)
-                    energy /= survival_prob
+        x_axis = x_axis / np.linalg.norm(x_axis)
+        y_axis = np.cross(z_axis, x_axis)
         
-        return total_energy_deposited
+        # Calculate new direction
+        sin_theta = np.sqrt(1 - cos_theta**2)
+        cos_phi = np.cos(phi)
+        sin_phi = np.sin(phi)
+        
+        # Rotate direction
+        new_direction = (sin_theta * cos_phi * x_axis + 
+                        sin_theta * sin_phi * y_axis + 
+                        cos_theta * z_axis)
+                        
+        return new_direction
+    
+    def _position_to_voxel(self, position, grid_origin, grid_spacing):
+        """
+        Convert a position to voxel indices.
+        
+        Parameters
+        ----------
+        position : np.ndarray
+            Position in world coordinates
+        grid_origin : tuple
+            Origin of the grid
+        grid_spacing : tuple
+            Spacing of the grid
+            
+        Returns
+        -------
+        np.ndarray
+            Voxel indices (i, j, k)
+        """
+        indices = np.floor((position - grid_origin) / grid_spacing).astype(int)
+        return indices
+    
+    def _is_inside_grid(self, indices, grid_shape):
+        """
+        Check if voxel indices are inside the grid.
+        
+        Parameters
+        ----------
+        indices : np.ndarray
+            Voxel indices
+        grid_shape : tuple
+            Shape of the grid
+            
+        Returns
+        -------
+        bool
+            True if inside, False otherwise
+        """
+        return (0 <= indices[0] < grid_shape[0] and
+                0 <= indices[1] < grid_shape[1] and
+                0 <= indices[2] < grid_shape[2])
+    
+    def _distance_to_boundary(self, position, direction, grid_origin, grid_size):
+        """
+        Calculate distance to the grid boundary.
+        
+        Parameters
+        ----------
+        position : np.ndarray
+            Current position
+        direction : np.ndarray
+            Current direction
+        grid_origin : tuple
+            Origin of the grid
+        grid_size : tuple
+            Size of the grid
+            
+        Returns
+        -------
+        float
+            Distance to boundary
+        """
+        # Calculate distances to each boundary plane
+        t_min = float('inf')
+        
+        for i in range(3):
+            if abs(direction[i]) < 1e-6:
+                continue
+                
+            t1 = (grid_origin[i] - position[i]) / direction[i]
+            t2 = (grid_origin[i] + grid_size[i] - position[i]) / direction[i]
+            
+            t_enter = min(t1, t2)
+            t_exit = max(t1, t2)
+            
+            if t_exit < 0:
+                return 0  # Already outside
+                
+            if t_enter > 0:
+                t_min = min(t_min, t_exit)
+        
+        return t_min
+    
+    def _get_max_cross_section(self, energy, material_idx):
+        """
+        Get maximum cross-section for a given energy and material.
+        
+        Parameters
+        ----------
+        energy : float
+            Photon energy in MeV
+        material_idx : int
+            Material index
+            
+        Returns
+        -------
+        float
+            Maximum cross-section value
+        """
+        # Simplified - in a real implementation, interpolate from tabulated data
+        # For now, use a basic model based on energy
+        
+        # Find closest energy in the grid
+        energies = self.interaction_data['energy_grid']
+        closest_idx = np.argmin(np.abs(energies - energy))
+        
+        # Get total cross-section for this material
+        return self.interaction_data['photon']['total'][closest_idx, material_idx]
+    
+    def _get_total_cross_section(self, energy, material_idx):
+        """
+        Get total cross-section for a given energy and material.
+        
+        Parameters
+        ----------
+        energy : float
+            Photon energy in MeV
+        material_idx : int
+            Material index
+            
+        Returns
+        -------
+        float
+            Total cross-section value
+        """
+        # Same as _get_max_cross_section for now
+        return self._get_max_cross_section(energy, material_idx)
 
-    # Helper methods (simplified implementations)
-    
-    def _convert_hu_to_density(self, ct_data):
-        """Convert HU values to electron density"""
-        # Simplified conversion, could be improved with calibration curve
-        # Basic linear relationship assumption
-        density = (ct_data + 1000) / 1000
-        density = np.clip(density, 0.01, 5.0)  # Limit to reasonable values
-        return density
-    
-    def _get_energy_spectrum(self, beam):
-        """Get energy spectrum from beam model"""
-        # Extract from beam model or use default
-        if self.beam_model and hasattr(self.beam_model, 'energy_spectrum'):
-            return self.beam_model.energy_spectrum
-        else:
-            # Return default for 6MV photon beam
-            return {
-                'energy_bins': [0.1, 0.5, 1.0, 2.0, 4.0, 6.0],
-                'probabilities': [0.1, 0.2, 0.3, 0.25, 0.1, 0.05]
-            }
-    
-    def _get_fluence_map(self, beam):
-        """Get fluence map from beam"""
-        # Simple uniform fluence for now
-        return np.ones((100, 100))
-    
-    def _generate_particle_batch(self, batch_size, energy_spectrum, fluence_map, beam):
-        """Generate a batch of particles"""
-        positions = np.zeros((batch_size, 3), dtype=np.float32)
-        directions = np.zeros((batch_size, 3), dtype=np.float32)
-        energies = np.zeros(batch_size, dtype=np.float32)
-        
-        for i in range(batch_size):
-            pos, dir, energy = self._generate_particle(energy_spectrum, fluence_map, beam)
-            positions[i] = pos
-            directions[i] = dir
-            energies[i] = energy
-            
-        return positions, directions, energies
-    
-    def _generate_particle(self, energy_spectrum, fluence_map, beam):
-        """Generate a single particle with position, direction, and energy"""
-        # Sample from energy spectrum
-        energy_bins = energy_spectrum['energy_bins']
-        probabilities = energy_spectrum['probabilities']
-        bin_index = np.random.choice(len(energy_bins), p=probabilities)
-        energy = energy_bins[bin_index]
-        
-        # Position and direction from beam geometry
-        # This is highly simplified
-        isocenter = beam.isocenter
-        source_pos = beam.source_position
-        
-        # Direction from source to isocenter
-        direction = isocenter - source_pos
-        direction = direction / np.linalg.norm(direction)
-        
-        # Add some divergence based on field size
-        divergence = 0.05  # radians
-        theta = np.random.random() * divergence
-        phi = np.random.random() * 2 * np.pi
-        
-        # Create divergent direction (simplified)
-        cos_theta = np.cos(theta)
-        sin_theta = np.sin(theta)
-        
-        direction = np.array([
-            sin_theta * np.cos(phi),
-            sin_theta * np.sin(phi),
-            cos_theta
-        ])
-        
-        # Position at source
-        position = source_pos
-        
-        return position, direction, energy
-    
-    def _get_density_at_position(self, position, density_grid):
-        """Get electron density at a position using interpolation"""
-        # This would implement proper coordinate transforms and interpolation
-        # Simplified implementation
-        return 1.0
-    
-    def _get_mean_free_path(self, energy, density):
-        """Calculate mean free path based on cross-sections"""
-        # Look up cross-section from tables
-        # This is a simplified implementation
-        return 5.0  # cm
-    
-    def _sample_interaction_type(self, energy, density):
-        """Sample interaction type based on cross-sections"""
-        # Simplified implementation
-        r = np.random.random()
-        if r < 0.2:
-            return 'photoelectric'
-        elif r < 0.9:
-            return 'compton'
-        else:
-            return 'pair_production'
-    
-    def _deposit_energy(self, position, energy, dose_grid, transform):
-        """Deposit energy at a position in the dose grid"""
-        # Convert position to dose grid indices
-        # This would implement proper coordinate transforms
-        # Simplified implementation - deposit at center
-        i, j, k = dose_grid.shape[0]//2, dose_grid.shape[1]//2, dose_grid.shape[2]//2
-        
-        # For track length estimator scoring
-        if 0 <= i < dose_grid.shape[0] and 0 <= j < dose_grid.shape[1] and 0 <= k < dose_grid.shape[2]:
-            dose_grid[i, j, k] += energy
-    
-    def _rotate_to_global(self, vector, reference):
-        """Rotate a vector from local to global coordinates"""
-        # This would implement proper coordinate transforms
-        # Simplified implementation
-        return vector
-    
     def _apply_denoising(self, dose_grid, uncertainty_grid):
         """Apply denoising filter to dose grid"""
         # Simple Gaussian filter
@@ -1862,3 +1718,122 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         smoothed = gaussian_filter(dose_grid, sigma=sigma)
         
         return smoothed
+
+    def _sample_interaction_type(self, energy, material_idx):
+        """
+        Sample interaction type based on cross-sections for the given energy and material.
+        
+        Parameters
+        ----------
+        energy : float
+            Photon energy in MeV
+        material_idx : int
+            Material index
+            
+        Returns
+        -------
+        str
+            Type of interaction: 'photoelectric', 'compton', 'pair_production', or 'rayleigh'
+        """
+        # Get cross-sections for each interaction type at this energy
+        energies = self.interaction_data['energy_grid']
+        closest_idx = np.argmin(np.abs(energies - energy))
+        
+        # Get cross-sections for different interaction types
+        photoelectric = self.interaction_data['photon']['photoelectric'][closest_idx, material_idx]
+        compton = self.interaction_data['photon']['compton'][closest_idx, material_idx]
+        pair_production = self.interaction_data['photon']['pair_production'][closest_idx, material_idx]
+        rayleigh = self.interaction_data['photon']['rayleigh'][closest_idx, material_idx]
+        
+        # Calculate total cross-section and probabilities
+        total = photoelectric + compton + pair_production + rayleigh
+        
+        # Generate random number for interaction type
+        r = np.random.random()
+        
+        # Determine interaction type based on relative probabilities
+        cumulative_prob = photoelectric / total
+        if r < cumulative_prob:
+            return 'photoelectric'
+            
+        cumulative_prob += compton / total
+        if r < cumulative_prob:
+            return 'compton'
+            
+        cumulative_prob += pair_production / total
+        if r < cumulative_prob:
+            return 'pair_production'
+            
+        return 'rayleigh'  # Default to Rayleigh scattering
+
+    def _calculate_mean_free_path(self, energy, material_idx, density):
+        """
+        Calculate mean free path for a photon in a material.
+
+        Parameters
+        ----------
+        energy : float
+            Photon energy in MeV
+        material_idx : int
+            Material index
+        density : float
+            Material density in g/cm³
+
+        Returns
+        -------
+        float
+            Mean free path in cm
+        """
+        # Get total cross-section for this energy and material
+        total_xsec = self._get_total_cross_section(energy, material_idx)
+        
+        # Calculate mean free path (lambda = 1 / (N * sigma))
+        # where N is the number of target particles per unit volume
+        # and sigma is the microscopic cross-section
+        
+        # For photons, typically:
+        # mfp = 1 / (density * NA/A * sigma)
+        # where NA is Avogadro's number, A is atomic weight
+        
+        # Simplified formula using macroscopic cross-section
+        if total_xsec > 0 and density > 0:
+            mean_free_path = 1.0 / (total_xsec * density)
+        else:
+            # Avoid division by zero, return a large value
+            mean_free_path = 1000.0  # cm
+            
+        return mean_free_path
+
+    def _normalize_to_isocenter(self, dose_image, isocenter):
+        """
+        Normalize dose distribution so that isocenter receives 100% dose.
+        
+        Parameters
+        ----------
+        dose_image : Image
+            Dose image to normalize
+        isocenter : np.ndarray
+            Isocenter position in world coordinates
+        """
+        # Convert isocenter to voxel coordinates
+        voxel_indices = dose_image.world_to_voxel(isocenter)
+        
+        # Round to nearest voxel
+        voxel_indices = np.round(voxel_indices).astype(int)
+        
+        # Ensure indices are within bounds
+        shape = dose_image.data.shape
+        voxel_indices = np.clip(voxel_indices, 
+                               [0, 0, 0], 
+                               [shape[0]-1, shape[1]-1, shape[2]-1])
+        
+        # Get dose at isocenter
+        iso_dose = dose_image.data[tuple(voxel_indices)]
+        
+        # Normalize if isocenter dose is non-zero
+        if iso_dose > 0:
+            # Scale so isocenter gets 100% dose
+            dose_image.data = dose_image.data * (100.0 / iso_dose)
+            logger.info(f"Normalized dose to isocenter. Original value: {iso_dose:.4f}")
+        else:
+            logger.warning("Isocenter dose is zero or negative, cannot normalize")

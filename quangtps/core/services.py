@@ -477,21 +477,69 @@ class ServiceRegistry:
     """
     
     _services = {}
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls):
+        """
+        Get singleton instance of the registry.
+        This method is provided for compatibility with code that expects
+        the ServiceRegistry to be instantiable.
+        
+        Returns
+        -------
+        ServiceRegistry
+            The singleton instance of ServiceRegistry
+        """
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+    
+    def __init__(self):
+        """Initialize a ServiceRegistry instance. This is a singleton."""
+        # We won't create a new dict if using the instance directly
+        # Keep _services as the shared state for all instances
+        pass
     
     @classmethod
     def register(cls, name, service):
         """
-        Register a service with the given name.
+        Register a service with the registry.
         
         Parameters
         ----------
         name : str
             The name of the service
-        service : Any
+        service : object
             The service instance
+            
+        Returns
+        -------
+        bool
+            True if registration was successful, False otherwise
         """
         cls._services[name] = service
         logger.debug(f"Registered service: {name}")
+        return True
+    
+    def register_service(self, name, service):
+        """
+        Instance method for registering a service.
+        Provided for compatibility with code that uses an instance.
+        
+        Parameters
+        ----------
+        name : str
+            The name of the service
+        service : object
+            The service instance
+            
+        Returns
+        -------
+        bool
+            True if registration was successful, False otherwise
+        """
+        return self.__class__.register(name, service)
     
     @classmethod
     def get(cls, name):
@@ -505,91 +553,71 @@ class ServiceRegistry:
             
         Returns
         -------
-        Any
-            The service instance if found, None otherwise
+        object
+            The service instance, or None if not found
         """
         return cls._services.get(name)
     
     @classmethod
     def get_service(cls, service_name_or_class):
         """
-        Get a service by its name or class. This method can be called with either
-        a string name or a class type to provide backward compatibility.
+        Get a service by name or class name.
+        
+        This method is more flexible than get() as it can accept either
+        a service name or a class name.
         
         Parameters
         ----------
-        service_name_or_class : Union[str, Type]
+        service_name_or_class : str or Type
             The name or class of the service to retrieve
             
         Returns
         -------
-        Any
-            The service instance if found, None otherwise
+        object
+            The service instance, or None if not found
         """
-        # If service_name_or_class is a string, treat it as a name
         if isinstance(service_name_or_class, str):
-            return cls.get(service_name_or_class)
-        
-        # Otherwise, treat it as a class type
-        for service in cls._services.values():
-            if isinstance(service, service_name_or_class):
+            # Try exact name match first
+            service = cls._services.get(service_name_or_class)
+            if service:
                 return service
-        return None
+            
+            # Try case-insensitive match with or without 'Service' suffix
+            service_name = service_name_or_class.lower()
+            for name, svc in cls._services.items():
+                if name.lower() == service_name or name.lower() == f"{service_name}service":
+                    return svc
+            
+            # Try to match with class name
+            for svc in cls._services.values():
+                if (hasattr(svc, '__class__') and 
+                    svc.__class__.__name__.lower() == service_name or
+                    svc.__class__.__name__.lower() == f"{service_name}service"):
+                    return svc
+            
+            return None
+        else:
+            # Try to match with class or subclass
+            for svc in cls._services.values():
+                if (hasattr(svc, '__class__') and 
+                    isinstance(svc, service_name_or_class)):
+                    return svc
+            
+            return None
     
-    @classmethod
-    def get_all(cls):
+    def get_service_instance(self, service_name_or_class):
         """
-        Get all registered services.
-        
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary of service names and instances
-        """
-        return cls._services
-    
-    @classmethod
-    def remove(cls, name):
-        """
-        Remove a service by name.
+        Instance method for getting a service by name or class.
+        Provided for compatibility with code that uses an instance.
         
         Parameters
         ----------
-        name : str
-            The name of the service
+        service_name_or_class : str or Type
+            The name or class of the service to retrieve
             
         Returns
         -------
-        bool
-            True if the service was removed, False if it wasn't found
+        object
+            The service instance, or None if not found
         """
-        if name in cls._services:
-            del cls._services[name]
-            logger.debug(f"Removed service: {name}")
-            return True
-        return False
-    
-    @classmethod
-    def clear(cls):
-        """Clear all registered services."""
-        cls._services.clear()
-        logger.debug("Cleared all services")
-    
-    @classmethod
-    def register_service(cls, name, service):
-        """
-        Alias for register method to maintain backward compatibility.
-        
-        Parameters
-        ----------
-        name : str or Type
-            The name or class of the service
-        service : Any
-            The service instance
-        """
-        if isinstance(name, type):
-            # If a class is provided, use the class name
-            name = name.__name__
-        
-        cls.register(name, service)
-        logger.debug(f"Registered service with compatibility method: {name}") 
+        return self.__class__.get_service(service_name_or_class) 

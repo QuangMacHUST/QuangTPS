@@ -1,0 +1,19 @@
+2025-04-02 04:38:05,671 - QuangTPS - INFO - Starting QuangTPS. Log file: E:\hoctap\QuangTPS\logs\quangtps_20250402_043805.log
+2025-04-02 04:38:06,942 - QuangTPS - INFO - Starting QuangTPS GUI
+2025-04-02 04:38:15,149 - root - ERROR - Error importing QuangTPS modules: cannot import name 'ObjectiveCollection' from 'quangtps.optimization.objectives' (E:\hoctap\QuangTPS\quangtps\optimization\objectives.py)
+2025-04-02 04:38:15,161 - quangtps.ui.main_window - WARNING - PlanningTab not available, features will be limited
+2025-04-02 04:38:15,820 - quangtps.dose.algorithms.monte_carlo - WARNING - CUDA GPU acceleration not available - falling back to CPU for Monte Carlo calculations
+2025-04-02 04:38:16,021 - quangtps.ui.main_window - INFO - Loading dark theme stylesheet from: E:\hoctap\QuangTPS\quangtps\ui\styles\dark_theme.css
+2025-04-02 04:38:16,023 - quangtps.ui.main_window - ERROR - Failed to load stylesheet: 'MainWindow' object has no attribute 'workflow_tabs'
+2025-04-02 04:38:16,038 - quangtps.dicom.pacs_client - INFO - Initialized AE with title QUANGTPS and 10 contexts
+2025-04-02 04:38:16,130 - root - ERROR - Error importing structure modules: cannot import name 'MarginTool' from 'quangtps.segmentation.contour.margin' (E:\hoctap\QuangTPS\quangtps\segmentation\contour\margin.py)
+2025-04-02 04:38:18,261 - quangtps.ui.main_window - INFO - Structure tab initialized successfully
+2025-04-02 04:38:18,281 - quangtps.ui.main_window - INFO - External Beam Planning tab initialized successfully
+2025-04-02 04:38:18,284 - quangtps.ui.main_window - INFO - Initializing Plan Evaluation tab
+2025-04-02 04:38:18,347 - quangtps.ui.main_window - ERROR - Failed to initialize Plan Evaluation tab: 'MainWindow' object has no attribute 'plan_changed'
+2025-04-02 04:38:18,353 - quangtps.ui.main_window - INFO - Treatment tab initialized successfully
+2025-04-02 04:38:18,365 - quangtps.ui.main_window - INFO - QA tab initialized successfully
+2025-04-02 04:38:18,376 - quangtps.ui.main_window - INFO - Reporting tab initialized successfully
+2025-04-02 04:38:18,443 - quangtps.ui.main_window - INFO - Set up simplified UI without Object Explorer
+2025-04-02 04:38:18,453 - quangtps.ui.main_window - INFO - Checking for plugins...
+2025-04-02 04:38:18,453 - quangtps.ui.main_window - INFO - No plugins found.

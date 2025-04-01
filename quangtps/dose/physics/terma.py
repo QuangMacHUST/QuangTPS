@@ -630,3 +630,432 @@ def calculate_terma_from_path_length(
         terma = terma / np.max(terma) * 100.0  # Normalize to 100 at maximum
     
     return terma
+
+def calculate_terma_from_beam(ct_image: Image, beam: Beam, electron_density: Optional[np.ndarray] = None) -> np.ndarray:
+    """
+    Calculate TERMA (Total Energy Released per unit MAss) for a given beam.
+    
+    This function calculates the TERMA distribution in the patient from a beam,
+    which represents the energy transferred from photons to charged particles
+    per unit mass at each point in the patient.
+    
+    Parameters
+    ----------
+    ct_image : Image
+        CT image of the patient
+    beam : Beam
+        Beam parameters including geometry and energy
+    electron_density : Optional[np.ndarray]
+        Pre-calculated electron density map. If None, it will be derived from CT.
+        
+    Returns
+    -------
+    np.ndarray
+        TERMA distribution with same dimensions as the CT image
+    """
+    # Ensure we have an electron density map
+    if electron_density is None:
+        # Convert CT to electron density relative to water
+        electron_density = convert_ct_to_electron_density(ct_image.data)
+    
+    # Get beam parameters
+    spectrum = beam.spectrum
+    if spectrum is None:
+        # Use default spectrum based on beam energy
+        energy_mev = beam.energy
+        spectrum = create_default_spectrum(energy_mev)
+    
+    # Get fluence map for this beam
+    fluence_map = beam.get_fluence_map()
+    
+    # Initialize TERMA grid
+    terma = np.zeros_like(ct_image.data, dtype=np.float32)
+    
+    # Calculate ray paths from source to each point
+    source_pos = beam.source_position
+    
+    # Ray trace for each primary sample point
+    # This is a simplified version - in a real implementation, this would be optimized
+    # and would handle divergence, beam hardening, attenuation, etc. more accurately
+    
+    # Get grid parameters
+    grid_shape = ct_image.data.shape
+    grid_spacing = ct_image.spacing
+    grid_origin = ct_image.origin
+    
+    # Create fluence grid aligned with beam
+    # (simplified - would normally do this in beam geometry and then transform)
+    isocenter = beam.isocenter
+    
+    # Calculate beam attenuation and energy deposition
+    # Simplified implementation for demonstration
+    for z in range(grid_shape[0]):
+        for y in range(grid_shape[1]):
+            for x in range(grid_shape[2]):
+                # Calculate position in world coordinates
+                pos = np.array([
+                    grid_origin[0] + z * grid_spacing[0],
+                    grid_origin[1] + y * grid_spacing[1],
+                    grid_origin[2] + x * grid_spacing[2]
+                ])
+                
+                # Skip if outside of CT
+                if not is_point_in_beam(pos, source_pos, beam.field_size, isocenter):
+                    continue
+                
+                # Calculate ray from source to this point
+                ray_dir = pos - source_pos
+                ray_dir = ray_dir / np.linalg.norm(ray_dir)
+                
+                # Calculate the radiological path length to this point
+                # (This is simplified - should account for actual ray path through voxels)
+                rad_path_length = calculate_radiological_path(
+                    source_pos, pos, ct_image, electron_density
+                )
+                
+                # Skip if path length is too large (outside of patient or beyond reasonable range)
+                if rad_path_length > 50.0:  # cm, arbitrary cutoff
+                    continue
+                
+                # Calculate primary fluence at this point (taking into account attenuation)
+                # This is a simplified model using a single effective attenuation coefficient
+                fluence = calculate_fluence_at_point(
+                    source_pos, pos, isocenter, fluence_map, spectrum, rad_path_length
+                )
+                
+                # Calculate TERMA (energy transferred per unit mass)
+                # Simplified: TERMA = fluence * mass energy absorption coefficient * electron density
+                mu_en = 0.03  # cm²/g, approximate value for water in MV range
+                terma[z, y, x] = fluence * mu_en * electron_density[z, y, x]
+    
+    return terma
+
+def calculate_radiological_path(start_pos, end_pos, ct_image, electron_density):
+    """
+    Calculate the radiological path length between two points.
+    
+    Parameters
+    ----------
+    start_pos : np.ndarray
+        Starting position (x, y, z) in world coordinates
+    end_pos : np.ndarray
+        Ending position (x, y, z) in world coordinates
+    ct_image : Image
+        CT image containing the geometry information
+    electron_density : np.ndarray
+        Electron density map relative to water
+        
+    Returns
+    -------
+    float
+        Radiological path length in cm
+    """
+    # Convert world coordinates to voxel indices
+    start_voxel = ct_image.world_to_voxel(start_pos)
+    end_voxel = ct_image.world_to_voxel(end_pos)
+    
+    # Use Siddon's algorithm or similar to trace ray through voxels
+    # This is a simplified implementation
+    voxels = trace_ray(start_voxel, end_voxel, ct_image.data.shape)
+    
+    # Calculate radiological path length
+    rad_path_length = 0.0
+    for voxel in voxels:
+        z, y, x = voxel
+        
+        # Skip if outside image bounds
+        if (z < 0 or z >= ct_image.data.shape[0] or
+            y < 0 or y >= ct_image.data.shape[1] or
+            x < 0 or x >= ct_image.data.shape[2]):
+            continue
+        
+        # Get physical path length through this voxel (simplified as uniform)
+        physical_length = np.mean(ct_image.spacing)
+        
+        # Get electron density in this voxel
+        density = electron_density[z, y, x]
+        
+        # Add to radiological path length
+        rad_path_length += physical_length * density
+    
+    return rad_path_length
+
+def trace_ray(start_voxel, end_voxel, grid_shape):
+    """
+    Trace a ray from start_voxel to end_voxel, returning all voxels it passes through.
+    
+    Parameters
+    ----------
+    start_voxel : np.ndarray
+        Starting voxel indices (z, y, x)
+    end_voxel : np.ndarray
+        Ending voxel indices (z, y, x)
+    grid_shape : tuple
+        Shape of the grid (nz, ny, nx)
+        
+    Returns
+    -------
+    list
+        List of tuples (z, y, x) representing voxels along the ray
+    """
+    # Convert to integers
+    start_voxel = np.round(start_voxel).astype(int)
+    end_voxel = np.round(end_voxel).astype(int)
+    
+    # This is a simplified version using Bresenham's algorithm
+    # In a real implementation, you would use a proper 3D line-voxel intersection algorithm
+    # like Siddon's algorithm or a similar approach
+    
+    # Get differences and directions for each axis
+    dz = abs(end_voxel[0] - start_voxel[0])
+    dy = abs(end_voxel[1] - start_voxel[1])
+    dx = abs(end_voxel[2] - start_voxel[2])
+    
+    sz = 1 if start_voxel[0] < end_voxel[0] else -1
+    sy = 1 if start_voxel[1] < end_voxel[1] else -1
+    sx = 1 if start_voxel[2] < end_voxel[2] else -1
+    
+    # Determine dominant axis
+    if dz >= dy and dz >= dx:
+        # z dominant
+        err_1 = 2 * dy - dz
+        err_2 = 2 * dx - dz
+        voxels = []
+        z, y, x = start_voxel
+        
+        for i in range(dz + 1):
+            if 0 <= z < grid_shape[0] and 0 <= y < grid_shape[1] and 0 <= x < grid_shape[2]:
+                voxels.append((z, y, x))
+            
+            if err_1 > 0:
+                y += sy
+                err_1 -= 2 * dz
+            
+            if err_2 > 0:
+                x += sx
+                err_2 -= 2 * dz
+            
+            err_1 += 2 * dy
+            err_2 += 2 * dx
+            z += sz
+            
+    elif dy >= dz and dy >= dx:
+        # y dominant
+        err_1 = 2 * dz - dy
+        err_2 = 2 * dx - dy
+        voxels = []
+        z, y, x = start_voxel
+        
+        for i in range(dy + 1):
+            if 0 <= z < grid_shape[0] and 0 <= y < grid_shape[1] and 0 <= x < grid_shape[2]:
+                voxels.append((z, y, x))
+            
+            if err_1 > 0:
+                z += sz
+                err_1 -= 2 * dy
+            
+            if err_2 > 0:
+                x += sx
+                err_2 -= 2 * dy
+            
+            err_1 += 2 * dz
+            err_2 += 2 * dx
+            y += sy
+            
+    else:
+        # x dominant
+        err_1 = 2 * dy - dx
+        err_2 = 2 * dz - dx
+        voxels = []
+        z, y, x = start_voxel
+        
+        for i in range(dx + 1):
+            if 0 <= z < grid_shape[0] and 0 <= y < grid_shape[1] and 0 <= x < grid_shape[2]:
+                voxels.append((z, y, x))
+            
+            if err_1 > 0:
+                y += sy
+                err_1 -= 2 * dx
+            
+            if err_2 > 0:
+                z += sz
+                err_2 -= 2 * dx
+            
+            err_1 += 2 * dy
+            err_2 += 2 * dz
+            x += sx
+    
+    return voxels
+
+def is_point_in_beam(point, source_pos, field_size, isocenter):
+    """
+    Check if a point is within the beam's field.
+    
+    Parameters
+    ----------
+    point : np.ndarray
+        Point to check (x, y, z) in world coordinates
+    source_pos : np.ndarray
+        Source position (x, y, z) in world coordinates
+    field_size : tuple
+        Field size (width, height) in cm at isocenter distance
+    isocenter : np.ndarray
+        Isocenter position (x, y, z) in world coordinates
+        
+    Returns
+    -------
+    bool
+        True if point is within beam field, False otherwise
+    """
+    # Calculate vector from source to isocenter
+    source_to_iso = isocenter - source_pos
+    beam_axis = source_to_iso / np.linalg.norm(source_to_iso)
+    
+    # Calculate vector from source to point
+    source_to_point = point - source_pos
+    
+    # Project source_to_point onto the beam axis to get distance along beam
+    distance_along_beam = np.dot(source_to_point, beam_axis)
+    
+    # Skip if point is behind source
+    if distance_along_beam <= 0:
+        return False
+    
+    # Calculate perpendicular distance from point to beam axis
+    projected_point = source_pos + distance_along_beam * beam_axis
+    perpendicular_vector = point - projected_point
+    perpendicular_distance = np.linalg.norm(perpendicular_vector)
+    
+    # Calculate field size at this distance
+    # Field size increases with distance from source (divergent beam)
+    distance_ratio = distance_along_beam / np.linalg.norm(source_to_iso)
+    field_width_at_point = field_size[0] * distance_ratio
+    field_height_at_point = field_size[1] * distance_ratio
+    
+    # Define an orthogonal coordinate system in the beam's eye view
+    # (This is simplified - in a real implementation, would account for gantry, 
+    # collimator, and couch angles)
+    
+    # Check if the perpendicular distance is within the field at this distance
+    # This is a simplified circular check; a real implementation would use a proper rectangular check
+    max_distance = min(field_width_at_point, field_height_at_point) / 2
+    return perpendicular_distance <= max_distance
+
+def calculate_fluence_at_point(source_pos, point, isocenter, fluence_map, spectrum, rad_path_length):
+    """
+    Calculate the fluence at a point within the patient.
+    
+    Parameters
+    ----------
+    source_pos : np.ndarray
+        Source position (x, y, z) in world coordinates
+    point : np.ndarray
+        Point to calculate fluence at (x, y, z) in world coordinates
+    isocenter : np.ndarray
+        Isocenter position (x, y, z) in world coordinates
+    fluence_map : np.ndarray
+        Fluence map at isocenter plane
+    spectrum : dict
+        Energy spectrum of the beam
+    rad_path_length : float
+        Radiological path length from source to point in cm
+        
+    Returns
+    -------
+    float
+        Fluence at the point in MU/cm²
+    """
+    # Calculate inverse square law factor
+    source_to_iso_distance = np.linalg.norm(isocenter - source_pos)
+    source_to_point_distance = np.linalg.norm(point - source_pos)
+    inverse_square_factor = (source_to_iso_distance / source_to_point_distance) ** 2
+    
+    # Calculate beam attenuation
+    # This is a simplified model using an effective attenuation coefficient
+    # In a real implementation, would use polyenergetic beam hardening model
+    mu_effective = 0.05  # cm⁻¹, approximate value for water in MV range
+    attenuation_factor = np.exp(-mu_effective * rad_path_length)
+    
+    # Calculate projection of point onto isocenter plane to get fluence map coordinates
+    # (This is simplified - in a real implementation, would account for beam geometry)
+    # Just using a placeholder fluence value for now
+    fluence_at_isocenter = 1.0  # MU/cm²
+    
+    # Calculate fluence at point
+    fluence = fluence_at_isocenter * inverse_square_factor * attenuation_factor
+    
+    return fluence
+
+def convert_ct_to_electron_density(ct_data):
+    """
+    Convert CT values (HU) to electron density relative to water.
+    
+    Parameters
+    ----------
+    ct_data : np.ndarray
+        CT data in Hounsfield Units
+        
+    Returns
+    -------
+    np.ndarray
+        Electron density relative to water
+    """
+    # This is a simplified model using a piecewise linear relationship
+    # In a real implementation, would use a calibration curve specific to the CT scanner
+    
+    # Create copy to avoid modifying original
+    electron_density = np.ones_like(ct_data, dtype=np.float32)
+    
+    # Air region (< -900 HU)
+    air_mask = ct_data < -900
+    electron_density[air_mask] = 0.001
+    
+    # Lung region (-900 to -700 HU)
+    lung_mask = (ct_data >= -900) & (ct_data < -700)
+    electron_density[lung_mask] = 0.3 * (ct_data[lung_mask] + 1000) / 1000
+    
+    # Soft tissue region (-700 to 100 HU)
+    tissue_mask = (ct_data >= -700) & (ct_data < 100)
+    electron_density[tissue_mask] = 0.7 + 0.3 * (ct_data[tissue_mask] + 700) / 800
+    
+    # Bone region (>= 100 HU)
+    bone_mask = ct_data >= 100
+    electron_density[bone_mask] = 1.0 + 0.5 * (ct_data[bone_mask] - 100) / 1000
+    
+    return electron_density
+
+def create_default_spectrum(energy_mev):
+    """
+    Create a default energy spectrum for a given nominal energy.
+    
+    Parameters
+    ----------
+    energy_mev : float
+        Nominal beam energy in MeV
+        
+    Returns
+    -------
+    dict
+        Energy spectrum with 'energies' and 'probabilities' keys
+    """
+    # Simplified model - in a real implementation, would use measured or 
+    # Monte Carlo generated spectra specific to the linac model
+    
+    # Create energy bins from 0 to maximum energy
+    num_bins = 50
+    energies = np.linspace(0.1, energy_mev, num_bins)
+    
+    # Create a simplified bremsstrahlung spectrum
+    # This is just a placeholder - real spectra are more complex
+    probabilities = np.zeros(num_bins)
+    for i, e in enumerate(energies):
+        # Simple bremsstrahlung shape
+        probabilities[i] = (1 - e / energy_mev) * np.exp(-2 * e / energy_mev)
+    
+    # Normalize probabilities
+    probabilities = probabilities / np.sum(probabilities)
+    
+    return {
+        'energies': energies,
+        'probabilities': probabilities
+    }
