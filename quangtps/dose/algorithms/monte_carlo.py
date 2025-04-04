@@ -964,28 +964,28 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         return material_indices, densities
 
     def _simulate_particles(self, 
-                        num_histories: int,
-                        grid_shape: Tuple[int, int, int],
-                        grid_spacing: Tuple[float, float, float],
-                        grid_origin: Tuple[float, float, float],
-                        materials: np.ndarray,
-                        densities: np.ndarray,
-                        source_position: np.ndarray,
-                        isocenter: np.ndarray,
-                        field_size: Tuple[float, float],
-                        gantry_angle: float,
-                        collimator_angle: float,
-                        couch_angle: float,
-                        energies: np.ndarray,
-                        energy_probabilities: np.ndarray,
-                        seed_offset: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+                            num_histories: int,
+                            grid_shape: Tuple[int, int, int],
+                            grid_spacing: Tuple[float, float, float],
+                            grid_origin: Tuple[float, float, float],
+                            materials: np.ndarray,
+                            densities: np.ndarray,
+                            source_position: np.ndarray,
+                            isocenter: np.ndarray,
+                            field_size: Tuple[float, float],
+                            gantry_angle: float,
+                            collimator_angle: float,
+                            couch_angle: float,
+                            energies: np.ndarray,
+                            energy_probabilities: np.ndarray,
+                            seed_offset: int = 0) -> Tuple[np.ndarray, np.ndarray]:
         """
         Simulate particle transport through the patient geometry.
-        
+
         This is the core Monte Carlo particle transport simulation function. It simulates
         the transport of photons and electrons through the patient geometry and scores
         the dose deposition.
-        
+
         Parameters
         ----------
         num_histories : int
@@ -1018,7 +1018,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             Energy spectrum probabilities
         seed_offset : int, optional
             Offset for the random seed
-            
+
         Returns
         -------
         Tuple[np.ndarray, np.ndarray]
@@ -1185,7 +1185,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                     if not self._is_inside_grid(voxel_indices, grid_shape):
                         # Particle escaped
                         break
-                    
+
                     # Get material and density at current position
                     material_idx = materials[tuple(voxel_indices)]
                     density = densities[tuple(voxel_indices)]
@@ -1272,7 +1272,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                                                           grid_spacing, grid_shape, local_rng,
                                                           use_track_length_estimator)
                             break  # Photon is absorbed in this simplified model
-                        else:
+        else:
                             # Move to boundary
                             current_position += current_direction * (t_boundary + 1e-5)
                             

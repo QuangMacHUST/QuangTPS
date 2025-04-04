@@ -1,0 +1,105 @@
+{
+  "name": "Prostate",
+  "description": "Clinical protocol for prostate cancer treatment planning",
+  "clinical_goals": [
+    {
+      "structure_name": "PTV",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 95.0,
+      "target_value": 78.0,
+      "priority": "High",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "PTV",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 2.0,
+      "target_value": 83.0,
+      "priority": "High",
+      "variation_acceptable": 1.0
+    },
+    {
+      "structure_name": "Bladder",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 70.0,
+      "target_value": 25.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Bladder",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 50.0,
+      "target_value": 50.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Rectum",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 75.0,
+      "target_value": 15.0,
+      "priority": "Medium",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "Rectum",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 65.0,
+      "target_value": 17.0,
+      "priority": "Medium",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "Rectum",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 40.0,
+      "target_value": 35.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Femoral Heads",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 50.0,
+      "priority": "Low",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Femoral Head_L",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 40.0,
+      "target_value": 40.0,
+      "priority": "Low",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Femoral Head_R",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 40.0,
+      "target_value": 40.0,
+      "priority": "Low",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Penile Bulb",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 50.0,
+      "priority": "Low",
+      "variation_acceptable": 5.0
+    }
+  ]
+} 

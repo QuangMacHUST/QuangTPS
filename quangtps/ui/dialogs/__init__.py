@@ -11,4 +11,10 @@ của hệ thống lập kế hoạch xạ trị QuangTPS.
 from quangtps.ui.dialogs.beam_dialog import BeamDialog
 from quangtps.ui.dialogs.model_download_dialog import ModelDownloadDialog
 
-__all__ = ['BeamDialog', 'ModelDownloadDialog']
+# Import protocol-related dialogs
+try:
+    from quangtps.ui.dialogs.protocol_dialog import ClinicalProtocolDialog
+    from quangtps.ui.dialogs.protocol_editor_dialog import ProtocolEditorDialog
+    __all__ = ['BeamDialog', 'ModelDownloadDialog', 'ClinicalProtocolDialog', 'ProtocolEditorDialog']
+except ImportError:
+    __all__ = ['BeamDialog', 'ModelDownloadDialog']

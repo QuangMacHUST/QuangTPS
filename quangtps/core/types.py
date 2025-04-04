@@ -7,7 +7,7 @@ for all modules.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Optional, Union, Any
+from typing import Dict, List, Tuple, Optional, Union, Any, TYPE_CHECKING
 from enum import Enum, auto
 import SimpleITK as sitk
 import numpy as np
@@ -16,6 +16,22 @@ from datetime import datetime, date
 import os
 import sys
 import enum
+
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from quangtps.evaluation.dvh.dvh_analysis import DVHAnalysis
+
+# Define PatientStatus directly here to avoid circular imports
+class PatientStatus(str, Enum):
+    """Trạng thái của bệnh nhân."""
+    ACTIVE = "Active"
+    PLANNED = "Planned"
+    ON_TREATMENT = "On Treatment"
+    COMPLETED = "Completed"
+    ON_HOLD = "On Hold"
+    ARCHIVED = "Archived"
+    DECEASED = "Deceased"
+    UNKNOWN = "Unknown"
 
 
 @dataclass

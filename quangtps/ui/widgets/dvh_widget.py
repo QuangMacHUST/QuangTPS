@@ -12,29 +12,29 @@ import os
 import logging
 from typing import Dict, List, Tuple, Optional, Any, Union
 import numpy as np
-
-import matplotlib
-matplotlib.use('Qt5Agg')
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.lines import Line2D
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, 
                             QComboBox, QLabel, QPushButton, QFrame, QGroupBox,
                             QTableWidget, QTableWidgetItem, QHeaderView,
-                            QSplitter, QTabWidget, QToolButton, QMenu, QAction)
+                            QSplitter, QTabWidget, QToolButton, QMenu, QAction,
+                            QToolBar)
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QColor, QIcon, QFont
+from PyQt5.QtGui import QColor, QIcon, QFont, QPalette
 
 from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh_metrics
 from quangtps.evaluation.dvh.dvh_visualization import get_structure_color
 from quangtps.ui.styles import Colors
+from quangtps.evaluation.dvh.dvh_data import DVHData, DVHCurve
 
 logger = logging.getLogger(__name__)
 
 
-class DVHPlot(FigureCanvasQTAgg):
+class DVHPlot(FigureCanvas):
     """
     Interactive DVH plot for displaying dose-volume histograms.
     
@@ -413,210 +413,329 @@ class DVHMetricsTable(QTableWidget):
 
 class DVHWidget(QWidget):
     """
-    Widget for displaying and analyzing dose-volume histograms.
-    
-    This widget provides a comprehensive interface for visualizing and 
-    analyzing dose-volume histograms, including an interactive plot and
-    a table of metrics.
+    Widget for displaying Dose-Volume Histograms (DVH).
+    Provides interactive visualization of DVH data with options for:
+    - Showing/hiding individual structures
+    - Displaying dose statistics
+    - Exporting data
+    - Customizing display options
     """
     
-    structureSelected = pyqtSignal(str)  # Emitted when a structure is selected
+    selection_changed = pyqtSignal(str)  # structure_id
     
     def __init__(self, parent=None):
-        """
-        Initialize the DVH widget.
-        
-        Parameters
-        ----------
-        parent : QWidget, optional
-            Parent widget
-        """
         super().__init__(parent)
         
-        # Initialize data
-        self.dvh_data = {}
+        self.dvh_data: Optional[DVHData] = None
+        self.selected_structure_id: Optional[str] = None
+        self.structure_visibility: Dict[str, bool] = {}  # structure_id -> visibility
+        self.structure_colors: Dict[str, QColor] = {}  # structure_id -> color
         
-        # Set up UI
+        # Display options
+        self.display_mode = "cumulative"  # "cumulative" or "differential"
+        self.show_grid = True
+        self.show_legend = True
+        self.x_axis_unit = "Gy"  # "Gy" or "%"
+        self.y_axis_unit = "%"  # "%" or "cc" (cubic centimeters)
+        
+        # Initialize UI
         self._init_ui()
     
     def _init_ui(self):
-        """Initialize the UI components."""
-        # Main layout
+        """Initialize the UI components"""
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create top toolbar
-        toolbar_layout = QHBoxLayout()
+        # Toolbar for options
+        self.toolbar = QToolBar()
         
-        # Add display mode selection
-        display_group = QGroupBox("Display Mode")
-        display_layout = QHBoxLayout(display_group)
+        # DVH Type combobox
+        self.toolbar.addWidget(QLabel("DVH Type:"))
+        self.dvh_type_combo = QComboBox()
+        self.dvh_type_combo.addItems(["Cumulative", "Differential"])
+        self.dvh_type_combo.setCurrentIndex(0)
+        self.dvh_type_combo.currentIndexChanged.connect(self._on_dvh_type_changed)
+        self.toolbar.addWidget(self.dvh_type_combo)
         
-        self.rb_cumulative = QCheckBox("Cumulative")
-        self.rb_cumulative.setChecked(True)
-        self.rb_differential = QCheckBox("Differential")
+        self.toolbar.addSeparator()
         
-        # Make the checkboxes mutually exclusive
-        self.rb_cumulative.clicked.connect(lambda checked: self._on_display_mode_changed(checked))
-        self.rb_differential.clicked.connect(lambda checked: self._on_display_mode_changed(checked))
+        # X-axis units
+        self.toolbar.addWidget(QLabel("Dose Units:"))
+        self.x_units_combo = QComboBox()
+        self.x_units_combo.addItems(["Gy", "%"])
+        self.x_units_combo.setCurrentIndex(0)
+        self.x_units_combo.currentIndexChanged.connect(self._on_x_units_changed)
+        self.toolbar.addWidget(self.x_units_combo)
         
-        display_layout.addWidget(self.rb_cumulative)
-        display_layout.addWidget(self.rb_differential)
-        toolbar_layout.addWidget(display_group)
+        self.toolbar.addSeparator()
         
-        # Add normalization selection
-        norm_group = QGroupBox("Normalization")
-        norm_layout = QHBoxLayout(norm_group)
+        # Y-axis units
+        self.toolbar.addWidget(QLabel("Volume Units:"))
+        self.y_units_combo = QComboBox()
+        self.y_units_combo.addItems(["%", "cc"])
+        self.y_units_combo.setCurrentIndex(0)
+        self.y_units_combo.currentIndexChanged.connect(self._on_y_units_changed)
+        self.toolbar.addWidget(self.y_units_combo)
         
-        self.combo_normalization = QComboBox()
-        self.combo_normalization.addItem("Absolute (Gy)")
-        self.combo_normalization.addItem("Relative to Max (%)")
-        self.combo_normalization.addItem("Relative to Prescription (%)")
-        self.combo_normalization.currentIndexChanged.connect(self._on_normalization_changed)
+        self.toolbar.addSeparator()
         
-        norm_layout.addWidget(self.combo_normalization)
-        toolbar_layout.addWidget(norm_group)
+        # Display options
+        self.grid_checkbox = QCheckBox("Grid")
+        self.grid_checkbox.setChecked(self.show_grid)
+        self.grid_checkbox.toggled.connect(self._on_grid_toggled)
+        self.toolbar.addWidget(self.grid_checkbox)
         
-        # Add export button
-        self.btn_export = QPushButton("Export DVH")
-        self.btn_export.setIcon(QIcon.fromTheme("document-save"))
-        toolbar_layout.addWidget(self.btn_export)
+        self.legend_checkbox = QCheckBox("Legend")
+        self.legend_checkbox.setChecked(self.show_legend)
+        self.legend_checkbox.toggled.connect(self._on_legend_toggled)
+        self.toolbar.addWidget(self.legend_checkbox)
         
-        # Add toolbar to main layout
-        main_layout.addLayout(toolbar_layout)
+        main_layout.addWidget(self.toolbar)
         
-        # Create splitter for plot and metrics
-        splitter = QSplitter(Qt.Vertical)
-        
-        # Add plot
-        plot_frame = QFrame()
-        plot_layout = QVBoxLayout(plot_frame)
-        
-        self.dvh_plot = DVHPlot(width=8, height=5)
-        self.dvh_plot.pointSelected.connect(self._on_point_selected)
+        # Matplotlib figure and canvas for DVH plot
+        self.figure = Figure(figsize=(5, 4), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumHeight(300)
         
         # Add matplotlib toolbar
-        nav_toolbar = NavigationToolbar(self.dvh_plot, self)
+        nav_toolbar = NavigationToolbar(self.canvas, self)
         
-        plot_layout.addWidget(nav_toolbar)
-        plot_layout.addWidget(self.dvh_plot)
+        main_layout.addWidget(nav_toolbar)
+        main_layout.addWidget(self.canvas, stretch=1)
         
-        splitter.addWidget(plot_frame)
+        # Initialize the plot
+        self.ax = self.figure.add_subplot(111)
+        self._setup_axes()
         
-        # Add metrics table
-        metrics_frame = QFrame()
-        metrics_layout = QVBoxLayout(metrics_frame)
-        
-        metrics_label = QLabel("DVH Metrics")
-        metrics_label.setAlignment(Qt.AlignCenter)
-        metrics_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        
-        self.metrics_table = DVHMetricsTable()
-        
-        metrics_layout.addWidget(metrics_label)
-        metrics_layout.addWidget(self.metrics_table)
-        
-        splitter.addWidget(metrics_frame)
-        
-        # Set splitter sizes (70% plot, 30% metrics)
-        splitter.setSizes([700, 300])
-        
-        # Add splitter to main layout
-        main_layout.addWidget(splitter, 1)
+        # Connect canvas click event
+        self.canvas.mpl_connect('pick_event', self._on_curve_picked)
     
-    def update_dvh(self, dvh_data):
-        """
-        Update the widget with DVH data.
+    def _setup_axes(self):
+        """Setup the axes with proper labels and grid"""
+        self.ax.clear()
         
-        Parameters
-        ----------
-        dvh_data : Dict[str, Dict]
-            Dictionary containing DVH data for each structure
-        """
+        # Set labels based on selected units
+        x_label = f"Dose [{self.x_axis_unit}]"
+        y_label = f"Volume [{self.y_axis_unit}]"
+        
+        self.ax.set_xlabel(x_label)
+        self.ax.set_ylabel(y_label)
+        self.ax.grid(self.show_grid)
+        
+        if self.display_mode == "cumulative":
+            self.ax.set_title("Cumulative Dose Volume Histogram")
+            # For cumulative DVH, y-axis ranges from 0 to 100%
+            if self.y_axis_unit == "%":
+                self.ax.set_ylim(0, 100)
+        else:
+            self.ax.set_title("Differential Dose Volume Histogram")
+        
+        # Set x-axis range based on unit
+        if self.x_axis_unit == "Gy":
+            self.ax.set_xlim(0, 80)  # Typical range for radiotherapy in Gy
+        else:
+            self.ax.set_xlim(0, 120)  # Percentage can go over 100%
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
+    
+    def set_dvh_data(self, dvh_data: DVHData):
+        """Set DVH data and update the plot"""
         self.dvh_data = dvh_data
         
-        # Update plot
-        self.dvh_plot.update_dvh(dvh_data)
+        # Initialize visibility and colors
+        structure_ids = dvh_data.get_structure_ids()
+        for struct_id in structure_ids:
+            if struct_id not in self.structure_visibility:
+                self.structure_visibility[struct_id] = True
+            
+            if struct_id not in self.structure_colors:
+                # Assign color based on structure type
+                structure = dvh_data.get_structure(struct_id)
+                if structure:
+                    if "PTV" in structure.name or "CTV" in structure.name or "GTV" in structure.name:
+                        self.structure_colors[struct_id] = QColor(255, 0, 0)  # Red for targets
+                    elif any(oar in structure.name for oar in ["Lung", "Heart", "Liver", "Kidney", "Spinal", "Brain", "Cord"]):
+                        self.structure_colors[struct_id] = QColor(0, 0, 255)  # Blue for OARs
+                    else:
+                        self.structure_colors[struct_id] = QColor(0, 180, 0)  # Green for other structures
         
-        # Update metrics table
-        self.metrics_table.update_metrics(dvh_data)
+        # Update the plot
+        self._update_plot()
     
-    def _on_structure_selected(self, structure_name):
-        """
-        Handle selection of a structure.
+    def clear(self):
+        """Clear the plot"""
+        self.dvh_data = None
+        self.selected_structure_id = None
         
-        Parameters
-        ----------
-        structure_name : str
-            Name of the selected structure
-        """
-        # Select in the metrics table
-        for row in range(self.metrics_table.rowCount()):
-            if self.metrics_table.item(row, 0).text() == structure_name:
-                self.metrics_table.selectRow(row)
-                break
-        
-        # Emit signal
-        self.structureSelected.emit(structure_name)
+        # Clear the plot
+        self.ax.clear()
+        self._setup_axes()
     
-    def _on_display_mode_changed(self, checked):
-        """
-        Handle change in display mode.
+    def _update_plot(self):
+        """Update the DVH plot with current data and settings"""
+        if not self.dvh_data:
+            return
         
-        Parameters
-        ----------
-        checked : bool
-            Whether the button is checked
-        """
-        # Determine which button was clicked
-        if self.sender() == self.rb_cumulative and checked:
-            self.rb_differential.setChecked(False)
-            self._update_display_mode(True)
-        elif self.sender() == self.rb_differential and checked:
-            self.rb_cumulative.setChecked(False)
-            self._update_display_mode(False)
+        # Clear the current plot
+        self.ax.clear()
+        self._setup_axes()
+        
+        # Get all structure IDs
+        structure_ids = self.dvh_data.get_structure_ids()
+        
+        # Plot each visible structure
+        legend_entries = []
+        for struct_id in structure_ids:
+            if not self.structure_visibility.get(struct_id, True):
+                continue
+            
+            # Get the structure and its DVH curve
+            structure = self.dvh_data.get_structure(struct_id)
+            curve = self.dvh_data.get_curve(struct_id)
+            
+            if not structure or not curve:
+                continue
+            
+            # Get the color
+            color = self.structure_colors.get(struct_id)
+            matplotlib_color = None
+            if color:
+                matplotlib_color = (color.red()/255.0, color.green()/255.0, color.blue()/255.0)
+            
+            # Set line styles
+            line_style = '-'
+            line_width = 2.0
+            
+            # Highlight selected structure
+            if struct_id == self.selected_structure_id:
+                line_width = 3.0
+            
+            # Get the appropriate data based on display mode and units
+            x_data, y_data = self._get_plot_data(curve)
+            
+            # Plot the curve
+            line, = self.ax.plot(
+                x_data, y_data, 
+                linestyle=line_style, 
+                linewidth=line_width,
+                color=matplotlib_color,
+                label=structure.name,
+                picker=5  # Make the line pickable
+            )
+            
+            # Store for legend
+            legend_entries.append(line)
+        
+        # Add legend if enabled
+        if self.show_legend and legend_entries:
+            self.ax.legend()
+        
+        # Update the canvas
+        self.canvas.draw()
     
-    def _update_display_mode(self, cumulative=True):
+    def _get_plot_data(self, curve: DVHCurve) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Update the display mode.
+        Get the appropriate x and y data for plotting based on the current settings.
         
-        Parameters
-        ----------
-        cumulative : bool, optional
-            Whether to show cumulative DVH
+        Args:
+            curve: The DVH curve to extract data from
+            
+        Returns:
+            Tuple of (x_data, y_data) as numpy arrays
         """
-        self.dvh_plot.current_mode = 'cumulative' if cumulative else 'differential'
-        self.dvh_plot.update_dvh(self.dvh_data, self.dvh_plot.selected_structures)
+        # Get dose and volume data
+        dose_data = curve.dose_data.copy()
+        volume_data = curve.volume_data.copy()
+        
+        # Transform data based on display mode
+        if self.display_mode == "differential":
+            # Convert cumulative to differential if needed
+            if curve.is_cumulative:
+                # Simple approach: diff between adjacent points
+                # In a real implementation, proper differentiation should be used
+                differential_volume = np.zeros_like(volume_data)
+                differential_volume[1:] = np.diff(volume_data)
+                differential_volume[0] = volume_data[0]
+                volume_data = differential_volume
+        else:  # cumulative
+            # Convert differential to cumulative if needed
+            if not curve.is_cumulative:
+                # Simple approach: running sum
+                # In a real implementation, proper integration should be used
+                volume_data = np.cumsum(volume_data)
+                # Normalize
+                if np.max(volume_data) > 0:
+                    volume_data = 100.0 * volume_data / np.max(volume_data)
+        
+        # Transform x-axis (dose) based on units
+        if self.x_axis_unit == "%":
+            # Convert dose to percentage of prescription
+            prescription_dose = self.dvh_data.prescription_dose
+            if prescription_dose > 0:
+                dose_data = 100.0 * dose_data / prescription_dose
+        
+        # Transform y-axis (volume) based on units
+        if self.y_axis_unit == "cc":
+            # Convert percentage to absolute volume
+            total_volume = curve.total_volume
+            volume_data = volume_data * total_volume / 100.0
+        
+        return dose_data, volume_data
     
-    def _on_normalization_changed(self, normalization_mode):
-        """
-        Handle change in normalization mode.
+    def _on_dvh_type_changed(self, index):
+        """Handle DVH type combobox changes"""
+        if index == 0:
+            self.display_mode = "cumulative"
+        else:
+            self.display_mode = "differential"
         
-        Parameters
-        ----------
-        normalization_mode : int
-            Index of the selected normalization mode
-        """
-        # Map index to normalization mode
-        mode_map = {
-            0: 'absolute',
-            1: 'relative',
-            2: 'prescription'
-        }
-        
-        self.dvh_plot.normalization = mode_map.get(normalization_mode, 'absolute')
-        self.dvh_plot.update_dvh(self.dvh_data, self.dvh_plot.selected_structures)
+        self._update_plot()
     
-    def _on_point_selected(self, structure_name, dose, volume):
-        """
-        Handle selection of a point on the DVH curve.
+    def _on_x_units_changed(self, index):
+        """Handle X-axis units combobox changes"""
+        if index == 0:
+            self.x_axis_unit = "Gy"
+        else:
+            self.x_axis_unit = "%"
         
-        Parameters
-        ----------
-        structure_name : str
-            Name of the structure
-        dose : float
-            Dose value at the selected point
-        volume : float
-            Volume value at the selected point
-        """
-        self._on_structure_selected(structure_name) 
+        self._update_plot()
+    
+    def _on_y_units_changed(self, index):
+        """Handle Y-axis units combobox changes"""
+        if index == 0:
+            self.y_axis_unit = "%"
+        else:
+            self.y_axis_unit = "cc"
+        
+        self._update_plot()
+    
+    def _on_grid_toggled(self, checked):
+        """Handle grid checkbox changes"""
+        self.show_grid = checked
+        self._update_plot()
+    
+    def _on_legend_toggled(self, checked):
+        """Handle legend checkbox changes"""
+        self.show_legend = checked
+        self._update_plot()
+    
+    def _on_curve_picked(self, event):
+        """Handle curve picking (clicking) in the plot"""
+        # Get the artist (line) that was picked
+        artist = event.artist
+        
+        # Find the corresponding structure ID
+        structure_ids = self.dvh_data.get_structure_ids()
+        for struct_id in structure_ids:
+            structure = self.dvh_data.get_structure(struct_id)
+            if structure and structure.name == artist.get_label():
+                # Set as selected
+                self.selected_structure_id = struct_id
+                
+                # Emit signal
+                self.selection_changed.emit(struct_id)
+                
+                # Update plot to highlight selected curve
+                self._update_plot()
+                break 

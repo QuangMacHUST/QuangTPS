@@ -101,6 +101,33 @@ All notable changes to the QuangTPS radiotherapy treatment planning system will 
 - Added `BeamProfileData` class to properly handle beam profile interpolation
 - Enhanced variance reduction techniques for Monte Carlo dose calculation
 
+- Comprehensive Plan Quality Evaluation module implementing Eclipse-style plan assessment
+  - Added `PlanQualityEvaluator` class for automated plan quality evaluation
+  - Added `ClinicalGoal` class for representing and evaluating clinical goals
+  - Added support for different goal types (D95, V20, Max Dose, etc.)
+  - Added visual progress indicators for goal achievement
+- New user interface components for plan quality evaluation
+  - Added `PlanQualityWidget` with interactive display of evaluation results
+  - Added overall, target, and OAR evaluation scores
+  - Added colored status indicators for passed/acceptable/failed goals
+  - Added detailed goals table with achievement status
+- Enhanced Clinical Protocol management
+  - Added support for protocol directories
+  - Added import/export functionality for protocols
+  - Added protocol validation
+  - Improved protocol file handling
+- Protocol selection dialog
+  - Added `ClinicalProtocolDialog` for selecting clinical protocols
+  - Added protocol details display with HTML formatting
+  - Added import/export functionality
+- Integration with existing evaluation tab
+  - Added Plan Quality tab to evaluation interface
+  - Added proper connection to dose calculation pipeline
+- Demo application
+  - Added complete demo script for plan quality evaluation
+  - Added synthetic data generation for demonstration
+  - Added command-line options for demo mode
+
 ### Fixed
 - Improved DICOM compatibility for importing from Eclipse and other TPS
 - Fixed 3D rendering issues in structure visualization
@@ -117,6 +144,10 @@ All notable changes to the QuangTPS radiotherapy treatment planning system will 
 - Fixed circular import issues in terma calculation module
 - Improved Monte Carlo dose calculation accuracy through proper particle simulation
 - Fixed convergence issues in IMRT optimization module
+- Fixed circular import issues in evaluation modules
+- Fixed proper dose calculator reference passing
+- Fixed file and directory handling in protocol manager
+- Improved error recovery in dose calculation
 
 ### Changed
 - Restructured patient database for better DICOM integration
@@ -133,6 +164,10 @@ All notable changes to the QuangTPS radiotherapy treatment planning system will 
 - Improved dependency resolution script to handle platform-specific dependencies
 - Changed planning workflow to integrated Eclipse-like approach
 - Redesigned the UI for more intuitive treatment planning process
+- Updated `MainWindow` to properly integrate evaluation components
+- Enhanced `EvaluationTab` with tabbed interface for DVH and Plan Quality
+- Improved module initialization and data flow
+- Added proper error handling for missing components
 
 ## [1.0.0] - 2023-01-15
 
@@ -154,4 +189,18 @@ All notable changes to the QuangTPS radiotherapy treatment planning system will 
 - Dose calculation algorithms (Pencil Beam, AAA approximation)
 - Basic optimization for IMRT/VMAT
 - Simple reporting functionality
-- Patient database management 
+- Patient database management
+
+### Fixed
+- Integration between plan quality widget and evaluation tab
+- Protocol selection and application in the evaluation tab
+- Import/export functionality for clinical protocols
+
+## [0.1.0] - 2023-04-01
+
+### Added
+- Initial release with basic treatment planning system functionality
+- Core dose calculation engine
+- Structure definition and contouring tools
+- Beam arrangement and planning
+- Plan evaluation with DVH analysis 

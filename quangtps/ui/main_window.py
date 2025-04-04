@@ -2,1712 +2,1125 @@
 # -*- coding: utf-8 -*-
 
 """
-Module giao diện chính của QuangTPS.
+Main Window Module
+=================
 
-Module này triển khai cửa sổ chính của ứng dụng, 
-điều khiển luồng công việc và quản lý các tab chính.
+This module implements the main window of the QuangTPS application, providing
+access to all features of the treatment planning system.
 """
 
+import logging
 import os
 import sys
-import json
-import time
-import logging
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union, Type, Tuple, cast
+from typing import Dict, List, Optional, Any, Union
 
-import numpy as np
+from PyQt5.QtWidgets import (
+    QMainWindow, QAction, QMenu, QToolBar, QDockWidget, QWidget, 
+    QTabWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QMessageBox, QFileDialog, QApplication, QSplitter, QDialog,
+    QStatusBar, QProgressBar, QComboBox, QStyle, QStyleFactory,
+    QSizePolicy
+)
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QSettings, QSize, QTimer
+from PyQt5.QtGui import QIcon, QColor, QPalette, QKeySequence, QPixmap
+
+from quangtps.core.services import ServiceRegistry
+from quangtps.ui.patient_browser import PatientBrowser
+from quangtps.ui.patient_tab import PatientTab
+from quangtps.ui.planning_tab import PlanningTab
+from quangtps.ui.evaluation_tab import EvaluationTab
+from quangtps.ui.optimization.optimizer_tab import OptimizerTab
+from quangtps.ui.imaging_tab import ImagingTab
+from quangtps.ui.optimization.mco_panel import MCOPanel
+
+from quangtps.core.image import Image
+from quangtps.core.structures import StructureSet, Structure
+from quangtps.planning.plan import Plan
+from quangtps.planning.beam_set import BeamSet
+from quangtps.dose.dose_calculator import DoseCalculator
+
+from quangtps.ui.mpr_viewer import MPRViewer
+from quangtps.ui.structure_tab import StructureTab
+from quangtps.ui.mpr_structure_integration import MPRStructureIntegration
+from quangtps.ui.dialogs.protocol_dialog import ClinicalProtocolDialog
+
+# Add the necessary imports for our optimization modules
 try:
-    from PyQt5.QtWidgets import (
-        QApplication, QMainWindow, QToolBar, QAction, QMenu, QMenuBar,
-        QStatusBar, QDockWidget, QTabWidget, QMessageBox, QFileDialog,
-        QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QDialog,
-        QSystemTrayIcon
-    )
-    from PyQt5.QtCore import Qt, QSize, QTimer, QSettings, QPoint, QRect
-    from PyQt5.QtGui import QIcon, QPixmap, QKeySequence, QMovie
-except ImportError as e:
-    print(f"Error importing PyQt5: {e}")
-    sys.exit(1)
+    from quangtps.ui.optimization.optimization_objective_panel import OptimizationObjectivePanel
+except ImportError:
+    logging.warning("Failed to import optimization components")
 
-# Set up logging before any imports that might use it
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Define PatientDB and ServiceRegistry at module level as fallback
-PatientDB = None
-ServiceRegistry = None
+class LeftPanel(QWidget):
+    """
+    Left panel containing patient browser and other navigation elements.
+    Mimics the Eclipse-style left panel.
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        self.setMinimumWidth(250)
+        self.setMaximumWidth(350)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2)
+        
+        # Patient browser
+        self.patient_browser = PatientBrowser()
+        layout.addWidget(self.patient_browser)
+        
+        # Setup style
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                border-radius: 2px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """)
 
-# Import các module nội bộ
-try:
-    from quangtps.ui.patient_tab import PatientTab
-except ImportError as e:
-    print(f"Error importing PatientTab: {e}")
-    PatientTab = None
+class ContouringView(QWidget):
+    """Contouring view mimicking Eclipse contouring interface"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Placeholder for now
+        label = QLabel("Contouring View")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
 
-# Try to import the imaging tab, with fallback options
-try:
-    from quangtps.ui.imaging_tab import ImagingTab
-except ImportError:
-    from quangtps.ui.simple_imaging_tab import ImagingTab
-    logger.warning("Using simplified ImagingTab implementation")
+class PlanningView(QWidget):
+    """Planning view mimicking Eclipse planning interface"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Use the existing PlanningTab
+        self.planning_tab = PlanningTab()
+        layout.addWidget(self.planning_tab)
 
-# Try to import the external beam planning tab
-try:
-    from quangtps.ui.external_beam_planning_tab import ExternalBeamPlanningTab
-except ImportError:
-    logger.warning("ExternalBeamPlanningTab not available, will use separate planning and dose tabs")
-    ExternalBeamPlanningTab = None
+class EvaluationView(QWidget):
+    """Evaluation view mimicking Eclipse evaluation interface"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Use the existing EvaluationTab
+        self.evaluation_tab = EvaluationTab()
+        layout.addWidget(self.evaluation_tab)
 
-# Try to import the planning tab, with fallback options
-try:
-    from quangtps.ui.planning_tab import PlanningTab
-except ImportError:
-    logger.warning("PlanningTab not available, features will be limited")
-    class PlanningTab(QWidget):
-        """Placeholder PlanningTab class"""
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            layout = QVBoxLayout(self)
-            label = QLabel("Planning features not available", self)
-            label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(label)
+class OptimizationView(QWidget):
+    """Optimization view mimicking Eclipse optimization interface"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Use the existing OptimizerTab
+        self.optimizer_tab = OptimizerTab()
+        layout.addWidget(self.optimizer_tab)
 
-# Continue with other imports
-try:
-    from quangtps.ui.dose_tab import DoseTab
-except ImportError:
-    logger.warning("DoseTab not available, features will be limited")
-    class DoseTab(QWidget):
-        """Placeholder DoseTab class"""
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            layout = QVBoxLayout(self)
-            label = QLabel("Dose calculation features not available", self)
-            label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(label)
-
-try:
-    from quangtps.ui.treatment_tab import TreatmentTab
-except ImportError:
-    logger.warning("TreatmentTab not available, features will be limited")
-    class TreatmentTab(QWidget):
-        """Placeholder TreatmentTab class"""
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            layout = QVBoxLayout(self)
-            label = QLabel("Treatment features not available", self)
-            label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(label)
-
-try:
-    from quangtps.ui.qa_tab import QATab 
-except ImportError:
-    logger.warning("QATab not available, features will be limited")
-    class QATab(QWidget):
-        """Placeholder QATab class"""
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            layout = QVBoxLayout(self)
-            label = QLabel("QA features not available", self)
-            label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(label)
-
-try:
-    from quangtps.ui.reporting_tab import ReportingTab
-except ImportError:
-    logger.warning("ReportingTab not available, features will be limited")
-    class ReportingTab(QWidget):
-        """Placeholder ReportingTab class"""
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            layout = QVBoxLayout(self)
-            label = QLabel("Reporting features not available", self)
-            label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(label)
-
-# Update service imports to handle potential circular imports
-from quangtps.core.services import ServiceRegistry
-from quangtps.core.patient import Patient
-
-try:
-    from quangtps.database.patient_db import PatientDB, PatientDatabase
-except ImportError as e:
-    print(f"Error importing PatientDB: {e}")
-    PatientDB = None
-
-try:
-    from quangtps.database.plan_db import PlanDB
-except ImportError as e:
-    print(f"Error importing PlanDB: {e}")
-    PlanDB = None
-
-try:
-    from quangtps.ui.treatment_planning_tab import TreatmentPlanningTab
-except ImportError as e:
-    print(f"Error importing TreatmentPlanningTab: {e}")
-    TreatmentPlanningTab = None
-
-try:
-    from quangtps.ui.dose_calculation_dialog import DoseCalculationDialog
-except ImportError as e:
-    print(f"Error importing DoseCalculationDialog: {e}")
-    DoseCalculationDialog = None
-
-try:
-    from quangtps.ui.auto_segmentation_tool import AutoSegmentationTool
-except ImportError as e:
-    print(f"Error importing AutoSegmentationTool: {e}")
-    AutoSegmentationTool = None
-
-try:
-    from quangtps.ui.segmentation_model_manager import SegmentationModelManager
-except ImportError as e:
-    print(f"Error importing SegmentationModelManager: {e}")
-    SegmentationModelManager = None
-
-try:
-    from quangtps.ui.object_explorer import ObjectExplorerPanel
-except ImportError as e:
-    print(f"Error importing ObjectExplorerPanel: {e}")
-    ObjectExplorerPanel = None
-
-try:
-    from quangtps.ui.dialogs.protocol_dialog import ClinicalProtocolDialog
-except ImportError as e:
-    print(f"Error importing ClinicalProtocolDialog: {e}")
-    ClinicalProtocolDialog = None
-
-try:
-    from quangtps.planning.clinical_protocols import ClinicalProtocolManager
-except ImportError as e:
-    print(f"Error importing ClinicalProtocolManager: {e}")
-    ClinicalProtocolManager = None
-
-try:
-    from quangtps.ui.optimization.mco_panel import MCOPanel
-except ImportError as e:
-    print(f"Error importing MCOPanel: {e}")
-    MCOPanel = None
-
-try:
-    from quangtps.ui.dialogs.collision_detection_dialog import CollisionDetectionDialog
-except ImportError as e:
-    print(f"Error importing CollisionDetectionDialog: {e}")
-    CollisionDetectionDialog = None
-
-try:
-    from quangtps.scripts.user_scripting import ScriptEditor
-except ImportError as e:
-    print(f"Error importing ScriptEditor: {e}")
-    ScriptEditor = None
-
-try:
-    from quangtps.ui.patient_dashboard import PatientDashboard
-except ImportError as e:
-    print(f"Error importing PatientDashboard: {e}")
-    PatientDashboard = None
-
-try:
-    from quangtps.administration.rt_admin import RTAdministration, QAManagement
-except ImportError as e:
-    print(f"Error importing RTAdministration: {e}")
-    RTAdministration = None
-    QAManagement = None
-
-try:
-    from quangtps.ui.dialogs.dicom_import_dialog import DicomImportDialog
-except ImportError as e:
-    print(f"Error importing DicomImportDialog: {e}")
-    DicomImportDialog = None
-
-try:
-    from quangtps.common.paths import get_icon_path
-except ImportError as e:
-    # Define a fallback function
-    def get_icon_path(icon_name):
-        return os.path.join(os.path.dirname(__file__), "icons", "new_icons", f"{icon_name}.svg")
-
-# Đường dẫn đến thư mục biểu tượng
-ICON_DIR = os.path.join(os.path.dirname(__file__), "icons", "new_icons")
-
-# Đảm bảo thư mục biểu tượng tồn tại
-if not os.path.exists(ICON_DIR):
-    os.makedirs(ICON_DIR, exist_ok=True)
-    logger.warning(f"Đã tạo thư mục biểu tượng: {ICON_DIR}")
+class ReviewView(QWidget):
+    """Review view mimicking Eclipse review and approval interface"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Placeholder for now
+        label = QLabel("Review View")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
 
 class MainWindow(QMainWindow):
     """
-    Lớp cửa sổ chính của ứng dụng QuangTPS.
-    
-    Cửa sổ chính chứa các tab chức năng, thanh công cụ, menu,
-    và các thành phần giao diện khác của hệ thống lập kế hoạch xạ trị.
+    Main application window for the treatment planning system.
+    Implements an Eclipse-like interface with tabs for different planning stages.
     """
     
-    def __init__(self, config=None):
-        """
-        Initialize the main window.
-        
-        Parameters
-        ----------
-        config : dict, optional
-            Configuration dictionary
-        """
+    def __init__(self):
         super().__init__()
         
-        # Set application style
-        self._load_stylesheet()
+        # Set window properties
+        self.setWindowTitle("QuangTPS - Radiation Treatment Planning System")
+        self.setMinimumSize(1024, 768)
+        self.setWindowIcon(QIcon("quangtps/resources/icons/logo.png"))
         
-        self.config = config or {}
-        self.current_patient_id = None
-        self.current_study_id = None
-        self.current_series_id = None
-        self.current_plan_id = None
+        # Initialize state
         self.current_patient = None
         self.current_plan = None
+        self.current_image = None
+        self.current_structure_set = None
+        self.current_dose = None
         
-        # Khởi tạo cơ sở dữ liệu
-        try:
-            if ServiceRegistry:
-                self.service_registry = ServiceRegistry.get_instance()
-                self.patient_db = self.service_registry.get_service('PatientDB')
-                if not self.patient_db and PatientDB:
-                    self.patient_db = PatientDB()
-                    self.service_registry.register_service('PatientDB', self.patient_db)
-            elif PatientDB:
-                self.patient_db = PatientDB()
-            else:
-                # Create a minimal placeholder for PatientDB if not imported
-                logger.warning("Using minimal Patient DB implementation")
-                self.patient_db = type('DummyPatientDB', (), {
-                    'get_patient': lambda self, patient_id: None,
-                    'get_patients': lambda self: [],
-                    'save_patient': lambda self, patient: None,
-                    'delete_patient': lambda self, patient_id: None
-                })()
-        except Exception as e:
-            logger.warning(f"Error initializing PatientDB: {e}")
-            # Create a minimal placeholder for PatientDB
-            self.patient_db = type('DummyPatientDB', (), {
-                'get_patient': lambda self, patient_id: None,
-                'get_patients': lambda self: [],
-                'save_patient': lambda self, patient: None,
-                'delete_patient': lambda self, patient_id: None
-            })()
+        # Setup services
+        self._initialize_services()
         
-        # Tạo các tab luồng công việc
-        self.workflow_tabs = QTabWidget()
-        self.workflow_tabs.setTabPosition(QTabWidget.North)  # Eclipse has tabs at the top
-        self.workflow_tabs.setDocumentMode(True)
-        self.workflow_tabs.setElideMode(Qt.ElideRight)
-        self.workflow_tabs.setTabsClosable(False)  # Eclipse doesn't have closable tabs
-        self.workflow_tabs.setMovable(False)       # Eclipse tabs aren't movable
-        
-        # Add tabs for different workflow stages in Eclipse-like order
-        self.tab_indexes = {}  # Store tab indexes for quick access
-        tab_index = 0
-        
-        try:
-            self.patient_tab = PatientTab()
-            self.workflow_tabs.addTab(self.patient_tab, "Patient")
-            self.tab_indexes['patient'] = tab_index
-            tab_index += 1
-        except Exception as e:
-            logger.error(f"Could not initialize PatientTab: {e}")
-            # Create a simple placeholder tab if PatientTab fails
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Patient Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.patient_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Patient")
-            self.tab_indexes['patient'] = tab_index
-            tab_index += 1
-        
-        # Thêm các tab chính
-        try:
-            if ImagingTab is not None:
-                self.imaging_tab = ImagingTab()
-                self.workflow_tabs.addTab(self.imaging_tab, "Imaging")
-                self.tab_indexes['imaging'] = tab_index
-                tab_index += 1
-            else:
-                raise ImportError("ImagingTab class is not defined")
-        except Exception as e:
-            logger.error(f"Could not initialize ImagingTab: {e}")
-            # Create a simple placeholder tab if ImagingTab fails
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Imaging Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.imaging_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Imaging")
-            self.tab_indexes['imaging'] = tab_index
-            tab_index += 1
-        
-        # Structure tab (Eclipse adds a separate structure tab)
-        try:
-            from quangtps.ui.structure_tab import StructureTab
-            self.structure_tab = StructureTab()
-            self.workflow_tabs.addTab(self.structure_tab, "Structure")
-            self.tab_indexes['structure'] = tab_index
-            tab_index += 1
-            logger.info("Structure tab initialized successfully")
-        except Exception as e:
-            logger.error(f"Could not initialize StructureTab: {e}")
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Structure Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.structure_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Structure")
-            self.tab_indexes['structure'] = tab_index
-            tab_index += 1
-        
-        try:
-            if ExternalBeamPlanningTab is not None:
-                self.external_beam_planning_tab = ExternalBeamPlanningTab()
-                self.workflow_tabs.addTab(self.external_beam_planning_tab, "External Beam Planning")
-                self.tab_indexes['external_beam_planning'] = tab_index
-                tab_index += 1
-                
-                # Kết nối tín hiệu
-                if hasattr(self.patient_tab, 'patient_loaded'):
-                    self.patient_tab.patient_loaded.connect(self.external_beam_planning_tab.set_patient)
-                
-                if hasattr(self.external_beam_planning_tab, 'plan_created'):
-                    self.external_beam_planning_tab.plan_created.connect(self._on_plan_selected)
-                    
-                if hasattr(self.external_beam_planning_tab, 'plan_updated'):
-                    self.external_beam_planning_tab.plan_updated.connect(self._on_plan_selected)
-                    
-                logger.info("External Beam Planning tab initialized successfully")
-            else:
-                # Nếu không tải được, sử dụng tách biệt Planning và Dose tabs thay thế
-                try:
-                    if PlanningTab is not None:
-                        self.planning_tab = PlanningTab()
-                        self.workflow_tabs.addTab(self.planning_tab, "Planning")
-                        self.tab_indexes['planning'] = tab_index
-                        tab_index += 1
-                        
-                        # Kết nối tín hiệu
-                        if hasattr(self.patient_tab, 'patient_loaded'):
-                            self.patient_tab.patient_loaded.connect(self.planning_tab.set_patient)
-                        
-                        if hasattr(self.planning_tab, 'plan_created'):
-                            self.planning_tab.plan_created.connect(self._on_plan_selected)
-                            
-                        if hasattr(self.planning_tab, 'plan_updated'):
-                            self.planning_tab.plan_updated.connect(self._on_plan_selected)
-                        
-                        logger.info("Planning tab initialized successfully as fallback")
-                    else:
-                        raise ImportError("PlanningTab class is not defined")
-                except Exception as e2:
-                    logger.error(f"Could not initialize PlanningTab as fallback: {e2}")
-                    placeholder = QWidget()
-                    placeholder_layout = QVBoxLayout(placeholder)
-                    placeholder_layout.addWidget(QLabel("Planning Tab - Not Available"))
-                    placeholder_layout.addWidget(QLabel(f"Error: {str(e2)}"))
-                    self.planning_tab = placeholder
-                    self.workflow_tabs.addTab(placeholder, "Planning")
-                    self.tab_indexes['planning'] = tab_index
-                    tab_index += 1
-
-                # Thêm tab Dose
-                try:
-                    if DoseTab is not None:
-                        self.dose_tab = DoseTab()
-                        self.workflow_tabs.addTab(self.dose_tab, "Dose")
-                        self.tab_indexes['dose'] = tab_index
-                        tab_index += 1
-                        
-                        # Kết nối tín hiệu
-                        if hasattr(self.patient_tab, 'patient_loaded'):
-                            self.patient_tab.patient_loaded.connect(self.dose_tab.set_patient)
-                        
-                        if hasattr(self.planning_tab, 'plan_created'):
-                            self.planning_tab.plan_created.connect(self.dose_tab.set_plan)
-                            
-                        if hasattr(self.planning_tab, 'plan_updated'):
-                            self.planning_tab.plan_updated.connect(self.dose_tab.set_plan)
-                        
-                        logger.info("Dose tab initialized successfully as fallback")
-                    else:
-                        raise ImportError("DoseTab class is not defined")
-                except Exception as e3:
-                    logger.error(f"Could not initialize DoseTab as fallback: {e3}")
-                    placeholder = QWidget()
-                    placeholder_layout = QVBoxLayout(placeholder)
-                    placeholder_layout.addWidget(QLabel("Dose Tab - Not Available"))
-                    placeholder_layout.addWidget(QLabel(f"Error: {str(e3)}"))
-                    self.dose_tab = placeholder
-                    self.workflow_tabs.addTab(placeholder, "Dose")
-                    self.tab_indexes['dose'] = tab_index
-                    tab_index += 1
-
-        except Exception as e:
-            logger.error(f"Error in _init_tabs: {e}")
-            logger.debug("Exception details:", exc_info=True)
-
-        # Chỉ tạo một tab Plan Evaluation 
-        self._init_plan_evaluation_tab()
-        self.tab_indexes['plan_evaluation'] = tab_index
-        tab_index += 1
-        
-        self._init_treatment_tab()
-        self.tab_indexes['treatment'] = tab_index
-        tab_index += 1
-        
-        self._init_qa_tab()
-        self.tab_indexes['qa'] = tab_index
-        tab_index += 1
-        
-        self._init_reporting_tab()
-        self.tab_indexes['reporting'] = tab_index
-        tab_index += 1
-        
-        # Thiết lập cửa sổ
-        self.setWindowTitle("QuangTPS - Hệ thống lập kế hoạch xạ trị mở")
-        icon_path = os.path.join(ICON_DIR, "app_icon.svg")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-        self.setMinimumSize(1200, 800)
-        
-        # Khởi tạo giao diện
+        # Setup UI
         self._setup_ui()
+        self._create_menus()
+        self._create_toolbars()
+        self.apply_styling()
         
-        # Tạo menu và thanh công cụ
-        self._setup_menus()
-        self._create_toolbar()
+        # Load settings
+        self._load_settings()
         
-        # Thiết lập trạng thái ban đầu của UI
-        self._update_ui_state()
+        # Setup status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Ready")
         
-        logger.info("Khởi tạo cửa sổ chính QuangTPS hoàn tất")
+        # Progress bar for calculations
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setMinimumWidth(200)
+        self.status_bar.addPermanentWidget(self.progress_bar)
         
-        self.load_plugins()
-    
-    def _load_stylesheet(self):
-        """
-        Load the application stylesheet to create an Eclipse-like appearance.
-        
-        This applies the dark blue theme similar to Varian Eclipse's interface.
-        """
-        try:
-            # First try to load the dark theme stylesheet
-            dark_theme_path = os.path.join(os.path.dirname(__file__), "styles", "dark_theme.css")
-            
-            if os.path.exists(dark_theme_path):
-                logger.info(f"Loading dark theme stylesheet from: {dark_theme_path}")
-                with open(dark_theme_path, 'r', encoding='utf-8') as f:
-                    stylesheet = f.read()
-                    self.setStyleSheet(stylesheet)
-                    
-                # Apply additional styling for specific elements
-                self.workflow_tabs.setTabPosition(QTabWidget.North)
-                self.workflow_tabs.setMovable(True)
-                self.workflow_tabs.setDocumentMode(True)  # More Eclipse-like tab appearance
-                
-                if hasattr(self, 'patient_tab'):
-                    self.patient_tab.setObjectName("PatientTab")
-                
-                if hasattr(self, 'imaging_tab'):
-                    self.imaging_tab.setObjectName("ImagingTab")
-                
-                if hasattr(self, 'planning_tab'):
-                    self.planning_tab.setObjectName("PlanningTab")
-                
-                if hasattr(self, 'dose_tab'):
-                    self.dose_tab.setObjectName("DoseTab")
-                
-                if hasattr(self, 'plan_evaluation_tab'):
-                    self.plan_evaluation_tab.setObjectName("PlanEvaluationTab")
-                
-                if hasattr(self, 'qa_tab'):
-                    self.qa_tab.setObjectName("QATab")
-                
-                if hasattr(self, 'treatment_tab'):
-                    self.treatment_tab.setObjectName("TreatmentTab")
-                
-                if hasattr(self, 'reporting_tab'):
-                    self.reporting_tab.setObjectName("ReportingTab")
-                
-                logger.info("Dark theme stylesheet applied successfully")
-                return True
-            else:
-                logger.warning(f"Dark theme stylesheet not found at: {dark_theme_path}")
-        except Exception as e:
-            logger.error(f"Failed to load stylesheet: {e}")
-            logger.debug("Exception details:", exc_info=True)
-        
-        return False
-    
-    def load_plugins(self):
-        """Load and initialize plugins for extending system functionality.
-        
-        This method scans the plugins directory and loads any compatible plugins
-        to extend the system's functionality.
-        """
-        logger.info("Checking for plugins...")
-        
-        # Get the plugins directory
-        plugins_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins")
-        
-        # Check if plugins directory exists
-        if not os.path.exists(plugins_dir):
-            logger.info("No plugins directory found. Creating one.")
-            try:
-                os.makedirs(plugins_dir, exist_ok=True)
-            except Exception as e:
-                logger.warning(f"Could not create plugins directory: {e}")
-            return
-            
-        # Check for Python files in the plugins directory
-        plugin_files = [f for f in os.listdir(plugins_dir) if f.endswith('.py') and f != '__init__.py']
-        
-        if not plugin_files:
-            logger.info("No plugins found.")
-            return
-            
-        logger.info(f"Found {len(plugin_files)} potential plugins.")
-        
-        # Try to load each plugin
-        for plugin_file in plugin_files:
-            plugin_name = os.path.splitext(plugin_file)[0]
-            logger.info(f"Attempting to load plugin: {plugin_name}")
-            
-            try:
-                # Add the plugins directory to the path temporarily
-                if plugins_dir not in sys.path:
-                    sys.path.insert(0, plugins_dir)
-                
-                # Import the plugin module
-                plugin_module = __import__(plugin_name)
-                
-                # Check if the module has a register_plugin function
-                if hasattr(plugin_module, 'register_plugin'):
-                    plugin_module.register_plugin(self)
-                    logger.info(f"Successfully loaded plugin: {plugin_name}")
-                else:
-                    logger.warning(f"Plugin {plugin_name} does not have a register_plugin function.")
-            
-            except Exception as e:
-                logger.error(f"Error loading plugin {plugin_name}: {e}")
-            
-            finally:
-                # Remove the plugins directory from the path
-                if plugins_dir in sys.path:
-                    sys.path.remove(plugins_dir)
-                    
-        # Refresh UI after loading plugins
-        self._update_ui_state()
-        logger.info("Plugin loading completed.")
+        # Show the window
+        self.show()
     
     def _setup_ui(self):
-        """Set up the main UI."""
-        # Create central widget with splitter
-        central_widget = QWidget()
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        """Set up the main UI components."""
+        # Create central widget and main layout
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        
+        self.main_layout = QVBoxLayout(self.central_widget)
         
         # Create main splitter
         self.main_splitter = QSplitter(Qt.Horizontal)
         
-        # Temporarily disable ObjectExplorerPanel
-        # Add Object Explorer panel on the left side
-        # self.object_explorer = ObjectExplorerPanel(self)
-        # self.object_explorer.patient_selected.connect(self._on_patient_selected_from_explorer)
-        # self.object_explorer.plan_selected.connect(self._on_plan_selected_from_explorer)
-        # self.object_explorer.structure_selected.connect(self._on_structure_selected_from_explorer)
+        # Create left panel for patient/plan browser
+        self.left_panel = LeftPanel()
+        self.main_splitter.addWidget(self.left_panel)
         
-        # self.main_splitter.addWidget(self.object_explorer)
+        # Create right area with tabs
+        self.right_area = QTabWidget()
         
-        # Add workflow tab widget
-        self.main_splitter.addWidget(self.workflow_tabs)
+        # Tab 1: Contouring tab
+        self.contouring_tab = ContouringView()
+        self.right_area.addTab(self.contouring_tab, "Contouring")
         
-        # Set initial sizes (25% explorer, 75% main area)
-        # self.main_splitter.setSizes([250, 750])
+        # Tab 2: Planning tab
+        self.planning_tab = PlanningView()
+        self.right_area.addTab(self.planning_tab, "Planning")
         
-        main_layout.addWidget(self.main_splitter)
-        self.setCentralWidget(central_widget)
+        # Tab 3: Evaluation tab
+        self.evaluation_tab = EvaluationView()
+        self.right_area.addTab(self.evaluation_tab, "Evaluation")
         
-        # Add a status message
-        status_bar = QStatusBar()
-        self.setStatusBar(status_bar)
-        status_bar.showMessage("QuangTPS is running in simplified mode")
+        # Tab 4: Optimization tab
+        self.optimization_tab = OptimizationView()
+        self.right_area.addTab(self.optimization_tab, "Optimization")
         
-        logger.info("Set up simplified UI without Object Explorer")
+        # Tab 5: MCO Tab (Multi-Criteria Optimization)
+        self.mco_tab = MCOPanel()
+        self.right_area.addTab(self.mco_tab, "MCO")
+        
+        # Tab 6: Review tab
+        self.review_tab = ReviewView()
+        self.right_area.addTab(self.review_tab, "Review")
+        
+        # Add right area to main splitter
+        self.main_splitter.addWidget(self.right_area)
+        
+        # Set initial sizes
+        self.main_splitter.setSizes([300, 900])
+        
+        # Add splitter to main layout
+        self.main_layout.addWidget(self.main_splitter)
+        
+        # Create menus and toolbars
+        self._create_menus()
+        self._create_toolbars()
+        
+        # Load user settings
+        self._load_settings()
+        
+        # Initially hide patient browser
+        self.toggle_patient_browser(False)
     
-    def _setup_menus(self):
-        """Set up the menu bar."""
+    def _create_menus(self):
+        """Create application menus."""
         # File menu
         self.file_menu = self.menuBar().addMenu("&File")
         
-        self.new_patient_action = self.file_menu.addAction("&New Patient...")
+        self.new_patient_action = QAction("&New Patient...", self)
         self.new_patient_action.setShortcut("Ctrl+N")
-        self.new_patient_action.triggered.connect(self.on_new_patient)
+        self.new_patient_action.triggered.connect(self._new_patient)
+        self.file_menu.addAction(self.new_patient_action)
         
-        self.open_patient_action = self.file_menu.addAction("&Open Patient...")
+        self.open_patient_action = QAction("&Open Patient...", self)
         self.open_patient_action.setShortcut("Ctrl+O")
-        self.open_patient_action.triggered.connect(self.on_open_patient)
+        self.open_patient_action.triggered.connect(self.open_patient_dialog)
+        self.file_menu.addAction(self.open_patient_action)
         
         self.file_menu.addSeparator()
         
-        self.import_menu = self.file_menu.addMenu("&Import")
+        self.import_dicom_action = QAction("Import &DICOM...", self)
+        self.import_dicom_action.triggered.connect(self.open_image_dialog)
+        self.file_menu.addAction(self.import_dicom_action)
         
-        self.import_dicom_action = self.import_menu.addAction("Import DICOM...")
-        self.import_dicom_action.triggered.connect(self.on_import_dicom)
+        self.import_rt_struct_action = QAction("Import RT&Struct...", self)
+        self.import_rt_struct_action.triggered.connect(self.import_structure_set_dialog)
+        self.file_menu.addAction(self.import_rt_struct_action)
         
-        self.import_rtstruct_action = self.import_menu.addAction("Import RTSTRUCT...")
-        self.import_rtstruct_action.triggered.connect(self._import_rtstruct)
+        self.import_rt_plan_action = QAction("Import RT&Plan...", self)
+        self.import_rt_plan_action.triggered.connect(self.load_plan_dialog)
+        self.file_menu.addAction(self.import_rt_plan_action)
         
-        self.import_rtplan_action = self.import_menu.addAction("Import RTPLAN...")
-        self.import_rtplan_action.triggered.connect(self._import_rtplan)
-        
-        self.import_rtdose_action = self.import_menu.addAction("Import RTDOSE...")
-        self.import_rtdose_action.triggered.connect(self._import_rtdose)
-        
-        self.file_menu.addSeparator()
-        
-        self.save_action = self.file_menu.addAction("&Save")
-        self.save_action.setShortcut("Ctrl+S")
-        self.save_action.triggered.connect(self._save_patient)
-        
-        self.save_as_action = self.file_menu.addAction("Save &As...")
-        self.save_as_action.setShortcut("Ctrl+Shift+S")
-        self.save_as_action.triggered.connect(self._save_patient_as)
+        self.import_rt_dose_action = QAction("Import RT&Dose...", self)
+        self.file_menu.addAction(self.import_rt_dose_action)
         
         self.file_menu.addSeparator()
         
-        self.export_menu = self.file_menu.addMenu("&Export")
+        self.save_plan_action = QAction("&Save Plan...", self)
+        self.save_plan_action.setShortcut("Ctrl+S")
+        self.save_plan_action.triggered.connect(self.save_plan_dialog)
+        self.file_menu.addAction(self.save_plan_action)
         
-        self.export_dicom_action = self.export_menu.addAction("Export DICOM...")
-        self.export_dicom_action.triggered.connect(self._export_dicom)
-        
-        self.export_pdf_action = self.export_menu.addAction("Export Report as PDF...")
-        self.export_pdf_action.triggered.connect(self._export_pdf)
+        self.export_dicom_action = QAction("&Export DICOM...", self)
+        self.file_menu.addAction(self.export_dicom_action)
         
         self.file_menu.addSeparator()
         
-        self.exit_action = self.file_menu.addAction("E&xit")
+        self.exit_action = QAction("E&xit", self)
         self.exit_action.setShortcut("Alt+F4")
         self.exit_action.triggered.connect(self.close)
+        self.file_menu.addAction(self.exit_action)
         
         # Edit menu
         self.edit_menu = self.menuBar().addMenu("&Edit")
         
-        self.undo_action = self.edit_menu.addAction("&Undo")
+        self.undo_action = QAction("&Undo", self)
         self.undo_action.setShortcut("Ctrl+Z")
-        self.undo_action.triggered.connect(self._undo)
+        self.edit_menu.addAction(self.undo_action)
         
-        self.redo_action = self.edit_menu.addAction("&Redo")
+        self.redo_action = QAction("&Redo", self)
         self.redo_action.setShortcut("Ctrl+Y")
-        self.redo_action.triggered.connect(self._redo)
+        self.edit_menu.addAction(self.redo_action)
         
         self.edit_menu.addSeparator()
         
-        self.preferences_action = self.edit_menu.addAction("&Preferences...")
-        self.preferences_action.triggered.connect(self._show_preferences)
+        self.preferences_action = QAction("&Preferences...", self)
+        self.edit_menu.addAction(self.preferences_action)
         
         # View menu
         self.view_menu = self.menuBar().addMenu("&View")
         
-        self.view_patient_browser_action = self.view_menu.addAction("Patient Browser")
-        self.view_patient_browser_action.setCheckable(True)
-        self.view_patient_browser_action.setChecked(True)
-        self.view_patient_browser_action.triggered.connect(self._toggle_patient_browser)
-        
-        self.view_image_tools_action = self.view_menu.addAction("Image Tools")
-        self.view_image_tools_action.setCheckable(True)
-        self.view_image_tools_action.setChecked(True)
-        self.view_image_tools_action.triggered.connect(self._toggle_image_tools)
+        self.patient_browser_action = QAction("Patient &Browser", self)
+        self.patient_browser_action.setCheckable(True)
+        self.patient_browser_action.setChecked(False)
+        self.patient_browser_action.triggered.connect(lambda checked: self.toggle_patient_browser(checked))
+        self.view_menu.addAction(self.patient_browser_action)
         
         self.view_menu.addSeparator()
         
-        self.view_full_screen_action = self.view_menu.addAction("Full Screen")
-        self.view_full_screen_action.setShortcut("F11")
-        self.view_full_screen_action.setCheckable(True)
-        self.view_full_screen_action.triggered.connect(self._toggle_full_screen)
+        # Planning menu
+        self.planning_menu = self.menuBar().addMenu("&Planning")
+        
+        self.new_plan_action = QAction("&New Plan...", self)
+        self.planning_menu.addAction(self.new_plan_action)
+        
+        self.calculate_dose_action = QAction("&Calculate Dose", self)
+        self.calculate_dose_action.triggered.connect(self.calculate_dose)
+        self.planning_menu.addAction(self.calculate_dose_action)
+        
+        self.optimization_action = QAction("&Optimization...", self)
+        self.planning_menu.addAction(self.optimization_action)
+        
+        self.planning_menu.addSeparator()
+        
+        self.clinical_protocols_action = QAction("&Clinical Protocols...", self)
+        self.clinical_protocols_action.triggered.connect(self.show_protocols_dialog)
+        self.planning_menu.addAction(self.clinical_protocols_action)
         
         # Tools menu
         self.tools_menu = self.menuBar().addMenu("&Tools")
         
-        self.contour_editor_action = self.tools_menu.addAction("Contour Editor")
-        self.contour_editor_action.triggered.connect(self._open_contour_editor)
+        self.dicom_browser_action = QAction("&DICOM Browser...", self)
+        self.tools_menu.addAction(self.dicom_browser_action)
         
-        self.beam_manager_action = self.tools_menu.addAction("Beam Manager")
-        self.beam_manager_action.triggered.connect(self._open_beam_manager)
+        self.tools_menu.addSeparator()
         
-        self.dose_calculator_action = self.tools_menu.addAction("Dose Calculator")
-        self.dose_calculator_action.triggered.connect(self._open_dose_calculator)
+        self.scripts_menu = QMenu("&Scripts", self)
+        self.tools_menu.addMenu(self.scripts_menu)
         
-        # Add the advanced dose calculator option
-        self.advanced_dose_calculator_action = self.tools_menu.addAction("Advanced Dose Calculator")
-        self.advanced_dose_calculator_action.triggered.connect(self._open_advanced_dose_calculator)
+        self.run_script_action = QAction("&Run Script...", self)
+        self.scripts_menu.addAction(self.run_script_action)
         
-        self.plan_optimizer_action = self.tools_menu.addAction("Plan Optimizer")
-        self.plan_optimizer_action.triggered.connect(self._open_plan_optimizer)
+        self.scripts_menu.addSeparator()
         
-        self.dvh_analyzer_action = self.tools_menu.addAction("DVH Analyzer")
-        self.dvh_analyzer_action.triggered.connect(self._open_dvh_analyzer)
+        self.script_editor_action = QAction("Script &Editor...", self)
+        self.scripts_menu.addAction(self.script_editor_action)
         
-        # Add collision detection to tools menu
-        self.collision_detection_action = self.tools_menu.addAction("Collision Detection")
-        self.collision_detection_action.triggered.connect(self._open_collision_detection)
+        # Window menu
+        self.window_menu = self.menuBar().addMenu("&Window")
+        
+        self.reset_layout_action = QAction("&Reset Layout", self)
+        self.window_menu.addAction(self.reset_layout_action)
+        
+        self.window_menu.addSeparator()
         
         # Help menu
         self.help_menu = self.menuBar().addMenu("&Help")
         
-        self.about_action = self.help_menu.addAction("&About")
-        self.about_action.triggered.connect(self._show_about_dialog)
+        self.help_contents_action = QAction("&Contents...", self)
+        self.help_menu.addAction(self.help_contents_action)
         
-        self.help_action = self.help_menu.addAction("&Help")
-        self.help_action.setShortcut("F1")
-        self.help_action.triggered.connect(self._show_help)
+        self.help_menu.addSeparator()
         
-        # Add Clinical Protocols menu
-        protocol_menu = self.menuBar().addMenu("&Protocols")
-        
-        # Apply protocol action
-        apply_protocol_action = QAction("Apply Clinical Protocol...", self)
-        apply_protocol_action.triggered.connect(self._show_protocol_dialog)
-        protocol_menu.addAction(apply_protocol_action)
-        
-        # Manage protocols action
-        manage_protocols_action = QAction("Manage Clinical Protocols...", self)
-        manage_protocols_action.triggered.connect(self._manage_protocols)
-        protocol_menu.addAction(manage_protocols_action)
-        
-        protocol_menu.addSeparator()
-        
-        # Create protocol templates action
-        create_protocol_action = QAction("Create Protocol Template...", self)
-        create_protocol_action.triggered.connect(self._create_protocol_template)
-        protocol_menu.addAction(create_protocol_action)
-        
-        # Optimization menu
-        optimization_menu = self.menuBar().addMenu("Optimization")
-        
-        # MCO actions
-        start_mco_action = QAction("Start Multi-Criteria Optimization", self)
-        start_mco_action.triggered.connect(self._on_start_mco)
-        optimization_menu.addAction(start_mco_action)
-        
-        # Update Administration menu or add if not exists
-        self.admin_menu = self.menuBar().addMenu("Administration")
-        
-        self.user_management_action = self.admin_menu.addAction("User Management")
-        self.user_management_action.triggered.connect(self._open_user_management)
-        
-        self.machine_management_action = self.admin_menu.addAction("Machine Management")
-        self.machine_management_action.triggered.connect(self._open_machine_management)
-        
-        self.system_settings_action = self.admin_menu.addAction("System Settings")
-        self.system_settings_action.triggered.connect(self._open_system_settings)
-        
-        self.license_info_action = self.admin_menu.addAction("License Information")
-        self.license_info_action.triggered.connect(self._show_license_info)
-        
-        self.backup_action = self.admin_menu.addAction("Backup/Restore")
-        self.backup_action.triggered.connect(self._open_backup_restore)
-        
-        # Add Scripts menu
-        self.scripts_menu = self.menuBar().addMenu("Scripts")
-        
-        self.script_editor_action = self.scripts_menu.addAction("Script Editor")
-        self.script_editor_action.triggered.connect(self._open_script_editor)
-        
-        self.run_script_action = self.scripts_menu.addAction("Run Script...")
-        self.run_script_action.triggered.connect(self._run_script)
-        
-        self.scripts_menu.addSeparator()
-        
-        self.script_samples_menu = self.scripts_menu.addMenu("Sample Scripts")
-        self.sample_dvh_script_action = self.script_samples_menu.addAction("DVH Analysis")
-        self.sample_dvh_script_action.triggered.connect(lambda: self._load_sample_script("dvh_analysis"))
-        
-        self.sample_plan_script_action = self.script_samples_menu.addAction("Auto-Planning")
-        self.sample_plan_script_action.triggered.connect(lambda: self._load_sample_script("auto_planning"))
-        
-        self.sample_qa_script_action = self.script_samples_menu.addAction("QA Report")
-        self.sample_qa_script_action.triggered.connect(lambda: self._load_sample_script("qa_report"))
+        self.about_action = QAction("&About QuangTPS...", self)
+        self.about_action.triggered.connect(self.show_about_dialog)
+        self.help_menu.addAction(self.about_action)
     
-    def _create_toolbar(self):
-        """Tạo thanh công cụ."""
-        # Thanh công cụ chính
-        self.main_toolbar = self.addToolBar("Thanh công cụ chính")
+    def _create_toolbars(self):
+        """Create application toolbars."""
+        # Main toolbar
+        self.main_toolbar = self.addToolBar("Main")
         self.main_toolbar.setIconSize(QSize(24, 24))
+        self.main_toolbar.setMovable(False)
         
-        # Thêm các action vào thanh công cụ
-        new_patient_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "new_patient.svg")), "Bệnh nhân mới", self)
-        new_patient_action.triggered.connect(self.on_new_patient)
-        self.main_toolbar.addAction(new_patient_action)
+        # Get icons directory
+        icons_dir = os.path.join(os.path.dirname(__file__), "icons")
         
-        open_patient_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "open_patient.svg")), "Mở bệnh nhân", self)
-        open_patient_action.triggered.connect(self.on_open_patient)
-        self.main_toolbar.addAction(open_patient_action)
+        # Add toolbar actions
+        self.new_patient_tool = QAction(QIcon(os.path.join(icons_dir, "new_patient.png")), "New Patient", self)
+        self.new_patient_tool.triggered.connect(self._new_patient)
+        self.main_toolbar.addAction(self.new_patient_tool)
         
-        self.main_toolbar.addSeparator()
-        
-        save_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "save.svg")), "Lưu", self)
-        save_action.triggered.connect(self._save_patient)
-        self.main_toolbar.addAction(save_action)
+        self.open_patient_tool = QAction(QIcon(os.path.join(icons_dir, "open_patient.png")), "Open Patient", self)
+        self.open_patient_tool.triggered.connect(self.open_patient_dialog)
+        self.main_toolbar.addAction(self.open_patient_tool)
         
         self.main_toolbar.addSeparator()
         
-        import_dicom_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "import_dicom.svg")), "Nhập DICOM", self)
-        import_dicom_action.triggered.connect(self.on_import_dicom)
-        self.main_toolbar.addAction(import_dicom_action)
+        self.import_dicom_tool = QAction(QIcon(os.path.join(icons_dir, "import_dicom.png")), "Import DICOM", self)
+        self.import_dicom_tool.triggered.connect(self.open_image_dialog)
+        self.main_toolbar.addAction(self.import_dicom_tool)
         
-        export_dicom_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "export_dicom.svg")), "Xuất DICOM", self)
-        export_dicom_action.triggered.connect(self._export_dicom)
-        self.main_toolbar.addAction(export_dicom_action)
-        
-        self.main_toolbar.addSeparator()
-        
-        # Công cụ đo lường
-        measurement_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "measure.svg")), "Đo lường", self)
-        measurement_action.triggered.connect(self._show_measurement_tools)
-        self.main_toolbar.addAction(measurement_action)
-        
-        # Công cụ Window/Level
-        window_level_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "window_level.svg")), "Window/Level", self)
-        window_level_action.triggered.connect(self._show_window_level_tools)
-        self.main_toolbar.addAction(window_level_action)
-        
-        # Thêm nút thu phóng
-        zoom_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "zoom.svg")), "Thu phóng", self)
-        zoom_action.triggered.connect(self._show_zoom_tools)
-        self.main_toolbar.addAction(zoom_action)
+        self.import_rt_struct_tool = QAction(QIcon(os.path.join(icons_dir, "roi.png")), "Import RTStruct", self)
+        self.import_rt_struct_tool.triggered.connect(self.import_structure_set_dialog)
+        self.main_toolbar.addAction(self.import_rt_struct_tool)
         
         self.main_toolbar.addSeparator()
         
-        # Công cụ contour
-        contour_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "contour.svg")), "Vẽ contour", self)
-        contour_action.triggered.connect(self._open_contour_editor)
-        self.main_toolbar.addAction(contour_action)
+        self.new_plan_tool = QAction(QIcon(os.path.join(icons_dir, "new_plan.png")), "New Plan", self)
+        self.main_toolbar.addAction(self.new_plan_tool)
         
-        # Công cụ beam
-        beam_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "beam.svg")), "Quản lý beam", self)
-        beam_action.triggered.connect(self._open_beam_manager)
-        self.main_toolbar.addAction(beam_action)
+        self.calculate_dose_tool = QAction(QIcon(os.path.join(icons_dir, "calculate_dose.png")), "Calculate Dose", self)
+        self.calculate_dose_tool.triggered.connect(self.calculate_dose)
+        self.main_toolbar.addAction(self.calculate_dose_tool)
         
-        self.main_toolbar.addSeparator()
-        
-        # Công cụ tính toán liều
-        dose_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "dose.svg")), "Tính toán liều", self)
-        dose_action.triggered.connect(self._open_dose_calculator)
-        self.main_toolbar.addAction(dose_action)
-        
-        # Công cụ tối ưu hóa kế hoạch
-        optimize_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "optimize.svg")), "Tối ưu hóa kế hoạch", self)
-        optimize_action.triggered.connect(self._open_plan_optimizer)
-        self.main_toolbar.addAction(optimize_action)
-        
-        # Công cụ phân tích DVH
-        dvh_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "dvh.svg")), "Phân tích DVH", self)
-        dvh_action.triggered.connect(self._open_dvh_analyzer)
-        self.main_toolbar.addAction(dvh_action)
+        self.optimize_tool = QAction(QIcon(os.path.join(icons_dir, "optimize.png")), "Optimize", self)
+        self.main_toolbar.addAction(self.optimize_tool)
         
         self.main_toolbar.addSeparator()
         
-        # Trợ giúp
-        help_action = QAction(QIcon(os.path.join(os.path.dirname(__file__), "icons", "new_icons", "help.svg")), "Trợ giúp", self)
-        help_action.triggered.connect(self._show_help)
-        self.main_toolbar.addAction(help_action)
+        self.evaluate_tool = QAction(QIcon(os.path.join(icons_dir, "evaluate.png")), "Evaluate", self)
+        self.main_toolbar.addAction(self.evaluate_tool)
+        
+        self.report_tool = QAction(QIcon(os.path.join(icons_dir, "report.png")), "Report", self)
+        self.main_toolbar.addAction(self.report_tool)
+        
+        # Add a stretch spacer to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.main_toolbar.addWidget(spacer)
+        
+        # Add help action to the right
+        self.help_tool = QAction(QIcon(os.path.join(icons_dir, "help.png")), "Help", self)
+        self.main_toolbar.addAction(self.help_tool)
     
-    def _update_ui_state(self):
-        """Update the UI state based on current selections."""
-        has_patient = self.current_patient_id is not None
-        has_plan = self.current_plan_id is not None
-        
-        # Update menu actions
-        if hasattr(self, 'import_rtplan_action'):
-            self.import_rtplan_action.setEnabled(has_patient)
-        if hasattr(self, 'import_rtdose_action'):
-            self.import_rtdose_action.setEnabled(has_patient)
-        if hasattr(self, 'export_dicom_action'):
-            self.export_dicom_action.setEnabled(has_plan)
-        if hasattr(self, 'save_patient_action'):
-            self.save_patient_action.setEnabled(has_patient)
-            
-        logger.debug("UI state updated")
-    
-    def run(self):
-        """
-        Run the main window application.
-        
-        This method shows the window, sets focus to the first workflow step (Patient),
-        and displays a welcome message in the status bar.
-        """
-        # Show the window
-        self.show()
-        
-        # Focus on the patient tab as the first workflow step
-        self.workflow_tabs.setCurrentIndex(0)
-        
-        # Set welcome message
-        self.statusBar().showMessage("Welcome to QuangTPS - Open Source Radiotherapy Treatment Planning System", 5000)
-        
-        # Update UI state
-        self._update_ui_state()
-        
-        logger.info("Main window is running")
-    
-    def _on_patient_selected(self, patient_id):
-        """Handle patient selection."""
-        self.current_patient_id = patient_id
-        logger.info(f"Selected patient: {patient_id}")
-        
-    def _new_patient(self):
-        """Tạo một bệnh nhân mới."""
-        self.patient_tab.create_new_patient()
-    
-    def _open_patient(self):
-        """Mở một bệnh nhân hiện có."""
-        # Đã được xử lý bởi PatientBrowser
-        pass
-    
-    def _import_dicom(self):
-        """Import DICOM files."""
-        logger.info("Import DICOM action triggered")
-        QMessageBox.information(self, "Not Implemented", "DICOM import will be implemented in a future update.")
-        
-    def _import_rtstruct(self):
-        """Import RTSTRUCT files."""
-        logger.info("Import RTSTRUCT action triggered")
-        QMessageBox.information(self, "Not Implemented", "RTSTRUCT import will be implemented in a future update.")
-        
-    def _import_rtplan(self):
-        """Import RTPLAN files."""
-        logger.info("Import RTPLAN action triggered")
-        QMessageBox.information(self, "Not Implemented", "RTPLAN import will be implemented in a future update.")
-        
-    def _import_rtdose(self):
-        """Import RTDOSE files."""
-        logger.info("Import RTDOSE action triggered")
-        QMessageBox.information(self, "Not Implemented", "RTDOSE import will be implemented in a future update.")
-        
-    def _export_dicom(self):
-        """Export to DICOM format."""
-        logger.info("Export DICOM action triggered")
-        QMessageBox.information(self, "Not Implemented", "DICOM export will be implemented in a future update.")
-        
-    def _export_pdf(self):
-        """Export report as PDF."""
-        logger.info("Export PDF action triggered")
-        QMessageBox.information(self, "Not Implemented", "PDF export will be implemented in a future update.")
-        
-    def _save_patient(self):
-        """Save the current patient."""
-        logger.info("Save patient action triggered")
-        QMessageBox.information(self, "Not Implemented", "Save patient will be implemented in a future update.")
-        
-    def _save_patient_as(self):
-        """Save the current patient with a new name."""
-        logger.info("Save patient as action triggered")
-        QMessageBox.information(self, "Not Implemented", "Save patient as will be implemented in a future update.")
-        
-    def _undo(self):
-        """Undo the last action."""
-        logger.info("Undo action triggered")
-        QMessageBox.information(self, "Not Implemented", "Undo will be implemented in a future update.")
-        
-    def _redo(self):
-        """Redo the last undone action."""
-        logger.info("Redo action triggered")
-        QMessageBox.information(self, "Not Implemented", "Redo will be implemented in a future update.")
-        
-    def _show_preferences(self):
-        """Show the preferences dialog."""
-        logger.info("Preferences action triggered")
-        QMessageBox.information(self, "Not Implemented", "Preferences will be implemented in a future update.")
-        
-    def _toggle_patient_browser(self, checked):
-        """Toggle the patient browser visibility."""
-        logger.info(f"Toggle patient browser action triggered: {checked}")
-        QMessageBox.information(self, "Not Implemented", "Patient browser toggle will be implemented in a future update.")
-        
-    def _toggle_image_tools(self, checked):
-        """Toggle the image tools visibility."""
-        logger.info(f"Toggle image tools action triggered: {checked}")
-        QMessageBox.information(self, "Not Implemented", "Image tools toggle will be implemented in a future update.")
-        
-    def _toggle_full_screen(self, checked):
-        """Toggle full screen mode."""
-        logger.info(f"Toggle full screen action triggered: {checked}")
-        if checked:
-            self.showFullScreen()
-        else:
-            self.showNormal()
-        
-    def _open_contour_editor(self):
-        """Open the contour editor."""
-        logger.info("Contour editor action triggered")
-        QMessageBox.information(self, "Not Implemented", "Contour editor will be implemented in a future update.")
-        
-    def _open_beam_manager(self):
-        """Open the beam manager."""
-        logger.info("Beam manager action triggered")
-        QMessageBox.information(self, "Not Implemented", "Beam manager will be implemented in a future update.")
-        
-    def _open_dose_calculator(self):
-        """Open the dose calculator."""
-        logger.info("Dose calculator action triggered")
-        QMessageBox.information(self, "Not Implemented", "Dose calculator will be implemented in a future update.")
-        
-    def _open_advanced_dose_calculator(self):
-        """Open the advanced dose calculator."""
-        logger.info("Advanced dose calculator action triggered")
-        QMessageBox.information(self, "Not Implemented", "Advanced dose calculator will be implemented in a future update.")
-        
-    def _open_plan_optimizer(self):
-        """Open the plan optimizer."""
-        logger.info("Plan optimizer action triggered")
-        QMessageBox.information(self, "Not Implemented", "Plan optimizer will be implemented in a future update.")
-        
-    def _open_dvh_analyzer(self):
-        """Open the DVH analyzer."""
-        logger.info("DVH analyzer action triggered")
-        QMessageBox.information(self, "Not Implemented", "DVH analyzer will be implemented in a future update.")
-        
-    def _open_collision_detection(self):
-        """Open the collision detection dialog."""
-        logger.info("Collision detection action triggered")
-        QMessageBox.information(self, "Not Implemented", "Collision detection will be implemented in a future update.")
-        
-    def _show_about_dialog(self):
-        """Show the about dialog."""
-        logger.info("About action triggered")
-        QMessageBox.information(self, "About QuangTPS", "QuangTPS - Treatment Planning System\nVersion 0.3.8\nDeveloped by Quang Team")
-        
-    def _show_help(self):
-        """Show the help documentation."""
-        logger.info("Help action triggered")
-        QMessageBox.information(self, "Not Implemented", "Help will be implemented in a future update.")
-        
-    def _open_user_management(self):
-        """Open the user management dialog."""
-        logger.info("User management action triggered")
-        QMessageBox.information(self, "Not Implemented", "User management will be implemented in a future update.")
-        
-    def _open_machine_management(self):
-        """Open the machine management dialog."""
-        logger.info("Machine management action triggered")
-        QMessageBox.information(self, "Not Implemented", "Machine management will be implemented in a future update.")
-        
-    def _open_system_settings(self):
-        """Open the system settings dialog."""
-        logger.info("System settings action triggered")
-        QMessageBox.information(self, "Not Implemented", "System settings will be implemented in a future update.")
-        
-    def _show_license_info(self):
-        """Show license information."""
-        logger.info("License information action triggered")
-        QMessageBox.information(self, "Not Implemented", "License information will be implemented in a future update.")
-        
-    def _open_backup_restore(self):
-        """Open the backup/restore dialog."""
-        logger.info("Backup/restore action triggered")
-        QMessageBox.information(self, "Not Implemented", "Backup/restore will be implemented in a future update.")
-        
-    def _open_script_editor(self):
-        """Open the script editor."""
-        logger.info("Script editor action triggered")
-        QMessageBox.information(self, "Not Implemented", "Script editor will be implemented in a future update.")
-        
-    def _run_script(self):
-        """Run a script."""
-        logger.info("Run script action triggered")
-        QMessageBox.information(self, "Not Implemented", "Run script will be implemented in a future update.")
-        
-    def _load_sample_script(self, script_name):
-        """Load a sample script."""
-        logger.info(f"Load sample script action triggered: {script_name}")
-        QMessageBox.information(self, "Not Implemented", f"Loading sample script '{script_name}' will be implemented in a future update.")
-
-    def _show_protocol_dialog(self):
-        """Show the clinical protocol dialog."""
-        if not self.current_patient:
-            QMessageBox.warning(self, "No Patient", "Please open a patient first.")
-            return
-            
-        current_plan = None
-        if hasattr(self.planning_tab, "current_plan"):
-            current_plan = self.planning_tab.current_plan
-            
-        if not current_plan:
-            QMessageBox.warning(self, "No Plan", "Please create or select a plan first.")
-            return
-            
-        dialog = ClinicalProtocolDialog(self.current_patient, current_plan, self)
-        dialog.protocol_applied.connect(self._apply_clinical_protocol)
-        dialog.exec_()
-    
-    def _apply_clinical_protocol(self, protocol, application_data):
-        """
-        Apply a clinical protocol to the current plan.
-        
-        Args:
-            protocol: The selected clinical protocol
-            application_data: Dictionary containing application options and templates
-        """
-        if not self.current_patient or not hasattr(self.planning_tab, "current_plan") or not self.planning_tab.current_plan:
-            return
-            
-        current_plan = self.planning_tab.current_plan
-        options = application_data.get("options", {})
-        
-        # Apply prescription if selected
-        if options.get("apply_prescription") and application_data.get("prescription_template"):
-            self._apply_prescription_template(current_plan, application_data["prescription_template"])
-        
-        # Apply beam template if selected
-        if options.get("apply_beam_template") and application_data.get("beam_template"):
-            template_name, template_data = application_data["beam_template"]
-            self._apply_beam_template(current_plan, template_name, template_data)
-        
-        # Apply optimization template if selected
-        if options.get("apply_optimization") and application_data.get("optimization_template"):
-            template_name, template_data = application_data["optimization_template"]
-            self._apply_optimization_template(current_plan, template_name, template_data)
-        
-        # Refresh UI
-        self.planning_tab.refresh()
-        
-        # Show confirmation
-        QMessageBox.information(self, "Protocol Applied", 
-                               f"The protocol '{protocol.name}' has been applied to the current plan.")
-    
-    def _apply_prescription_template(self, plan, template):
-        """Apply a prescription template to a plan."""
-        if not plan or not template:
-            return
-            
-        # Create a new prescription from the template
-        if hasattr(plan, "create_prescription_from_template"):
-            plan.create_prescription_from_template(template)
-        else:
-            logger.warning("Plan does not have create_prescription_from_template method")
-    
-    def _apply_beam_template(self, plan, template_name, template_data):
-        """Apply a beam template to a plan."""
-        if not plan or not template_data:
-            return
-            
-        # Create beams from template
-        if hasattr(plan, "create_beams_from_template"):
-            plan.create_beams_from_template(template_name, template_data)
-        else:
-            logger.warning("Plan does not have create_beams_from_template method")
-    
-    def _apply_optimization_template(self, plan, template_name, template_data):
-        """Apply an optimization template to a plan."""
-        if not plan or not template_data:
-            return
-            
-        # Create optimization objectives from template
-        if hasattr(plan, "create_objectives_from_template"):
-            plan.create_objectives_from_template(template_name, template_data)
-        else:
-            logger.warning("Plan does not have create_objectives_from_template method")
-    
-    def _manage_protocols(self):
-        """Show the protocol management dialog."""
-        # This would open a dialog for managing clinical protocols
-        # Not implemented in this edit
-        QMessageBox.information(self, "Not Implemented", "Protocol management will be implemented in a future update.")
-    
-    def _create_protocol_template(self):
-        """Show the protocol template creation dialog."""
-        # This would open a dialog for creating a new protocol template
-        # Not implemented in this edit
-        QMessageBox.information(self, "Not Implemented", "Protocol template creation will be implemented in a future update.")
-
-    def _on_start_mco(self):
-        """Start multi-criteria optimization for the current plan."""
-        if not self.current_plan:
-            QMessageBox.warning(self, "Warning", "No plan selected")
-            return
-        
-        # Switch to the MCO tab
-        for i in range(self.workflow_tabs.count()):
-            if self.workflow_tabs.tabText(i) == "MCO":
-                self.workflow_tabs.setCurrentIndex(i)
-                break
-        
-        # Set the current plan in the MCO panel
-        self.mco_panel.set_plan(self.current_plan)
-        
-        # Initialize the MCO engine
-        success = self.mco_panel.initialize_mco()
-        if not success:
-            QMessageBox.warning(self, "Warning", "Failed to initialize MCO")
-
-    def _on_plan_updated(self, plan):
-        """Handle plan updates from the MCO panel."""
-        if self.current_plan and plan:
-            # Update the current plan with the new one
-            self.current_plan = plan
-            
-            # Update other panels that show plan information
-            for i in range(self.workflow_tabs.count()):
-                tab_widget = self.workflow_tabs.widget(i)
-                if hasattr(tab_widget, 'set_plan'):
-                    tab_widget.set_plan(plan)
-            
-            # Update the object explorer
-            if hasattr(self, 'object_explorer'):
-                self.object_explorer.refresh()
-
-    def on_open_patient_dashboard(self):
-        """Open the patient dashboard."""
-        dashboard = PatientDashboard(self)
-        dashboard.patient_selected.connect(self._on_dashboard_patient_selected)
-        dashboard.plan_selected.connect(self._on_dashboard_plan_selected)
-        dashboard.action_triggered.connect(self._on_dashboard_action)
-        
-        dashboard_tab_index = self._add_or_focus_tab(dashboard, "Patient Dashboard")
-        if dashboard_tab_index >= 0:
-            self.main_tab_widget.setCurrentIndex(dashboard_tab_index)
-
-    def _on_dashboard_patient_selected(self, patient):
-        """Handle patient selection from the dashboard."""
-        self.current_patient = patient
-        self._update_patient_display()
-
-    def _on_dashboard_plan_selected(self, plan):
-        """Handle plan selection from the dashboard."""
-        self.current_plan = plan
-        self._update_plan_display()
-        
-        # Open relevant tabs for the plan
-        self._show_planning_tab()
-
-    def _on_dashboard_action(self, action, patient):
-        """Handle actions from the dashboard."""
-        if action == "new_patient":
-            self._new_patient()
-        elif action == "new_plan" and patient:
-            self.current_patient = patient
-            self._new_plan()
-        elif action == "new_appointment" and patient:
-            # TODO: Implement appointment creation
-            pass
-
-    def _add_or_focus_tab(self, widget, title):
-        """Add a new tab with the widget or focus an existing tab with the same title."""
-        # Check if a tab with this title already exists
-        for i in range(self.main_tab_widget.count()):
-            if self.main_tab_widget.tabText(i) == title:
-                return i
-        
-        # Add a new tab
-        index = self.main_tab_widget.addTab(widget, title)
-        return index
-
-    def _show_measurement_tools(self):
-        """Show measurement tools."""
-        logger.info("Measurement tools action triggered")
-        QMessageBox.information(self, "Not Implemented", "Measurement tools will be implemented in a future update.")
-        
-    def _show_window_level_tools(self):
-        """Show window/level tools."""
-        logger.info("Window/level tools action triggered")
-        QMessageBox.information(self, "Not Implemented", "Window/level tools will be implemented in a future update.")
-        
-    def _show_zoom_tools(self):
-        """Show zoom tools."""
-        logger.debug("Showing zoom tools")
-        QMessageBox.information(self, "Zoom Tools", "Zoom tools not implemented in simplified version.")
-        
-    # Add alias methods for compatibility
-    def on_new_patient(self):
-        """Alias for _new_patient for compatibility."""
-        return self._new_patient()
-        
-    def on_import_dicom(self):
-        """Alias for _import_dicom for compatibility."""
-        return self._import_dicom()
-        
-    def on_open_patient(self):
-        """Alias for _open_patient for compatibility."""
-        return self._open_patient()
-
-    def _init_dose_tab(self):
-        """Initialize the dose tab with error handling."""
-        try:
-            self.dose_tab = DoseTab()
-            self.workflow_tabs.addTab(self.dose_tab, "Dose")
-            logger.info("Dose tab initialized successfully")
-        except Exception as e:
-            logger.error(f"Could not initialize DoseTab: {e}")
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Dose Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.dose_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Dose")
-    
-    def _init_treatment_tab(self):
-        """Initialize the treatment tab with error handling."""
-        try:
-            self.treatment_tab = TreatmentTab()
-            self.workflow_tabs.addTab(self.treatment_tab, "Treatment")
-            logger.info("Treatment tab initialized successfully")
-        except Exception as e:
-            logger.error(f"Could not initialize TreatmentTab: {e}")
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Treatment Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.treatment_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Treatment")
-    
-    def _init_qa_tab(self):
-        """Initialize the QA tab with error handling."""
-        try:
-            self.qa_tab = QATab()
-            self.workflow_tabs.addTab(self.qa_tab, "QA")
-            logger.info("QA tab initialized successfully")
-        except Exception as e:
-            logger.error(f"Could not initialize QATab: {e}")
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("QA Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.qa_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "QA")
-    
-    def _init_reporting_tab(self):
-        """Initialize the reporting tab with error handling."""
-        try:
-            self.reporting_tab = ReportingTab()
-            self.workflow_tabs.addTab(self.reporting_tab, "Reporting")
-            logger.info("Reporting tab initialized successfully")
-        except Exception as e:
-            logger.error(f"Could not initialize ReportingTab: {e}")
-            placeholder = QWidget()
-            placeholder_layout = QVBoxLayout(placeholder)
-            placeholder_layout.addWidget(QLabel("Reporting Tab - Not Available"))
-            placeholder_layout.addWidget(QLabel(f"Error: {str(e)}"))
-            self.reporting_tab = placeholder
-            self.workflow_tabs.addTab(placeholder, "Reporting")
-
-    def _init_plan_evaluation_tab(self):
-        """
-        Initialize the Plan Evaluation tab for DVH analysis and plan quality assessment.
-        
-        This tab provides comprehensive evaluation capabilities similar to Eclipse's
-        Plan Evaluation workspace.
-        """
-        try:
-            from quangtps.ui.plan_evaluation import PlanEvaluationTab
-            
-            logger.info("Initializing Plan Evaluation tab")
-            self.plan_evaluation_tab = PlanEvaluationTab(self)
-            
-            # Add tab to workflow
-            self.workflow_tabs.addTab(self.plan_evaluation_tab, "Plan Evaluation")
-            
-            # Connect signals for plan updates
-            if hasattr(self, 'planning_tab') and hasattr(self.planning_tab, 'plan_created'):
-                self.planning_tab.plan_created.connect(self._on_plan_selected_for_evaluation)
-            
-            if hasattr(self, 'planning_tab') and hasattr(self.planning_tab, 'plan_updated'):
-                self.planning_tab.plan_updated.connect(self._on_plan_updated_for_evaluation)
-            
-            if hasattr(self, 'dose_tab') and hasattr(self.dose_tab, 'dose_calculated'):
-                self.dose_tab.dose_calculated.connect(self._on_plan_updated_for_evaluation)
-            
-            # Connect to current plan changes
-            self.plan_changed.connect(self._on_plan_selected_for_evaluation)
-            
-            # Set icon for the tab
-            evaluation_icon = QIcon(get_icon_path("evaluation"))
-            tab_index = self.workflow_tabs.indexOf(self.plan_evaluation_tab)
-            if tab_index >= 0:
-                self.workflow_tabs.setTabIcon(tab_index, evaluation_icon)
-            
-            logger.info("Plan Evaluation tab initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize Plan Evaluation tab: {e}")
-            logger.debug("Exception details:", exc_info=True)
-            
-            # Create placeholder if needed
-            from PyQt5.QtWidgets import QLabel, QVBoxLayout
-            self.plan_evaluation_tab = QWidget()
-            layout = QVBoxLayout(self.plan_evaluation_tab)
-            layout.addWidget(QLabel("Plan Evaluation functionality is not available."))
-            
-            self.workflow_tabs.addTab(self.plan_evaluation_tab, "Plan Evaluation")
-    
-    def _on_plan_selected_for_evaluation(self, plan):
-        """
-        Handle when a plan is selected, specifically for plan evaluation.
-        
-        Parameters
-        ----------
-        plan : Plan or dict
-            Plan object or dictionary with plan data
-        """
-        try:
-            # Check if we have a plan evaluation tab
-            if not hasattr(self, 'plan_evaluation_tab'):
-                logger.warning("Plan Evaluation tab not available")
-                return
-                
-            # Check if the plan evaluation tab has the required method
-            if not hasattr(self.plan_evaluation_tab, 'set_plan'):
-                logger.warning("Plan Evaluation tab does not have set_plan method")
-                return
-                
-            logger.info(f"Setting plan for evaluation: {getattr(plan, 'id', plan)}")
-            
-            # Set the plan in the evaluation tab
-            self.plan_evaluation_tab.set_plan(plan)
-            
-            # If we're not already on the plan evaluation tab, show a notification
-            if self.workflow_tabs.currentWidget() != self.plan_evaluation_tab:
-                logger.info("Plan ready for evaluation. Switch to Plan Evaluation tab to view results.")
-                # Could add a notification here if needed
-                
-        except Exception as e:
-            logger.error(f"Error setting plan for evaluation: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def _on_plan_updated_for_evaluation(self, plan):
-        """
-        Handle when a plan is updated in the planning tab.
-        
-        Parameters
-        ----------
-        plan : Plan or dict
-            Updated plan object or dictionary
-        """
-        if hasattr(self, 'plan_evaluation_tab') and hasattr(self.plan_evaluation_tab, 'set_plan'):
-            try:
-                logger.info(f"Refreshing Plan Evaluation for updated plan: {getattr(plan, 'id', plan)}")
-                self.plan_evaluation_tab.set_plan(plan, self.current_patient)
-            except Exception as e:
-                logger.error(f"Error refreshing Plan Evaluation: {e}")
-
-    def _on_plan_selected(self, plan):
-        """
-        Handle when a plan is selected from any tab.
-        
-        Parameters
-        ----------
-        plan : Plan or dict
-            Plan object or dictionary with plan data
-        """
-        try:
-            # Update current plan
-            self.current_plan = plan
-            plan_id = getattr(plan, 'id', plan)
-            logger.info(f"Plan selected: {plan_id}")
-            
-            # Update all tabs that need plan data
-            if hasattr(self, 'planning_tab') and hasattr(self.planning_tab, 'set_plan'):
-                self.planning_tab.set_plan(plan)
-                
-            if hasattr(self, 'dose_tab') and hasattr(self.dose_tab, 'set_plan'):
-                self.dose_tab.set_plan(plan)
-                
-            # Call the specific plan evaluation handler
-            self._on_plan_selected_for_evaluation(plan)
-                
-            # Also update any other tabs that depend on the plan
-            if hasattr(self, 'treatment_tab') and hasattr(self.treatment_tab, 'set_plan'):
-                self.treatment_tab.set_plan(plan)
-                
-            if hasattr(self, 'qa_tab') and hasattr(self.qa_tab, 'set_plan'):
-                self.qa_tab.set_plan(plan)
-                
-            if hasattr(self, 'reporting_tab') and hasattr(self.reporting_tab, 'set_plan'):
-                self.reporting_tab.set_plan(plan)
-                
-            # Update UI state
-            self._update_ui_state()
-            
-        except Exception as e:
-            logger.error(f"Error handling plan selection: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def get_tab_index(self, tab_name):
-        """
-        Get the index of a tab by its name or instance variable name.
-        
-        Parameters
-        ----------
-        tab_name : str
-            Name of the tab, either the displayed name or the instance variable name
-            (e.g., 'patient_tab', 'imaging_tab', etc.)
-            
-        Returns
-        -------
-        int
-            Index of the tab in the workflow_tabs widget, or -1 if not found
-        """
-        # Check if this is an instance variable name
-        tab_instance = getattr(self, tab_name, None) if isinstance(tab_name, str) else None
-        
-        if tab_instance is not None:
-            # Find the tab by its widget reference
-            for i in range(self.workflow_tabs.count()):
-                if self.workflow_tabs.widget(i) == tab_instance:
-                    return i
-        
-        # Check if this is a tab display name
-        for i in range(self.workflow_tabs.count()):
-            if self.workflow_tabs.tabText(i).lower() == str(tab_name).lower():
-                return i
-                
-        # Not found
-        logger.warning(f"Tab '{tab_name}' not found")
-        return -1
-        
-    def switch_to_tab(self, tab_index):
-        """
-        Switch to the specified tab by index or name.
-        
-        Parameters
-        ----------
-        tab_index : int or str
-            Index of the tab to switch to, or name of the tab
-            
-        Returns
-        -------
-        bool
-            True if switched successfully, False otherwise
-        """
-        # Convert name to index if needed
-        if isinstance(tab_index, str):
-            tab_index = self.get_tab_index(tab_index)
-            
-        # Validate index
-        if tab_index < 0 or tab_index >= self.workflow_tabs.count():
-            logger.warning(f"Invalid tab index: {tab_index}")
-            return False
-            
-        # Switch to the tab
-        self.workflow_tabs.setCurrentIndex(tab_index)
-        logger.info(f"Switched to tab index {tab_index}: {self.workflow_tabs.tabText(tab_index)}")
-        return True
-        
-    def load_test_data(self):
-        """
-        Load test data for development and demonstration purposes.
-        
-        This creates a test patient with a simple plan for evaluation.
-        """
-        logger.info("Loading test data for development")
-        
-        try:
-            # Import necessary modules
-            from quangtps.core.patient import Patient
-            from quangtps.planning.plan import Plan
-            from quangtps.database.patient_db import PatientDB
-            
-            # Create a test patient
-            patient_id = "TEST_PATIENT_001"
-            test_patient = {
-                "id": patient_id,
-                "name": "Test Patient",
-                "gender": "Other",
-                "birth_date": "1980-01-01",
-                "medical_record_num": "TEST-MRN-001",
-                "creation_date": datetime.now().strftime("%Y-%m-%d"),
+    def apply_styling(self):
+        """Apply styling to the application."""
+        # Set application style based on availability
+        if QStyleFactory.keys().count("Fusion") > 0:
+            self.setStyle(QStyleFactory.create("Fusion"))
+        
+        # Create color palette (Eclipse-like blue theme)
+        palette = QPalette()
+        
+        # Set window and button colors
+        palette.setColor(QPalette.Window, QColor(240, 240, 240))
+        palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
+        palette.setColor(QPalette.Base, QColor(255, 255, 255))
+        palette.setColor(QPalette.AlternateBase, QColor(245, 245, 245))
+        palette.setColor(QPalette.Button, QColor(240, 240, 240))
+        palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
+        
+        # Set highlight colors
+        palette.setColor(QPalette.Highlight, QColor(32, 112, 192))
+        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        
+        # Set link colors
+        palette.setColor(QPalette.Link, QColor(32, 112, 192))
+        palette.setColor(QPalette.LinkVisited, QColor(102, 0, 153))
+        
+        # Apply palette
+        self.setPalette(palette)
+        
+        # Set stylesheet for custom styling
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
             }
             
-            # Update or create the patient in database
-            try:
-                patient_db = PatientDB()
-                if patient_db.get_patient(patient_id):
-                    patient_db.update_patient(patient_id, test_patient)
-                else:
-                    patient_db.add_patient(test_patient)
-                logger.info(f"Test patient saved to database: {patient_id}")
-            except Exception as e:
-                logger.warning(f"Could not save test patient to database: {e}")
+            QMenuBar {
+                background-color: #f0f0f0;
+                border-bottom: 1px solid #d0d0d0;
+            }
             
-            # Create a patient object
-            patient = Patient(**test_patient)
-            self.current_patient = patient
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 5px 8px;
+            }
             
-            # Create a test plan
-            plan_id = "TEST_PLAN_001"
-            test_plan = Plan(
-                id=plan_id,
-                name="Test Plan",
-                patient_id=patient_id,
-                prescription_dose=70.0,  # Gy
-                description="Test plan for development",
-                creation_date=datetime.now().strftime("%Y-%m-%d"),
+            QMenuBar::item:selected {
+                background-color: #2070c0;
+                color: white;
+            }
+            
+            QMenu {
+                background-color: #f8f8f8;
+                border: 1px solid #d0d0d0;
+            }
+            
+            QMenu::item:selected {
+                background-color: #2070c0;
+                color: white;
+            }
+            
+            QToolBar {
+                background-color: #f0f0f0;
+                border-bottom: 1px solid #d0d0d0;
+                spacing: 3px;
+            }
+            
+            QToolButton {
+                background-color: transparent;
+                border-radius: 3px;
+                padding: 3px;
+            }
+            
+            QToolButton:hover {
+                background-color: #e0e0e0;
+            }
+            
+            QToolButton:pressed {
+                background-color: #c0c0c0;
+            }
+            
+            QTabWidget::pane {
+                border: 1px solid #d0d0d0;
+                background-color: #f8f8f8;
+            }
+            
+            QTabBar::tab {
+                background-color: #e0e0e0;
+                border: 1px solid #d0d0d0;
+                border-bottom: none;
+                padding: 5px 10px;
+                margin-right: 2px;
+                border-top-left-radius: 3px;
+                border-top-right-radius: 3px;
+            }
+            
+            QTabBar::tab:selected {
+                background-color: #2070c0;
+                color: white;
+            }
+            
+            QTabBar::tab:!selected {
+                margin-top: 2px;
+            }
+            
+            QTabBar::tab:hover:!selected {
+                background-color: #d0d0d0;
+            }
+            
+            QStatusBar {
+                background-color: #f0f0f0;
+                border-top: 1px solid #d0d0d0;
+            }
+            
+            QTreeWidget {
+                background-color: white;
+                border: 1px solid #d0d0d0;
+                alternate-background-color: #f8f8f8;
+            }
+            
+            QTreeWidget::item:hover {
+                background-color: #e8e8e8;
+            }
+            
+            QTreeWidget::item:selected {
+                background-color: #2070c0;
+                color: white;
+            }
+        """)
+    
+    def _load_settings(self):
+        """Load application settings."""
+        settings = QSettings("QuangTPS", "Treatment Planning System")
+        
+        # Restore window geometry
+        if settings.contains("geometry"):
+            self.restoreGeometry(settings.value("geometry"))
+        else:
+            # Set default window size and position
+            screen_rect = self.screen().availableGeometry()
+            window_width = int(screen_rect.width() * 0.8)
+            window_height = int(screen_rect.height() * 0.8)
+            self.resize(window_width, window_height)
+            self.move(
+                (screen_rect.width() - window_width) // 2,
+                (screen_rect.height() - window_height) // 2
             )
+        
+        # Restore window state
+        if settings.contains("windowState"):
+            self.restoreState(settings.value("windowState"))
+        
+        # Restore last directory
+        if settings.contains("lastDirectory"):
+            self.last_directory = settings.value("lastDirectory")
+        else:
+            self.last_directory = str(Path.home())
+    
+    def _initialize_services(self):
+        """Initialize the dose calculator and other services."""
+        try:
+            self.dose_calculator = DoseCalculator()
+            logger.info("Dose calculator initialized")
             
-            # Set the current plan
-            self.current_plan = test_plan
+            # Set in evaluation tab
+            if self.evaluation_tab:
+                self.evaluation_tab.set_dose_calculator(self.dose_calculator)
+        except Exception as e:
+            logger.error(f"Failed to initialize dose calculator: {e}")
+            self.dose_calculator = None
+    
+    def open_image_dialog(self):
+        """Show dialog to open an image."""
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Image", self.last_directory,
+            "Image Files (*.nii *.nii.gz *.dcm *.mha *.mhd);;All Files (*)",
+            options=options
+        )
+        
+        if file_path:
+            # Update last directory
+            self.last_directory = os.path.dirname(file_path)
             
-            # Update UI state
-            self._update_ui_state()
+            # Load the image
+            self.load_image_from_path(file_path)
+    
+    def load_image_from_path(self, file_path):
+        """Load an image from file path."""
+        try:
+            # Show status message
+            self.statusBar().showMessage(f"Loading image: {file_path}...")
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(10)
             
-            # Switch to plan evaluation tab if available
-            plan_eval_tab_index = self.get_tab_index("plan_evaluation_tab")
-            if plan_eval_tab_index >= 0:
-                self.switch_to_tab(plan_eval_tab_index)
+            # Use SimpleITK to load image
+            sitk_image = sitk.ReadImage(file_path)
+            
+            # Convert to numpy array
+            image_array = sitk.GetArrayFromImage(sitk_image)
+            
+            # Create Image object
+            image = Image()
+            image.data = image_array
+            
+            # Set spacing and origin from SimpleITK image
+            image.voxel_size = sitk_image.GetSpacing()[::-1]  # Reverse order for NumPy
+            image.origin = sitk_image.GetOrigin()[::-1]  # Reverse order for NumPy
+            
+            # Load the image into the application
+            self.load_image(image)
+            
+            # Update progress
+            self.progress_bar.setValue(100)
+            
+            # Clear status message after delay
+            QTimer.singleShot(2000, lambda: self.statusBar().clearMessage())
+            QTimer.singleShot(2000, lambda: self.progress_bar.setVisible(False))
+            
+            # Add to patient browser
+            self.left_panel.patient_browser.add_image(image, os.path.basename(file_path))
+            
+        except Exception as e:
+            # Show error message
+            QMessageBox.critical(self, "Error", f"Failed to load image: {str(e)}")
+            logger.error(f"Failed to load image: {e}")
+            
+            # Clear status message
+            self.statusBar().clearMessage()
+            self.progress_bar.setVisible(False)
+    
+    def load_image(self, image):
+        """Load an image into the application."""
+        if image is None:
+            return
+        
+        self.current_image = image
+        
+        # Set image in MPR viewer
+        if hasattr(self, 'mpr_viewer'):
+            self.mpr_viewer.set_image(image)
+        
+        # Set image in structure tab
+        if hasattr(self, 'structure_tab'):
+            self.structure_tab.set_image(image)
+        
+        # Set image in planning tab
+        if hasattr(self, 'planning_tab'):
+            self.planning_tab.set_image(image)
+        
+        # Switch to imaging tab
+        self.right_area.setCurrentWidget(self.contouring_tab)
+        
+        # Update status
+        self.statusBar().showMessage(f"Loaded image: {image.series_description if hasattr(image, 'series_description') else 'Unknown'}")
+    
+    def import_structure_set_dialog(self):
+        """Show dialog to import a structure set."""
+        if not self.current_image:
+            QMessageBox.warning(self, "Warning", "Please load an image first.")
+            return
+        
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Import Structure Set", self.last_directory,
+            "Structure Files (*.dcm *.xml *.json);;All Files (*)",
+            options=options
+        )
+        
+        if file_path:
+            # Update last directory
+            self.last_directory = os.path.dirname(file_path)
+            
+            # TODO: Implement structure set import
+            QMessageBox.information(self, "Information", "Structure set import not yet implemented.")
+    
+    def load_structure_set(self, structure_set):
+        """Load a structure set into the application."""
+        if not structure_set:
+            return
+        
+        # Set current structure set
+        self.current_structure_set = structure_set
+        
+        # Set in structure tab
+        self.structure_tab.set_structure_set(structure_set)
+        
+        # Set in dose calculator
+        if self.dose_calculator:
+            self.dose_calculator.structure_set = structure_set
+        
+        # Update status bar
+        structure_count = len(structure_set.structures) if structure_set.structures else 0
+        self.statusBar().showMessage(f"Structure set loaded: {structure_set.name} ({structure_count} structures)")
+        
+        # Switch to Structure tab
+        self.right_area.setCurrentWidget(self.contouring_tab)
+    
+    def save_plan_dialog(self):
+        """Show dialog to save the current plan."""
+        if not self.current_plan:
+            QMessageBox.warning(self, "Warning", "No plan to save.")
+            return
+        
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Plan", self.last_directory,
+            "Plan Files (*.plan);;All Files (*)",
+            options=options
+        )
+        
+        if file_path:
+            # Add .plan extension if not provided
+            if not file_path.lower().endswith('.plan'):
+                file_path += '.plan'
+            
+            # Update last directory
+            self.last_directory = os.path.dirname(file_path)
+            
+            try:
+                # Save the plan to disk
+                self.statusBar().showMessage(f"Saving plan to: {file_path}...")
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setValue(0)
                 
-            logger.info("Test data loaded successfully")
-            return True
+                # TODO: Implement plan saving
+                # Placeholder for actual implementation
+                QTimer.singleShot(500, lambda: self.progress_bar.setValue(50))
+                QTimer.singleShot(1000, lambda: self.progress_bar.setValue(100))
+                
+                # Clear status message after delay
+                QTimer.singleShot(1500, lambda: self.statusBar().showMessage("Plan saved successfully."))
+                QTimer.singleShot(3000, lambda: self.statusBar().clearMessage())
+                QTimer.singleShot(3000, lambda: self.progress_bar.setVisible(False))
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save plan: {str(e)}")
+                logger.error(f"Failed to save plan: {e}")
+                
+                # Clear status message
+                self.statusBar().clearMessage()
+                self.progress_bar.setVisible(False)
+    
+    def load_plan_dialog(self):
+        """Show dialog to load a plan."""
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Plan", self.last_directory,
+            "Plan Files (*.plan);;All Files (*)",
+            options=options
+        )
+        
+        if file_path:
+            # Update last directory
+            self.last_directory = os.path.dirname(file_path)
+            
+            try:
+                # Load the plan from disk
+                self.statusBar().showMessage(f"Loading plan from: {file_path}...")
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setValue(0)
+                
+                # TODO: Implement plan loading
+                # Placeholder for actual implementation
+                QTimer.singleShot(500, lambda: self.progress_bar.setValue(50))
+                QTimer.singleShot(1000, lambda: self.progress_bar.setValue(100))
+                
+                # Clear status message after delay
+                QTimer.singleShot(1500, lambda: self.statusBar().showMessage("Plan loaded successfully."))
+                QTimer.singleShot(3000, lambda: self.statusBar().clearMessage())
+                QTimer.singleShot(3000, lambda: self.progress_bar.setVisible(False))
+                
+                # Create a dummy plan for testing
+                self.create_test_plan()
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load plan: {str(e)}")
+                logger.error(f"Failed to load plan: {e}")
+                
+                # Clear status message
+                self.statusBar().clearMessage()
+                self.progress_bar.setVisible(False)
+    
+    def create_test_plan(self):
+        """Create a test plan for development purposes."""
+        if not self.current_image or not self.current_structure_set:
+            QMessageBox.warning(self, "Warning", "Please load an image and create structures first.")
+            return
+        
+        # Create a plan
+        plan = Plan()
+        plan.name = "Test Plan"
+        plan.image_ref = self.current_image
+        plan.structure_set = self.current_structure_set
+        
+        # Create a beam set
+        beam_set = BeamSet()
+        beam_set.name = "3DCRT"
+        beam_set.plan = plan
+        
+        # Add beam set to plan
+        plan.add_beam_set(beam_set)
+        
+        # Set the plan and beam set
+        self.load_plan(plan)
+        
+        # Switch to Planning tab
+        self.right_area.setCurrentWidget(self.planning_tab)
+    
+    def load_plan(self, plan):
+        """Load a plan into the application."""
+        if not plan:
+            return
+        
+        # Set current plan
+        self.current_plan = plan
+        
+        # Set current beam set to the first one if available
+        if plan.beam_sets and len(plan.beam_sets) > 0:
+            self.current_beam_set = plan.beam_sets[0]
+        else:
+            self.current_beam_set = None
+        
+        # Set in planning tab
+        self.planning_tab.set_plan(plan)
+        self.planning_tab.set_beam_set(self.current_beam_set)
+        
+        # Set in evaluation tab if dose is available
+        if plan.dose is not None:
+            self.evaluation_tab.set_dose(plan.dose)
+            self.evaluation_tab.set_plan(plan)
+            
+            # Show dose overlay in MPR viewer
+            self.mpr_viewer.set_dose(plan.dose)
+        
+        # Update status bar
+        self.statusBar().showMessage(f"Plan loaded: {plan.name}")
+    
+    def calculate_dose(self):
+        """Calculate dose for the current plan."""
+        if not self.current_image or not self.current_structure_set or not self.current_beam_set:
+            QMessageBox.warning(
+                self, "Warning", 
+                "Cannot calculate dose. Please ensure image, structure set, and beam set are loaded."
+            )
+            return
+        
+        if not self.dose_calculator:
+            QMessageBox.warning(
+                self, "Warning", 
+                "Dose calculator is not initialized."
+            )
+            return
+        
+        # Show status message
+        self.statusBar().showMessage("Calculating dose...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        
+        try:
+            # Setup dose calculator
+            self.dose_calculator.image = self.current_image
+            self.dose_calculator.structure_set = self.current_structure_set
+            self.dose_calculator.beam_set = self.current_beam_set
+            
+            # Connect progress signal
+            self.dose_calculator.progress_updated.connect(self.update_dose_progress)
+            
+            # Calculate dose
+            dose = self.dose_calculator.calculate()
+            
+            # Disconnect progress signal
+            self.dose_calculator.progress_updated.disconnect(self.update_dose_progress)
+            
+            # Set dose in plan
+            if self.current_plan:
+                self.current_plan.dose = dose
+                
+                # Set in evaluation tab
+                self.evaluation_tab.set_dose(dose)
+                self.evaluation_tab.set_plan(self.current_plan)
+                
+                # Show dose overlay in MPR viewer
+                self.mpr_viewer.set_dose(dose)
+            
+            # Update status bar
+            self.statusBar().showMessage("Dose calculation completed.")
+            self.progress_bar.setValue(100)
+            
+            # Clear status message after delay
+            QTimer.singleShot(2000, lambda: self.statusBar().clearMessage())
+            QTimer.singleShot(2000, lambda: self.progress_bar.setVisible(False))
+            
+            # Switch to evaluation tab
+            self.right_area.setCurrentWidget(self.evaluation_tab)
             
         except Exception as e:
-            logger.error(f"Failed to load test data: {e}")
-            logger.debug("Exception details:", exc_info=True)
-            return False
-
-def main():
-    """Hàm chạy chính của ứng dụng."""
-    try:
-        app = QApplication(sys.argv)
-        
-        # Thiết lập stylesheet
-        try:
-            style_file = os.path.join(os.path.dirname(__file__), "styles", "main_style.qss")
-            if os.path.exists(style_file):
-                with open(style_file, "r") as f:
-                    app.setStyleSheet(f.read())
-        except Exception as e:
-            logger.warning("Không thể đọc stylesheet: %s", str(e))
-        
-        # Tạo và chạy cửa sổ chính
-        window = MainWindow()
-        window.run()
-        
-        return app.exec_()
-    except Exception as e:
-        import traceback
-        error_text = traceback.format_exc()
-        print("Lỗi khởi động ứng dụng:", error_text)
-        
-        # Hiển thị hộp thoại lỗi nếu có thể
-        try:
-            # QMessageBox is already imported through PyQt5.QtWidgets 
-            # at the top of the file
-            app = QApplication.instance()
-            if not app:
-                app = QApplication(sys.argv)
-            QMessageBox.critical(None, "Lỗi khởi động", f"Không thể khởi động ứng dụng:\n\n{str(e)}\n\n{error_text}")
-        except:
-            pass
+            # Show error message
+            QMessageBox.critical(self, "Error", f"Failed to calculate dose: {str(e)}")
+            logger.error(f"Failed to calculate dose: {e}")
             
-        return 1
+            # Clear status message
+            self.statusBar().clearMessage()
+            self.progress_bar.setVisible(False)
+    
+    def update_dose_progress(self, progress):
+        """Update dose calculation progress."""
+        self.progress_bar.setValue(int(progress * 100))
+    
+    def show_protocols_dialog(self):
+        """Show the clinical protocols dialog."""
+        try:
+            from quangtps.ui.dialogs.protocol_dialog import ClinicalProtocolDialog
+            dialog = ClinicalProtocolDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
+                protocol = dialog.get_selected_protocol()
+                if protocol and hasattr(self, 'evaluation_tab'):
+                    # Pass protocol to evaluation tab
+                    self.evaluation_tab.set_protocol(protocol)
+                    self.statusBar().showMessage(f"Applied protocol: {protocol['name']}")
+        except Exception as e:
+            logger.exception(f"Error showing protocols dialog: {e}")
+            QMessageBox.warning(self, "Error", f"Could not open protocols dialog: {str(e)}")
+    
+    def set_window_level(self, window, level):
+        """Set window and level presets in the MPR viewer."""
+        self.mpr_viewer.set_window_level(window, level)
+    
+    def toggle_patient_browser(self, visible):
+        """Toggle the visibility of the patient browser."""
+        # Get the main splitter
+        main_splitter = self.centralWidget().layout().itemAt(0).widget()
+        
+        if visible:
+            # Get the current sizes
+            sizes = main_splitter.sizes()
+            if sizes[0] == 0:
+                # Restore previous size (default 20% of width)
+                total_width = sum(sizes)
+                sizes[0] = total_width * 0.2
+                sizes[1] = total_width - sizes[0]
+                main_splitter.setSizes(sizes)
+        else:
+            # Get the current sizes
+            sizes = main_splitter.sizes()
+            if sizes[0] > 0:
+                # Hide patient browser
+                sizes[1] += sizes[0]
+                sizes[0] = 0
+                main_splitter.setSizes(sizes)
+    
+    def _on_tab_changed(self, index):
+        """Handle tab widget tab changes."""
+        current_tab = self.right_area.widget(index)
+        
+        # Update UI based on current tab
+        if current_tab == self.contouring_tab:
+            self.statusBar().showMessage("Contouring tab: Use the tools to create and edit structures")
+        elif current_tab == self.planning_tab:
+            self.statusBar().showMessage("Planning tab: Create and modify treatment plans")
+        elif current_tab == self.evaluation_tab:
+            self.statusBar().showMessage("Evaluation tab: Evaluate treatment plans")
+        elif current_tab == self.optimization_tab:
+            self.statusBar().showMessage("Optimization tab: Optimize treatment plans")
+        elif current_tab == self.mco_tab:
+            self.statusBar().showMessage("MCO tab: Multi-Criteria Optimization")
+        elif current_tab == self.review_tab:
+            self.statusBar().showMessage("Review tab: Review treatment plans")
+        
+        # Update menu and toolbar state based on current tab
+        self._update_ui_state()
+    
+    def _update_ui_state(self):
+        """Update UI state based on current context."""
+        has_image = hasattr(self, 'current_image') and self.current_image is not None
+        has_structure_set = hasattr(self, 'current_structure_set') and self.current_structure_set is not None
+        has_plan = hasattr(self, 'current_plan') and self.current_plan is not None
+        has_dose = has_plan and hasattr(self.current_plan, 'dose') and self.current_plan.dose is not None
+        
+        # Update file menu actions
+        self.import_rt_struct_action.setEnabled(has_image)
+        self.import_rt_plan_action.setEnabled(has_image)
+        self.save_plan_action.setEnabled(has_plan)
+        
+        # Update planning menu actions
+        self.new_plan_action.setEnabled(has_image and has_structure_set)
+        self.calculate_dose_action.setEnabled(has_plan)
+        self.optimization_action.setEnabled(has_plan)
+        
+        # Update toolbar actions
+        self.import_rt_struct_tool.setEnabled(has_image)
+        self.new_plan_tool.setEnabled(has_image and has_structure_set)
+        self.calculate_dose_tool.setEnabled(has_plan)
+        self.optimize_tool.setEnabled(has_plan)
+        self.evaluate_tool.setEnabled(has_dose)
+        self.report_tool.setEnabled(has_dose)
+    
+    def show_about_dialog(self):
+        """Show the about dialog."""
+        QMessageBox.about(
+            self, "About QuangTPS",
+            "<h2>QuangTPS</h2>"
+            "<p>Version 1.0</p>"
+            "<p>A treatment planning system for radiation therapy.</p>"
+            "<p>&copy; 2023 All rights reserved.</p>"
+            "<p>This software is for educational and research purposes only.</p>"
+        )
+    
+    def closeEvent(self, event):
+        """Handle the close event."""
+        # Save settings
+        self._save_settings()
+        
+        # Accept the event
+        event.accept()
 
-if __name__ == "__main__":
-    sys.exit(main())
+    def _on_plan_selected(self, plan):
+        """Handle plan selection."""
+        self.current_plan = plan
+        
+        # Update patient information in case it's not set
+        if plan and not self.current_patient:
+            self.current_patient = plan.patient
+        
+        # Update UI for the selected plan
+        self.planning_tab.set_plan(plan)
+        self.evaluation_tab.set_plan(plan)
+        self.optimization_tab.set_plan(plan)
+        
+        # Update MCO tab with the selected plan
+        self.mco_tab.set_plan(plan)
+        
+        # Also update the review tab
+        self.review_tab.set_plan(plan)
+        
+        # Show plan information in status bar
+        if plan:
+            self.statusBar().showMessage(f"Plan: {plan.name}")
+        else:
+            self.statusBar().showMessage("No plan selected")
+
+    def _on_optimization_completed(self, plan, results):
+        """Handle completion of optimization."""
+        # Update the plan with optimization results
+        self.current_plan = plan
+        
+        # Update planning and evaluation views
+        self.planning_tab.set_plan(plan)
+        self.evaluation_tab.set_plan(plan)
+        
+        # Also update the MCO tab
+        self.mco_tab.set_plan(plan)
+        
+        # Switch to evaluation tab
+        self.right_area.setCurrentWidget(self.evaluation_tab)
+        
+        # Show message
+        self.statusBar().showMessage("Optimization completed")
+    
+    def _on_mco_solution_selected(self, solution_id):
+        """Handle MCO solution selection."""
+        # This could update other views if needed
+        self.statusBar().showMessage(f"MCO Solution {solution_id} selected")
+    
+    def _on_mco_solution_modified(self):
+        """Handle MCO solution modification."""
+        # This could update other views if needed
+        self.statusBar().showMessage("MCO Solution modified")

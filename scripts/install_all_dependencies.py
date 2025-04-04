@@ -2,393 +2,309 @@
 # -*- coding: utf-8 -*-
 
 """
-QuangTPS Complete Dependency Installation Script
+QuangTPS Dependency Installer
 
-This script installs all required dependencies for the QuangTPS system,
-including proper setup for WeasyPrint and other problematic packages.
-
-Usage:
-    python install_all_dependencies.py
+This script installs all dependencies required for QuangTPS to run properly.
+It handles platform-specific requirements and checks for existing installations.
 """
 
 import os
 import sys
 import platform
 import subprocess
+import argparse
 import logging
 import shutil
 import time
 from pathlib import Path
+from typing import List, Dict, Optional, Tuple, Set
 
-# Configure logging
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
 )
-logger = logging.getLogger("quangtps-installer")
+logger = logging.getLogger("dependency_installer")
 
-# All dependencies for QuangTPS by category
-DEPENDENCIES = {
-    "Core": [
-        "numpy>=1.22.0",
-        "scipy>=1.8.0",
-        "matplotlib>=3.5.0",
-        "pandas>=1.4.0",
-        "scikit-image>=0.19.0",
-        "scikit-learn>=1.1.0",
-        "opencv-python>=4.6.0",
-        "pydicom>=2.3.0",
-        "SimpleITK>=2.1.0",
-        "h5py>=3.7.0"
-    ],
-    "GUI": [
-        "PyQt5>=5.15.0",
-        "PyQtChart>=5.15.0",
-        "pyqtgraph>=0.12.0"
-    ],
-    "Visualization": [
-        "pyvista>=0.37.0",
-        "pyvistaQt>=0.2.0",
-        "vtk>=9.1.0"
-    ],
-    "Reporting": [
-        "weasyprint>=54.0",
-        "reportlab>=3.6.0",
-        "jinja2>=3.1.0",
-        "pypdf2>=2.10.0"
-    ],
-    "ML": [
-        "tensorflow>=2.9.0",
-        "torch>=1.12.0",
-        "torchvision>=0.13.0",
-        "monai>=0.9.0"
-    ],
-    "Optimization": [
-        "pulp>=2.6.0",
-        "cvxpy>=1.2.0",
-        "pyomo>=6.4.0"
-    ],
-    "Utilities": [
-        "requests>=2.28.0",
-        "tqdm>=4.64.0",
-        "colorama>=0.4.5"
-    ]
+# Define core dependencies
+CORE_DEPENDENCIES = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.5.0",
+    "pydicom>=2.3.0",
+    "scikit-image>=0.19.0",
+    "SimpleITK>=2.1.0",
+    "h5py>=3.6.0",
+    "pandas>=1.4.0",
+    "PyQt5>=5.15.0",
+    "vtk>=9.1.0",
+    "pyvista>=0.34.0",
+    "PyVistaQt>=0.6.0",
+    "opencv-python>=4.5.5.0",
+    "weasyprint>=54.0",
+    "cython>=0.29.0",
+    "pytest>=7.0.0",
+    "trimesh>=3.12.0",
+]
+
+# Optional Machine Learning dependencies
+ML_DEPENDENCIES = [
+    "tensorflow>=2.8.0",
+    "keras>=2.8.0",
+    "scikit-learn>=1.0.0",
+]
+
+# Development dependencies
+DEV_DEPENDENCIES = [
+    "black",
+    "pylint",
+    "mypy",
+    "pytest-cov",
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+# Platform-specific dependencies
+PLATFORM_DEPENDENCIES = {
+    "Windows": {
+        "packages": ["pywin32>=303"],
+        "system_dependencies": ["Microsoft Visual C++ Redistributable for Visual Studio 2019"]
+    },
+    "Linux": {
+        "packages": [],
+        "system_dependencies": ["libgl1-mesa-glx", "libxt6", "libxrender1", "xvfb", "libcairo2", "libpango-1.0-0", "libpangocairo-1.0-0"]
+    },
+    "Darwin": {  # macOS
+        "packages": [],
+        "system_dependencies": ["xquartz"]
+    }
 }
 
-class DependencyInstaller:
-    """Class to install all dependencies for QuangTPS."""
-    
-    def __init__(self):
-        """Initialize the dependency installer."""
-        self.os_name = platform.system()
-        self.os_version = platform.version()
-        self.python_version = platform.python_version()
-        self.failed_packages = []
-        
-    def install_all(self):
-        """Install all dependencies by category."""
-        logger.info("Starting QuangTPS dependency installation")
-        logger.info(f"Operating System: {self.os_name} {self.os_version}")
-        logger.info(f"Python Version: {self.python_version}")
-        
-        # Ensure pip is available and up-to-date
-        self._update_pip()
-        
-        # Install dependencies by category
-        for category, packages in DEPENDENCIES.items():
-            logger.info(f"\nInstalling {category} dependencies:")
-            for package in packages:
-                self._install_package(package)
-        
-        # Fix WeasyPrint setup
-        self._setup_weasyprint()
-        
-        # Verify installation
-        self._verify_installation()
-        
-        if self.failed_packages:
-            logger.warning("\nThe following packages could not be installed:")
-            for package in self.failed_packages:
-                logger.warning(f"  - {package}")
-            return False
-        else:
-            logger.info("\n✅ All dependencies installed successfully!")
-            return True
-    
-    def _update_pip(self):
-        """Update pip to the latest version."""
-        logger.info("Updating pip...")
-        try:
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", "--upgrade", "pip"
-            ])
-            logger.info("pip updated successfully")
-        except Exception as e:
-            logger.error(f"Failed to update pip: {e}")
-    
-    def _install_package(self, package):
-        """Install a specific package."""
-        logger.info(f"Installing {package}...")
-        try:
-            # Check if package is already installed with required version
-            package_name = package.split('>=')[0] if '>=' in package else package
-            try:
-                spec = __import__(package_name.replace('-', '_'))
-                logger.info(f"✅ {package_name} is already installed")
-                return True
-            except ImportError:
-                pass  # Package not installed, continue with installation
-            
-            # Install the package
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", package
-            ])
-            
-            logger.info(f"✅ {package} installed successfully")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Failed to install {package}: {e}")
-            self.failed_packages.append(package)
-            return False
-    
-    def _setup_weasyprint(self):
-        """Set up WeasyPrint properly based on the operating system."""
-        logger.info("\nSetting up WeasyPrint...")
-        
-        if self.os_name == "Windows":
-            self._setup_weasyprint_windows()
-        elif self.os_name == "Linux":
-            self._setup_weasyprint_linux()
-        elif self.os_name == "Darwin":  # macOS
-            self._setup_weasyprint_macos()
-        else:
-            logger.warning(f"Unsupported OS: {self.os_name}")
-    
-    def _setup_weasyprint_windows(self):
-        """Set up WeasyPrint on Windows."""
-        logger.info("Setting up WeasyPrint on Windows...")
-        
-        try:
-            # Check if requests is installed
-            try:
-                import requests
-                import tempfile
-            except ImportError:
-                logger.info("Installing requests...")
-                subprocess.check_call([
-                    sys.executable, "-m", "pip", "install", "requests"
-                ])
-                import requests
-                import tempfile
-            
-            # Create temporary directory
-            temp_dir = tempfile.mkdtemp()
-            temp_file = os.path.join(temp_dir, "gtk3-runtime-installer.exe")
-            
-            # Latest GTK3 installer URL
-            gtk_url = "https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases/download/2023-03-01/gtk3-runtime-3.24.38-2023-03-01-ts-win64.exe"
-            
-            logger.info(f"Downloading GTK3 Runtime from {gtk_url}...")
-            response = requests.get(gtk_url, stream=True)
-            response.raise_for_status()
-            
-            # Write the installer to a temporary file
-            with open(temp_file, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            logger.info("Download complete. Installing GTK3 Runtime...")
-            
-            # Run the installer silently with default options
-            subprocess.check_call([temp_file, "/S"])
-            
-            # Update PATH to include GTK bin directory
-            gtk_bin_path = "C:\\Program Files\\GTK3-Runtime Win64\\bin"
-            
-            # Check if the path exists
-            if os.path.exists(gtk_bin_path):
-                # Add to PATH environment variable
-                current_path = os.environ.get('PATH', '')
-                if gtk_bin_path not in current_path:
-                    os.environ['PATH'] = f"{gtk_bin_path};{current_path}"
-                    logger.info(f"Added {gtk_bin_path} to PATH environment variable")
-                    
-                    # Also modify system PATH for future sessions
-                    try:
-                        # Using PowerShell to update system PATH
-                        ps_command = f'[Environment]::SetEnvironmentVariable("PATH", "{gtk_bin_path};" + [Environment]::GetEnvironmentVariable("PATH", "Machine"), "Machine")'
-                        subprocess.check_call(["powershell", "-Command", ps_command])
-                        logger.info("Updated system PATH environment variable")
-                    except Exception as e:
-                        logger.warning(f"Could not update system PATH: {e}")
-                        logger.warning("You may need to manually add GTK to your PATH")
-            else:
-                logger.warning(f"GTK installation path {gtk_bin_path} not found. Installation may have failed or used a different path.")
-            
-            # Clean up temporary files
-            try:
-                os.remove(temp_file)
-                os.rmdir(temp_dir)
-            except:
-                pass
-                
-            # Reinstall WeasyPrint
-            logger.info("Reinstalling WeasyPrint...")
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "uninstall", "-y", "weasyprint"
-            ])
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", "--force-reinstall", "weasyprint"
-            ])
-            
-            logger.info("WeasyPrint setup completed for Windows.")
-            
-        except Exception as e:
-            logger.error(f"Failed to set up WeasyPrint on Windows: {e}")
-            self.failed_packages.append("weasyprint-setup")
-    
-    def _setup_weasyprint_linux(self):
-        """Set up WeasyPrint on Linux."""
-        logger.info("Setting up WeasyPrint on Linux...")
-        
-        try:
-            # Try to detect the distribution
-            if shutil.which("apt"):
-                logger.info("Detected Debian/Ubuntu. Installing dependencies...")
-                subprocess.check_call([
-                    "sudo", "apt", "install", "-y", 
-                    "build-essential", "python3-dev", "python3-pip", "python3-setuptools",
-                    "python3-wheel", "python3-cffi", "libcairo2", "libpango-1.0-0", 
-                    "libpangocairo-1.0-0", "libgdk-pixbuf2.0-0", "libffi-dev", "shared-mime-info"
-                ])
-            elif shutil.which("dnf"):
-                logger.info("Detected Fedora/RHEL. Installing dependencies...")
-                subprocess.check_call([
-                    "sudo", "dnf", "install", "-y",
-                    "redhat-rpm-config", "python3-devel", "python3-pip", "python3-setuptools",
-                    "python3-wheel", "python3-cffi", "cairo", "pango", "gdk-pixbuf2"
-                ])
-            elif shutil.which("pacman"):
-                logger.info("Detected Arch Linux. Installing dependencies...")
-                subprocess.check_call([
-                    "sudo", "pacman", "-S", "--noconfirm",
-                    "python-pip", "python-setuptools", "python-wheel", "python-cffi", 
-                    "cairo", "pango", "gdk-pixbuf2"
-                ])
-            else:
-                logger.warning("Could not detect package manager. Please install WeasyPrint dependencies manually.")
-                
-            # Reinstall WeasyPrint
-            logger.info("Reinstalling WeasyPrint...")
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "weasyprint"
-            ])
-            
-            logger.info("WeasyPrint setup completed for Linux.")
-            
-        except Exception as e:
-            logger.error(f"Failed to set up WeasyPrint on Linux: {e}")
-            self.failed_packages.append("weasyprint-setup")
-    
-    def _setup_weasyprint_macos(self):
-        """Set up WeasyPrint on macOS."""
-        logger.info("Setting up WeasyPrint on macOS...")
-        
-        try:
-            if shutil.which("brew"):
-                logger.info("Homebrew detected. Installing dependencies...")
-                subprocess.check_call([
-                    "brew", "install", "cairo", "pango", "gdk-pixbuf", "libffi"
-                ])
-                
-                # Reinstall WeasyPrint
-                logger.info("Reinstalling WeasyPrint...")
-                subprocess.check_call([
-                    sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "weasyprint"
-                ])
-                
-                logger.info("WeasyPrint setup completed for macOS.")
-            else:
-                logger.warning("Homebrew is not installed. Please install it first: https://brew.sh/")
-                self.failed_packages.append("homebrew-missing")
-        except Exception as e:
-            logger.error(f"Failed to set up WeasyPrint on macOS: {e}")
-            self.failed_packages.append("weasyprint-setup")
-    
-    def _verify_installation(self):
-        """Verify that all packages were installed correctly."""
-        logger.info("\nVerifying installation...")
-        
-        for category, packages in DEPENDENCIES.items():
-            logger.info(f"Checking {category} dependencies:")
-            for package_spec in packages:
-                package_name = package_spec.split('>=')[0] if '>=' in package_spec else package_spec
-                package_name = package_name.replace('-', '_')  # Convert hyphens to underscores for importing
-                
-                try:
-                    spec = __import__(package_name)
-                    logger.info(f"✅ {package_name} is properly installed")
-                except ImportError as e:
-                    logger.warning(f"❌ {package_name} is not properly installed: {e}")
-                    if package_name not in [p.split('>=')[0] for p in self.failed_packages]:
-                        self.failed_packages.append(package_spec)
-        
-        # Special check for WeasyPrint
-        try:
-            import weasyprint
-            try:
-                # Try to create a simple PDF
-                test_html = "<html><body><h1>Test</h1></body></html>"
-                test_pdf = Path(os.path.expanduser("~")) / "weasyprint_test.pdf"
-                weasyprint.HTML(string=test_html).write_pdf(str(test_pdf))
-                
-                # Check if the file was created
-                if test_pdf.exists():
-                    test_pdf.unlink()  # Delete the test file
-                    logger.info(f"✅ WeasyPrint is fully functional")
-                else:
-                    logger.warning("❌ WeasyPrint could not generate a PDF")
-                    if "weasyprint" not in [p.split('>=')[0] for p in self.failed_packages]:
-                        self.failed_packages.append("weasyprint")
-            except Exception as e:
-                logger.warning(f"❌ WeasyPrint is installed but not working properly: {e}")
-                if "weasyprint" not in [p.split('>=')[0] for p in self.failed_packages]:
-                    self.failed_packages.append("weasyprint")
-        except ImportError:
-            logger.warning("❌ WeasyPrint is not installed")
-            if "weasyprint" not in [p.split('>=')[0] for p in self.failed_packages]:
-                self.failed_packages.append("weasyprint")
+def get_platform() -> str:
+    """Get the current platform."""
+    system = platform.system()
+    if system == "Linux":
+        return "Linux"
+    elif system == "Windows":
+        return "Windows"
+    elif system == "Darwin":
+        return "Darwin"
+    else:
+        logger.warning(f"Unknown platform: {system}")
+        return "Unknown"
 
+def check_python_version() -> bool:
+    """Check if Python version is compatible."""
+    python_version = sys.version_info
+    if python_version.major < 3 or (python_version.major == 3 and python_version.minor < 8):
+        logger.error(f"Python version {python_version.major}.{python_version.minor} is not supported. Please use Python 3.8 or newer.")
+        return False
+    return True
+
+def check_pip() -> bool:
+    """Check if pip is installed and up to date."""
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "--version"], stdout=subprocess.DEVNULL)
+        # Ensure pip is up to date
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], stdout=subprocess.DEVNULL)
+        return True
+    except subprocess.CalledProcessError:
+        logger.error("Pip is not installed or not working correctly.")
+        return False
+
+def get_installed_packages() -> Set[str]:
+    """Get the set of installed packages."""
+    try:
+        result = subprocess.check_output([sys.executable, "-m", "pip", "list", "--format=freeze"]).decode("utf-8")
+        installed_packages = set()
+        for line in result.splitlines():
+            if "==" in line:
+                package_name = line.split("==")[0].lower()
+                installed_packages.add(package_name)
+        return installed_packages
+    except subprocess.CalledProcessError:
+        logger.error("Failed to get installed packages.")
+        return set()
+
+def install_package(package: str, upgrade: bool = False) -> bool:
+    """Install a single package using pip."""
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if upgrade:
+        cmd.append("--upgrade")
+    cmd.append(package)
+    
+    try:
+        logger.info(f"Installing {package}...")
+        subprocess.check_call(cmd)
+        logger.info(f"Successfully installed {package}")
+        return True
+    except subprocess.CalledProcessError:
+        logger.error(f"Failed to install {package}")
+        return False
+
+def check_system_dependencies(system_deps: List[str]) -> None:
+    """Check if system dependencies are installed."""
+    platform_name = get_platform()
+    
+    if platform_name == "Windows":
+        logger.info("Please ensure you have the following installed:")
+        for dep in system_deps:
+            logger.info(f"  - {dep}")
+    elif platform_name == "Linux":
+        logger.info("You may need to install the following system packages:")
+        if os.path.exists("/etc/debian_version"):
+            logger.info(f"  sudo apt-get install {' '.join(system_deps)}")
+        elif os.path.exists("/etc/redhat-release"):
+            logger.info(f"  sudo yum install {' '.join(system_deps)}")
+        else:
+            logger.info(f"  {' '.join(system_deps)}")
+    elif platform_name == "Darwin":
+        logger.info("You may need to install the following with brew:")
+        logger.info(f"  brew install {' '.join(system_deps)}")
+
+def install_vtk_dependencies() -> bool:
+    """Install VTK and related dependencies."""
+    logger.info("Installing VTK and related dependencies...")
+    
+    # First try to install VTK directly
+    if not install_package("vtk>=9.1.0", upgrade=True):
+        logger.warning("Standard VTK installation failed, trying alternative approaches...")
+        platform_name = get_platform()
+        
+        if platform_name == "Windows":
+            # On Windows, try specific wheels
+            if platform.architecture()[0] == '64bit':
+                logger.info("Trying VTK wheel for Windows 64-bit...")
+                return install_package("https://files.pythonhosted.org/packages/8e/da/684cf2d387173101abba13a4ffa42c618eb358ccb4cf8a101de9986a8b1d/vtk-9.1.0-cp39-cp39-win_amd64.whl")
+            else:
+                logger.error("VTK installation on 32-bit Windows is not supported.")
+                return False
+        elif platform_name == "Linux":
+            logger.info("On Linux, please ensure you have development packages installed:")
+            logger.info("  sudo apt-get install libgl1-mesa-dev libxt-dev")
+            logger.info("  sudo apt-get install python3-dev cmake build-essential")
+            return install_package("vtk>=9.1.0", upgrade=True)
+        elif platform_name == "Darwin":
+            logger.info("On macOS, consider using Homebrew:")
+            logger.info("  brew install vtk")
+            return install_package("vtk>=9.1.0", upgrade=True)
+    
+    # If we got here, VTK installed or at least we tried our best
+    return True
+
+def install_weasyprint_dependencies() -> bool:
+    """Install WeasyPrint and its dependencies."""
+    logger.info("Installing WeasyPrint and its dependencies...")
+    
+    platform_name = get_platform()
+    
+    if platform_name == "Windows":
+        try:
+            # Install the GTK runtime for Windows
+            logger.info("WeasyPrint requires GTK on Windows.")
+            logger.info("Please download and install the GTK runtime from:")
+            logger.info("https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer")
+            
+            # Install WeasyPrint
+            return install_package("weasyprint>=54.0", upgrade=True)
+        except Exception as e:
+            logger.error(f"Failed to install WeasyPrint: {e}")
+            return False
+    else:
+        # For Linux and macOS, install system dependencies first
+        system_deps = []
+        if platform_name == "Linux":
+            system_deps = ["libcairo2-dev", "libpango1.0-dev", "libgdk-pixbuf2.0-dev", "libffi-dev", "shared-mime-info"]
+        elif platform_name == "Darwin":
+            system_deps = ["cairo", "pango", "gdk-pixbuf", "libffi"]
+        
+        check_system_dependencies(system_deps)
+        
+        # Install WeasyPrint
+        return install_package("weasyprint>=54.0", upgrade=True)
+
+def install_all_dependencies(include_ml: bool = False, include_dev: bool = False, upgrade: bool = False) -> bool:
+    """Install all required dependencies."""
+    if not check_python_version():
+        return False
+    
+    if not check_pip():
+        return False
+    
+    platform_name = get_platform()
+    logger.info(f"Platform detected: {platform_name}")
+    
+    # Get currently installed packages
+    installed_packages = get_installed_packages()
+    
+    # Install platform-specific packages
+    if platform_name in PLATFORM_DEPENDENCIES:
+        platform_deps = PLATFORM_DEPENDENCIES[platform_name]
+        system_deps = platform_deps.get("system_dependencies", [])
+        check_system_dependencies(system_deps)
+        
+        for pkg in platform_deps.get("packages", []):
+            pkg_name = pkg.split(">=")[0].split("==")[0].lower()
+            if pkg_name in installed_packages and not upgrade:
+                logger.info(f"Package {pkg_name} is already installed. Skipping.")
+                continue
+            install_package(pkg, upgrade)
+    
+    # Install core dependencies
+    for dep in CORE_DEPENDENCIES:
+        pkg_name = dep.split(">=")[0].split("==")[0].lower()
+        if pkg_name in installed_packages and not upgrade:
+            logger.info(f"Package {pkg_name} is already installed. Skipping.")
+            continue
+        install_package(dep, upgrade)
+    
+    # Handle special cases for VTK and WeasyPrint
+    install_vtk_dependencies()
+    install_weasyprint_dependencies()
+    
+    # Optionally install machine learning dependencies
+    if include_ml:
+        logger.info("Installing machine learning dependencies...")
+        for dep in ML_DEPENDENCIES:
+            pkg_name = dep.split(">=")[0].split("==")[0].lower()
+            if pkg_name in installed_packages and not upgrade:
+                logger.info(f"Package {pkg_name} is already installed. Skipping.")
+                continue
+            install_package(dep, upgrade)
+    
+    # Optionally install development dependencies
+    if include_dev:
+        logger.info("Installing development dependencies...")
+        for dep in DEV_DEPENDENCIES:
+            pkg_name = dep.split(">=")[0].split("==")[0].lower()
+            if pkg_name in installed_packages and not upgrade:
+                logger.info(f"Package {pkg_name} is already installed. Skipping.")
+                continue
+            install_package(dep, upgrade)
+    
+    logger.info("All dependencies have been installed.")
+    return True
 
 def main():
-    """Main function."""
-    logger.info("QuangTPS Dependency Installer")
-    logger.info("============================")
-    logger.info("This script will install all dependencies required for QuangTPS.")
-    logger.info("This may take some time, depending on your internet connection and computer speed.")
-    logger.info("Please be patient and do not close this window.")
-    logger.info("============================\n")
+    """Main function for the dependency installer."""
+    parser = argparse.ArgumentParser(description="Install dependencies for QuangTPS")
+    parser.add_argument("--ml", action="store_true", help="Install machine learning dependencies")
+    parser.add_argument("--dev", action="store_true", help="Install development dependencies")
+    parser.add_argument("--upgrade", action="store_true", help="Upgrade all packages")
+    args = parser.parse_args()
     
-    time.sleep(2)  # Give the user time to read the message
-    
-    installer = DependencyInstaller()
-    success = installer.install_all()
+    success = install_all_dependencies(
+        include_ml=args.ml,
+        include_dev=args.dev,
+        upgrade=args.upgrade
+    )
     
     if success:
-        logger.info("\n============================")
-        logger.info("Installation completed successfully!")
-        logger.info("You can now run QuangTPS.")
-        logger.info("============================")
-        return 0
+        logger.info("Dependency installation completed successfully.")
     else:
-        logger.warning("\n============================")
-        logger.warning("Installation completed with some issues.")
-        logger.warning("Please check the log messages above for details.")
-        logger.warning("You may need to manually install some dependencies.")
-        logger.warning("============================")
-        return 1
-
+        logger.error("Dependency installation failed.")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    main() 

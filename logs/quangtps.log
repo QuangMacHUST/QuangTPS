@@ -12076,3 +12076,90 @@ AttributeError: 'Config' object has no attribute 'check_for_updates_on_startup'
 2025-04-01 14:31:02 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
 2025-04-02 04:18:32 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
 2025-04-02 04:38:18 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-02 04:54:21 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-02 04:55:18 [INFO] __main__ (__main__.py:205): Khởi động QuangTPS...
+2025-04-02 04:55:19 [INFO] __main__ (__main__.py:235): Đã khởi tạo kết nối đến cơ sở dữ liệu
+2025-04-02 04:55:20 [INFO] __main__ (__main__.py:270): Đã khởi tạo các dịch vụ
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for conformity_index: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for homogeneity_index: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for gradient_measure: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for conformity_index: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for homogeneity_index: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for gradient_measure: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for conformity_index: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for homogeneity_index: expected list but got <class 'dict'>
+2025-04-02 04:55:20 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for gradient_measure: expected list but got <class 'dict'>
+2025-04-02 04:55:24 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-02 04:55:25 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-02 04:55:25 [INFO] __main__ (__main__.py:299): Ứng dụng đã khởi động thành công
+2025-04-02 04:55:25 [ERROR] __main__ (__main__.py:307): Lỗi khi tạo cửa sổ chính: 'Config' object has no attribute 'check_for_updates_on_startup'
+2025-04-02 04:55:25 [ERROR] __main__ (__main__.py:308): Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 302, in show_main_window
+    if config.check_for_updates_on_startup:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Config' object has no attribute 'check_for_updates_on_startup'
+
+2025-04-02 05:03:46 [INFO] __main__ (__main__.py:205): Khởi động QuangTPS...
+2025-04-02 05:03:47 [INFO] __main__ (__main__.py:235): Đã khởi tạo kết nối đến cơ sở dữ liệu
+2025-04-02 05:03:47 [INFO] __main__ (__main__.py:270): Đã khởi tạo các dịch vụ
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for conformity_index: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for homogeneity_index: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for gradient_measure: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for conformity_index: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for homogeneity_index: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for gradient_measure: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for conformity_index: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for homogeneity_index: expected list but got <class 'dict'>
+2025-04-02 05:03:47 [ERROR] quangtps.planning.clinical_protocols (clinical_protocols.py:135): Invalid goals data format for gradient_measure: expected list but got <class 'dict'>
+2025-04-02 05:03:52 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-02 05:03:53 [INFO] __main__ (__main__.py:299): Ứng dụng đã khởi động thành công
+2025-04-02 05:03:53 [ERROR] __main__ (__main__.py:307): Lỗi khi tạo cửa sổ chính: 'Config' object has no attribute 'check_for_updates_on_startup'
+2025-04-02 05:03:53 [ERROR] __main__ (__main__.py:308): Traceback (most recent call last):
+  File "E:\hoctap\QuangTPS\quangtps\__main__.py", line 302, in show_main_window
+    if config.check_for_updates_on_startup:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Config' object has no attribute 'check_for_updates_on_startup'
+
+2025-04-02 05:05:50 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:240): Tải DICOM với SimpleITK từ 25 files
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:257): Bắt đầu đọc 25 files với SimpleITK
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:259): SimpleITK thực thi thành công
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:319): Đã đọc được hình ảnh kích thước: (512, 512, 25), spacing: (0.46875, 0.46875, 0.2291676136344072)
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:324): Chuyển đổi thành công sang mảng NumPy, shape: (25, 512, 512)
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:378): Đọc modality từ DICOM: MR
+2025-04-02 05:06:26 [INFO] quangtps.ui.dicom_loader (dicom_loader.py:475): Đã tải thành công chuỗi DICOM với SimpleITK, kích thước (25, 512, 512)
+2025-04-02 05:06:26 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:26 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:26 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:28 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:28 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:28 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:28 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:29 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:30 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
+2025-04-02 06:01:59 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA

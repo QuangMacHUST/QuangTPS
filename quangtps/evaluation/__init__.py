@@ -48,7 +48,21 @@ from quangtps.evaluation.dvh import (
 # Import plan evaluation module
 from quangtps.evaluation.plan_evaluation import (
     PlanEvaluation,
+    DVHCalculator,
     evaluate_plan
+)
+
+# Import plan quality module
+from quangtps.evaluation.plan_quality import (
+    ClinicalGoal,
+    PlanQualityEvaluator
+)
+
+# Import clinical protocols module
+from quangtps.evaluation.clinical_protocols import (
+    ClinicalProtocolManager,
+    get_protocol,
+    select_protocol_dialog
 )
 
 # Import robustness evaluation if available
@@ -95,7 +109,15 @@ __all__ = [
     
     # Đánh giá kế hoạch
     'PlanEvaluation',
+    'DVHCalculator',
     'evaluate_plan',
+    
+    # Đánh giá chất lượng kế hoạch
+    'ClinicalGoal',
+    'PlanQualityEvaluator',
+    'ClinicalProtocolManager',
+    'get_protocol',
+    'select_protocol_dialog',
     
     # Đánh giá và so sánh kế hoạch
     'EvaluationReport',

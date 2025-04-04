@@ -1,193 +1,173 @@
-# QuangTPS - Open Source Radiotherapy Treatment Planning System
+# QuangTPS - Radiation Therapy Treatment Planning System
 
-QuangTPS is a comprehensive, open-source radiotherapy treatment planning system inspired by commercial systems like Eclipse™ (Varian Medical Systems).
+QuangTPS is a comprehensive radiation therapy treatment planning system designed for educational and research purposes. It provides a set of tools for radiotherapy planning, including image visualization, structure contouring, beam planning, dose calculation, and plan evaluation.
 
 ## Features
 
-### Eclipse-Like User Interface
-- **Object Explorer**: Hierarchical view of patients, plans, structures, and images, similar to Eclipse's Object Explorer
-- **Clinical Protocol System**: Standardized template-based planning for consistent treatment approaches
-- **Multi-Tab Workflow**: Organized workflow with dedicated tabs for each planning stage
-- **Plan Evaluation Tab**: Dedicated tab for comprehensive plan evaluation with DVH analysis and clinical goal assessment
-- **Modern Look and Feel**: Clean, professional interface designed for clinical use
+- **Eclipse-like Interface** - Modern user interface similar to Varian Eclipse TPS with intuitive workflow and comprehensive tools
+- **Multi-Planar Reconstruction (MPR)** - View and navigate through medical images in axial, sagittal, and coronal planes
+- **3D Visualization** - Visualize patient anatomy, structures, and dose distribution in 3D using VTK
+- **Structure Contouring** - Draw and edit structures with advanced contouring tools (brush, pencil, polygon, threshold)
+- **External Beam Planning** - Create and manage external beam radiation therapy plans with comprehensive beam parameters
+- **Dose Calculation** - Calculate dose distribution using a simplified pencil beam algorithm
+- **Clinical Protocols** - Define, import, and manage clinical protocols for plan evaluation
+- **Plan Quality Evaluation** - Automated assessment of plan quality against clinical protocols and goals
+- **Plan Evaluation** - Analyze treatment plans with DVH (Dose-Volume Histogram) and structure statistics
+- **DICOM Support** - Import and export DICOM images, structures, plans, and dose
 
-### Advanced Planning Capabilities
-- **Interactive DVH Display**: Comprehensive DVH analysis with comparison capabilities
-- **Clinical Goals Evaluation**: Automated evaluation and reporting of plan quality
-- **Robust Optimization**: Advanced optimization including target coverage constraints and OAR sparing
-- **Image Registration**: Multi-modality image fusion for precise target delineation
+## Screenshots
 
-### Treatment Techniques
-- **IMRT/VMAT Planning**: Support for intensity-modulated and volumetric arc therapy
-- **Stereotactic Planning**: Support for SRS and SBRT treatments
-- **Electron Therapy**: Electron beam planning capabilities
-- **Specialized Techniques**: Support for TBI, TSET, and other specialized techniques
-
-### Quality Assurance
-- **Plan QA**: Tools for quality assurance of treatment plans
-- **Collision Detection**: Automated collision detection and reporting
-- **Plan Robustness**: Evaluation of plan robustness to setup errors and anatomical changes
-
-### Interoperability
-- **DICOM Support**: Full integration with DICOM standard for RT planning
-- **Multi-System Compatibility**: Compatible with various treatment delivery systems
-- **Data Import/Export**: Tools for transferring data to and from other systems
-
-## System Requirements
-
-- **Operating System**: Windows 10 or newer
-- **RAM**: 8GB minimum, 16GB or more recommended
-- **Processor**: Multi-core CPU (Intel i5/i7 or equivalent)
-- **Graphics**: Dedicated GPU with 2GB+ VRAM recommended
-- **Storage**: 10GB minimum for application, additional space needed for patient data
+*(Screenshots would be included here)*
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.8 or higher
+- Git
+
+### Installation Steps
+
 1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/QuangTPS.git
+   cd QuangTPS
+   ```
+
+2. Install dependencies:
+   ```
+   python scripts/install_all_dependencies.py
+   ```
+
+3. Verify installation:
+   ```
+   python scripts/run_quangtps.py
+   ```
+
+### Dependencies
+
+QuangTPS requires the following main libraries:
+
+- **NumPy** - For numerical computations
+- **PyQt5** - For the graphical user interface
+- **VTK** - For 3D visualization
+- **SimpleITK** - For image processing
+- **pydicom** - For DICOM file handling
+- **matplotlib** - For plotting
+- **scikit-image** - For image processing
+
+## Usage
+
+### Running the Application
+
 ```
-git clone https://github.com/username/quangtps.git
+python scripts/run_quangtps.py [options]
 ```
 
-2. Install the required dependencies:
-```
-pip install -r requirements.txt
-```
+Options:
+- `--debug` - Enable debug logging
+- `--patient-dir PATH` - Open a specific patient directory at startup
 
-3. Run the application:
-```
-python -m quangtps
-```
+### Basic Workflow
+
+1. **Patient Tab**: Select or import patient data
+2. **Structure Tab**: Create and edit structures (targets and organs at risk)
+3. **External Beam Planning Tab**: Create and configure treatment beams and calculate dose
+4. **Evaluation Tab**: Evaluate the treatment plan with DVH, statistics, and protocol compliance
+
+## Component Documentation
+
+### MPR Viewer
+
+The MPR Viewer provides a synchronized view of the patient's medical images in three planes:
+- Axial (transverse)
+- Sagittal
+- Coronal
+
+Features include:
+- Window/level adjustment
+- Structure overlay
+- Dose overlay
+- Measurement tools
+- Synchronized scrolling
+
+### Structure Tools
+
+The Structure Tab offers advanced contouring tools:
+- **Brush Tool**: Freehand drawing with adjustable size and hardness
+- **Pencil Tool**: Precise contour drawing
+- **Polygon Tool**: Create polygon contours
+- **Threshold Tool**: Semi-automatic contouring based on intensity thresholds
+
+### Beam Planning
+
+The External Beam Planning Tab allows creating and managing external radiation therapy beams:
+- Setup of beam parameters (energy, gantry angle, couch angle, collimator angle)
+- Field size adjustment
+- Beam weighting
+- Beam visualization
+- MLC (Multi-Leaf Collimator) editing
+- Real-time dose calculation and visualization
+- Integration with plan evaluation
+
+### Dose Calculation
+
+The dose calculation module implements a simplified pencil beam algorithm with:
+- Percentage depth dose (PDD) modeling
+- Beam profile modeling
+- Tissue heterogeneity handling
+- Dose grid resolution setting
+- Multi-beam dose accumulation
+
+### Clinical Protocols
+
+The Clinical Protocol system provides tools for plan quality assessment:
+- **Protocol Management**: Create, edit, import, and export clinical protocols
+- **Structure Matching**: Automatically match structures to protocol goals
+- **Goal Definition**: Define various goal types (D95, V20, Max Dose, etc.)
+- **Predefined Protocols**: Built-in protocols for common treatment sites
+- **Priority Levels**: Critical, High, Medium, and Low priority goals
+- **Acceptable Variations**: Define acceptable variations for each goal
+
+### Plan Quality Evaluation
+
+The Plan Quality Evaluation system provides automated assessment:
+- **Automated Evaluation**: Evaluate plans against clinical protocols
+- **Score Calculation**: Overall, target, and OAR scores
+- **Visual Feedback**: Color-coded progress bars and status indicators
+- **Detailed Results**: Comprehensive table of goals and achievements
+- **Report Generation**: Generate detailed evaluation reports
+
+### Plan Evaluation
+
+The Evaluation Tab provides tools for plan analysis:
+- DVH calculation and visualization
+- Structure dose statistics (min, max, mean, D95, D50, D2, V95)
+- Clinical protocol compliance checking
+- Plan quality scores and metrics
+- Plan report generation
+
+## Documentation
+
+For more detailed information, see the following documentation:
+- [Eclipse-like Features Documentation](docs/ECLIPSE_FEATURES.md)
+- [User Guide for Eclipse-like Features](docs/USER_GUIDE_ECLIPSE_FEATURES.md)
+- [Demo Guide](DEMO_GUIDE.md)
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions to QuangTPS are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## Acknowledgments
+
+- The VTK development team for their visualization toolkit
+- The PyQt team for the GUI framework
+- The medical physics community for their guidance and standards
+
 ## Disclaimer
 
-QuangTPS is intended for research and educational purposes. It is not FDA-approved or CE-marked for clinical use. Always validate results independently before clinical use.
-
-## Acknowledgements
-
-- The developers of open-source projects used by QuangTPS
-- The radiotherapy community for ongoing feedback and support
-
-## Contact
-
-For questions, suggestions, or collaboration requests, please open an issue on GitHub or contact the project maintainers directly.
-
-## Recent Updates
-
-### Version 0.4.3: System Analysis and Improvement Roadmap
-We've conducted a comprehensive analysis of QuangTPS and created a detailed improvement plan to guide future development. Key updates include:
-
-- **Comprehensive System Analysis** identifying strengths and areas for improvement
-- **New IMPROVEMENT_PLAN.md** with detailed roadmap for system development
-- **Enhanced Error Handling** for more reliable operation across modules
-- **Diagnostic Tools** for analyzing system stability and performance
-- **Improved Documentation** reflecting current status and development plans
-
-Our top priorities for upcoming development include:
-- Completing the IMRT/VMAT optimization module
-- Fixing dependency issues (particularly WeasyPrint)
-- Enhancing multi-modality image registration
-- Extending robust optimization for respiratory motion
-
-For details, see the [Improvement Plan](IMPROVEMENT_PLAN.md) and the latest [changelog](changelog.txt).
-
-### Version 0.4.2: Plan Evaluation Tab Enhancements
-We have significantly improved the Plan Evaluation module to ensure robust handling of DVH data and better integration with the treatment planning workflow. Key improvements include:
-
-- **Enhanced DVH visualization** with support for multiple data formats (tuple and dictionary formats)
-- **Improved structure management** with better list population and state preservation
-- **Robust metrics calculation** with proper error handling for missing or invalid data
-- **Fixed plan indices calculation** for accurate assessment of plan quality
-- **Better prescription integration** for more relevant DVH analysis against prescribed dose
-- **Improved user feedback** with informative status updates and error messages
-
-For detailed documentation on the Plan Evaluation module, see [Plan Evaluation Documentation](docs/plan_evaluation.md).
-
-### DVH Module and Plan Evaluation Improvements
-We have significantly enhanced the Dose-Volume Histogram (DVH) module and added comprehensive plan evaluation functionality to QuangTPS. Key improvements include:
-
-- **Enhanced DVH calculation accuracy** with proper interpolation for metrics
-- **Robust metrics calculation** including Dx/Vx values and plan quality indices
-- **New PlanEvaluation class** for comprehensive radiotherapy plan assessment
-- **Clinical constraints evaluation system** for treatment plan validation
-- **Improved visualization** with customizable DVH plots and comprehensive reports
-
-#### New Plan Evaluation Tab
-A dedicated Plan Evaluation tab has been added to the UI, providing:
-- Interactive DVH visualization with structure filtering
-- Comprehensive metrics tables displaying dose and volume statistics
-- Plan quality indices (Homogeneity Index, Conformity Index)
-- Clinical constraints evaluation (coming soon)
-- Seamless integration with the planning workflow
-
-For a detailed list of improvements, see [DVH Module Improvements](dvh_module_improvements.md).
-
-## Contributing to the Development Roadmap
-
-We welcome contributions to help advance the QuangTPS system according to our development roadmap. Here's how you can contribute:
-
-### Priority Areas for Contribution
-
-1. **IMRT/VMAT Optimization**
-   - Implementing and testing optimization algorithms
-   - Developing leaf sequencing algorithms
-   - Creating validation tools for optimization results
-
-2. **Visualization Improvements**
-   - Enhancing DVH visualization
-   - Implementing 3D visualization of treatment plans
-   - Creating intuitive user interfaces for plan evaluation
-
-3. **Documentation and Testing**
-   - Creating detailed user documentation
-   - Writing automated tests for system components
-   - Developing test cases for treatment planning features
-
-### Getting Started as a Contributor
-
-1. Review the [Improvement Plan](IMPROVEMENT_PLAN.md) to identify areas where you can contribute
-2. Check the [Issues](https://github.com/username/quangtps/issues) for specific tasks that need attention
-3. Fork the repository and create a feature branch for your contribution
-4. Follow the coding standards and documentation practices established in the codebase
-5. Submit a pull request with a clear description of your changes and how they advance the roadmap
-
-For more detailed contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development Timeline
-
-QuangTPS is following a phased development approach:
-
-- **Phase 1 (Current)**: Core functionality and stability improvements
-- **Phase 2**: Advanced optimization and image registration
-- **Phase 3**: Knowledge-based planning and machine learning integration
-- **Phase 4**: Specialized techniques and external system integration
-
-See the [Improvement Plan](IMPROVEMENT_PLAN.md) for detailed timeline and milestones.
-
-## Demo Commands
-
-```bash
-# Run the basic DVH test
-python test_dvh_basic.py
-
-# Run the comprehensive plan evaluation demo
-python run_plan_evaluation.py
-
-# View DVH results with interactive visualization
-python view_results.py
-
-# Launch QuangTPS with Plan Evaluation tab focused (with test data)
-python demo_plan_evaluation.py
-
-# Launch a simplified Plan Evaluation demo with synthetic data (more stable)
-python demo_plan_evaluation_simple.py
-```
-
-For detailed information about these demo scripts, including troubleshooting tips and guidance for creating your own custom demos, see the [Demo Guide](./DEMO_GUIDE.md).
+QuangTPS is designed for educational and research purposes. It is not FDA-approved or CE-marked, and should not be used for clinical treatment planning without appropriate validation and approval.

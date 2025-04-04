@@ -1,0 +1,105 @@
+{
+  "name": "Head and Neck",
+  "description": "Clinical protocol for head and neck cancer treatment planning",
+  "clinical_goals": [
+    {
+      "structure_name": "PTV70",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 95.0,
+      "target_value": 70.0,
+      "priority": "High",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "PTV70",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 2.0,
+      "target_value": 75.0,
+      "priority": "High",
+      "variation_acceptable": 1.0
+    },
+    {
+      "structure_name": "PTV60",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 95.0,
+      "target_value": 60.0,
+      "priority": "High",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Spinal Cord",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 45.0,
+      "priority": "Critical",
+      "variation_acceptable": 1.0
+    },
+    {
+      "structure_name": "Brainstem",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 54.0,
+      "priority": "Critical",
+      "variation_acceptable": 1.0
+    },
+    {
+      "structure_name": "Parotid_L",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 26.0,
+      "priority": "Medium",
+      "variation_acceptable": 4.0
+    },
+    {
+      "structure_name": "Parotid_R",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 26.0,
+      "priority": "Medium",
+      "variation_acceptable": 4.0
+    },
+    {
+      "structure_name": "Oral Cavity",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 30.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Larynx",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 45.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Mandible",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 70.0,
+      "priority": "Low",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "Lips",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 30.0,
+      "priority": "Low",
+      "variation_acceptable": 5.0
+    }
+  ]
+} 

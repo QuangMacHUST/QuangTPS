@@ -1,0 +1,172 @@
+{
+  "name": "Head and Neck Protocol",
+  "description": "Clinical protocol for evaluation of head and neck radiotherapy plans based on RTOG guidelines",
+  "clinical_goals": [
+    {
+      "structure_name": "PTV_High",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 95.0,
+      "target_value": 95.0,
+      "priority": "Critical",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "PTV_High",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 99.0,
+      "target_value": 90.0,
+      "priority": "High",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "PTV_High",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 107.0,
+      "priority": "High",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "PTV_Low",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 95.0,
+      "target_value": 95.0,
+      "priority": "High",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Spinal Cord",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 45.0,
+      "priority": "Critical",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Brainstem",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 54.0,
+      "priority": "Critical",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Parotid_L",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 26.0,
+      "priority": "High",
+      "variation_acceptable": 4.0
+    },
+    {
+      "structure_name": "Parotid_R",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 26.0,
+      "priority": "High",
+      "variation_acceptable": 4.0
+    },
+    {
+      "structure_name": "Larynx",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 45.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Oral_Cavity",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 30.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Mandible",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 70.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Lens_L",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 10.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Lens_R",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 10.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Optic_Chiasm",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 54.0,
+      "priority": "Critical",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Optic_Nerve_L",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 54.0,
+      "priority": "Critical",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Optic_Nerve_R",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 54.0,
+      "priority": "Critical",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Cochlea_L",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 45.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Cochlea_R",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 45.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    }
+  ],
+  "version": "1.0",
+  "created_date": "2023-07-01",
+  "last_modified": "2023-12-01",
+  "source": "RTOG guidelines with adaptations for QuangTPS example"
+} 

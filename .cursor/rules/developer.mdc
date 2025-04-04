@@ -11,13 +11,10 @@ alwaysApply: false
 
 # Your rule content
 
-- You can read all file
-- You can use web
-- You can delete, add file
-- You have all permission with this project and all file
-- You have permission that you can download anything from web to this project
-- You must understand the structure of this project, understand which files correspond to which features.
-- You have to complete this treatment planning system
-- Ensure that system can work without errors
-- Ensure that system have full features and all the feature activate correctly
-- đảm bảo tính thống nhất của hệ thống, file phải rõ ràng, file nào tương ứng với tính năng nào, phải rõ ràng, rành mạch trong thiết kế và triển khai
+1️. You have full access to all files and permissions in this project.
+2️. You can download any necessary resources from the web for this project.
+3️. You must thoroughly understand the project structure and how each file corresponds to specific features.
+4️. Your goal is to complete the treatment planning system with full functionality and no errors.
+5️. Ensure the system is consistent, well-structured, and clearly designed. Each file must have a clear purpose and correspond to a specific feature.
+6️. Read and understand all comments in files and functions before making any decisions. Comments describe the purpose, functionality, and features of each component.
+7️. Ensure all features are correctly implemented, activated, and function as expected.

@@ -14,6 +14,11 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Union, Any
 from scipy import interpolate
 
+from quangtps.evaluation.dvh.dvh_data import DVHData, DVHCurve
+from quangtps.dose.dose_distribution import DoseDistribution
+from quangtps.structures.structure_set import StructureSet
+from quangtps.structures.structure import Structure
+
 logger = logging.getLogger(__name__)
 
 
@@ -612,3 +617,238 @@ def get_structure_color(structure_name: str) -> str:
     
     # Default color for unknown structures
     return '#336699'  # Blue
+
+
+class DVHCalculator:
+    """
+    Calculates Dose-Volume Histograms (DVH) for radiotherapy treatment plans.
+    This class handles the calculation of DVH curves from dose distributions and structure sets.
+    """
+    
+    def __init__(self):
+        self.bin_width = 0.1  # Dose bin width in Gy
+        self.min_dose = 0.0  # Minimum dose to consider in Gy
+        self.max_dose = 100.0  # Maximum dose to consider in Gy
+        self.use_relative_volume = True  # Use relative volume (%) instead of absolute (cc)
+    
+    def set_bin_width(self, bin_width: float):
+        """Set the dose bin width for DVH calculation"""
+        if bin_width <= 0:
+            raise ValueError("Bin width must be positive")
+        
+        self.bin_width = bin_width
+    
+    def set_dose_range(self, min_dose: float, max_dose: float):
+        """Set the dose range for DVH calculation"""
+        if min_dose < 0:
+            raise ValueError("Minimum dose cannot be negative")
+        if max_dose <= min_dose:
+            raise ValueError("Maximum dose must be greater than minimum dose")
+        
+        self.min_dose = min_dose
+        self.max_dose = max_dose
+    
+    def calculate_dvh(
+        self, 
+        dose: DoseDistribution, 
+        structure_set: StructureSet,
+        structures_to_include: Optional[List[str]] = None
+    ) -> DVHData:
+        """
+        Calculate DVH for all structures in the structure set, or for specific structures if provided.
+        
+        Args:
+            dose: The dose distribution
+            structure_set: The structure set containing structures
+            structures_to_include: Optional list of structure IDs to include (if None, include all)
+            
+        Returns:
+            DVHData object containing all calculated DVH curves
+        """
+        # Create a new DVHData object
+        dvh_data = DVHData()
+        dvh_data.bin_width = self.bin_width
+        
+        # Set plan-level information
+        dvh_data.plan_name = getattr(dose, 'plan_name', "")
+        dvh_data.prescription_dose = getattr(dose, 'prescription_dose', 0.0)
+        dvh_data.patient_id = getattr(dose, 'patient_id', "")
+        dvh_data.calculation_grid_size = getattr(dose, 'grid_size', 0.0)
+        
+        # Get the list of structures to process
+        if structures_to_include:
+            structures = [s for s in structure_set.structures if s.id in structures_to_include]
+        else:
+            structures = structure_set.structures
+        
+        # Calculate DVH for each structure
+        for structure in structures:
+            try:
+                # Calculate DVH curve for this structure
+                curve = self._calculate_structure_dvh(structure, dose)
+                
+                # Add to results
+                dvh_data.add_curve(curve, structure)
+                
+            except Exception as e:
+                logger.error(f"Error calculating DVH for structure {structure.name}: {str(e)}")
+                # Continue with next structure
+        
+        return dvh_data
+    
+    def _calculate_structure_dvh(self, structure: Structure, dose: DoseDistribution) -> DVHCurve:
+        """
+        Calculate DVH curve for a single structure.
+        
+        Args:
+            structure: The structure
+            dose: The dose distribution
+            
+        Returns:
+            DVHCurve object for the structure
+        """
+        # Create a new DVH curve
+        curve = DVHCurve(structure.id, structure.name)
+        
+        # Set structure volume
+        curve.total_volume = structure.get_volume()
+        
+        # In a real implementation, we would:
+        # 1. Sample the dose grid within the structure
+        # 2. Create a histogram of dose values
+        # 3. Convert to cumulative or differential DVH
+        
+        # For this example, we'll create synthetic data similar to a real DVH
+        
+        # Create dose bins
+        num_bins = int((self.max_dose - self.min_dose) / self.bin_width) + 1
+        dose_bins = np.linspace(self.min_dose, self.max_dose, num_bins)
+        
+        # Create synthetic dose and volume data
+        curve = self._create_synthetic_dvh_curve(structure, dose, curve, dose_bins)
+        
+        return curve
+    
+    def _create_synthetic_dvh_curve(
+        self, 
+        structure: Structure, 
+        dose: DoseDistribution,
+        curve: DVHCurve,
+        dose_bins: np.ndarray
+    ) -> DVHCurve:
+        """
+        Create a synthetic DVH curve for a structure.
+        In a real implementation, this would sample the actual dose distribution within the structure.
+        
+        Args:
+            structure: The structure
+            dose: The dose distribution
+            curve: The DVH curve to populate
+            dose_bins: The dose bin edges
+            
+        Returns:
+            The populated DVH curve
+        """
+        # Get prescription dose if available
+        prescription_dose = getattr(dose, 'prescription_dose', 60.0)
+        
+        # Synthetic parameters based on structure type
+        # We'll model the DVH with a normal distribution for targets
+        # and an exponential distribution for OARs
+        
+        # Default parameters
+        mean_dose = 20.0
+        std_dose = 5.0
+        is_target = False
+        
+        # Adjust parameters based on structure name
+        name = structure.name.lower()
+        
+        # Check if it's a target structure
+        if 'ptv' in name or 'ctv' in name or 'gtv' in name:
+            is_target = True
+            # Targets have high, uniform dose
+            mean_dose = prescription_dose
+            std_dose = prescription_dose * 0.05  # 5% standard deviation
+        
+        # Check if it's an OAR
+        elif any(oar in name for oar in ['lung', 'heart', 'liver', 'kidney', 'spinal', 'cord', 'brain']):
+            # OARs have lower dose with higher variability
+            
+            # Different OARs get different dose levels based on their typical constraints
+            if 'cord' in name or 'spinal' in name:
+                mean_dose = prescription_dose * 0.3  # Spinal cord has strict constraints
+                std_dose = mean_dose * 0.5
+            elif 'lung' in name:
+                mean_dose = prescription_dose * 0.25
+                std_dose = mean_dose * 0.6
+            elif 'heart' in name:
+                mean_dose = prescription_dose * 0.2
+                std_dose = mean_dose * 0.7
+            elif 'liver' in name or 'kidney' in name:
+                mean_dose = prescription_dose * 0.4
+                std_dose = mean_dose * 0.5
+            elif 'brain' in name:
+                mean_dose = prescription_dose * 0.6
+                std_dose = mean_dose * 0.4
+            else:
+                # Generic OAR
+                mean_dose = prescription_dose * 0.3
+                std_dose = mean_dose * 0.6
+        
+        else:
+            # Other structures get variable dose
+            mean_dose = prescription_dose * 0.5
+            std_dose = mean_dose * 0.7
+        
+        # Generate synthetic differential DVH
+        if is_target:
+            # For targets, use normal distribution centered around prescription dose
+            # This creates a bell-shaped differential DVH
+            differential_volume = np.exp(-0.5 * ((dose_bins - mean_dose) / std_dose)**2)
+        else:
+            # For OARs, use exponential distribution
+            # This creates a differential DVH with more volume at lower doses
+            scale = mean_dose / 2.0
+            differential_volume = np.exp(-dose_bins / scale)
+        
+        # Normalize to total volume
+        differential_volume = differential_volume / np.sum(differential_volume) * 100.0
+        
+        # Convert to cumulative DVH
+        cumulative_volume = np.zeros_like(differential_volume)
+        for i in range(len(dose_bins)):
+            cumulative_volume[i] = np.sum(differential_volume[i:])
+        
+        # Set data in curve
+        curve.set_data(dose_bins, cumulative_volume, is_cumulative=True)
+        
+        # Calculate and set basic statistics
+        self._calculate_dvh_statistics(curve)
+        
+        return curve
+    
+    def _calculate_dvh_statistics(self, curve: DVHCurve):
+        """
+        Calculate DVH statistics for a curve.
+        This includes min/max/mean dose, and common metrics like D95, D50, V20, etc.
+        
+        Args:
+            curve: The DVH curve to analyze
+        """
+        # Basic statistics are already calculated in the curve.set_data() method
+        
+        # Calculate common D metrics (dose to x% of volume)
+        common_volume_percentages = [95, 90, 80, 50, 20, 10, 5, 2]
+        for volume_percent in common_volume_percentages:
+            curve.calculate_d_metric(volume_percent)
+        
+        # Calculate common V metrics (volume receiving at least x Gy)
+        common_doses = [5, 10, 20, 30, 40, 50, 60, 70]
+        for dose in common_doses:
+            curve.calculate_v_metric(dose)
+        
+        # Calculate volume receiving at least 95% of prescription dose
+        if hasattr(curve, 'prescription_dose') and curve.prescription_dose > 0:
+            v95_dose = 0.95 * curve.prescription_dose
+            curve.calculate_v_metric(v95_dose)

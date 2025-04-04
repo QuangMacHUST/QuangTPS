@@ -2,840 +2,861 @@
 # -*- coding: utf-8 -*-
 
 """
-Module for optimization objectives and constraints in QuangTPS.
+Optimization Objectives Module
+==============================
 
-This module provides classes and functions to define dose-based objectives
-and constraints for radiotherapy treatment planning optimization.
+This module defines the objective functions used in IMRT/VMAT optimization,
+matching the objectives available in the Eclipse treatment planning system.
 """
 
 import logging
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable
-
-# Import DVH functions from the correct location
-from quangtps.evaluation.dvh import (
-    calculate_dvh_from_dose_grid, 
-    calculate_dvh_metrics
-)
-from quangtps.evaluation.dvh.dvh_calculation import (
-    _get_dose_at_volume,
-    _get_volume_at_dose
-)
+from typing import Dict, List, Optional, Tuple, Union, Any
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
-
-class ObjectiveFunction:
+class ObjectiveFunction(ABC):
     """
-    Base class for all objective functions.
-    
-    This class defines the interface for all objective functions used in the 
-    optimization process. Subclasses must implement the __call__ method to 
-    compute the objective value and the gradient method to compute the gradient.
+    Abstract base class for all optimization objective functions.
     """
     
-    def __init__(self, weight: float = 1.0, name: Optional[str] = None):
+    def __init__(self, structure_id: str, structure_name: str, 
+                 weight: float = 1.0, priority: int = 100,
+                 enabled: bool = True, normalize: bool = True):
         """
         Initialize the objective function.
         
         Parameters
         ----------
+        structure_id : str
+            ID of the structure
+        structure_name : str
+            Name of the structure
         weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
+            Weight of the objective
+        priority : int, optional
+            Priority of the objective (100 is default)
+        enabled : bool, optional
+            Whether the objective is enabled
+        normalize : bool, optional
+            Whether to normalize the objective value
         """
+        self.structure_id = structure_id
+        self.structure_name = structure_name
         self.weight = weight
-        self.name = name or self.__class__.__name__
+        self.priority = priority
+        self.enabled = enabled
+        self.normalize = normalize
     
-    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
+    @abstractmethod
+    def evaluate(self, dose, structure_mask) -> float:
         """
         Evaluate the objective function.
         
         Parameters
         ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
+        dose : ndarray
+            Dose distribution
+        structure_mask : ndarray
+            Binary mask of the structure
+        
         Returns
         -------
         float
             Objective function value
         """
-        raise NotImplementedError("Subclasses must implement this method")
+        pass
     
-    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+    @abstractmethod
+    def get_gradient(self, dose, structure_mask) -> np.ndarray:
         """
-        Compute the gradient of the objective function.
+        Calculate the gradient of the objective function.
         
         Parameters
         ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
+        dose : ndarray
+            Dose distribution
+        structure_mask : ndarray
+            Binary mask of the structure
+        
         Returns
         -------
-        np.ndarray
+        ndarray
             Gradient of the objective function
         """
-        raise NotImplementedError("Subclasses must implement this method")
-
-
-class DoseBasedObjective(ObjectiveFunction):
-    """
-    Base class for dose-based objective functions.
+        pass
     
-    Dose-based objectives depend only on the dose distribution, such as
-    minimizing the total dose.
-    """
-    
-    def __init__(self, weight: float = 1.0, name: Optional[str] = None):
+    def to_dict(self) -> Dict:
         """
-        Initialize the dose-based objective.
+        Convert the objective to a dictionary.
         
-        Parameters
-        ----------
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(weight, name)
-
-
-class StructureBasedObjective(ObjectiveFunction):
-    """
-    Base class for structure-based objective functions.
-    
-    Structure-based objectives depend on both the dose distribution and 
-    the structures, such as minimizing the dose to an organ at risk.
-    """
-    
-    def __init__(self, structure_name: str, weight: float = 1.0, name: Optional[str] = None):
-        """
-        Initialize the structure-based objective.
-        
-        Parameters
-        ----------
-        structure_name : str
-            Name of the structure
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(weight, name)
-        self.structure_name = structure_name
-
-
-class MinDose(StructureBasedObjective):
-    """
-    Minimize the minimum dose to a structure.
-    
-    This objective function penalizes doses below the prescribed minimum dose.
-    It is typically used for target structures.
-    """
-    
-    def __init__(self, structure_name: str, min_dose: float, 
-                 weight: float = 1.0, name: Optional[str] = None):
-        """
-        Initialize the minimum dose objective.
-        
-        Parameters
-        ----------
-        structure_name : str
-            Name of the structure
-        min_dose : float
-            Minimum dose in Gy
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(structure_name, weight, name or f"MinDose_{structure_name}")
-        self.min_dose = min_dose
-    
-    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
-        """
-        Evaluate the minimum dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
         Returns
         -------
-        float
-            Objective function value
+        Dict
+            Dictionary representation of the objective
         """
-        if structures is None or self.structure_name not in structures:
-            return 0.0
-        
-        structure_mask = structures[self.structure_name]
-        doses = dose_grid[structure_mask > 0]
-        
-        if len(doses) == 0:
-            return 0.0
-        
-        min_dose = np.min(doses)
-        if min_dose >= self.min_dose:
-            return 0.0
-        
-        return self.weight * (self.min_dose - min_dose)**2
+        return {
+            "type": self.__class__.__name__,
+            "structure_id": self.structure_id,
+            "structure_name": self.structure_name,
+            "weight": self.weight,
+            "priority": self.priority,
+            "enabled": self.enabled,
+            "normalize": self.normalize
+        }
     
-    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'ObjectiveFunction':
         """
-        Compute the gradient of the minimum dose objective.
+        Create an objective from a dictionary.
         
         Parameters
         ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
+        data : Dict
+            Dictionary with objective parameters
+        
         Returns
         -------
-        np.ndarray
-            Gradient of the objective function
+        ObjectiveFunction
+            Created objective function
         """
-        if structures is None or self.structure_name not in structures:
-            return np.zeros_like(dose_grid)
+        obj_type = data.pop("type", cls.__name__)
         
-        structure_mask = structures[self.structure_name]
+        # Find the appropriate subclass based on type
+        for subclass in ObjectiveFunction.__subclasses__():
+            if subclass.__name__ == obj_type:
+                return subclass(**data)
         
-        # Find voxel with minimum dose
-        doses = dose_grid * structure_mask
-        flat_indices = np.argwhere(structure_mask > 0)
-        
-        if len(flat_indices) == 0:
-            return np.zeros_like(dose_grid)
-        
-        voxel_doses = doses[structure_mask > 0]
-        min_dose_idx = np.argmin(voxel_doses)
-        min_dose = voxel_doses[min_dose_idx]
-        
-        if min_dose >= self.min_dose:
-            return np.zeros_like(dose_grid)
-        
-        # Get coordinates of minimum dose voxel
-        min_voxel = tuple(flat_indices[min_dose_idx])
-        
-        # Initialize gradient
-        gradient = np.zeros_like(dose_grid)
-        
-        # Update gradient at the minimum dose voxel
-        gradient[min_voxel] = -2.0 * self.weight * (self.min_dose - min_dose)
-        
-        return gradient
+        raise ValueError(f"Unknown objective type: {obj_type}")
 
-
-class MaxDose(StructureBasedObjective):
-    """
-    Minimize the maximum dose to a structure.
+class DoseObjective(ObjectiveFunction):
+    """Base class for dose-based objectives."""
     
-    This objective function penalizes doses above the prescribed maximum dose.
-    It is typically used for organs at risk.
-    """
-    
-    def __init__(self, structure_name: str, max_dose: float, 
-                 weight: float = 1.0, name: Optional[str] = None):
+    def __init__(self, structure_id: str, structure_name: str, 
+                 dose: float, **kwargs):
         """
-        Initialize the maximum dose objective.
+        Initialize a dose-based objective.
         
         Parameters
         ----------
-        structure_name : str
-            Name of the structure
-        max_dose : float
-            Maximum dose in Gy
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(structure_name, weight, name or f"MaxDose_{structure_name}")
-        self.max_dose = max_dose
-    
-    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
-        """
-        Evaluate the maximum dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
-        Returns
-        -------
-        float
-            Objective function value
-        """
-        if structures is None or self.structure_name not in structures:
-            return 0.0
-        
-        structure_mask = structures[self.structure_name]
-        doses = dose_grid[structure_mask > 0]
-        
-        if len(doses) == 0:
-            return 0.0
-        
-        max_dose = np.max(doses)
-        if max_dose <= self.max_dose:
-            return 0.0
-        
-        return self.weight * (max_dose - self.max_dose)**2
-    
-    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
-        """
-        Compute the gradient of the maximum dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
-        Returns
-        -------
-        np.ndarray
-            Gradient of the objective function
-        """
-        if structures is None or self.structure_name not in structures:
-            return np.zeros_like(dose_grid)
-        
-        structure_mask = structures[self.structure_name]
-        
-        # Find voxel with maximum dose
-        doses = dose_grid * structure_mask
-        flat_indices = np.argwhere(structure_mask > 0)
-        
-        if len(flat_indices) == 0:
-            return np.zeros_like(dose_grid)
-        
-        voxel_doses = doses[structure_mask > 0]
-        max_dose_idx = np.argmax(voxel_doses)
-        max_dose = voxel_doses[max_dose_idx]
-        
-        if max_dose <= self.max_dose:
-            return np.zeros_like(dose_grid)
-        
-        # Get coordinates of maximum dose voxel
-        max_voxel = tuple(flat_indices[max_dose_idx])
-        
-        # Initialize gradient
-        gradient = np.zeros_like(dose_grid)
-        
-        # Update gradient at the maximum dose voxel
-        gradient[max_voxel] = 2.0 * self.weight * (max_dose - self.max_dose)
-        
-        return gradient
-
-
-class MeanDose(StructureBasedObjective):
-    """
-    Minimize the mean dose to a structure.
-    
-    This objective function penalizes the mean dose above the prescribed dose.
-    It is typically used for organs at risk.
-    """
-    
-    def __init__(self, structure_name: str, target_dose: float, 
-                 weight: float = 1.0, name: Optional[str] = None):
-        """
-        Initialize the mean dose objective.
-        
-        Parameters
-        ----------
-        structure_name : str
-            Name of the structure
-        target_dose : float
-            Target mean dose in Gy
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(structure_name, weight, name or f"MeanDose_{structure_name}")
-        self.target_dose = target_dose
-    
-    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
-        """
-        Evaluate the mean dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
-        Returns
-        -------
-        float
-            Objective function value
-        """
-        if structures is None or self.structure_name not in structures:
-            return 0.0
-        
-        structure_mask = structures[self.structure_name]
-        doses = dose_grid[structure_mask > 0]
-        
-        if len(doses) == 0:
-            return 0.0
-        
-        mean_dose = np.mean(doses)
-        if mean_dose <= self.target_dose:
-            return 0.0
-        
-        return self.weight * (mean_dose - self.target_dose)**2
-    
-    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
-        """
-        Compute the gradient of the mean dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
-        Returns
-        -------
-        np.ndarray
-            Gradient of the objective function
-        """
-        if structures is None or self.structure_name not in structures:
-            return np.zeros_like(dose_grid)
-        
-        structure_mask = structures[self.structure_name]
-        doses = dose_grid[structure_mask > 0]
-        
-        if len(doses) == 0:
-            return np.zeros_like(dose_grid)
-        
-        mean_dose = np.mean(doses)
-        if mean_dose <= self.target_dose:
-            return np.zeros_like(dose_grid)
-        
-        # Calculate gradient
-        gradient = np.zeros_like(dose_grid)
-        voxel_count = np.sum(structure_mask > 0)
-        
-        # Update gradient for all voxels in the structure
-        gradient[structure_mask > 0] = 2.0 * self.weight * (mean_dose - self.target_dose) / voxel_count
-        
-        return gradient
-
-
-class UniformDose(StructureBasedObjective):
-    """
-    Minimize dose non-uniformity in a structure.
-    
-    This objective function penalizes the variance of the dose distribution
-    in a structure. It is typically used for target structures to achieve
-    a uniform dose distribution.
-    """
-    
-    def __init__(self, structure_name: str, target_dose: float, 
-                 weight: float = 1.0, name: Optional[str] = None):
-        """
-        Initialize the uniform dose objective.
-        
-        Parameters
-        ----------
-        structure_name : str
-            Name of the structure
-        target_dose : float
-            Target dose in Gy
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(structure_name, weight, name or f"UniformDose_{structure_name}")
-        self.target_dose = target_dose
-    
-    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
-        """
-        Evaluate the uniform dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
-        Returns
-        -------
-        float
-            Objective function value
-        """
-        if structures is None or self.structure_name not in structures:
-            return 0.0
-        
-        structure_mask = structures[self.structure_name]
-        doses = dose_grid[structure_mask > 0]
-        
-        if len(doses) == 0:
-            return 0.0
-        
-        return self.weight * np.sum((doses - self.target_dose)**2) / len(doses)
-    
-    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
-        """
-        Compute the gradient of the uniform dose objective.
-        
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            3D dose grid
-        structures : Dict[str, np.ndarray], optional
-            Dictionary mapping structure names to binary masks
-        **kwargs : Any
-            Additional parameters
-            
-        Returns
-        -------
-        np.ndarray
-            Gradient of the objective function
-        """
-        if structures is None or self.structure_name not in structures:
-            return np.zeros_like(dose_grid)
-        
-        structure_mask = structures[self.structure_name]
-        
-        # Initialize gradient
-        gradient = np.zeros_like(dose_grid)
-        
-        # Update gradient for all voxels in the structure
-        voxel_count = np.sum(structure_mask > 0)
-        if voxel_count > 0:
-            gradient[structure_mask > 0] = 2.0 * self.weight * (dose_grid[structure_mask > 0] - self.target_dose) / voxel_count
-        
-        return gradient
-
-
-class DoseVolumeObjective(StructureBasedObjective):
-    """
-    Base class for dose-volume based objectives.
-    
-    Dose-volume objectives depend on the dose-volume histogram (DVH) of a structure.
-    These objectives are typically used to constrain the volume of a structure
-    receiving a certain dose.
-    """
-    
-    def __init__(self, structure_name: str, dose: float, volume: float,
-                 weight: float = 1.0, name: Optional[str] = None):
-        """
-        Initialize the dose-volume objective.
-        
-        Parameters
-        ----------
+        structure_id : str
+            ID of the structure
         structure_name : str
             Name of the structure
         dose : float
-            Dose threshold in Gy
-        volume : float
-            Volume threshold as a percentage (0-100)
-        weight : float, optional
-            Weight of the objective in the total cost function
-        name : str, optional
-            Name of the objective function
-        """
-        super().__init__(structure_name, weight, name)
-        self.dose = dose
-        self.volume = volume
-
-
-class DVHObjective(DoseVolumeObjective):
-    """
-    Dose-volume histogram based objective.
-    
-    This objective uses DVH metrics for optimization.
-    """
-    
-    def __init__(self, structure_name: str, metric_type: str, metric_value: float,
-                 target_value: float, constraint: str = "<",
-                 weight: float = 1.0, name: Optional[str] = None):
-        """
-        Initialize the DVH objective.
-        
-        Parameters
-        ----------
-        structure_name : str
-            Name of the structure to apply the objective to
-        metric_type : str
-            Type of DVH metric ('Dx' or 'Vx')
-        metric_value : float
-            Value for the metric (x in Dx or Vx)
-        target_value : float
-            Target value for the objective
-        constraint : str
-            Constraint type ('<', '>', '=')
-        weight : float
-            Objective weight
-        name : str, optional
-            Name of the objective
-        """
-        super().__init__(structure_name, 0, 0, weight, name)
-        self.metric_type = metric_type.upper()
-        self.metric_value = metric_value
-        self.target_value = target_value
-        self.constraint = constraint
-
-        # Validate inputs
-        if not (self.metric_type.startswith('D') or self.metric_type.startswith('V')):
-            raise ValueError(f"Metric type '{metric_type}' not supported. Use 'Dx' or 'Vx'.")
-        
-        # Set name if not provided
-        if not name:
-            self.name = f"{self.metric_type}{self.metric_value}{self.constraint}{self.target_value}"
-
-    def __call__(self, dose_grid, structures=None, **kwargs) -> float:
-        """
-        Calculate the objective value.
-        
-        Parameters
-        ----------
-        dose_grid : array-like
-            3D dose grid
-        structures : dict, optional
-            Dictionary of structure masks
+            Reference dose in Gy
         **kwargs : dict
-            Additional parameters
-            
-        Returns
-        -------
-        float
-            Objective value
+            Additional parameters for the base class
         """
-        if not structures or self.structure_name not in structures:
-            logger.warning(f"Structure '{self.structure_name}' not found.")
+        super().__init__(structure_id, structure_name, **kwargs)
+        self.dose = dose
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary."""
+        data = super().to_dict()
+        data["dose"] = self.dose
+        return data
+
+class DVHObjective(DoseObjective):
+    """Base class for DVH-based objectives."""
+    
+    def __init__(self, structure_id: str, structure_name: str, 
+                 dose: float, volume: float, **kwargs):
+        """
+        Initialize a DVH-based objective.
+        
+        Parameters
+        ----------
+        structure_id : str
+            ID of the structure
+        structure_name : str
+            Name of the structure
+        dose : float
+            Reference dose in Gy
+        volume : float
+            Reference volume percentage (0-100)
+        **kwargs : dict
+            Additional parameters for the base class
+        """
+        super().__init__(structure_id, structure_name, dose, **kwargs)
+        self.volume = volume
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary."""
+        data = super().to_dict()
+        data["volume"] = self.volume
+        return data
+
+class LowerDoseObjective(DoseObjective):
+    """
+    Lower dose objective to ensure dose is above a threshold.
+    Corresponds to Eclipse's 'Lower Dose' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
             return 0.0
         
-        # Get structure mask
-        structure_mask = structures[self.structure_name]
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
         
-        # Calculate DVH
-        dvh_data = calculate_dvh_from_dose_grid(dose_grid, structure_mask)
+        # Calculate how much dose is below target
+        below_target = np.maximum(0, self.dose - masked_dose)
         
-        # Get actual value based on metric type
-        actual_value = 0.0
+        # Calculate mean squared deviation
+        msd = np.mean(below_target ** 2)
         
-        if self.metric_type.startswith('D'):
-            # We need to adjust the dose
-            dose_bins = dvh_data.get('dose_bins', [])
-            volume_bins = dvh_data.get('cumulative_volume', [])
-            
-            if len(dose_bins) > 0 and len(volume_bins) > 0:
-                actual_value = _get_dose_at_volume(
-                    dose_bins, 
-                    volume_bins, 
-                    self.metric_value
-                )
-            
-        elif self.metric_type.startswith('V'):
-            # We need to adjust the volume
-            dose_bins = dvh_data.get('dose_bins', [])
-            volume_bins = dvh_data.get('cumulative_volume', [])
-            
-            if len(dose_bins) > 0 and len(volume_bins) > 0:
-                actual_value = _get_volume_at_dose(
-                    dose_bins, 
-                    volume_bins, 
-                    self.metric_value
-                )
+        return self.weight * msd
+    
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
         
-        # Calculate penalty based on constraint
-        penalty = 0.0
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
         
-        if self.constraint == '<':
-            if actual_value > self.target_value:
-                penalty = (actual_value - self.target_value) ** 2
-        elif self.constraint == '>':
-            if actual_value < self.target_value:
-                penalty = (self.target_value - actual_value) ** 2
-        else:  # constraint == '='
-            penalty = (actual_value - self.target_value) ** 2
+        # Calculate gradient: -2 * (dose - target) for voxels below target
+        below_target = masked_dose < self.dose
+        voxel_gradients = np.zeros_like(masked_dose)
+        voxel_gradients[below_target] = -2 * (masked_dose[below_target] - self.dose)
         
-        return self.weight * penalty
-
-    def gradient(self, dose_grid, structures=None, **kwargs) -> np.ndarray:
-        """
-        Compute the gradient of the DVH objective.
-        
-        Parameters
-        ----------
-        dose_grid : array-like
-            3D dose grid
-        structures : dict, optional
-            Dictionary of structure masks
-        **kwargs : dict
-            Additional parameters
-            
-        Returns
-        -------
-        np.ndarray
-            Gradient of the objective function
-        """
-        if not structures or self.structure_name not in structures:
-            logger.warning(f"Structure '{self.structure_name}' not found.")
-            return np.zeros_like(dose_grid)
-        
-        structure_mask = structures[self.structure_name]
-        
-        # Calculate current objective value
-        current_value = self.__call__(dose_grid, structures, **kwargs)
-        
-        # If constraint is already satisfied, gradient is zero
-        if current_value == 0.0:
-            return np.zeros_like(dose_grid)
-        
-        # For simplicity, use a uniform gradient inside the structure
-        # This is a rough approximation and not optimal for all cases
-        gradient = np.zeros_like(dose_grid)
-        
-        if self.metric_type.startswith('D'):
-            # For D metrics, we want to increase/decrease the dose
-            if self.constraint == '<':
-                # We want to decrease the dose
-                gradient[structure_mask > 0] = 2.0 * self.weight
-            elif self.constraint == '>':
-                # We want to increase the dose
-                gradient[structure_mask > 0] = -2.0 * self.weight
-            else:  # self.constraint == '='
-                # We need to adjust the dose
-                dvh_data = calculate_dvh_from_dose_grid(dose_grid, structure_mask)
-                actual_value = _get_dose_at_volume(
-                    dvh_data.get('dose_bins', []), 
-                    dvh_data.get('cumulative_volume', []), 
-                    self.metric_value
-                )
-            
-                if actual_value < self.target_value:
-                    gradient[structure_mask > 0] = -2.0 * self.weight
-                else:
-                    gradient[structure_mask > 0] = 2.0 * self.weight
-        else:  # self.metric_type.startswith('V')
-            # For V metrics, we want to adjust the volume receiving a dose
-            if self.constraint == '<':
-                # We want to decrease the volume
-                gradient[structure_mask > 0] = 2.0 * self.weight
-            elif self.constraint == '>':
-                # We want to increase the volume
-                gradient[structure_mask > 0] = -2.0 * self.weight
-            else:  # self.constraint == '='
-                # We need to adjust the volume
-                dvh_data = calculate_dvh_from_dose_grid(dose_grid, structure_mask)
-                actual_value = _get_volume_at_dose(
-                    dvh_data.get('dose_bins', []), 
-                    dvh_data.get('cumulative_volume', []), 
-                    self.metric_value
-                )
-            
-                if actual_value < self.target_value:
-                    gradient[structure_mask > 0] = -2.0 * self.weight
-                else:
-                    gradient[structure_mask > 0] = 2.0 * self.weight
+        # Apply to full gradient array
+        gradient[masked_indices] = voxel_gradients * self.weight
         
         return gradient
 
+class UpperDoseObjective(DoseObjective):
+    """
+    Upper dose objective to ensure dose is below a threshold.
+    Corresponds to Eclipse's 'Upper Dose' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate how much dose is above target
+        above_target = np.maximum(0, masked_dose - self.dose)
+        
+        # Calculate mean squared deviation
+        msd = np.mean(above_target ** 2)
+        
+        return self.weight * msd
+    
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Calculate gradient: 2 * (dose - target) for voxels above target
+        above_target = masked_dose > self.dose
+        voxel_gradients = np.zeros_like(masked_dose)
+        voxel_gradients[above_target] = 2 * (masked_dose[above_target] - self.dose)
+        
+        # Apply to full gradient array
+        gradient[masked_indices] = voxel_gradients * self.weight
+        
+        return gradient
 
-def get_objective_result(objective: Union[ObjectiveFunction, Dict],
-                        dose_grid, structures=None, **kwargs) -> Dict:
+class MeanDoseObjective(DoseObjective):
     """
-    Evaluate an objective function and return detailed results.
-    
-    Parameters
-    ----------
-    objective : Union[ObjectiveFunction, Dict]
-        Objective function or a dictionary describing it
-    dose_grid : np.ndarray
-        3D dose grid
-    structures : Dict[str, np.ndarray], optional
-        Dictionary mapping structure names to binary masks
-    **kwargs : Any
-        Additional parameters
-        
-    Returns
-    -------
-    Dict
-        Dictionary containing objective function details and result
+    Mean dose objective to achieve a target mean dose.
+    Corresponds to Eclipse's 'Mean Dose' objective.
     """
-    if isinstance(objective, dict):
-        # Create objective function from dictionary
-        obj_type = objective.get('type', 'UniformDose')
-        structure_name = objective.get('structure', '')
-        weight = objective.get('weight', 1.0)
-        name = objective.get('name', None)
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
         
-        if obj_type == 'MinDose':
-            min_dose = objective.get('min_dose', 0.0)
-            obj = MinDose(structure_name, min_dose, weight, name)
-        elif obj_type == 'MaxDose':
-            max_dose = objective.get('max_dose', 0.0)
-            obj = MaxDose(structure_name, max_dose, weight, name)
-        elif obj_type == 'MeanDose':
-            target_dose = objective.get('target_dose', 0.0)
-            obj = MeanDose(structure_name, target_dose, weight, name)
-        elif obj_type == 'UniformDose':
-            target_dose = objective.get('target_dose', 0.0)
-            obj = UniformDose(structure_name, target_dose, weight, name)
-        elif obj_type == 'DVH':
-            metric_type = objective.get('metric_type', 'D')
-            metric_value = objective.get('metric_value', 0.0)
-            target_value = objective.get('target_value', 0.0)
-            constraint = objective.get('constraint', '<')
-            obj = DVHObjective(structure_name, metric_type, metric_value, 
-                              target_value, constraint, weight, name)
-        else:
-            # Default to uniform dose
-            target_dose = objective.get('target_dose', 0.0)
-            obj = UniformDose(structure_name, target_dose, weight, name)
-    else:
-        # Use provided objective function
-        obj = objective
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate mean dose
+        mean_dose = np.mean(masked_dose)
+        
+        # Calculate squared deviation from target
+        deviation = (mean_dose - self.dose) ** 2
+        
+        return self.weight * deviation
     
-    # Evaluate objective function
-    value = obj(dose_grid, structures, **kwargs)
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Calculate mean dose
+        mean_dose = np.mean(masked_dose)
+        
+        # Calculate gradient: 2 * (mean - target) / num_voxels
+        num_voxels = np.sum(masked_indices)
+        gradient_value = 2 * (mean_dose - self.dose) / num_voxels
+        
+        # Apply to full gradient array
+        gradient[masked_indices] = gradient_value * self.weight
+        
+        return gradient
+
+class MaxDoseObjective(DoseObjective):
+    """
+    Maximum dose objective to limit maximum dose.
+    Corresponds to Eclipse's 'Maximum Dose' objective.
+    """
     
-    # Return result
-    return {
-        'name': obj.name,
-        'type': obj.__class__.__name__,
-        'weight': obj.weight,
-        'value': value,
-        'weighted_value': value,
-        'structure': getattr(obj, 'structure_name', None)
-    }
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate maximum dose
+        max_dose = np.max(masked_dose)
+        
+        # Calculate how much the max is above target
+        above_target = np.maximum(0, max_dose - self.dose)
+        
+        # Calculate squared deviation
+        deviation = above_target ** 2
+        
+        return self.weight * deviation
+    
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Find the maximum dose value and its index
+        max_dose = np.max(masked_dose)
+        if max_dose <= self.dose:
+            return gradient
+        
+        # Only apply gradient to the voxel(s) with maximum dose
+        max_indices = np.where(dose == max_dose)
+        gradient[max_indices] = 2 * (max_dose - self.dose) * self.weight
+        
+        return gradient
+
+class MinDoseObjective(DoseObjective):
+    """
+    Minimum dose objective to ensure minimum dose.
+    Corresponds to Eclipse's 'Minimum Dose' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate minimum dose
+        min_dose = np.min(masked_dose)
+        
+        # Calculate how much the min is below target
+        below_target = np.maximum(0, self.dose - min_dose)
+        
+        # Calculate squared deviation
+        deviation = below_target ** 2
+        
+        return self.weight * deviation
+    
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Find the minimum dose value and its index
+        min_dose = np.min(masked_dose)
+        if min_dose >= self.dose:
+            return gradient
+        
+        # Only apply gradient to the voxel(s) with minimum dose
+        min_indices = np.where(dose == min_dose)
+        gradient[min_indices] = -2 * (self.dose - min_dose) * self.weight
+        
+        return gradient
+
+class LowerDVHObjective(DVHObjective):
+    """
+    Lower DVH objective to ensure a minimum dose to a volume.
+    Corresponds to Eclipse's 'Lower DVH' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate DVH
+        hist, bins = np.histogram(masked_dose, bins=100, range=(0, np.max(masked_dose) * 1.1))
+        cum_hist = np.cumsum(hist) / np.sum(hist) * 100
+        
+        # Find bin index for the specified volume percentage
+        volume_index = np.searchsorted(cum_hist, self.volume)
+        if volume_index >= len(bins) - 1:
+            volume_index = len(bins) - 2
+        
+        # Get dose at the specified volume
+        dose_at_volume = bins[volume_index]
+        
+        # Calculate how much the dose is below target
+        below_target = np.maximum(0, self.dose - dose_at_volume)
+        
+        # Calculate squared deviation
+        deviation = below_target ** 2
+        
+        return self.weight * deviation
+    
+    def get_gradient(self, dose, structure_mask):
+        """
+        Calculate gradient.
+        This is more complex for DVH constraints and requires approximation.
+        """
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Sort doses to find the dose threshold
+        sorted_dose = np.sort(masked_dose)
+        index = int(np.floor(len(sorted_dose) * (100 - self.volume) / 100))
+        if index >= len(sorted_dose):
+            index = len(sorted_dose) - 1
+        
+        dose_threshold = sorted_dose[index]
+        
+        # If the dose at volume is already above target, no gradient
+        if dose_threshold >= self.dose:
+            return gradient
+        
+        # Apply gradient to voxels near the threshold
+        window = 0.05 * (np.max(masked_dose) - np.min(masked_dose))
+        
+        # Create a window of influence around the threshold
+        influence = np.zeros_like(masked_dose)
+        influence[masked_dose > (dose_threshold - window)] = 1.0
+        influence[masked_dose > (dose_threshold + window)] = 0.0
+        
+        # Apply the influence-weighted gradient
+        voxel_gradients = -2 * (self.dose - dose_threshold) * influence
+        
+        # Scale by number of influenced voxels to maintain magnitude
+        num_influenced = np.sum(influence > 0)
+        if num_influenced > 0:
+            voxel_gradients = voxel_gradients * (len(masked_dose) / num_influenced)
+        
+        # Apply to full gradient array
+        gradient[masked_indices] = voxel_gradients * self.weight
+        
+        return gradient
+
+class UpperDVHObjective(DVHObjective):
+    """
+    Upper DVH objective to limit dose to a volume.
+    Corresponds to Eclipse's 'Upper DVH' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate DVH
+        hist, bins = np.histogram(masked_dose, bins=100, range=(0, np.max(masked_dose) * 1.1))
+        cum_hist = np.cumsum(hist[::-1])[::-1] / np.sum(hist) * 100
+        
+        # Find bin index for the specified volume percentage
+        volume_index = np.searchsorted(cum_hist, self.volume)
+        if volume_index >= len(bins) - 1:
+            volume_index = len(bins) - 2
+        
+        # Get dose at the specified volume
+        dose_at_volume = bins[volume_index]
+        
+        # Calculate how much the dose is above target
+        above_target = np.maximum(0, dose_at_volume - self.dose)
+        
+        # Calculate squared deviation
+        deviation = above_target ** 2
+        
+        return self.weight * deviation
+    
+    def get_gradient(self, dose, structure_mask):
+        """
+        Calculate gradient.
+        This is more complex for DVH constraints and requires approximation.
+        """
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Sort doses to find the dose threshold
+        sorted_dose = np.sort(masked_dose)[::-1]  # Descending
+        index = int(np.floor(len(sorted_dose) * self.volume / 100))
+        if index >= len(sorted_dose):
+            index = len(sorted_dose) - 1
+        
+        dose_threshold = sorted_dose[index]
+        
+        # If the dose at volume is already below target, no gradient
+        if dose_threshold <= self.dose:
+            return gradient
+        
+        # Apply gradient to voxels near the threshold
+        window = 0.05 * (np.max(masked_dose) - np.min(masked_dose))
+        
+        # Create a window of influence around the threshold
+        influence = np.zeros_like(masked_dose)
+        influence[masked_dose < (dose_threshold + window)] = 1.0
+        influence[masked_dose < (dose_threshold - window)] = 0.0
+        
+        # Apply the influence-weighted gradient
+        voxel_gradients = 2 * (dose_threshold - self.dose) * influence
+        
+        # Scale by number of influenced voxels to maintain magnitude
+        num_influenced = np.sum(influence > 0)
+        if num_influenced > 0:
+            voxel_gradients = voxel_gradients * (len(masked_dose) / num_influenced)
+        
+        # Apply to full gradient array
+        gradient[masked_indices] = voxel_gradients * self.weight
+        
+        return gradient
+
+class ConformityObjective(DoseObjective):
+    """
+    Conformity objective to ensure dose conforms to target.
+    Corresponds to Eclipse's 'Conformity' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Calculate conformity index (CI)
+        # CI = (Volume of target receiving at least reference dose) / (Target volume)
+        target_volume = np.sum(structure_mask)
+        target_covered = np.sum((structure_mask > 0) & (dose >= self.dose))
+        
+        if target_volume == 0:
+            return 0.0
+        
+        ci = target_covered / target_volume
+        
+        # Penalty is proportional to deviation from ideal CI of 1.0
+        deviation = (1.0 - ci) ** 2
+        
+        return self.weight * deviation
+    
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        # Identify voxels just below and just above the threshold
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Window around threshold for gradient influence
+        window = 0.05 * np.max(masked_dose)
+        
+        # Create influence weights for voxels near the threshold
+        influence = np.zeros_like(masked_dose)
+        influence[(masked_dose > self.dose - window) & (masked_dose < self.dose + window)] = 1.0
+        
+        # Calculate direction: negative for voxels below threshold
+        direction = np.ones_like(masked_dose)
+        direction[masked_dose < self.dose] = -1.0
+        
+        # Apply gradient
+        voxel_gradients = direction * influence
+        
+        # Scale gradient
+        target_volume = np.sum(structure_mask)
+        voxel_gradients = voxel_gradients * (2.0 / target_volume)
+        
+        # Apply to full gradient array
+        gradient[masked_indices] = voxel_gradients * self.weight
+        
+        return gradient
+
+class HomogeneityObjective(DoseObjective):
+    """
+    Homogeneity objective to ensure uniform dose in target.
+    Corresponds to Eclipse's 'Homogeneity' objective.
+    """
+    
+    def evaluate(self, dose, structure_mask):
+        """Evaluate the objective."""
+        if np.sum(structure_mask) == 0:
+            return 0.0
+        
+        # Get masked dose values
+        masked_dose = dose[structure_mask > 0]
+        
+        # Calculate homogeneity index (HI)
+        # HI = (D2% - D98%) / D50%
+        if len(masked_dose) < 3:
+            return 0.0
+        
+        sorted_dose = np.sort(masked_dose)
+        d2_index = int(np.ceil(0.98 * len(sorted_dose)))
+        d98_index = int(np.floor(0.02 * len(sorted_dose)))
+        d50_index = int(0.5 * len(sorted_dose))
+        
+        d2 = sorted_dose[d2_index]
+        d98 = sorted_dose[d98_index]
+        d50 = sorted_dose[d50_index]
+        
+        if d50 == 0:
+            return 0.0
+        
+        hi = (d2 - d98) / d50
+        
+        # Penalty is proportional to HI (lower is better)
+        penalty = hi ** 2
+        
+        return self.weight * penalty
+    
+    def get_gradient(self, dose, structure_mask):
+        """Calculate gradient."""
+        gradient = np.zeros_like(dose)
+        if np.sum(structure_mask) == 0:
+            return gradient
+        
+        # Get masked dose values
+        masked_indices = structure_mask > 0
+        masked_dose = dose[masked_indices]
+        
+        # Find D2%, D98%, D50%
+        sorted_indices = np.argsort(masked_dose)
+        d2_index = int(np.ceil(0.98 * len(sorted_indices)))
+        d98_index = int(np.floor(0.02 * len(sorted_indices)))
+        d50_index = int(0.5 * len(sorted_indices))
+        
+        if d2_index >= len(sorted_indices) or d98_index >= len(sorted_indices) or d50_index >= len(sorted_indices):
+            return gradient
+        
+        d2_idx = sorted_indices[d2_index]
+        d98_idx = sorted_indices[d98_index]
+        d50_idx = sorted_indices[d50_index]
+        
+        d2 = masked_dose[d2_idx]
+        d98 = masked_dose[d98_idx]
+        d50 = masked_dose[d50_idx]
+        
+        if d50 == 0:
+            return gradient
+        
+        # Create sparse gradient
+        voxel_gradients = np.zeros_like(masked_dose)
+        
+        # Gradient for D2%: decrease
+        voxel_gradients[d2_idx] = 2.0 * (d2 - d98) / (d50 ** 2)
+        
+        # Gradient for D98%: increase
+        voxel_gradients[d98_idx] = -2.0 * (d2 - d98) / (d50 ** 2)
+        
+        # Gradient for D50%: adjust to minimize HI
+        voxel_gradients[d50_idx] = -2.0 * (d2 - d98) ** 2 / (d50 ** 3)
+        
+        # Apply to full gradient array
+        gradient[masked_indices] = voxel_gradients * self.weight
+        
+        return gradient
+
+class ObjectiveCollection:
+    """Collection of objective functions."""
+    
+    def __init__(self):
+        """Initialize an empty collection."""
+        self.objectives = []
+    
+    def add_objective(self, objective):
+        """
+        Add an objective to the collection.
+        
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective to add
+        """
+        if not isinstance(objective, ObjectiveFunction):
+            raise TypeError("Objective must be an instance of ObjectiveFunction")
+        
+        self.objectives.append(objective)
+    
+    def remove_objective(self, index):
+        """
+        Remove an objective from the collection.
+        
+        Parameters
+        ----------
+        index : int
+            Index of the objective to remove
+        """
+        if 0 <= index < len(self.objectives):
+            del self.objectives[index]
+    
+    def clear(self):
+        """Clear all objectives."""
+        self.objectives = []
+    
+    def evaluate(self, dose, structures):
+        """
+        Evaluate all objectives.
+        
+        Parameters
+        ----------
+        dose : ndarray
+            Dose distribution
+        structures : dict
+            Dictionary mapping structure IDs to masks
+        
+        Returns
+        -------
+        float
+            Total objective function value
+        dict
+            Dictionary with individual objective values
+        """
+        total_value = 0.0
+        objective_values = {}
+        
+        for i, obj in enumerate(self.objectives):
+            if not obj.enabled:
+                continue
+            
+            # Skip if structure mask is not available
+            if obj.structure_id not in structures:
+                continue
+            
+            structure_mask = structures[obj.structure_id]
+            value = obj.evaluate(dose, structure_mask)
+            
+            # Store value with some identifier
+            obj_name = f"{obj.__class__.__name__}_{obj.structure_name}_{i}"
+            objective_values[obj_name] = value
+            
+            # Add to total
+            total_value += value
+        
+        return total_value, objective_values
+    
+    def get_gradient(self, dose, structures):
+        """
+        Calculate the gradient of all objectives.
+        
+        Parameters
+        ----------
+        dose : ndarray
+            Dose distribution
+        structures : dict
+            Dictionary mapping structure IDs to masks
+        
+        Returns
+        -------
+        ndarray
+            Total gradient
+        """
+        gradient = np.zeros_like(dose)
+        
+        for obj in self.objectives:
+            if not obj.enabled:
+                continue
+            
+            # Skip if structure mask is not available
+            if obj.structure_id not in structures:
+                continue
+            
+            structure_mask = structures[obj.structure_id]
+            obj_gradient = obj.get_gradient(dose, structure_mask)
+            
+            # Add to total gradient
+            gradient += obj_gradient
+        
+        return gradient
+    
+    def to_dict(self):
+        """
+        Convert the collection to a dictionary.
+        
+        Returns
+        -------
+        dict
+            Dictionary representation of the collection
+        """
+        return {
+            "objectives": [obj.to_dict() for obj in self.objectives]
+        }
+    
+    @classmethod
+    def from_dict(cls, data):
+        """
+        Create a collection from a dictionary.
+        
+        Parameters
+        ----------
+        data : dict
+            Dictionary with collection data
+        
+        Returns
+        -------
+        ObjectiveCollection
+            Created collection
+        """
+        collection = cls()
+        
+        for obj_data in data.get("objectives", []):
+            obj = ObjectiveFunction.from_dict(obj_data)
+            collection.add_objective(obj)
+        
+        return collection
+    
+    def __len__(self):
+        """Get the number of objectives."""
+        return len(self.objectives)
+    
+    def __getitem__(self, index):
+        """Get an objective by index."""
+        return self.objectives[index]

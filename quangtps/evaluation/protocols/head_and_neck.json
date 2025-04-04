@@ -1,0 +1,166 @@
+{
+  "name": "Head and Neck IMRT",
+  "description": "Clinical protocol for head and neck IMRT plans with standard dose constraints",
+  "prescription": {
+    "dose": 70.0,
+    "fractions": 35
+  },
+  "goals": [
+    {
+      "structure_name": "PTV 70",
+      "structure_id": "*ptv*70*",
+      "goal_type": "D95",
+      "parameter": "dose_rel",
+      "target_value": 100.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV 70",
+      "structure_id": "*ptv*70*",
+      "goal_type": "V95",
+      "parameter": "volume_rel",
+      "target_value": 95.0,
+      "priority": "high", 
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV 70",
+      "structure_id": "*ptv*70*",
+      "goal_type": "D2",
+      "parameter": "dose_rel",
+      "target_value": 110.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV 56",
+      "structure_id": "*ptv*56*",
+      "goal_type": "D95",
+      "parameter": "dose_rel",
+      "target_value": 100.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV 56",
+      "structure_id": "*ptv*56*",
+      "goal_type": "V95",
+      "parameter": "volume_rel",
+      "target_value": 95.0,
+      "priority": "high", 
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Spinal Cord",
+      "structure_id": "*spinal*cord*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 45.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Brainstem",
+      "structure_id": "*brainstem*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 54.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Left Parotid",
+      "structure_id": "*left*parotid*",
+      "goal_type": "Mean",
+      "parameter": "dose_abs",
+      "target_value": 26.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Right Parotid",
+      "structure_id": "*right*parotid*",
+      "goal_type": "Mean",
+      "parameter": "dose_abs",
+      "target_value": 26.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Larynx",
+      "structure_id": "*larynx*",
+      "goal_type": "Mean",
+      "parameter": "dose_abs",
+      "target_value": 45.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Mandible",
+      "structure_id": "*mandible*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 70.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Oral Cavity",
+      "structure_id": "*oral*cavity*",
+      "goal_type": "Mean",
+      "parameter": "dose_abs",
+      "target_value": 30.0,
+      "priority": "low",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Left Eye",
+      "structure_id": "*left*eye*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 45.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Right Eye",
+      "structure_id": "*right*eye*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 45.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Left Optic Nerve",
+      "structure_id": "*left*optic*nerve*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 54.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Right Optic Nerve",
+      "structure_id": "*right*optic*nerve*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 54.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Optic Chiasm",
+      "structure_id": "*optic*chiasm*",
+      "goal_type": "Max",
+      "parameter": "dose_abs",
+      "target_value": 54.0,
+      "priority": "medium",
+      "is_achieved": null
+    }
+  ],
+  "created_date": "2023-10-15",
+  "modified_date": "2023-10-15",
+  "version": "1.0"
+} 

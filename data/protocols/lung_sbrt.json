@@ -1,0 +1,154 @@
+{
+  "name": "Lung SBRT Protocol",
+  "description": "Clinical protocol for evaluation of lung SBRT treatment plans based on RTOG 0813 and 0915 guidelines",
+  "clinical_goals": [
+    {
+      "structure_name": "PTV",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 95.0,
+      "target_value": 100.0,
+      "priority": "Critical",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "PTV",
+      "structure_id": "",
+      "goal_type": "D",
+      "parameter": 99.0,
+      "target_value": 90.0,
+      "priority": "High",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "PTV",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 120.0,
+      "priority": "High",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Spinal Cord",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 18.0,
+      "priority": "Critical",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Esophagus",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 27.5,
+      "priority": "High",
+      "variation_acceptable": 2.5
+    },
+    {
+      "structure_name": "Brachial Plexus",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 24.0,
+      "priority": "High",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Heart",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 30.0,
+      "priority": "High",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Heart",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 15.0,
+      "target_value": 15.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Trachea",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 30.0,
+      "priority": "High",
+      "variation_acceptable": 2.0
+    },
+    {
+      "structure_name": "Lung_Ipsilateral",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 12.5,
+      "target_value": 20.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Lung_Contralateral",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 10.0,
+      "target_value": 10.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Lung_Total",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 20.0,
+      "target_value": 20.0,
+      "priority": "High",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Lung_Total",
+      "structure_id": "",
+      "goal_type": "Mean Dose",
+      "parameter": 0.0,
+      "target_value": 7.0,
+      "priority": "Medium",
+      "variation_acceptable": 3.0
+    },
+    {
+      "structure_name": "Chest Wall",
+      "structure_id": "",
+      "goal_type": "V",
+      "parameter": 30.0,
+      "target_value": 30.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Ribs",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 40.0,
+      "priority": "Medium",
+      "variation_acceptable": 5.0
+    },
+    {
+      "structure_name": "Skin",
+      "structure_id": "",
+      "goal_type": "Max Dose",
+      "parameter": 0.0,
+      "target_value": 32.0,
+      "priority": "Low",
+      "variation_acceptable": 3.0
+    }
+  ],
+  "version": "1.0",
+  "created_date": "2023-06-15",
+  "last_modified": "2023-12-01",
+  "source": "Based on RTOG 0813 and 0915 guidelines for lung SBRT"
+} 

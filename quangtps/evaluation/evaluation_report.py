@@ -681,3 +681,303 @@ class EvaluationReport:
         </body>
         </html>
         """
+
+def generate_quality_report(
+    evaluation_results: Dict[str, Any],
+    plan_evaluation: Any = None,
+    protocol: Dict[str, Any] = None
+) -> str:
+    """
+    Generate an HTML report specifically for plan quality evaluation.
+    
+    Args:
+        evaluation_results: Dictionary with evaluation results
+        plan_evaluation: PlanEvaluation object
+        protocol: Protocol dictionary
+        
+    Returns:
+        str: HTML content for the report
+    """
+    if not evaluation_results:
+        return "<html><body><h1>No evaluation results available</h1></body></html>"
+        
+    # Get protocol information
+    protocol_name = evaluation_results.get("protocol_name", protocol.get("name", "Unknown Protocol"))
+    protocol_description = protocol.get("description", "") if protocol else ""
+    
+    # Get scores
+    overall_score = evaluation_results.get("overall_score", 0)
+    target_score = evaluation_results.get("target_score", 0)
+    oar_score = evaluation_results.get("oar_score", 0)
+    
+    # Format status text and class
+    if overall_score >= 90:
+        overall_status = "Passed"
+        overall_class = "passed"
+    elif overall_score >= 70:
+        overall_status = "Acceptable"
+        overall_class = "acceptable"
+    else:
+        overall_status = "Failed"
+        overall_class = "failed"
+        
+    if target_score >= 95:
+        target_status = "Passed"
+        target_class = "passed"
+    elif target_score >= 85:
+        target_status = "Acceptable"
+        target_class = "acceptable"
+    else:
+        target_status = "Failed"
+        target_class = "failed"
+        
+    if oar_score >= 85:
+        oar_status = "Passed"
+        oar_class = "passed"
+    elif oar_score >= 70:
+        oar_status = "Acceptable"
+        oar_class = "acceptable"
+    else:
+        oar_status = "Failed"
+        oar_class = "failed"
+    
+    # Create HTML content
+    html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Plan Quality Evaluation Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.5;
+            color: #333;
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        h1, h2, h3 {
+            color: #2c662d;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .passed {
+            color: green;
+            font-weight: bold;
+        }
+        .acceptable {
+            color: orange;
+            font-weight: bold;
+        }
+        .failed {
+            color: red;
+            font-weight: bold;
+        }
+        .progress-container {
+            background-color: #e0e0e0;
+            height: 20px;
+            width: 100%;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 4px;
+        }
+        .progress-passed {
+            background-color: #4CAF50;
+        }
+        .progress-acceptable {
+            background-color: #FF9800;
+        }
+        .progress-failed {
+            background-color: #F44336;
+        }
+        .footer {
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            font-size: 0.8em;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Plan Quality Evaluation Report</h1>
+        <h2>Protocol: {protocol_name}</h2>
+    </div>
+    
+    <div>
+        <p>{protocol_description}</p>
+    </div>
+    
+    <h2>Quality Scores</h2>
+    
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Score</th>
+            <th>Progress</th>
+            <th>Status</th>
+        </tr>
+        <tr>
+            <td>Overall</td>
+            <td>{overall_score:.1f}%</td>
+            <td>
+                <div class="progress-container">
+                    <div class="progress-bar progress-{overall_class}" style="width: {overall_score}%"></div>
+                </div>
+            </td>
+            <td class="{overall_class}">{overall_status}</td>
+        </tr>
+        <tr>
+            <td>Target</td>
+            <td>{target_score:.1f}%</td>
+            <td>
+                <div class="progress-container">
+                    <div class="progress-bar progress-{target_class}" style="width: {target_score}%"></div>
+                </div>
+            </td>
+            <td class="{target_class}">{target_status}</td>
+        </tr>
+        <tr>
+            <td>OAR</td>
+            <td>{oar_score:.1f}%</td>
+            <td>
+                <div class="progress-container">
+                    <div class="progress-bar progress-{oar_class}" style="width: {oar_score}%"></div>
+                </div>
+            </td>
+            <td class="{oar_class}">{oar_status}</td>
+        </tr>
+    </table>
+    
+    <h2>Clinical Goals</h2>
+    
+    <table>
+        <tr>
+            <th>Structure</th>
+            <th>Goal</th>
+            <th>Target</th>
+            <th>Achieved</th>
+            <th>Status</th>
+        </tr>
+""".format(
+        protocol_name=protocol_name,
+        protocol_description=protocol_description,
+        overall_score=overall_score,
+        overall_class=overall_class,
+        overall_status=overall_status,
+        target_score=target_score,
+        target_class=target_class,
+        target_status=target_status,
+        oar_score=oar_score,
+        oar_class=oar_class,
+        oar_status=oar_status
+    )
+    
+    # Add goal rows
+    for goal in evaluation_results.get("goals_details", []):
+        structure_name = goal.get("matched_structure", goal.get("structure_name", ""))
+        
+        # Format goal type
+        goal_type = goal.get("goal_type", "")
+        if goal_type.startswith("D") or goal_type.startswith("V"):
+            goal_type = f"{goal_type}{goal.get('parameter', 0)}"
+            
+        # Format target value
+        target_value = goal.get("target_value", 0.0)
+        if goal_type.startswith("D"):
+            goal_value = f"≥ {target_value:.2f} Gy"
+        elif goal_type.startswith("V"):
+            goal_value = f"≤ {target_value:.2f} %"
+        elif goal_type == "Max Dose":
+            goal_value = f"≤ {target_value:.2f} Gy"
+        elif goal_type == "Min Dose":
+            goal_value = f"≥ {target_value:.2f} Gy"
+        elif goal_type == "Mean Dose":
+            goal_value = f"= {target_value:.2f} Gy"
+        else:
+            goal_value = f"{target_value:.2f}"
+            
+        # Format achieved value
+        result_value = goal.get("result_value", 0.0)
+        
+        # Format status
+        if goal.get("achieved", False):
+            status = "Passed"
+            status_class = "passed"
+        elif goal.get("partially_achieved", False):
+            status = "Acceptable"
+            status_class = "acceptable"
+        else:
+            status = "Failed"
+            status_class = "failed"
+            
+        # Add row
+        html += """
+        <tr>
+            <td>{structure_name}</td>
+            <td>{goal_type}</td>
+            <td>{goal_value}</td>
+            <td>{result_value:.2f}</td>
+            <td class="{status_class}">{status}</td>
+        </tr>
+        """.format(
+            structure_name=structure_name,
+            goal_type=goal_type,
+            goal_value=goal_value,
+            result_value=result_value,
+            status_class=status_class,
+            status=status
+        )
+    
+    # Finish HTML
+    html += """
+    </table>
+    
+    <h2>Summary</h2>
+    <p>
+        This plan {overall_verb} the overall quality requirements with a score of {overall_score:.1f}%.
+        Target coverage {target_verb} target goals with a score of {target_score:.1f}%.
+        Organs at risk {oar_verb} constraints with a score of {oar_score:.1f}%.
+    </p>
+    
+    <div class="footer">
+        <p>Report generated by QuangTPS on {date}</p>
+        <p>This report is for clinical evaluation purposes only.</p>
+    </div>
+</body>
+</html>
+""".format(
+        overall_score=overall_score,
+        target_score=target_score,
+        oar_score=oar_score,
+        overall_verb="meets" if overall_score >= 70 else "does not meet",
+        target_verb="meets" if target_score >= 85 else "does not meet",
+        oar_verb="meet" if oar_score >= 70 else "do not meet",
+        date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    
+    return html

@@ -10,13 +10,13 @@ trong nhiều phần khác nhau của ứng dụng.
 
 import logging
 import os
-from typing import Optional, Callable, Dict, List, Tuple, Any
+from typing import Optional, Callable, Dict, List, Tuple, Any, Union
 
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, QRect, QPropertyAnimation, QEvent
-from PyQt5.QtGui import QIcon, QColor, QPainter, QPixmap
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, QRect, QPropertyAnimation, QEvent, QPoint
+from PyQt5.QtGui import QIcon, QColor, QPainter, QPixmap, QPalette, QFont, QCursor
 from PyQt5.QtWidgets import (
     QPushButton, QWidget, QColorDialog, QVBoxLayout, QHBoxLayout,
-    QFrame, QScrollArea, QToolButton, QSizePolicy, QStyle
+    QFrame, QScrollArea, QToolButton, QSizePolicy, QStyle, QStyleOption
 )
 
 logger = logging.getLogger(__name__)
@@ -311,3 +311,38 @@ class CollapsibleBox(QWidget):
             Tiêu đề mới
         """
         self.toggle_button.setText(title)
+
+
+class ToolButton(QToolButton):
+    """
+    Custom tool button with improved styling and functionality.
+    Similar to Eclipse's tool buttons with better visual feedback.
+    """
+    
+    def __init__(self, parent=None, icon_size=QSize(24, 24)):
+        super().__init__(parent)
+        self.setIconSize(icon_size)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.setStyleSheet("""
+            QToolButton {
+                border: 1px solid transparent;
+                border-radius: 2px;
+                padding: 3px;
+                background-color: transparent;
+            }
+            QToolButton:hover {
+                border: 1px solid #c0c0c0;
+                background-color: #f0f0f0;
+            }
+            QToolButton:pressed {
+                background-color: #e0e0e0;
+            }
+            QToolButton:checked {
+                background-color: #d0d0d0;
+                border: 1px solid #a0a0a0;
+            }
+        """)
+        
+    def sizeHint(self):
+        size = self.iconSize()
+        return QSize(size.width() + 6, size.height() + 6)

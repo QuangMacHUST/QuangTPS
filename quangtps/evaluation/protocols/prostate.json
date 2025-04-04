@@ -1,0 +1,121 @@
+{
+  "name": "Prostate VMAT",
+  "description": "Clinical protocol for prostate VMAT plans with standard dose constraints",
+  "prescription": {
+    "dose": 78.0,
+    "fractions": 39
+  },
+  "goals": [
+    {
+      "structure_name": "PTV",
+      "structure_id": "*ptv*",
+      "goal_type": "D95",
+      "parameter": "dose_rel",
+      "target_value": 100.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV",
+      "structure_id": "*ptv*",
+      "goal_type": "V95",
+      "parameter": "volume_rel",
+      "target_value": 95.0,
+      "priority": "high", 
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV",
+      "structure_id": "*ptv*",
+      "goal_type": "D2",
+      "parameter": "dose_rel",
+      "target_value": 107.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "PTV",
+      "structure_id": "*ptv*",
+      "goal_type": "D98",
+      "parameter": "dose_rel",
+      "target_value": 95.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Bladder",
+      "structure_id": "*bladder*",
+      "goal_type": "V70Gy",
+      "parameter": "volume_rel",
+      "target_value": 35.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Bladder",
+      "structure_id": "*bladder*",
+      "goal_type": "V50Gy",
+      "parameter": "volume_rel",
+      "target_value": 50.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Rectum",
+      "structure_id": "*rectum*",
+      "goal_type": "V70Gy",
+      "parameter": "volume_rel",
+      "target_value": 20.0,
+      "priority": "high",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Rectum",
+      "structure_id": "*rectum*",
+      "goal_type": "V50Gy",
+      "parameter": "volume_rel",
+      "target_value": 50.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Left Femoral Head",
+      "structure_id": "*left*femoral*head*",
+      "goal_type": "V50Gy",
+      "parameter": "volume_rel",
+      "target_value": 5.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Right Femoral Head",
+      "structure_id": "*right*femoral*head*",
+      "goal_type": "V50Gy",
+      "parameter": "volume_rel",
+      "target_value": 5.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Bowel",
+      "structure_id": "*bowel*",
+      "goal_type": "V45Gy",
+      "parameter": "volume_abs",
+      "target_value": 195.0,
+      "priority": "medium",
+      "is_achieved": null
+    },
+    {
+      "structure_name": "Penile Bulb",
+      "structure_id": "*penile*bulb*",
+      "goal_type": "Mean",
+      "parameter": "dose_abs",
+      "target_value": 50.0,
+      "priority": "low",
+      "is_achieved": null
+    }
+  ],
+  "created_date": "2023-10-15",
+  "modified_date": "2023-10-15",
+  "version": "1.0"
+} 

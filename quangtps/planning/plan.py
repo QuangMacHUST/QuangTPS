@@ -15,455 +15,442 @@ import os
 from typing import Dict, Optional, Any, List, Tuple, Union, TYPE_CHECKING
 from enum import Enum
 from datetime import datetime
+import numpy as np
 
 from quangtps.core.services import ServiceRegistry
 from quangtps.core.constants import DOSE_UNITS
 
 # Import within TYPE_CHECKING to avoid circular imports
 if TYPE_CHECKING:
-    from quangtps.planning.beam import BeamArrangement
+    from quangtps.planning.beam import BeamArrangement, BeamSet
     from quangtps.planning.evaluation import PlanEvaluation
     from quangtps.planning.prescription import Prescription
     from quangtps.planning.optimization import OptimizationSettings
     from quangtps.treatment.beams.beam import Beam
+    from quangtps.structures.structure_set import StructureSet
+    from quangtps.structures.structure import Structure
 
 # Don't import anything outside TYPE_CHECKING that would cause circular imports
 # We'll import them locally in methods as needed
 
 logger = logging.getLogger(__name__)
 
-class PlanType(str, Enum):
-    """Enum cho các loại kế hoạch điều trị."""
-    DEFINITIVE = "Definitive"           # Điều trị triệt căn
-    PALLIATIVE = "Palliative"           # Điều trị triệu chứng
-    ADJUVANT = "Adjuvant"               # Điều trị bổ trợ
-    NEOADJUVANT = "Neoadjuvant"         # Điều trị tân bổ trợ
-    SALVAGE = "Salvage"                 # Điều trị cứu vãn
-    BOOST = "Boost"                     # Điều trị tăng cường
-    CUSTOM = "Custom"                   # Tùy chỉnh
+class PlanIntent:
+    """Plan intent constants."""
+    CURATIVE = "curative"
+    PALLIATIVE = "palliative"
+    RESEARCH = "research"
+    OTHER = "other"
 
+class PlanType:
+    """Plan type constants."""
+    CONFORMAL = "conformal"
+    IMRT = "imrt"
+    VMAT = "vmat"
+    ELECTRON = "electron"
+    PROTON = "proton"
+    OTHER = "other"
 
-class PlanStatus(str, Enum):
-    """Enum cho các trạng thái của kế hoạch điều trị."""
-    DRAFT = "Draft"                     # Bản nháp
-    PLANNING = "Planning"               # Đang lập kế hoạch
-    OPTIMIZATION = "Optimization"       # Đang tối ưu hóa
-    CALCULATION = "Calculation"         # Đang tính toán
-    REVIEW = "Review"                   # Đang xem xét
-    APPROVED = "Approved"               # Đã phê duyệt
-    DELIVERED = "Delivered"             # Đã thực hiện
-    COMPLETED = "Completed"             # Đã hoàn thành
-    ARCHIVED = "Archived"               # Đã lưu trữ
-    DISCARDED = "Discarded"             # Đã hủy bỏ
-
+class PlanState:
+    """Plan state constants."""
+    DRAFT = "draft"
+    PLANNING = "planning"
+    OPTIMIZATION = "optimization"
+    APPROVED = "approved"
+    DELIVERED = "delivered"
+    ARCHIVED = "archived"
 
 class Plan:
     """
-    Lớp đại diện cho một kế hoạch điều trị.
+    Radiotherapy treatment plan class.
     
-    Lớp này chứa thông tin về một kế hoạch điều trị bao gồm thông tin bệnh nhân,
-    loại kế hoạch, trạng thái, và các thông số liên quan đến kế hoạch điều trị.
+    A plan connects a beam set, structure set, and dose calculation
+    for a specific patient treatment.
+    
+    Attributes:
+        id (str): Unique identifier for the plan
+        name (str): Name of the plan
+        description (str): Description of the plan
+        intent (str): Clinical intent of the plan
+        type (str): Type of treatment plan
+        state (str): Current state of the plan
+        beam_set (BeamSet): Set of treatment beams
+        structure_set_id (str): ID of the associated structure set
+        image_id (str): ID of the associated planning image
+        patient_id (str): ID of the patient
+        creation_date (datetime): Date when the plan was created
+        dose_grid (np.ndarray): Dose grid for the plan (3D array)
+        dose_spacing (Tuple[float, float, float]): Voxel spacing for the dose grid
+        dose_origin (Tuple[float, float, float]): Origin coordinates of the dose grid
+        prescription (Dict): Prescription information
+        approval_info (Dict): Approval information
+        props (Dict): Additional properties
     """
     
-    def __init__(
-        self, 
-        plan_name: str, 
-        patient_id: str,
-        plan_id: Optional[str] = None,
-        plan_type: PlanType = PlanType.DEFINITIVE,
-        status: PlanStatus = PlanStatus.DRAFT
-    ):
+    def __init__(self, name: str = "", beam_set: Optional[BeamSet] = None):
         """
-        Khởi tạo một kế hoạch điều trị.
+        Initialize a new treatment plan.
         
-        Parameters
-        ----------
-        plan_name : str
-            Tên của kế hoạch điều trị
-        patient_id : str
-            ID của bệnh nhân
-        plan_id : str, optional
-            ID duy nhất của kế hoạch điều trị. Nếu không cung cấp, một ID mới sẽ được tạo.
-        plan_type : PlanType, optional
-            Loại kế hoạch điều trị
-        status : PlanStatus, optional
-            Trạng thái của kế hoạch điều trị
+        Args:
+            name: Name of the plan
+            beam_set: Optional beam set to associate with the plan
         """
-        self.plan_name = plan_name
-        self.patient_id = patient_id
-        self.plan_id = plan_id if plan_id else str(uuid.uuid4())
-        self.plan_type = plan_type
-        self.status = status
-        
-        # Thông tin cơ bản
+        self.id = f"plan_{uuid.uuid4().hex[:8]}"
+        self.name = name
         self.description = ""
-        self.notes = ""
-        self.created_date = datetime.now()
-        self.last_modified = datetime.now()
-        self.created_by = ""
-        self.approved_by = ""
-        self.approval_date = None
+        self.intent = PlanIntent.CURATIVE
+        self.type = PlanType.CONFORMAL
+        self.state = PlanState.DRAFT
         
-        # Thông tin lâm sàng
-        self.diagnosis = ""
-        self.diagnosis_code = ""
-        self.site = ""
-        self.laterality = ""  # Left, Right, Bilateral, N/A
+        # Plan components
+        self.beam_set = beam_set or BeamSet(name=f"BS_{name}" if name else "BS_Unnamed")
+        self.structure_set_id = ""
+        self.image_id = ""
+        self.patient_id = ""
         
-        # Kỹ thuật và thiết bị
-        self.technique = ""  # 3DCRT, IMRT, VMAT, SRS, SBRT, etc.
-        self.machine_id = ""
-        self.energy = ""  # 6MV, 10MV, Mixed, etc.
+        # Dates and metadata
+        self.creation_date = datetime.datetime.now()
         
-        # Các thành phần của kế hoạch
-        self.beam_arrangement = None
-        self.prescription = None
-        self.optimization_settings = None
-        self.evaluation = None
+        # Dose information
+        self.dose_grid: Optional[np.ndarray] = None
+        self.dose_spacing: Tuple[float, float, float] = (2.0, 2.0, 2.0)  # mm
+        self.dose_origin: Tuple[float, float, float] = (0.0, 0.0, 0.0)  # mm
         
-        # Dữ liệu tính toán
-        self.dose_grid = None
-        self.structures = {}
-        self.isodose_levels = [95, 90, 80, 70, 60, 50, 40, 30, 20, 10]
+        # Clinical information
+        self.prescription: Dict[str, Any] = {
+            "dose": 0.0,  # Gy
+            "fractions": 0,
+            "target_structures": [],
+            "dose_constraints": []
+        }
         
-        # Trạng thái tính toán
-        self.calculation_complete = False
-        self.calculation_time = None
-        self.calculation_status = ""
+        # Approval information
+        self.approval_info: Dict[str, Any] = {
+            "approved_by": "",
+            "approval_date": None,
+            "comments": ""
+        }
         
-    def set_plan_type(self, plan_type: PlanType):
+        # Additional properties
+        self.props: Dict[str, Any] = {}
+        
+    def set_structure_set(self, structure_set_id: str):
         """
-        Đặt loại kế hoạch điều trị.
+        Set the structure set for this plan.
         
-        Parameters
-        ----------
-        plan_type : PlanType
-            Loại kế hoạch điều trị
+        Args:
+            structure_set_id: ID of the structure set
         """
-        self.plan_type = plan_type
-        self.last_modified = datetime.now()
-    
-    def set_status(self, status: PlanStatus):
-        """
-        Đặt trạng thái của kế hoạch điều trị.
+        self.structure_set_id = structure_set_id
         
-        Parameters
-        ----------
-        status : PlanStatus
-            Trạng thái của kế hoạch điều trị
+    def set_image(self, image_id: str):
         """
-        self.status = status
-        self.last_modified = datetime.now()
+        Set the planning image for this plan.
         
-        # Cập nhật các trường liên quan nếu trạng thái là Approved
-        if status == PlanStatus.APPROVED:
-            self.approval_date = datetime.now()
-    
-    def set_beam_arrangement(self, beam_arrangement):
+        Args:
+            image_id: ID of the planning image
         """
-        Đặt sắp xếp chùm tia cho kế hoạch.
+        self.image_id = image_id
         
-        Parameters
-        ----------
-        beam_arrangement : BeamArrangement
-            Đối tượng sắp xếp chùm tia
+    def set_prescription(self, dose: float, fractions: int, target_structures: List[str] = None):
         """
-        self.beam_arrangement = beam_arrangement
-        self.last_modified = datetime.now()
-    
-    def set_prescription(self, prescription):
-        """
-        Đặt đơn điều trị cho kế hoạch.
+        Set the prescription for this plan.
         
-        Parameters
-        ----------
-        prescription : Prescription
-            Đối tượng đơn điều trị
+        Args:
+            dose: Prescription dose in Gy
+            fractions: Number of fractions
+            target_structures: List of target structure IDs
         """
-        self.prescription = prescription
-        self.last_modified = datetime.now()
-    
-    def set_optimization_settings(self, settings: 'OptimizationSettings'):
-        """
-        Đặt thiết lập tối ưu hóa cho kế hoạch.
-        
-        Parameters
-        ----------
-        settings : OptimizationSettings
-            Đối tượng thiết lập tối ưu hóa
-        """
-        self.optimization_settings = settings
-        self.last_modified = datetime.now()
-    
-    def calculate_dose(self) -> bool:
-        """
-        Tính toán phân bố liều cho kế hoạch.
-        
-        Returns
-        -------
-        bool
-            True nếu tính toán thành công, False nếu không
-        """
-        if not self.beam_arrangement:
-            logger.error("Không thể tính toán liều - sắp xếp chùm tia chưa được thiết lập")
-            return False
-        
-        if not self.prescription:
-            logger.error("Không thể tính toán liều - đơn điều trị chưa được thiết lập")
-            return False
-        
-        start_time = datetime.now()
-        
-        try:
-            # Giả lập quá trình tính toán liều
-            # Trong thực tế, sẽ gọi đến engine tính toán liều
-            self.calculation_status = "Calculating..."
-            self.status = PlanStatus.CALCULATION
+        self.prescription["dose"] = dose
+        self.prescription["fractions"] = fractions
+        if target_structures:
+            self.prescription["target_structures"] = target_structures
             
-            # Giả lập: tạo ra một grid liều giả
-            # Thực tế: sẽ tính toán liều dựa trên các thông số vật lý
+        # Update beam set prescription dose as well
+        if hasattr(self.beam_set, "prescription_dose"):
+            self.beam_set.prescription_dose = dose
             
-            # Đánh dấu tính toán hoàn thành
-            self.calculation_complete = True
-            self.calculation_time = (datetime.now() - start_time).total_seconds()
-            self.calculation_status = "Complete"
-            self.status = PlanStatus.REVIEW
-            
-            return True
-        except Exception as e:
-            logger.error(f"Lỗi khi tính toán liều: {str(e)}")
-            self.calculation_status = f"Error: {str(e)}"
-            return False
-    
-    def evaluate(self) -> Optional['PlanEvaluation']:
+    def add_dose_constraint(self, structure_id: str, constraint_type: str, dose: float, volume: float = None):
         """
-        Đánh giá kế hoạch điều trị.
+        Add a dose constraint for a structure.
         
-        Returns
-        -------
-        Optional[PlanEvaluation]
-            Đối tượng đánh giá kế hoạch nếu thành công, None nếu không
+        Args:
+            structure_id: ID of the structure
+            constraint_type: Type of constraint (max, min, d_x, v_y)
+            dose: Dose value in Gy
+            volume: Volume value in % (for D_x and V_y constraints)
         """
-        if not self.calculation_complete:
-            logger.error("Không thể đánh giá kế hoạch - tính toán liều chưa hoàn thành")
-            return None
+        constraint = {
+            "structure_id": structure_id,
+            "type": constraint_type,
+            "dose": dose
+        }
         
-        try:
-            # Import PlanEvaluation here to avoid circular imports
-            from quangtps.planning.evaluation import PlanEvaluation
+        if volume is not None:
+            constraint["volume"] = volume
             
-            # Tạo đối tượng đánh giá kế hoạch
-            self.evaluation = PlanEvaluation(
-                plan_id=self.plan_id,
-                dose_grid=self.dose_grid
-            )
+        self.prescription["dose_constraints"].append(constraint)
+        
+    def set_dose_grid(self, dose_grid: np.ndarray, spacing: Tuple[float, float, float], origin: Tuple[float, float, float]):
+        """
+        Set the dose grid for this plan.
+        
+        Args:
+            dose_grid: 3D array of dose values
+            spacing: Voxel spacing in mm
+            origin: Origin coordinates in mm
+        """
+        self.dose_grid = dose_grid
+        self.dose_spacing = spacing
+        self.dose_origin = origin
+        
+    def approve(self, approver: str, comments: str = ""):
+        """
+        Approve this plan.
+        
+        Args:
+            approver: Name of the person approving the plan
+            comments: Approval comments
+        """
+        self.state = PlanState.APPROVED
+        self.approval_info["approved_by"] = approver
+        self.approval_info["approval_date"] = datetime.datetime.now()
+        self.approval_info["comments"] = comments
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert plan to a dictionary.
+        
+        Returns:
+            Dictionary representation of the plan
+        """
+        plan_dict = {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'intent': self.intent,
+            'type': self.type,
+            'state': self.state,
+            'beam_set_id': self.beam_set.id if self.beam_set else None,
+            'structure_set_id': self.structure_set_id,
+            'image_id': self.image_id,
+            'patient_id': self.patient_id,
+            'creation_date': self.creation_date.isoformat() if self.creation_date else None,
+            'dose_spacing': self.dose_spacing,
+            'dose_origin': self.dose_origin,
+            'prescription': self.prescription,
+            'approval_info': {
+                'approved_by': self.approval_info['approved_by'],
+                'approval_date': self.approval_info['approval_date'].isoformat() if self.approval_info['approval_date'] else None,
+                'comments': self.approval_info['comments']
+            },
+            'props': self.props
+        }
+        
+        # Don't include the dose grid in the dictionary (too large)
+        # Include info about whether it exists
+        plan_dict['has_dose'] = self.dose_grid is not None
+        
+        return plan_dict
+        
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], beam_set: Optional[BeamSet] = None) -> 'Plan':
+        """
+        Create a plan from a dictionary.
+        
+        Args:
+            data: Dictionary representation of a plan
+            beam_set: Optional beam set to associate with the plan
             
-            # Thêm cấu trúc vào đánh giá
-            for struct_id, struct_data in self.structures.items():
-                if 'mask' in struct_data and 'name' in struct_data:
-                    self.evaluation.add_structure(
-                        structure_id=struct_id,
-                        structure_name=struct_data['name'],
-                        structure_mask=struct_data['mask'],
-                        structure_type=struct_data.get('type', '')
-                    )
+        Returns:
+            New Plan instance
+        """
+        name = data.get('name', '')
+        
+        plan = cls(name=name, beam_set=beam_set)
+        plan.id = data.get('id', plan.id)
+        plan.description = data.get('description', plan.description)
+        plan.intent = data.get('intent', plan.intent)
+        plan.type = data.get('type', plan.type)
+        plan.state = data.get('state', plan.state)
+        
+        # Set IDs
+        plan.structure_set_id = data.get('structure_set_id', plan.structure_set_id)
+        plan.image_id = data.get('image_id', plan.image_id)
+        plan.patient_id = data.get('patient_id', plan.patient_id)
+        
+        # Parse creation date
+        creation_date_str = data.get('creation_date')
+        if creation_date_str:
+            try:
+                plan.creation_date = datetime.datetime.fromisoformat(creation_date_str)
+            except ValueError:
+                logger.warning(f"Could not parse creation date: {creation_date_str}")
+        
+        # Set dose parameters
+        plan.dose_spacing = data.get('dose_spacing', plan.dose_spacing)
+        plan.dose_origin = data.get('dose_origin', plan.dose_origin)
+        
+        # Set prescription
+        prescription_data = data.get('prescription', {})
+        if prescription_data:
+            plan.prescription.update(prescription_data)
             
-            # Tính toán DVH và các chỉ số chất lượng
-            self.evaluation.calculate_dvh()
+        # Set approval info
+        approval_data = data.get('approval_info', {})
+        if approval_data:
+            plan.approval_info.update(approval_data)
             
-            # Tạo dictionary chứa liều kê toa cho mỗi cấu trúc target
-            prescription_doses = {}
-            if self.prescription and hasattr(self.prescription, 'targets'):
+            # Parse approval date
+            approval_date_str = approval_data.get('approval_date')
+            if approval_date_str:
                 try:
-                    # Handle case where targets is a dictionary
-                    if isinstance(self.prescription.targets, dict):
-                        for target_id, target in self.prescription.targets.items():
-                            if isinstance(target, dict) and 'structure_id' in target and 'dose' in target:
-                                struct_id = target['structure_id'] 
-                                if struct_id in self.structures:
-                                    prescription_doses[struct_id] = target['dose']
-                            elif hasattr(target, 'structure_id') and hasattr(target, 'dose'):
-                                if target.structure_id in self.structures:
-                                    prescription_doses[target.structure_id] = target.dose
-                    # Handle case where targets might be a list or other iterable
-                    elif hasattr(self.prescription.targets, '__iter__'):
-                        for target in self.prescription.targets:
-                            if isinstance(target, dict) and 'structure_id' in target and 'dose' in target:
-                                struct_id = target['structure_id']
-                                if struct_id in self.structures:
-                                    prescription_doses[struct_id] = target['dose']
-                            elif hasattr(target, 'structure_id') and hasattr(target, 'dose'):
-                                if target.structure_id in self.structures:
-                                    prescription_doses[target.structure_id] = target.dose
-                except Exception as e:
-                    logger.warning(f"Error processing prescription targets: {str(e)}")
-                        
-                # Tính toán các chỉ số chất lượng với liều kê toa
-                if prescription_doses:
-                    self.evaluation.calculate_quality_metrics(prescription_dose=prescription_doses)
-                else:
-                    # Tính toán các chỉ số chất lượng không có liều kê toa
-                    self.evaluation.calculate_quality_metrics()
-            else:
-                # Tính toán các chỉ số chất lượng không có liều kê toa
-                self.evaluation.calculate_quality_metrics()
+                    plan.approval_info['approval_date'] = datetime.datetime.fromisoformat(approval_date_str)
+                except ValueError:
+                    logger.warning(f"Could not parse approval date: {approval_date_str}")
+        
+        # Set additional properties
+        props_data = data.get('props', {})
+        if props_data:
+            plan.props.update(props_data)
             
-            return self.evaluation
-        except Exception as e:
-            logger.error(f"Lỗi khi đánh giá kế hoạch: {str(e)}")
+        return plan
+        
+    def __str__(self) -> str:
+        """String representation of the plan."""
+        return f"Plan(id={self.id}, name={self.name}, type={self.type}, state={self.state})"
+
+class PlanCollection:
+    """
+    Collection of treatment plans for a patient.
+    
+    Attributes:
+        id (str): Unique identifier for the collection
+        name (str): Name of the collection
+        patient_id (str): ID of the patient
+        plans (List[Plan]): List of plans in the collection
+    """
+    
+    def __init__(self, name: str = "", patient_id: str = ""):
+        """
+        Initialize a new plan collection.
+        
+        Args:
+            name: Name of the collection
+            patient_id: ID of the patient
+        """
+        self.id = f"pc_{uuid.uuid4().hex[:8]}"
+        self.name = name
+        self.patient_id = patient_id
+        self.plans: List[Plan] = []
+        
+    def add_plan(self, plan: Plan):
+        """
+        Add a plan to the collection.
+        
+        Args:
+            plan: Plan to add
+        """
+        # Set patient ID on the plan if not already set
+        if not plan.patient_id and self.patient_id:
+            plan.patient_id = self.patient_id
+            
+        self.plans.append(plan)
+        
+    def get_plan_by_id(self, plan_id: str) -> Optional[Plan]:
+        """
+        Get a plan by its ID.
+        
+        Args:
+            plan_id: ID of the plan
+            
+        Returns:
+            Plan with the given ID, or None if not found
+        """
+        for plan in self.plans:
+            if plan.id == plan_id:
+                return plan
+                
             return None
     
-    def approve(self, approver: str) -> bool:
+    def get_plan_by_name(self, name: str) -> Optional[Plan]:
         """
-        Phê duyệt kế hoạch điều trị.
+        Get a plan by its name.
         
-        Parameters
-        ----------
-        approver : str
-            Tên người phê duyệt
+        Args:
+            name: Name of the plan
             
-        Returns
-        -------
-        bool
-            True nếu phê duyệt thành công, False nếu không
+        Returns:
+            Plan with the given name, or None if not found
         """
-        if self.status != PlanStatus.REVIEW:
-            logger.error(f"Không thể phê duyệt kế hoạch - trạng thái hiện tại là {self.status}")
+        for plan in self.plans:
+            if plan.name == name:
+                return plan
+                
+        return None
+        
+    def remove_plan(self, plan_id: str) -> bool:
+        """
+        Remove a plan from the collection.
+        
+        Args:
+            plan_id: ID of the plan to remove
+            
+        Returns:
+            True if the plan was removed, False otherwise
+        """
+        for i, plan in enumerate(self.plans):
+            if plan.id == plan_id:
+                self.plans.pop(i)
+                return True
+                
             return False
-        
-        if not self.calculation_complete:
-            logger.error("Không thể phê duyệt kế hoạch - tính toán liều chưa hoàn thành")
-            return False
-        
-        if not self.evaluation:
-            logger.error("Không thể phê duyệt kế hoạch - đánh giá kế hoạch chưa được thực hiện")
-            return False
-        
-        # Cập nhật trạng thái và thông tin phê duyệt
-        self.status = PlanStatus.APPROVED
-        self.approved_by = approver
-        self.approval_date = datetime.now()
-        self.last_modified = datetime.now()
-        
-        return True
     
     def to_dict(self) -> Dict[str, Any]:
         """
-        Chuyển đổi đối tượng kế hoạch điều trị thành dictionary.
+        Convert collection to a dictionary.
         
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary chứa thông tin kế hoạch điều trị
+        Returns:
+            Dictionary representation of the collection
         """
-        result = {
-            "plan_id": self.plan_id,
-            "plan_name": self.plan_name,
-            "patient_id": self.patient_id,
-            "plan_type": self.plan_type.value,
-            "status": self.status.value,
-            "description": self.description,
-            "notes": self.notes,
-            "created_date": self.created_date.isoformat(),
-            "last_modified": self.last_modified.isoformat(),
-            "created_by": self.created_by,
-            "approved_by": self.approved_by,
-            "approval_date": self.approval_date.isoformat() if self.approval_date else None,
-            "diagnosis": self.diagnosis,
-            "diagnosis_code": self.diagnosis_code,
-            "site": self.site,
-            "laterality": self.laterality,
-            "technique": self.technique,
-            "machine_id": self.machine_id,
-            "energy": self.energy,
-            "isodose_levels": self.isodose_levels,
-            "calculation_complete": self.calculation_complete,
-            "calculation_time": self.calculation_time,
-            "calculation_status": self.calculation_status
+        return {
+            'id': self.id,
+            'name': self.name,
+            'patient_id': self.patient_id,
+            'plans': [plan.to_dict() for plan in self.plans]
         }
-        
-        # Thêm các thành phần phức tạp nếu có
-        if self.beam_arrangement:
-            result["beam_arrangement"] = self.beam_arrangement.to_dict()
-        
-        if self.prescription:
-            result["prescription"] = self.prescription.to_dict()
-        
-        if self.optimization_settings:
-            result["optimization_settings"] = self.optimization_settings.to_dict()
-        
-        if self.evaluation:
-            result["evaluation"] = self.evaluation.to_dict()
-        
-        return result
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Plan':
+    def from_dict(cls, data: Dict[str, Any], beam_sets: Dict[str, BeamSet] = None) -> 'PlanCollection':
         """
-        Tạo đối tượng Plan từ dictionary.
+        Create a collection from a dictionary.
         
-        Parameters
-        ----------
-        data : Dict[str, Any]
-            Dictionary chứa thông tin kế hoạch điều trị
+        Args:
+            data: Dictionary representation of a collection
+            beam_sets: Optional dictionary mapping beam set IDs to BeamSet objects
             
-        Returns
-        -------
-        Plan
-            Đối tượng Plan được tạo từ dữ liệu
+        Returns:
+            New PlanCollection instance
         """
-        # Tạo đối tượng Plan cơ bản
-        plan = cls(
-            plan_name=data.get("plan_name", ""),
-            patient_id=data.get("patient_id", ""),
-            plan_id=data.get("plan_id"),
-            plan_type=PlanType(data.get("plan_type", PlanType.DEFINITIVE.value)),
-            status=PlanStatus(data.get("status", PlanStatus.DRAFT.value))
-        )
+        name = data.get('name', '')
+        patient_id = data.get('patient_id', '')
         
-        # Cập nhật các thông tin cơ bản
-        plan.description = data.get("description", "")
-        plan.notes = data.get("notes", "")
-        plan.created_by = data.get("created_by", "")
-        plan.approved_by = data.get("approved_by", "")
-        plan.diagnosis = data.get("diagnosis", "")
-        plan.diagnosis_code = data.get("diagnosis_code", "")
-        plan.site = data.get("site", "")
-        plan.laterality = data.get("laterality", "")
-        plan.technique = data.get("technique", "")
-        plan.machine_id = data.get("machine_id", "")
-        plan.energy = data.get("energy", "")
-        plan.isodose_levels = data.get("isodose_levels", [95, 90, 80, 70, 60, 50, 40, 30, 20, 10])
-        plan.calculation_complete = data.get("calculation_complete", False)
-        plan.calculation_time = data.get("calculation_time")
-        plan.calculation_status = data.get("calculation_status", "")
+        collection = cls(name=name, patient_id=patient_id)
+        collection.id = data.get('id', collection.id)
         
-        # Chuyển đổi các trường datetime
-        if "created_date" in data:
-            plan.created_date = datetime.fromisoformat(data["created_date"])
+        # Parse plans
+        plans_data = data.get('plans', [])
+        for plan_data in plans_data:
+            # Find beam set if available
+            beam_set = None
+            if beam_sets and plan_data.get('beam_set_id') in beam_sets:
+                beam_set = beam_sets[plan_data['beam_set_id']]
+                
+            plan = Plan.from_dict(plan_data, beam_set=beam_set)
+            collection.add_plan(plan)
+            
+        return collection
         
-        if "last_modified" in data:
-            plan.last_modified = datetime.fromisoformat(data["last_modified"])
-        
-        if "approval_date" in data and data["approval_date"]:
-            plan.approval_date = datetime.fromisoformat(data["approval_date"])
-        
-        # Tái tạo các thành phần phức tạp nếu có
-        if "beam_arrangement" in data:
-            from quangtps.planning.beam import BeamArrangement
-            plan.beam_arrangement = BeamArrangement.from_dict(data["beam_arrangement"])
-        
-        if "prescription" in data:
-            # Import locally to avoid circular import
-            from quangtps.planning.prescription import Prescription
-            plan.prescription = Prescription.from_dict(data["prescription"])
-        
-        if "optimization_settings" in data:
-            from quangtps.planning.optimization import OptimizationSettings
-            plan.optimization_settings = OptimizationSettings.from_dict(data["optimization_settings"])
-        
-        if "evaluation" in data:
-            from quangtps.planning.evaluation import PlanEvaluation
-            plan.evaluation = PlanEvaluation.from_dict(data["evaluation"])
-        
-        return plan
+    def __str__(self) -> str:
+        """String representation of the collection."""
+        return f"PlanCollection(id={self.id}, name={self.name}, num_plans={len(self.plans)})"

@@ -136,6 +136,41 @@ def get_beam_data_dir() -> str:
     return beam_data_dir
 
 
+def get_protocols_directory() -> str:
+    """
+    Lấy đường dẫn đến thư mục lưu trữ các giao thức lâm sàng.
+    
+    Thư mục này chứa các tệp JSON định nghĩa giao thức lâm sàng
+    để đánh giá chất lượng kế hoạch điều trị.
+    
+    Returns
+    -------
+    str
+        Đường dẫn đến thư mục giao thức lâm sàng
+    """
+    protocols_dir = os.path.join(get_app_data_dir(), "protocols")
+    os.makedirs(protocols_dir, exist_ok=True)
+    
+    # Nếu thư mục mới tạo trống rỗng, sao chép các giao thức mặc định
+    if not any(os.scandir(protocols_dir)):
+        try:
+            default_protocols_dir = os.path.join(get_project_root(), "data", "protocols")
+            
+            if os.path.exists(default_protocols_dir):
+                import shutil
+                for file in os.listdir(default_protocols_dir):
+                    if file.endswith('.json'):
+                        src = os.path.join(default_protocols_dir, file)
+                        dst = os.path.join(protocols_dir, file)
+                        shutil.copy2(src, dst)
+                        logger.info(f"Copied default protocol: {file}")
+        except Exception as e:
+            logger.warning(f"Could not copy default protocols: {str(e)}")
+    
+    logger.debug(f"Protocols directory: {protocols_dir}")
+    return protocols_dir
+
+
 def get_icon_path(icon_name: str) -> str:
     """
     Lấy đường dẫn đến một biểu tượng trong thư mục icons.

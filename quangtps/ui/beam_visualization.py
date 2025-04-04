@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle, Circle, Polygon, Wedge
 from typing import List, Dict, Tuple, Any, Optional, Union
+import math
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QGroupBox,

@@ -1,0 +1,64 @@
+2025-04-02 06:45:08,740 - __main__ - INFO - Using PyQt5 for GUI
+2025-04-02 06:45:17,792 - quangtps.planning.beam - WARNING - Could not import real beam implementations: No module named 'quangtps.structures.structure_set'
+2025-04-02 06:45:17,803 - root - ERROR - Error importing QuangTPS modules: No module named 'quangtps.structures.structure_set'
+2025-04-02 06:45:17,998 - __main__ - CRITICAL - Application crashed: name 'DoseCalculator' is not defined
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\scripts\run_quangtps.py", line 57, in main
+    from quangtps.ui.main_window import MainWindow
+  File "e:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 66, in <module>
+    from quangtps.ui.planning_tab import PlanningTab
+  File "e:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 37, in <module>
+    from quangtps.optimization.methods import MCOEngine, MCONavigator, MCOTrade, MCOMethod
+  File "e:\hoctap\QuangTPS\quangtps\optimization\__init__.py", line 107, in <module>
+    from quangtps.optimization.objectives import (
+  File "e:\hoctap\QuangTPS\quangtps\optimization\objectives.py", line 16, in <module>
+    from quangtps.evaluation.dvh import (
+  File "e:\hoctap\QuangTPS\quangtps\evaluation\__init__.py", line 49, in <module>
+    from quangtps.evaluation.plan_evaluation import (
+  File "e:\hoctap\QuangTPS\quangtps\evaluation\plan_evaluation.py", line 48, in <module>
+    class DVHCalculator:
+  File "e:\hoctap\QuangTPS\quangtps\evaluation\plan_evaluation.py", line 68, in DVHCalculator
+    def set_dose_calculator(self, dose_calculator: DoseCalculator):
+                                                   ^^^^^^^^^^^^^^
+NameError: name 'DoseCalculator' is not defined
+2025-04-02 06:45:40,818 - __main__ - INFO - Using PyQt5 for GUI
+2025-04-02 06:45:48,573 - quangtps.planning.beam - WARNING - Could not import real beam implementations: No module named 'quangtps.structures.structure_set'
+2025-04-02 06:45:48,586 - root - ERROR - Error importing QuangTPS modules: No module named 'quangtps.structures.structure_set'
+2025-04-02 06:45:48,773 - __main__ - CRITICAL - Application crashed: name 'DoseCalculator' is not defined
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\scripts\run_quangtps.py", line 57, in main
+    from quangtps.ui.main_window import MainWindow
+  File "e:\hoctap\QuangTPS\quangtps\ui\main_window.py", line 66, in <module>
+    from quangtps.ui.planning_tab import PlanningTab
+  File "e:\hoctap\QuangTPS\quangtps\ui\planning_tab.py", line 37, in <module>
+    from quangtps.optimization.methods import MCOEngine, MCONavigator, MCOTrade, MCOMethod
+  File "e:\hoctap\QuangTPS\quangtps\optimization\__init__.py", line 107, in <module>
+    from quangtps.optimization.objectives import (
+  File "e:\hoctap\QuangTPS\quangtps\optimization\objectives.py", line 16, in <module>
+    from quangtps.evaluation.dvh import (
+  File "e:\hoctap\QuangTPS\quangtps\evaluation\__init__.py", line 49, in <module>
+    from quangtps.evaluation.plan_evaluation import (
+  File "e:\hoctap\QuangTPS\quangtps\evaluation\plan_evaluation.py", line 48, in <module>
+    class DVHCalculator:
+  File "e:\hoctap\QuangTPS\quangtps\evaluation\plan_evaluation.py", line 68, in DVHCalculator
+    def set_dose_calculator(self, dose_calculator: DoseCalculator):
+                                                   ^^^^^^^^^^^^^^
+NameError: name 'DoseCalculator' is not defined
+2025-04-02 07:56:10,546 - __main__ - INFO - Using PyQt5 for GUI
+2025-04-02 07:56:18,963 - __main__ - CRITICAL - Application crashed: name 'logging' is not defined
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\quangtps\structures\__init__.py", line 28, in <module>
+    from quangtps.structures.structure_utils import (
+ModuleNotFoundError: No module named 'quangtps.structures.structure_utils'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "e:\hoctap\QuangTPS\scripts\run_quangtps.py", line 57, in main
+    from quangtps.ui.main_window import MainWindow
+  File "e:\hoctap\QuangTPS\quangtps\__init__.py", line 43, in <module>
+    from quangtps.structures.structure import Structure
+  File "e:\hoctap\QuangTPS\quangtps\structures\__init__.py", line 33, in <module>
+    logging.warning(f"Failed to import structure utilities: {e}")
+    ^^^^^^^
+NameError: name 'logging' is not defined. Did you forget to import 'logging'
