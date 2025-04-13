@@ -194,7 +194,7 @@ class MCOEngine:
             objective_type: Type of objective
             parameters: Parameters for the objective
             priority: Priority level
-            
+        
         Returns:
             ID of the added objective
         """
@@ -218,7 +218,7 @@ class MCOEngine:
         
         Args:
             objective_id: ID of the objective to remove
-            
+        
         Returns:
             True if the objective was removed, False otherwise
         """
@@ -379,7 +379,7 @@ class MCOEngine:
         
         Args:
             weights: Dict mapping objective_id to weight
-            
+        
         Returns:
             The generated solution
         """
@@ -462,13 +462,13 @@ class MCOEngine:
         
         Args:
             solution_id: ID of the solution to load
-            
+        
         Returns:
             True if loaded successfully, False otherwise
         """
         if solution_id not in self.solutions:
             return False
-            
+    
         self.current_solution = self.solutions[solution_id]
         
         # Update weights
@@ -479,19 +479,19 @@ class MCOEngine:
         # Call solution callback if provided
         if self.solution_callback and self.current_solution:
             self.solution_callback(self.current_solution)
-        
-        return True
+            
+            return True
 
-
-def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
-    """
-    Create and initialize an MCO engine for a given plan.
     
-    Args:
+def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
+        """
+    Create and initialize an MCO engine for a given plan.
+        
+        Args:
         base_plan: Base plan to start from
         optimizer: Optimizer to use
         
-    Returns:
+        Returns:
         Initialized MCO engine
     """
     engine = MCOEngine(base_plan, optimizer)

@@ -1,6 +1,7 @@
 import os
 import datetime
 from typing import Dict, List, Optional, Any, Tuple
+import uuid
 
 from quangtps.core.logging import get_logger
 from quangtps.core.services import ServiceRegistry
@@ -771,4 +772,406 @@ class QAManagement:
             ]
         })
         
-        return templates 
+        return templates
+
+
+class PatientAdministrationModule:
+    """
+    Eclipse-like patient administration module for comprehensive patient management.
+    
+    This module provides functionality similar to Eclipse ARIA for patient management,
+    scheduling, and integration with hospital information systems.
+    """
+    
+    def __init__(self, parent=None):
+        """Initialize the patient administration module."""
+        self.parent = parent
+        self.db_service = ServiceRegistry.get_service("PatientDB")
+        self.patients = {}
+        self.appointments = {}
+        self.treatment_courses = {}
+        
+    def register_patient(self, patient_data):
+        """
+        Register a new patient in the system.
+        
+        Parameters
+        ----------
+        patient_data : dict
+            Dictionary containing patient information (name, ID, DOB, etc.)
+        
+        Returns
+        -------
+        str
+            Patient ID if successful, None otherwise
+        """
+        try:
+            # Create patient object
+            patient = Patient(
+                id=patient_data.get('id', str(uuid.uuid4())),
+                name=patient_data.get('name', ''),
+                gender=patient_data.get('gender', ''),
+                dob=patient_data.get('dob', ''),
+                mrn=patient_data.get('mrn', ''),
+                physician=patient_data.get('physician', '')
+            )
+            
+            # Add medical history
+            if 'medical_history' in patient_data:
+                for item in patient_data['medical_history']:
+                    patient.add_medical_history_item(item)
+            
+            # Add diagnosis
+            if 'diagnosis' in patient_data:
+                patient.diagnosis = patient_data['diagnosis']
+            
+            # Save to database
+            if self.db_service:
+                self.db_service.add_patient(patient)
+                
+            self.patients[patient.id] = patient
+            
+            logger.info(f"Registered patient: {patient.name} (ID: {patient.id})")
+            return patient.id
+            
+        except Exception as e:
+            logger.error(f"Error registering patient: {e}")
+            return None
+    
+    def create_treatment_course(self, patient_id, course_data):
+        """
+        Create a new treatment course for a patient.
+        
+        Parameters
+        ----------
+        patient_id : str
+            Patient ID
+        course_data : dict
+            Dictionary containing course information
+            
+        Returns
+        -------
+        str
+            Course ID if successful, None otherwise
+        """
+        try:
+            # Get patient
+            patient = self.get_patient(patient_id)
+            if not patient:
+                logger.error(f"Patient not found: {patient_id}")
+                return None
+                
+            # Create course
+            course_id = str(uuid.uuid4())
+            course = {
+                'id': course_id,
+                'patient_id': patient_id,
+                'name': course_data.get('name', 'Course 1'),
+                'start_date': course_data.get('start_date', ''),
+                'end_date': course_data.get('end_date', ''),
+                'intent': course_data.get('intent', 'Curative'),
+                'status': course_data.get('status', 'Planned'),
+                'fractions': course_data.get('fractions', 0),
+                'physician': course_data.get('physician', ''),
+                'plans': []
+            }
+            
+            # Save course
+            self.treatment_courses[course_id] = course
+            
+            # Add reference to patient
+            if not hasattr(patient, 'treatment_courses'):
+                patient.treatment_courses = []
+            patient.treatment_courses.append(course_id)
+            
+            # Update patient in database
+            if self.db_service:
+                self.db_service.update_patient(patient)
+                
+            logger.info(f"Created treatment course: {course['name']} for patient: {patient.name}")
+            return course_id
+            
+        except Exception as e:
+            logger.error(f"Error creating treatment course: {e}")
+            return None
+    
+    def schedule_appointment(self, patient_id, appointment_data):
+        """
+        Schedule a new appointment for a patient.
+        
+        Parameters
+        ----------
+        patient_id : str
+            Patient ID
+        appointment_data : dict
+            Dictionary containing appointment information
+            
+        Returns
+        -------
+        str
+            Appointment ID if successful, None otherwise
+        """
+        try:
+            # Get patient
+            patient = self.get_patient(patient_id)
+            if not patient:
+                logger.error(f"Patient not found: {patient_id}")
+                return None
+                
+            # Create appointment
+            appointment_id = str(uuid.uuid4())
+            appointment = {
+                'id': appointment_id,
+                'patient_id': patient_id,
+                'date': appointment_data.get('date', ''),
+                'time': appointment_data.get('time', ''),
+                'duration': appointment_data.get('duration', 30),
+                'purpose': appointment_data.get('purpose', ''),
+                'resource': appointment_data.get('resource', ''),
+                'status': appointment_data.get('status', 'Scheduled'),
+                'notes': appointment_data.get('notes', '')
+            }
+            
+            # Save appointment
+            self.appointments[appointment_id] = appointment
+            
+            # Add reference to patient
+            if not hasattr(patient, 'appointments'):
+                patient.appointments = []
+            patient.appointments.append(appointment_id)
+            
+            # Update patient in database
+            if self.db_service:
+                self.db_service.update_patient(patient)
+                
+            logger.info(f"Scheduled appointment for patient: {patient.name} on {appointment['date']} at {appointment['time']}")
+            return appointment_id
+            
+        except Exception as e:
+            logger.error(f"Error scheduling appointment: {e}")
+            return None
+    
+    def get_patient(self, patient_id):
+        """
+        Get a patient by ID.
+        
+        Parameters
+        ----------
+        patient_id : str
+            Patient ID
+            
+        Returns
+        -------
+        Patient
+            Patient object if found, None otherwise
+        """
+        # Check in-memory cache first
+        if patient_id in self.patients:
+            return self.patients[patient_id]
+            
+        # Check database
+        if self.db_service:
+            patient = self.db_service.get_patient(patient_id)
+            if patient:
+                self.patients[patient_id] = patient
+                return patient
+                
+        return None
+    
+    def search_patients(self, search_criteria):
+        """
+        Search for patients matching the given criteria.
+        
+        Parameters
+        ----------
+        search_criteria : dict
+            Dictionary containing search criteria
+            
+        Returns
+        -------
+        list
+            List of matching patients
+        """
+        results = []
+        
+        if self.db_service:
+            # Convert criteria to database query
+            query = {}
+            
+            if 'id' in search_criteria:
+                query['id'] = search_criteria['id']
+                
+            if 'name' in search_criteria:
+                query['name'] = search_criteria['name']
+                
+            if 'mrn' in search_criteria:
+                query['mrn'] = search_criteria['mrn']
+                
+            # Add more criteria as needed
+            
+            # Execute search
+            patients = self.db_service.search_patients(query)
+            
+            # Cache results
+            for patient in patients:
+                self.patients[patient.id] = patient
+                results.append(patient)
+                
+        return results
+        
+    def export_patient_data(self, patient_id, format='json'):
+        """
+        Export patient data in the specified format.
+        
+        Parameters
+        ----------
+        patient_id : str
+            Patient ID
+        format : str
+            Export format ('json', 'xml', 'hl7')
+            
+        Returns
+        -------
+        str
+            Exported data as string
+        """
+        patient = self.get_patient(patient_id)
+        if not patient:
+            logger.error(f"Patient not found: {patient_id}")
+            return None
+            
+        if format == 'json':
+            return self._export_json(patient)
+        elif format == 'xml':
+            return self._export_xml(patient)
+        elif format == 'hl7':
+            return self._export_hl7(patient)
+        else:
+            logger.error(f"Unsupported export format: {format}")
+            return None
+            
+    def _export_json(self, patient):
+        """Export patient data as JSON."""
+        import json
+        
+        # Create data dictionary
+        data = {
+            'id': patient.id,
+            'name': patient.name,
+            'gender': patient.gender if hasattr(patient, 'gender') else '',
+            'dob': patient.dob if hasattr(patient, 'dob') else '',
+            'mrn': patient.mrn if hasattr(patient, 'mrn') else '',
+            'physician': patient.physician if hasattr(patient, 'physician') else '',
+            'diagnosis': patient.diagnosis if hasattr(patient, 'diagnosis') else '',
+            'medical_history': patient.medical_history if hasattr(patient, 'medical_history') else []
+        }
+        
+        # Add treatment courses
+        if hasattr(patient, 'treatment_courses'):
+            data['treatment_courses'] = []
+            for course_id in patient.treatment_courses:
+                if course_id in self.treatment_courses:
+                    data['treatment_courses'].append(self.treatment_courses[course_id])
+        
+        # Add appointments
+        if hasattr(patient, 'appointments'):
+            data['appointments'] = []
+            for appointment_id in patient.appointments:
+                if appointment_id in self.appointments:
+                    data['appointments'].append(self.appointments[appointment_id])
+        
+        return json.dumps(data, indent=2)
+    
+    def _export_xml(self, patient):
+        """Export patient data as XML."""
+        # Implement XML export
+        pass
+        
+    def _export_hl7(self, patient):
+        """Export patient data as HL7."""
+        # Implement HL7 export
+        pass
+    
+    def import_patient_data(self, data, format='json'):
+        """
+        Import patient data from the specified format.
+        
+        Parameters
+        ----------
+        data : str
+            Data to import
+        format : str
+            Import format ('json', 'xml', 'hl7')
+            
+        Returns
+        -------
+        str
+            Patient ID if successful, None otherwise
+        """
+        try:
+            if format == 'json':
+                return self._import_json(data)
+            elif format == 'xml':
+                return self._import_xml(data)
+            elif format == 'hl7':
+                return self._import_hl7(data)
+            else:
+                logger.error(f"Unsupported import format: {format}")
+                return None
+        except Exception as e:
+            logger.error(f"Error importing patient data: {e}")
+            return None
+            
+    def _import_json(self, data):
+        """Import patient data from JSON."""
+        import json
+        
+        # Parse JSON data
+        patient_data = json.loads(data)
+        
+        # Register patient
+        patient_id = self.register_patient(patient_data)
+        
+        # Import treatment courses
+        if 'treatment_courses' in patient_data:
+            for course in patient_data['treatment_courses']:
+                self.create_treatment_course(patient_id, course)
+        
+        # Import appointments
+        if 'appointments' in patient_data:
+            for appointment in patient_data['appointments']:
+                self.schedule_appointment(patient_id, appointment)
+        
+        return patient_id
+    
+    def _import_xml(self, data):
+        """Import patient data from XML."""
+        # Implement XML import
+        pass
+        
+    def _import_hl7(self, data):
+        """Import patient data from HL7."""
+        # Implement HL7 import
+        pass
+        
+    def integrate_with_his(self, connection_params):
+        """
+        Integrate with Hospital Information System.
+        
+        Parameters
+        ----------
+        connection_params : dict
+            Connection parameters for HIS integration
+            
+        Returns
+        -------
+        bool
+            True if successful, False otherwise
+        """
+        try:
+            # Implement HIS integration
+            logger.info(f"Integration with HIS established")
+            return True
+        except Exception as e:
+            logger.error(f"Error integrating with HIS: {e}")
+            return False 

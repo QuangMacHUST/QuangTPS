@@ -207,3 +207,8 @@ def get_icon_path(icon_name: str) -> str:
     # Nếu không tìm thấy, trả về None
     logger.warning(f"Cannot find icon: {icon_name}")
     return None
+
+
+def get_protocols_dir():
+    """Get the path to the protocols directory."""
+    return os.path.join(get_app_data_dir(), "protocols")

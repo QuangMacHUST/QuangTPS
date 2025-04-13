@@ -1,59 +1,67 @@
 """
 Plan Comparison Module
 
-This module provides functionality for comparing multiple radiotherapy treatment plans.
-It includes features for comparing DVHs, dose distributions, and clinical metrics
-similar to Eclipse's plan comparison capabilities.
+This module provides functionality for comparing multiple radiotherapy treatment plans
+to support decision making in the planning process.
 """
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Optional, Tuple, Any, Union, Set
+from typing import Dict, List, Optional, Any, Tuple, Union
 import logging
-from datetime import datetime
+from copy import deepcopy
 
-from quangtps.core.types import Structure
-from quangtps.planning.plan import Plan
+from quangtps.core.plan import Plan
+from quangtps.core.structures import Structure, StructureType
 from quangtps.evaluation.dvh.dvh_data import DVHData, DVHCurve
 from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh, calculate_dvh_metrics
-from quangtps.evaluation.clinical_goals import ClinicalGoal, GoalResult
+from quangtps.evaluation.clinical_goals import ClinicalGoal, GoalResult, GoalType, GoalOperator
 from quangtps.evaluation.clinical_protocols import ClinicalProtocol
 from quangtps.evaluation.plan_quality import PlanQualityEvaluator
 from quangtps.evaluation.dose_analysis import analyze_dose_distribution
 from quangtps.core.logging import get_logger
+from quangtps.common.paths import get_temp_dir
+from quangtps.evaluation.metrics import conformity_index, homogeneity_index, gradient_index
+from quangtps.evaluation.qa.gamma_analysis import calculate_gamma_index_3d
 
 logger = get_logger(__name__)
 
 
 class PlanComparison:
     """
-    Class for comparing multiple treatment plans.
+    Class for comparing multiple radiotherapy treatment plans.
     
-    This class provides functionality similar to Eclipse's plan comparison features,
-    allowing for side-by-side comparison of DVHs, dose distributions, and metrics.
+    This class provides functionality for comparing DVH data, dose statistics,
+    clinical goals achievement, and other metrics between multiple plans.
+    
+    Attributes:
+        reference_plan: The primary plan against which others are compared
+        comparison_plans: Dictionary of additional plans to compare
+        protocol: Optional clinical protocol for evaluating all plans
+        plan_data: Cached plan data including DVH and metrics
     """
     
     def __init__(self, reference_plan: Plan):
         """
-        Initialize the plan comparison with a reference plan.
+        Initialize a plan comparison object.
         
         Args:
-            reference_plan: The primary plan to compare others against
+            reference_plan: The primary plan against which others are compared
         """
         self.reference_plan = reference_plan
-        self.comparison_plans: Dict[str, Plan] = {}
-        self.dvh_data: Dict[str, Dict[str, DVHData]] = {}
-        self.metric_data: Dict[str, Dict[str, Dict[str, float]]] = {}
-        self.structure_names: Dict[str, str] = {}
-        self.protocol: Optional[ClinicalProtocol] = None
-        self.goal_results: Dict[str, Dict[str, GoalResult]] = {}
+        self.comparison_plans = {}
+        self.protocol = None
         
-        # Calculate DVH and metrics for reference plan
+        # Cache plan data
+        self.plan_data = {}
         self._calculate_plan_data(reference_plan)
+        
+        logger.info(f"Created plan comparison with reference plan: {reference_plan.name}")
     
     def add_comparison_plan(self, plan: Plan) -> bool:
         """
-        Add a plan to be compared against the reference plan.
+        Add a plan to compare against the reference plan.
         
         Args:
             plan: The plan to add for comparison
@@ -61,20 +69,20 @@ class PlanComparison:
         Returns:
             True if the plan was successfully added, False otherwise
         """
-        if plan.id == self.reference_plan.id:
-            logger.warning(f"Cannot add reference plan {plan.id} as comparison plan")
-            return False
-            
+        # Skip if plan ID already exists
         if plan.id in self.comparison_plans:
-            logger.warning(f"Plan {plan.id} already exists in comparison")
+            logger.warning(f"Plan {plan.name} already exists in comparison")
             return False
-            
-        # Store the plan
-        self.comparison_plans[plan.id] = plan
         
-        # Calculate DVH and metrics for the plan
+        # Skip if it's the reference plan
+        if plan.id == self.reference_plan.id:
+            logger.warning(f"Cannot add reference plan as comparison plan")
+            return False
+        
+        self.comparison_plans[plan.id] = plan
         self._calculate_plan_data(plan)
         
+        logger.info(f"Added comparison plan: {plan.name}")
         return True
     
     def remove_comparison_plan(self, plan_id: str) -> bool:
@@ -85,24 +93,18 @@ class PlanComparison:
             plan_id: ID of the plan to remove
             
         Returns:
-            True if the plan was removed, False if it wasn't found
+            True if the plan was successfully removed, False otherwise
         """
         if plan_id not in self.comparison_plans:
             logger.warning(f"Plan {plan_id} not found in comparison")
             return False
-            
-        del self.comparison_plans[plan_id]
         
-        # Remove the plan's data
-        if plan_id in self.dvh_data:
-            del self.dvh_data[plan_id]
-            
-        if plan_id in self.metric_data:
-            del self.metric_data[plan_id]
-            
-        if plan_id in self.goal_results:
-            del self.goal_results[plan_id]
-            
+        # Remove the plan and its data
+        del self.comparison_plans[plan_id]
+        if plan_id in self.plan_data:
+            del self.plan_data[plan_id]
+        
+        logger.info(f"Removed comparison plan: {plan_id}")
         return True
     
     def set_clinical_protocol(self, protocol: ClinicalProtocol):
@@ -110,84 +112,85 @@ class PlanComparison:
         Set a clinical protocol for evaluating all plans.
         
         Args:
-            protocol: The clinical protocol to use for evaluation
+            protocol: The clinical protocol to use
         """
         self.protocol = protocol
         
-        # Evaluate all plans with the protocol
+        # Re-evaluate all plans with the new protocol
         self._evaluate_with_protocol(self.reference_plan)
         for plan_id, plan in self.comparison_plans.items():
             self._evaluate_with_protocol(plan)
+        
+        logger.info(f"Set clinical protocol: {protocol.name}")
     
     def get_plan_names(self) -> List[str]:
         """
-        Get the list of all plan names in the comparison.
+        Get a list of all plan names in the comparison.
         
         Returns:
-            List of plan names, with reference plan first
+            List of plan names
         """
         names = [self.reference_plan.name]
-        for plan_id in self.comparison_plans:
-            names.append(self.comparison_plans[plan_id].name)
+        for plan in self.comparison_plans.values():
+            names.append(plan.name)
         return names
     
     def get_structure_ids(self) -> List[str]:
         """
-        Get the list of all structure IDs across all plans.
+        Get a list of structure IDs that exist in all plans.
         
         Returns:
-            List of all unique structure IDs
+            List of structure IDs
         """
-        structure_ids = set()
+        # Get structures from reference plan
+        reference_structures = {
+            s.id for s in self.reference_plan.structure_set.structures
+        }
         
-        # Add structures from reference plan
-        for structure in self.reference_plan.structure_set.structures:
-            structure_ids.add(structure.id)
-            self.structure_names[structure.id] = structure.name
+        # Find intersection with comparison plans
+        for plan in self.comparison_plans.values():
+            plan_structures = {s.id for s in plan.structure_set.structures}
+            reference_structures &= plan_structures
         
-        # Add structures from comparison plans
-        for plan_id, plan in self.comparison_plans.items():
-            for structure in plan.structure_set.structures:
-                structure_ids.add(structure.id)
-                self.structure_names[structure.id] = structure.name
-        
-        return list(structure_ids)
+        return list(reference_structures)
     
     def get_dvh_data(self, plan_id: str, structure_id: str) -> Optional[DVHData]:
         """
-        Get DVH data for a specific plan and structure.
+        Get DVH data for a specific structure in a plan.
         
         Args:
             plan_id: ID of the plan
             structure_id: ID of the structure
             
         Returns:
-            DVH data if found, None otherwise
+            DVH data for the specified structure and plan, or None if not found
         """
-        if plan_id not in self.dvh_data:
-            return None
-            
-        return self.dvh_data[plan_id].get(structure_id)
+        if plan_id == self.reference_plan.id:
+            plan_data = self.plan_data.get(self.reference_plan.id, {})
+        else:
+            plan_data = self.plan_data.get(plan_id, {})
+        
+        return plan_data.get('dvh_data', {}).get(structure_id)
     
     def get_metric(self, plan_id: str, structure_id: str, metric_name: str) -> Optional[float]:
         """
-        Get a specific metric value for a plan and structure.
+        Get a specific metric value for a structure in a plan.
         
         Args:
             plan_id: ID of the plan
             structure_id: ID of the structure
-            metric_name: Name of the metric (e.g., "D95", "V20")
+            metric_name: Name of the metric (e.g., "D95", "V20", "mean_dose")
             
         Returns:
-            Metric value if found, None otherwise
+            Value of the metric, or None if not available
         """
-        if plan_id not in self.metric_data:
-            return None
-            
-        if structure_id not in self.metric_data[plan_id]:
-            return None
-            
-        return self.metric_data[plan_id][structure_id].get(metric_name)
+        if plan_id == self.reference_plan.id:
+            plan_data = self.plan_data.get(self.reference_plan.id, {})
+        else:
+            plan_data = self.plan_data.get(plan_id, {})
+        
+        metrics = plan_data.get('metrics', {}).get(structure_id, {})
+        return metrics.get(metric_name)
     
     def get_all_metrics(self, structure_id: str, metric_name: str) -> Dict[str, float]:
         """
@@ -196,199 +199,251 @@ class PlanComparison:
         Args:
             structure_id: ID of the structure
             metric_name: Name of the metric
-            
+        
         Returns:
             Dictionary mapping plan IDs to metric values
         """
-        results = {}
+        result = {}
         
-        # Reference plan
-        if structure_id in self.metric_data.get(self.reference_plan.id, {}):
-            if metric_name in self.metric_data[self.reference_plan.id][structure_id]:
-                results[self.reference_plan.id] = self.metric_data[self.reference_plan.id][structure_id][metric_name]
+        # Get from reference plan
+        ref_value = self.get_metric(self.reference_plan.id, structure_id, metric_name)
+        if ref_value is not None:
+            result[self.reference_plan.id] = ref_value
         
-        # Comparison plans
+        # Get from comparison plans
         for plan_id in self.comparison_plans:
-            if structure_id in self.metric_data.get(plan_id, {}):
-                if metric_name in self.metric_data[plan_id][structure_id]:
-                    results[plan_id] = self.metric_data[plan_id][structure_id][metric_name]
+            value = self.get_metric(plan_id, structure_id, metric_name)
+            if value is not None:
+                result[plan_id] = value
         
-        return results
+        return result
     
     def get_goal_results(self, plan_id: str) -> Dict[str, GoalResult]:
         """
-        Get all goal results for a specific plan.
+        Get the results of clinical goals for a plan.
         
         Args:
             plan_id: ID of the plan
             
         Returns:
-            Dictionary mapping goal IDs to goal results
+            Dictionary mapping goal IDs to results
         """
-        return self.goal_results.get(plan_id, {})
+        if plan_id == self.reference_plan.id:
+            plan_data = self.plan_data.get(self.reference_plan.id, {})
+        else:
+            plan_data = self.plan_data.get(plan_id, {})
+        
+        return plan_data.get('goal_results', {})
     
     def compare_specific_metrics(self, metric_names: List[str]) -> Dict[str, Dict[str, Dict[str, float]]]:
         """
-        Compare specific metrics across all plans.
+        Compare specific metrics across all plans for all common structures.
         
         Args:
             metric_names: List of metric names to compare
-            
+        
         Returns:
-            Dictionary mapping structure IDs to plan IDs to metric values
+            Nested dictionary with structure IDs as keys, then metric names, then plan IDs
         """
-        results = {}
+        result = {}
+        
+        # Get common structures
         structure_ids = self.get_structure_ids()
         
         for structure_id in structure_ids:
-            results[structure_id] = {}
+            result[structure_id] = {}
             
             for metric_name in metric_names:
-                metric_results = self.get_all_metrics(structure_id, metric_name)
+                # Get metric values for all plans
+                metric_values = self.get_all_metrics(structure_id, metric_name)
                 
-                if structure_id not in results:
-                    results[structure_id] = {}
-                    
-                results[structure_id][metric_name] = metric_results
+                if metric_values:
+                    result[structure_id][metric_name] = metric_values
         
-        return results
+        return result
     
     def generate_comparison_report(self, output_file: Optional[str] = None) -> str:
         """
-        Generate a report comparing all plans in HTML format.
+        Generate a detailed PDF report of the plan comparison.
         
         Args:
-            output_file: Path to save the report (optional)
-            
+            output_file: Optional path for saving the report. If None, a temporary file is created.
+        
         Returns:
-            HTML string containing the report
+            Path to the generated report file
         """
-        # Import here to avoid circular imports
-        from quangtps.reporting.report_generator import ReportGenerator
+        try:
+            from quangtps.reporting.report_generator import ReportGenerator
+            
+            # Create report generator
+            generator = ReportGenerator()
+            
+            # Add plan comparison data
+            generator.add_section("Plan Comparison")
+            generator.add_plan_comparison(self)
+            
+            # Generate report
+            if output_file is None:
+                output_file = os.path.join(get_temp_dir(), "plan_comparison_report.pdf")
+            
+            generator.generate_pdf(output_file)
+            logger.info(f"Generated comparison report: {output_file}")
+            
+            return output_file
         
-        generator = ReportGenerator()
-        report = generator.generate_plan_comparison_report(
-            reference_plan=self.reference_plan,
-            comparison_plans=list(self.comparison_plans.values()),
-            dvh_data=self.dvh_data,
-            metric_data=self.metric_data,
-            goal_results=self.goal_results
-        )
-        
-        if output_file:
-            with open(output_file, 'w') as f:
-                f.write(report)
-        
-        return report
+        except ImportError:
+            logger.error("Cannot generate report - reporting module not available")
+            return ""
     
     def _calculate_plan_data(self, plan: Plan):
         """
-        Calculate DVH and metrics data for a plan.
+        Calculate and cache DVH data and metrics for a plan.
         
         Args:
-            plan: The plan to analyze
+            plan: The plan to calculate data for
         """
-        if not plan.dose:
-            logger.warning(f"Plan {plan.id} has no dose data, skipping analysis")
-            return
-            
-        # Store DVH data
-        if plan.id not in self.dvh_data:
-            self.dvh_data[plan.id] = {}
-            
-        # Store metric data
-        if plan.id not in self.metric_data:
-            self.metric_data[plan.id] = {}
+        plan_data = {
+            'dvh_data': {},
+            'metrics': {},
+            'goal_results': {},
+        }
         
-        # Calculate DVH and metrics for each structure
-        for structure in plan.structure_set.structures:
-            # Skip empty structures
-            if structure.is_empty():
-                continue
+        # Get all structures
+        structures = plan.structure_set.structures
+        
+        for structure in structures:
+            # Get DVH data
+            dvh_data = plan.get_dvh_data(structure.id)
+            if dvh_data:
+                plan_data['dvh_data'][structure.id] = dvh_data
                 
-            # Calculate DVH
-            dvh = calculate_dvh(structure, plan.dose)
-            self.dvh_data[plan.id][structure.id] = dvh
-            
-            # Calculate metrics
-            metrics = calculate_dvh_metrics(structure, plan.dose)
-            self.metric_data[plan.id][structure.id] = metrics
-            
-            # Store structure name
-            self.structure_names[structure.id] = structure.name
+                # Calculate metrics
+                structure_metrics = {}
+                
+                # D metrics (dose at volume)
+                structure_metrics['D95'] = dvh_data.get_dose_at_volume(95)
+                structure_metrics['D90'] = dvh_data.get_dose_at_volume(90)
+                structure_metrics['D50'] = dvh_data.get_dose_at_volume(50)
+                structure_metrics['D5'] = dvh_data.get_dose_at_volume(5)
+                structure_metrics['D2'] = dvh_data.get_dose_at_volume(2)
+                
+                # V metrics (volume at dose) - using prescription dose from plan
+                prescription = plan.prescription
+                if prescription:
+                    prescription_dose = prescription.dose
+                    structure_metrics[f'V{int(prescription_dose)}'] = dvh_data.get_volume_at_dose(prescription_dose)
+                    structure_metrics[f'V{int(prescription_dose*0.95)}'] = dvh_data.get_volume_at_dose(prescription_dose * 0.95)
+                    structure_metrics[f'V{int(prescription_dose*0.9)}'] = dvh_data.get_volume_at_dose(prescription_dose * 0.9)
+                    structure_metrics[f'V{int(prescription_dose*0.5)}'] = dvh_data.get_volume_at_dose(prescription_dose * 0.5)
+                
+                # Common V metrics for OARs
+                structure_metrics['V5'] = dvh_data.get_volume_at_dose(5)
+                structure_metrics['V10'] = dvh_data.get_volume_at_dose(10)
+                structure_metrics['V20'] = dvh_data.get_volume_at_dose(20)
+                structure_metrics['V30'] = dvh_data.get_volume_at_dose(30)
+                structure_metrics['V40'] = dvh_data.get_volume_at_dose(40)
+                structure_metrics['V50'] = dvh_data.get_volume_at_dose(50)
+                
+                # Other common metrics
+                structure_metrics['mean_dose'] = dvh_data.mean_dose
+                structure_metrics['max_dose'] = dvh_data.max_dose
+                structure_metrics['min_dose'] = dvh_data.min_dose
+                
+                plan_data['metrics'][structure.id] = structure_metrics
         
-        # Evaluate the plan with protocol if set
+        self.plan_data[plan.id] = plan_data
+        
+        # Evaluate with protocol if available
         if self.protocol:
             self._evaluate_with_protocol(plan)
     
     def _evaluate_with_protocol(self, plan: Plan):
         """
-        Evaluate a plan with the current protocol.
+        Evaluate a plan against the clinical protocol.
         
         Args:
             plan: The plan to evaluate
         """
         if not self.protocol:
             return
-            
-        # Use PlanQualityEvaluator to evaluate the plan
-        evaluator = PlanQualityEvaluator()
-        evaluator.set_protocol(self.protocol)
-        evaluator.evaluate_plan(plan)
         
-        # Store goal results
-        if plan.id not in self.goal_results:
-            self.goal_results[plan.id] = {}
+        goal_results = {}
+        
+        for goal in self.protocol.goals:
+            # Skip goals for structures not in this plan
+            structure = plan.structure_set.get_structure(goal.structure_id)
+            if not structure:
+                continue
             
-        # Get goal results
-        for goal_id, result in evaluator.get_goal_results().items():
-            self.goal_results[plan.id][goal_id] = result
+            # Get DVH data
+            dvh_data = plan.get_dvh_data(goal.structure_id)
+            if not dvh_data:
+                continue
+            
+            # Evaluate goal
+            result = goal.evaluate(dvh_data)
+            if result:
+                goal_results[goal.id] = result
+        
+        # Store results
+        if plan.id in self.plan_data:
+            self.plan_data[plan.id]['goal_results'] = goal_results
     
     def calculate_gamma_index(self, reference_plan_id: str, evaluation_plan_id: str, 
                              dose_threshold: float = 3.0, distance_threshold: float = 3.0) -> np.ndarray:
         """
         Calculate the gamma index between two plans.
         
+        The gamma index is a metric for comparing dose distributions that combines
+        dose difference and distance-to-agreement criteria.
+        
         Args:
             reference_plan_id: ID of the reference plan
-            evaluation_plan_id: ID of the evaluation plan
+            evaluation_plan_id: ID of the plan to evaluate
             dose_threshold: Dose difference threshold in percent
-            distance_threshold: Distance to agreement threshold in mm
+            distance_threshold: Distance-to-agreement threshold in mm
             
         Returns:
             3D numpy array of gamma index values
         """
-        from quangtps.evaluation.qa.gamma_analysis import calculate_gamma_index
-        
-        # Get the reference plan
+        # Get reference plan
         if reference_plan_id == self.reference_plan.id:
-            reference_plan = self.reference_plan
+            ref_plan = self.reference_plan
         else:
-            reference_plan = self.comparison_plans.get(reference_plan_id)
-            
-        # Get the evaluation plan
-        if evaluation_plan_id == self.reference_plan.id:
-            evaluation_plan = self.reference_plan
-        else:
-            evaluation_plan = self.comparison_plans.get(evaluation_plan_id)
-            
-        if not reference_plan or not evaluation_plan:
-            logger.error(f"Plan not found for gamma index calculation")
-            return np.zeros((1, 1, 1))  # Return empty array
-            
-        if not reference_plan.dose or not evaluation_plan.dose:
-            logger.error(f"Dose data missing for gamma index calculation")
-            return np.zeros((1, 1, 1))  # Return empty array
-            
-        # Calculate gamma index
-        gamma = calculate_gamma_index(
-            reference_dose=reference_plan.dose,
-            evaluation_dose=evaluation_plan.dose,
-            dose_threshold=dose_threshold,
-            distance_threshold=distance_threshold
-        )
+            ref_plan = self.comparison_plans.get(reference_plan_id)
         
-        return gamma
+        # Get evaluation plan
+        if evaluation_plan_id == self.reference_plan.id:
+            eval_plan = self.reference_plan
+        else:
+            eval_plan = self.comparison_plans.get(evaluation_plan_id)
+        
+        if not ref_plan or not eval_plan:
+            logger.error(f"Cannot calculate gamma index - plan not found")
+            return np.array([])
+        
+        # Get dose distributions
+        ref_dose = ref_plan.dose.get_dose_grid()
+        eval_dose = eval_plan.dose.get_dose_grid()
+        
+        if ref_dose is None or eval_dose is None:
+            logger.error(f"Cannot calculate gamma index - dose not available")
+            return np.array([])
+        
+        try:
+            # Calculate gamma index
+            gamma = calculate_gamma_index_3d(
+                ref_dose,
+                eval_dose,
+                ref_dose.spacing,
+                eval_dose.spacing,
+                dose_threshold=dose_threshold,
+                distance_threshold=distance_threshold
+            )
+            return gamma
+        except Exception as e:
+            logger.error(f"Error calculating gamma index: {str(e)}")
+            return np.array([])
     
     def calculate_dose_difference(self, reference_plan_id: str, evaluation_plan_id: str) -> np.ndarray:
         """
@@ -396,41 +451,44 @@ class PlanComparison:
         
         Args:
             reference_plan_id: ID of the reference plan
-            evaluation_plan_id: ID of the evaluation plan
-            
+            evaluation_plan_id: ID of the plan to evaluate
+        
         Returns:
-            3D numpy array of dose difference values
+            3D numpy array of dose differences (evaluation - reference)
         """
-        # Get the reference plan
+        # Get reference plan
         if reference_plan_id == self.reference_plan.id:
-            reference_plan = self.reference_plan
+            ref_plan = self.reference_plan
         else:
-            reference_plan = self.comparison_plans.get(reference_plan_id)
-            
-        # Get the evaluation plan
+            ref_plan = self.comparison_plans.get(reference_plan_id)
+        
+        # Get evaluation plan
         if evaluation_plan_id == self.reference_plan.id:
-            evaluation_plan = self.reference_plan
+            eval_plan = self.reference_plan
         else:
-            evaluation_plan = self.comparison_plans.get(evaluation_plan_id)
-            
-        if not reference_plan or not evaluation_plan:
-            logger.error(f"Plan not found for dose difference calculation")
-            return np.zeros((1, 1, 1))  # Return empty array
-            
-        if not reference_plan.dose or not evaluation_plan.dose:
-            logger.error(f"Dose data missing for dose difference calculation")
-            return np.zeros((1, 1, 1))  # Return empty array
-            
-        # Get dose grids
-        ref_dose = reference_plan.dose.get_dose_grid()
-        eval_dose = evaluation_plan.dose.get_dose_grid()
+            eval_plan = self.comparison_plans.get(evaluation_plan_id)
         
-        # Ensure grids are the same size
-        if ref_dose.shape != eval_dose.shape:
-            logger.error(f"Dose grid sizes do not match: {ref_dose.shape} vs {eval_dose.shape}")
-            return np.zeros((1, 1, 1))  # Return empty array
-            
-        # Calculate difference
-        difference = eval_dose - ref_dose
+        if not ref_plan or not eval_plan:
+            logger.error(f"Cannot calculate dose difference - plan not found")
+            return np.array([])
         
-        return difference
+        # Get dose distributions
+        ref_dose = ref_plan.dose.get_dose_grid()
+        eval_dose = eval_plan.dose.get_dose_grid()
+        
+        if ref_dose is None or eval_dose is None:
+            logger.error(f"Cannot calculate dose difference - dose not available")
+            return np.array([])
+        
+        try:
+            # Ensure same dimensions
+            if ref_dose.shape != eval_dose.shape:
+                logger.error(f"Cannot calculate dose difference - dose dimensions do not match")
+                return np.array([])
+            
+            # Calculate difference (eval - ref)
+            difference = eval_dose - ref_dose
+            return difference
+        except Exception as e:
+            logger.error(f"Error calculating dose difference: {str(e)}")
+            return np.array([])

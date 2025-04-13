@@ -1,3 +1,22 @@
+## [0.4.6] - 2025-04-08
+
+### Added
+- Enhanced DoseConstraints class with Eclipse-like functionality:
+  - Added comprehensive `evaluate_constraints` method to assess constraints against plan metrics
+  - Added `evaluate_against_plan` method for direct integration with PlanEvaluation
+  - Implemented clinical protocol import/export functionality with Eclipse-compatible format
+  - Added HTML report generation for constraint evaluation with visual indicators
+  - Enhanced constraint management with metadata storage
+  - Added support for analyzing various constraint types (Max/Min/Mean Dose, DVH, conformity indices)
+  - Implemented priority-based constraint categorization similar to Eclipse
+
+### Improved
+- Made constraint evaluation more robust with fallback lookup by structure name
+- Enhanced visualization with HTML reports showing constraint compliance status
+- Added support for Dx and Vx constraint types with decimal precision handling
+- Implemented clinical protocol compatibility layer for interchange with commercial systems
+- Added detailed constraint violation reporting with actual vs target values
+
 ## [0.4.5] - 2025-04-05
 
 ### Added
@@ -328,34 +347,87 @@
 - Enhanced system stability with proper dependency management
 - Added detailed error messages for debugging difficult import scenarios 
 
-## [0.5.0] - 2025-04-15
+## [0.5.0] - 2025-04-06
 
 ### Added
-- Implemented comprehensive Multi-Criteria Optimization (MCO) module similar to Eclipse's MCO functionality:
-  - Created core MCO engine (`mco_interface.py`) with Pareto front generation and navigation
-  - Implemented MCO Solution class to represent and compare optimization solutions
-  - Added MCO Navigator for exploring the solution space with undo/redo capabilities
-  - Created interactive MCO Navigator Dialog with visualization of Pareto fronts
-  - Implemented objective sliders for intuitive navigation through the solution space
-  - Added DVH comparison tools to evaluate different treatment plan options
-  - Integrated metrics display for quantitative plan evaluation
-  - Supported multiple objectives including PTV coverage and OAR sparing
-  - Added functionality for interpolation between solutions
+- Implemented Eclipse-style contouring system with three tools:
+  - Freehand Tool for drawing freehand contours with mouse
+  - Polygon Tool for creating polygon contours with vertex-based editing
+  - Threshold Tool for semi-automatic contouring based on image intensity
+- Enhanced MPR Structure Integration with full Eclipse-like functionality:
+  - Structure list with color-coded visualization
+  - Efficient structure management (add, delete, select)
+  - Contour propagation between slices
+  - Copy to next/all slice functionality
+  - Placeholder for AI-assisted auto-segmentation
+- Fixed Plan Evaluation tab for complete DVH analysis:
+  - Support for both cumulative and differential DVH display
+  - Clinical protocol integration
+  - Goal-based evaluation of plans
+  - Comprehensive metrics calculation
+  - DVH export functionality (image and CSV)
+- Added proper logging module with configurable loggers
+- Created setup.py for package installation
 
 ### Fixed
-- Fixed linter errors in `external_beam_planning_tab.py`:
-  - Added missing imports including QInputDialog
-  - Updated Plan constructor parameters to match current API
-  - Fixed service registry access for database connections
-  - Updated method names to match current API (create_plan vs add_plan, etc)
-  - Added proper error handling for plan creation and management
+- Fixed ThresholdTool class to properly implement the segmentation interface
+- Resolved circular import issues across multiple modules
+- Fixed MPR structure integration to work correctly with segmentation tools
+- Enhanced DVH display to handle diverse data formats
+- Fixed Plan Evaluation tab integration with clinical protocols
+- Improved visualization of clinical goals with color-coded results
 
 ### Improved
-- Enhanced service registry integration with better error handling
-- Improved user interface for plan creation with interactive dialogs
-- Added more informative error messages throughout the planning workflow
-- Updated dose calculation and optimization integration in External Beam Planning tab
-- Improved structure management in the planning workflow
+- Enhanced overall UI responsiveness and interaction
+- Better error handling in DVH calculation
+- More robust structure management in MPR viewer
+- Improved integration between segmentation tools and MPR viewer
+- Added detailed status feedback in Plan Evaluation tab
+- Enhanced coupling between plan evaluation and clinical protocols
+- Added protocol manager integration for easier protocol selection
+
+## [0.4.4] - 2025-04-01
+
+### Enhanced Monte Carlo Dose Calculation
+- Implemented advanced variance reduction techniques for improved simulation efficiency
+- Added Woodcock tracking algorithm for efficient photon transport through heterogeneous media
+- Implemented track-length estimator for improved statistical precision
+- Added photon splitting and Russian roulette for better sampling of beam profiles
+- Enhanced physics modeling with improved Compton scattering using Klein-Nishina formula
+- Implemented detailed photon interaction physics (photoelectric, Compton, pair production, Rayleigh)
+- Added comprehensive progress reporting and performance statistics during simulations
+- Fixed particle transport algorithm to correctly handle boundary conditions
+- Implemented proper uncertainty calculation and denoising capabilities
+- Greatly improved simulation efficiency and accuracy, especially for heterogeneous tissues
+
+## [0.4.3] - 2025-04-03
+
+### Analysis
+- Conducted a comprehensive system analysis of QuangTPS with focus on stability and functionality
+- Identified areas needing improvement in IMRT/VMAT optimization, reporting, and integration
+- Created IMPROVEMENT_PLAN.md with detailed roadmap for system development
+- Diagnosed WeasyPrint dependency issues in reporting module
+- Identified remaining circular import issues in core modules
+
+### Planned Improvements
+- Drafted a four-phase development plan with clear timelines and priorities
+- Prioritized completing IMRT/VMAT optimization as highest urgency task
+- Scheduled resolution of all technical debt items with specific assignments
+- Planned feature roadmap aligned with clinical workflow requirements
+- Set timeline for multi-modality imaging and advanced treatment techniques
+
+### Added
+- Created IMPROVEMENT_PLAN.md with comprehensive development roadmap
+- Added automated dependency checking script to help resolve installation issues
+- Created diagnostic tools for analyzing system stability and performance
+- Added documentation for resolving common installation problems
+
+### Improved
+- Enhanced error handling in core modules to provide clearer diagnostics
+- Updated all documentation to reflect current system status and roadmap
+- Improved stability of Plan Evaluation tab with more robust error handling
+- Enhanced DVH visualization to handle diverse data formats more efficiently
+- Added cross-platform compatibility improvements for Windows environments
 
 # Changelog for QuangTPS Improvements
 

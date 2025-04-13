@@ -1,138 +1,139 @@
 """
-Hệ thống logging cho QuangTPS.
+Logging Module for QuangTPS
+
+This module provides logging utilities for the QuangTPS treatment planning
+system. It sets up consistent logging throughout the application.
 """
 
 import os
 import sys
 import logging
-import locale
-import codecs
-from logging.handlers import RotatingFileHandler
+import datetime
+from pathlib import Path
+from typing import Optional, Union, Dict, Any
 
-from .config import Config
+# Default log format
+DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-def setup_utf8_console():
-    """
-    Thiết lập UTF-8 cho console trên Windows.
-    
-    Hàm này cố gắng thiết lập locale và encoding thích hợp 
-    để hiển thị tiếng Việt đúng cách trên Windows.
-    """
-    if sys.platform == 'win32':
-        try:
-            # Thử đặt locale cho tiếng Việt
-            locale.setlocale(locale.LC_ALL, 'Vietnamese_Vietnam.65001')
-        except locale.Error:
-            try:
-                # Nếu không có locale tiếng Việt, sử dụng UTF-8 chung
-                locale.setlocale(locale.LC_ALL, '.65001')
-            except locale.Error:
-                try:
-                    # Thử set mặc định
-                    locale.setlocale(locale.LC_ALL, '')
-                except:
-                    # Nếu không thể, bỏ qua
-                    pass
-        
-        # Đặt các biến môi trường cho Python
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
-        os.environ['PYTHONUTF8'] = '1'
-        
-        try:
-            # Thiết lập utf-8 cho stdout và stderr
-            if hasattr(sys.stdout, 'buffer'):
-                sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
-                sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
-        except Exception as e:
-            print(f"Cảnh báo: Không thể thiết lập UTF-8 cho console: {str(e)}")
-    
-    return True
+# Default log directory
+DEFAULT_LOG_DIR = Path.home() / ".quangtps" / "logs"
 
-def setup_logger(name="quangtps", log_file=None, level=None):
+def setup_logging(
+    level: int = logging.INFO,
+    log_file: Optional[Union[str, Path]] = None,
+    log_format: str = DEFAULT_FORMAT,
+    log_to_console: bool = True,
+    log_to_file: bool = True,
+) -> None:
     """
-    Thiết lập logger với tên và cấu hình được chỉ định.
+    Set up logging configuration for the application.
     
-    Parameters:
-        name (str): Tên của logger
-        log_file (str): Đường dẫn đến file log
-        level (int): Mức độ log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    
-    Returns:
-        logging.Logger: Logger đã cấu hình
+    Args:
+        level: Logging level (default: INFO)
+        log_file: Path to log file (default: auto-generated based on date)
+        log_format: Format string for log messages
+        log_to_console: Whether to log to console
+        log_to_file: Whether to log to file
     """
+    # Create root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
     
-    # Thiết lập UTF-8 cho console
-    setup_utf8_console()
+    # Clear existing handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
     
-    # Lấy cấu hình từ Config nếu không được chỉ định
-    config = Config.get_instance()
-    if log_file is None:
-        log_file = config.log_file
-    if level is None:
-        level = config.log_level
+    # Create formatter
+    formatter = logging.Formatter(log_format)
     
-    # Tạo logger
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    
-    # Xóa các handler hiện có để tránh lặp log
-    if logger.handlers:
-        logger.handlers = []
-    
-    # Định dạng log
-    formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    # Thêm StreamHandler với xử lý Unicode tốt hơn
-    try:
-        console_handler = logging.StreamHandler(sys.stdout)
+    # Add console handler if requested
+    if log_to_console:
+        console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-    except Exception as e:
-        print(f"Lỗi khi thiết lập console handler: {str(e)}")
+        root_logger.addHandler(console_handler)
     
-    # Handler file (nếu có)
-    if log_file:
-        try:
-            # Đảm bảo thư mục chứa file log tồn tại
-            log_dir = os.path.dirname(log_file)
-            if log_dir:
-                os.makedirs(log_dir, exist_ok=True)
-            
-            # Tạo rotating file handler để tránh file log quá lớn
-            file_handler = RotatingFileHandler(
-                log_file, maxBytes=10*1024*1024, backupCount=5, 
-                encoding='utf-8'  # Chỉ định encoding utf-8 cho file
-            )
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-        except Exception as e:
-            print(f"Lỗi khi thiết lập file handler: {str(e)}")
-            # Cố gắng tạo file handler đơn giản hơn nếu rotating handler gặp lỗi
-            try:
-                simple_file_handler = logging.FileHandler(
-                    log_file, encoding='utf-8'
-                )
-                simple_file_handler.setFormatter(formatter)
-                logger.addHandler(simple_file_handler)
-            except Exception as e2:
-                print(f"Lỗi nghiêm trọng với file logging: {str(e2)}")
+    # Add file handler if requested
+    if log_to_file:
+        # Create log directory if it doesn't exist
+        if log_file is None:
+            # Generate default log file name based on date and time
+            today = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_dir = DEFAULT_LOG_DIR
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / f"quangtps_{today}.log"
+        else:
+            log_file = Path(log_file)
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create file handler
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
     
-    return logger
+    # Log system info
+    logger = get_logger(__name__)
+    logger.info(f"QuangTPS logging initialized at level {logging.getLevelName(level)}")
+    if log_to_file:
+        logger.info(f"Logging to file: {log_file}")
+    
+    logger.debug(f"Python version: {sys.version}")
+    logger.debug(f"Platform: {sys.platform}")
+    
+    # Log versions of key dependencies
+    try:
+        import numpy as np
+        logger.debug(f"NumPy version: {np.__version__}")
+    except ImportError:
+        pass
+    
+    try:
+        from PyQt5.QtCore import QT_VERSION_STR
+        logger.debug(f"Qt version: {QT_VERSION_STR}")
+    except ImportError:
+        pass
 
-def get_logger(name="quangtps"):
+def get_logger(name: str) -> logging.Logger:
     """
-    Lấy logger đã được cấu hình sẵn hoặc tạo mới nếu chưa tồn tại.
+    Get a logger with the specified name.
     
-    Parameters:
-        name (str): Tên của logger
-    
+    Args:
+        name: Logger name (typically __name__ for module-level loggers)
+        
     Returns:
-        logging.Logger: Logger
+        Logger instance
     """
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        return setup_logger(name)
-    return logger
+    return logging.getLogger(name)
+
+def set_log_level(level: Union[int, str]) -> None:
+    """
+    Set the logging level for the root logger.
+    
+    Args:
+        level: Logging level as integer or string
+    """
+    if isinstance(level, str):
+        level = getattr(logging, level.upper())
+    
+    logging.getLogger().setLevel(level)
+    get_logger(__name__).info(f"Log level changed to {logging.getLevelName(level)}")
+
+def log_exception(logger: logging.Logger, exc: Exception, context: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Log an exception with optional context information.
+    
+    Args:
+        logger: Logger instance
+        exc: Exception to log
+        context: Optional dictionary with context information
+    """
+    message = f"Exception: {type(exc).__name__}: {str(exc)}"
+    
+    if context:
+        context_str = ", ".join(f"{k}={v}" for k, v in context.items())
+        message += f" [Context: {context_str}]"
+    
+    logger.exception(message)
+    
+# Initialize default logging configuration
+if not logging.getLogger().handlers:
+    setup_logging()

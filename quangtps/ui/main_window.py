@@ -99,7 +99,7 @@ class ContouringView(QWidget):
         label = QLabel("Contouring View")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
-
+        
 class PlanningView(QWidget):
     """Planning view mimicking Eclipse planning interface"""
     
@@ -267,8 +267,18 @@ class MainWindow(QMainWindow):
         self.toggle_patient_browser(False)
     
     def _create_menus(self):
-        """Create application menus."""
-        # File menu
+        """Create the application menus."""
+        self._create_file_menu()
+        self._create_edit_menu()
+        self._create_view_menu()
+        self._create_planning_menu()
+        self._create_dose_menu()
+        self._create_evaluation_menu()
+        self._create_tools_menu()
+        self._create_help_menu()
+    
+    def _create_file_menu(self):
+        """Create the file menu."""
         self.file_menu = self.menuBar().addMenu("&File")
         
         self.new_patient_action = QAction("&New Patient...", self)
@@ -314,8 +324,9 @@ class MainWindow(QMainWindow):
         self.exit_action.setShortcut("Alt+F4")
         self.exit_action.triggered.connect(self.close)
         self.file_menu.addAction(self.exit_action)
-        
-        # Edit menu
+    
+    def _create_edit_menu(self):
+        """Create the edit menu."""
         self.edit_menu = self.menuBar().addMenu("&Edit")
         
         self.undo_action = QAction("&Undo", self)
@@ -330,8 +341,9 @@ class MainWindow(QMainWindow):
         
         self.preferences_action = QAction("&Preferences...", self)
         self.edit_menu.addAction(self.preferences_action)
-        
-        # View menu
+    
+    def _create_view_menu(self):
+        """Create the view menu."""
         self.view_menu = self.menuBar().addMenu("&View")
         
         self.patient_browser_action = QAction("Patient &Browser", self)
@@ -341,8 +353,9 @@ class MainWindow(QMainWindow):
         self.view_menu.addAction(self.patient_browser_action)
         
         self.view_menu.addSeparator()
-        
-        # Planning menu
+    
+    def _create_planning_menu(self):
+        """Create the planning menu."""
         self.planning_menu = self.menuBar().addMenu("&Planning")
         
         self.new_plan_action = QAction("&New Plan...", self)
@@ -360,8 +373,28 @@ class MainWindow(QMainWindow):
         self.clinical_protocols_action = QAction("&Clinical Protocols...", self)
         self.clinical_protocols_action.triggered.connect(self.show_protocols_dialog)
         self.planning_menu.addAction(self.clinical_protocols_action)
+    
+    def _create_dose_menu(self):
+        """Create the dose menu."""
+        self.dose_menu = self.menuBar().addMenu("&Dose")
         
-        # Tools menu
+        self.dose_calculator_action = QAction("&Dose Calculator...", self)
+        self.dose_menu.addAction(self.dose_calculator_action)
+    
+    def _create_evaluation_menu(self):
+        """Create the evaluation menu."""
+        self.evaluation_menu = self.menuBar().addMenu("&Evaluation")
+        
+        plan_evaluation_action = QAction("Plan Evaluation", self)
+        plan_evaluation_action.triggered.connect(self._open_plan_evaluation)
+        self.evaluation_menu.addAction(plan_evaluation_action)
+        
+        plan_comparison_action = QAction("Plan Comparison", self)
+        plan_comparison_action.triggered.connect(self._open_plan_comparison)
+        self.evaluation_menu.addAction(plan_comparison_action)
+    
+    def _create_tools_menu(self):
+        """Create the tools menu."""
         self.tools_menu = self.menuBar().addMenu("&Tools")
         
         self.dicom_browser_action = QAction("&DICOM Browser...", self)
@@ -379,16 +412,9 @@ class MainWindow(QMainWindow):
         
         self.script_editor_action = QAction("Script &Editor...", self)
         self.scripts_menu.addAction(self.script_editor_action)
-        
-        # Window menu
-        self.window_menu = self.menuBar().addMenu("&Window")
-        
-        self.reset_layout_action = QAction("&Reset Layout", self)
-        self.window_menu.addAction(self.reset_layout_action)
-        
-        self.window_menu.addSeparator()
-        
-        # Help menu
+    
+    def _create_help_menu(self):
+        """Create the help menu."""
         self.help_menu = self.menuBar().addMenu("&Help")
         
         self.help_contents_action = QAction("&Contents...", self)
@@ -611,7 +637,7 @@ class MainWindow(QMainWindow):
         # Restore last directory
         if settings.contains("lastDirectory"):
             self.last_directory = settings.value("lastDirectory")
-        else:
+                    else:
             self.last_directory = str(Path.home())
     
     def _initialize_services(self):
@@ -623,7 +649,7 @@ class MainWindow(QMainWindow):
             # Set in evaluation tab
             if self.evaluation_tab:
                 self.evaluation_tab.set_dose_calculator(self.dose_calculator)
-        except Exception as e:
+                except Exception as e:
             logger.error(f"Failed to initialize dose calculator: {e}")
             self.dose_calculator = None
     
@@ -831,7 +857,7 @@ class MainWindow(QMainWindow):
                 # Create a dummy plan for testing
                 self.create_test_plan()
                 
-            except Exception as e:
+                except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load plan: {str(e)}")
                 logger.error(f"Failed to load plan: {e}")
                 
@@ -876,7 +902,7 @@ class MainWindow(QMainWindow):
         # Set current beam set to the first one if available
         if plan.beam_sets and len(plan.beam_sets) > 0:
             self.current_beam_set = plan.beam_sets[0]
-        else:
+            else:
             self.current_beam_set = None
         
         # Set in planning tab
@@ -1124,3 +1150,58 @@ class MainWindow(QMainWindow):
         """Handle MCO solution modification."""
         # This could update other views if needed
         self.statusBar().showMessage("MCO Solution modified")
+
+    def _open_plan_evaluation(self):
+        """Open the plan evaluation dialog."""
+        # Get the current active plan from the planning tab
+        planning_tab = self._get_tab_by_name("Planning")
+        if not planning_tab or not hasattr(planning_tab, "current_plan"):
+            QMessageBox.warning(self, "Plan Evaluation", "Please open a plan first")
+                return
+            
+        if not planning_tab.current_plan:
+            QMessageBox.warning(self, "Plan Evaluation", "Please select a plan to evaluate")
+            return
+        
+        # Show the plan evaluation tab and pass the plan to it
+        evaluation_tab = self._get_tab_by_name("Evaluation")
+        if evaluation_tab:
+            self.right_area.setCurrentWidget(evaluation_tab)
+            evaluation_tab.set_plan(planning_tab.current_plan)
+        else:
+            QMessageBox.warning(self, "Plan Evaluation", "Evaluation tab not found")
+
+    def _open_plan_comparison(self):
+        """Open the plan comparison dialog."""
+        # Get the current active plan from the planning tab
+        planning_tab = self._get_tab_by_name("Planning")
+        if not planning_tab or not hasattr(planning_tab, "current_plan"):
+            QMessageBox.warning(self, "Plan Comparison", "Please open a plan first")
+            return
+        
+        if not planning_tab.current_plan:
+            QMessageBox.warning(self, "Plan Comparison", "Please select a plan to use as reference")
+            return
+        
+        # Import here to avoid circular imports
+        from quangtps.ui.plan_comparison_dialog import PlanComparisonDialog
+        
+        # Create and show the dialog
+        dialog = PlanComparisonDialog(planning_tab.current_plan, self)
+        dialog.exec_()
+
+    def _get_tab_by_name(self, tab_name):
+        """
+        Get a tab widget by its name.
+        
+        Args:
+            tab_name: Name of the tab to find
+            
+        Returns:
+            The tab widget if found, None otherwise
+        """
+        for i in range(self.right_area.count()):
+            tab = self.right_area.widget(i)
+            if tab.objectName() == tab_name:
+                return tab
+        return None

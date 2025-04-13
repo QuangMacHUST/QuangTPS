@@ -2,536 +2,430 @@
 # -*- coding: utf-8 -*-
 
 """
-Freehand Contouring Tool Module
-===============================
+Freehand Contouring Tool
 
-This module provides Eclipse-like freehand contouring tools for QuangTPS.
+This module implements the freehand drawing tool for manual structure 
+contouring in the QuangTPS treatment planning system.
 """
 
-import numpy as np
 import logging
-from enum import Enum
-from typing import List, Tuple, Dict, Optional, Any, Union
+import numpy as np
+from typing import List, Tuple, Optional, Any
 
-from PyQt5.QtCore import Qt, pyqtSignal, QPoint, QPointF, QSize
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QPushButton, QComboBox, QGroupBox, QRadioButton,
-    QButtonGroup, QSpinBox, QFrame, QGridLayout
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QSlider, QCheckBox, QComboBox, QGroupBox
 )
-from PyQt5.QtGui import QIcon, QColor, QCursor, QPainter, QPixmap, QPen, QBrush
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint, QPointF
+from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QCursor, QPixmap
 
-logger = logging.getLogger(__name__)
+from quangtps.core.logging import get_logger
 
-class FreehandMode(Enum):
-    """Enum for the different modes of the freehand tool."""
-    PENCIL = 1  # Draw with a single-pixel pencil
-    BRUSH = 2   # Draw with a round brush of variable size
-    ERASER = 3  # Erase with a round brush of variable size
+logger = get_logger(__name__)
 
-class FreehandContourTool:
+class FreehandTool:
     """
-    Tool for freehand contouring.
+    Freehand contouring tool for manual structure delineation.
     
-    This class implements freehand drawing tools for creating and editing
-    contours, similar to Eclipse's brush and pencil tools.
+    This tool allows drawing freehand contours by tracking mouse movements
+    while the mouse button is pressed.
     """
     
-    def __init__(self, mode=FreehandMode.BRUSH, brush_size=5):
-        """Initialize the freehand contouring tool."""
-        self.mode = mode
-        self.brush_size = brush_size
-        self.points = []
-        self.is_drawing = False
-        self.slice_index = None
-        self.orientation = None
-        self.structure = None
-        self.image_shape = None
-        self.temp_mask = None
-        self.brush_preview_opacity = 0.5
-        self.brush_color = QColor(255, 0, 0, 200)  # Red with alpha
-        self.eraser_color = QColor(0, 255, 255, 200)  # Cyan with alpha
+    def __init__(self):
+        """Initialize the freehand tool."""
+        # Tool properties
+        self.line_width = 1
+        self.smoothing_enabled = False
+        self.smoothing_level = 3  # Default smoothing level
         
-        # Create a cursor image for the brush
-        self._update_cursor()
+        # Drawing state
+        self.is_drawing = False
+        self.points = []  # Points collected during drawing
+        self.current_contour = None  # Current contour being drawn
+        
+        # Create custom cursor
+        self._cursor = self._create_cursor()
     
-    def start_drawing(self, point, slice_index, orientation):
-        """Start drawing at the specified point."""
+    def on_mouse_press(self, event, image_data=None):
+        """
+        Handle mouse press event to start drawing.
+        
+        Args:
+            event: Mouse event object
+            image_data: Optional image data for reference
+        """
+        # Reset points and start drawing
+        self.points = []
         self.is_drawing = True
-        self.points = [(point[0], point[1])]
-        self.slice_index = slice_index
-        self.orientation = orientation
         
-        # Create a temporary mask for drawing preview
-        if self.image_shape is not None:
-            self.temp_mask = np.zeros(self.image_shape, dtype=np.uint8)
-            
-            # Draw the first point
-            self._draw_point(point)
-            
-        return self.points
+        # Add first point
+        pos = event.pos()
+        self.points.append((pos.x(), pos.y()))
+        
+        logger.debug("Started freehand drawing")
     
-    def continue_drawing(self, point):
-        """Continue drawing to the specified point."""
+    def on_mouse_move(self, event, image_data=None):
+        """
+        Handle mouse move event to continue drawing.
+        
+        Args:
+            event: Mouse event object
+            image_data: Optional image data for reference
+        """
         if not self.is_drawing:
-            return None
-            
-        # Draw line from last point to current point
-        last_point = self.points[-1]
-        self._draw_line(last_point, point)
+            return
         
-        # Add the new point
-        self.points.append((point[0], point[1]))
+        # Add point to the contour
+        pos = event.pos()
+        self.points.append((pos.x(), pos.y()))
         
-        return self.points
+        # We don't finalize the contour yet, just collect points
     
-    def stop_drawing(self):
-        """Stop drawing and return the final contour points."""
+    def on_mouse_release(self, event, image_data=None):
+        """
+        Handle mouse release event to finish drawing.
+        
+        Args:
+            event: Mouse event object
+            image_data: Optional image data for reference
+        """
+        if not self.is_drawing:
+            return
+            
+        # Add final point
+        pos = event.pos()
+        self.points.append((pos.x(), pos.y()))
+        
+        # Stop drawing
         self.is_drawing = False
         
-        # If we have a structure and enough points, apply the changes
-        if self.structure is not None and len(self.points) > 0:
-            if self.mode == FreehandMode.PENCIL:
-                # For pencil mode, add the points directly to the structure
-                if self.temp_mask is not None:
-                    if self.mode == FreehandMode.ERASER:
-                        self.structure.remove_points_from_mask(self.temp_mask, 
-                                                            self.slice_index, 
-                                                            self.orientation)
-                    else:
-                        self.structure.add_points_to_mask(self.temp_mask, 
-                                                       self.slice_index, 
-                                                       self.orientation)
-            elif self.mode == FreehandMode.BRUSH or self.mode == FreehandMode.ERASER:
-                # For brush mode, update the mask in the structure
-                if self.temp_mask is not None:
-                    if self.mode == FreehandMode.ERASER:
-                        self.structure.remove_points_from_mask(self.temp_mask, 
-                                                            self.slice_index, 
-                                                            self.orientation)
-                    else:
-                        self.structure.add_points_to_mask(self.temp_mask, 
-                                                       self.slice_index, 
-                                                       self.orientation)
+        # Need at least 3 points to form a valid contour
+        if len(self.points) < 3:
+            logger.warning("Not enough points to create a contour")
+            self.points = []
+            return
         
-        final_points = self.points
-        self.points = []
-        self.temp_mask = None
+        # Process the contour
+        self._process_contour()
         
-        return final_points, self.slice_index, self.orientation
+        logger.debug(f"Finished freehand drawing with {len(self.points)} points")
     
-    def set_mode(self, mode):
-        """Set the drawing mode."""
-        if self.mode != mode:
-            self.mode = mode
-            self._update_cursor()
-    
-    def set_brush_size(self, size):
-        """Set the brush size."""
-        if self.brush_size != size:
-            self.brush_size = size
-            self._update_cursor()
-    
-    def set_image_shape(self, shape):
-        """Set the image shape for the mask."""
-        if shape is not None and len(shape) == 2:
-            self.image_shape = shape
-            if self.is_drawing:
-                # Resize the temp mask if we're currently drawing
-                self.temp_mask = np.zeros(shape, dtype=np.uint8)
-                
-                # Redraw all points
-                for i in range(len(self.points) - 1):
-                    self._draw_line(self.points[i], self.points[i+1])
+    def draw_preview(self, painter, image_data=None):
+        """
+        Draw the current contour preview.
+        
+        Args:
+            painter: QPainter object
+            image_data: Optional image data for reference
+        """
+        if not self.is_drawing or not self.points:
+            return
+        
+        # Set up painter
+        pen = QPen(Qt.green)
+        pen.setWidth(self.line_width)
+        painter.setPen(pen)
+        
+        # Draw line segments between adjacent points
+        for i in range(1, len(self.points)):
+            x1, y1 = self.points[i-1]
+            x2, y2 = self.points[i]
+            painter.drawLine(x1, y1, x2, y2)
     
     def get_cursor(self):
-        """Get the cursor for the current tool."""
-        if hasattr(self, 'cursor'):
-            return self.cursor
-        else:
-            # Default cursor
-            return QCursor(Qt.CrossCursor)
-    
-    def get_temp_mask(self):
-        """Get the temporary mask for preview during drawing."""
-        return self.temp_mask
-    
-    def _update_cursor(self):
-        """Update the cursor based on the current mode and brush size."""
-        if self.mode == FreehandMode.PENCIL:
-            # Use a simple cross cursor for pencil
-            self.cursor = QCursor(Qt.CrossCursor)
-        elif self.mode == FreehandMode.BRUSH or self.mode == FreehandMode.ERASER:
-            # Create a custom cursor with a circle to represent brush size
-            size = max(16, self.brush_size * 2 + 4)
-            cursor_pixmap = QPixmap(size, size)
-            cursor_pixmap.fill(Qt.transparent)
-            
-            painter = QPainter(cursor_pixmap)
-            painter.setRenderHint(QPainter.Antialiasing)
-            
-            # Draw circle representing brush size
-            if self.mode == FreehandMode.BRUSH:
-                painter.setPen(QPen(QColor(255, 0, 0), 1))
-                painter.setBrush(QBrush(QColor(255, 0, 0, 64)))
-            else:  # ERASER
-                painter.setPen(QPen(QColor(0, 255, 255), 1))
-                painter.setBrush(QBrush(QColor(0, 255, 255, 64)))
-                
-            painter.drawEllipse(size // 2 - self.brush_size, 
-                              size // 2 - self.brush_size,
-                              self.brush_size * 2, 
-                              self.brush_size * 2)
-            
-            # Draw crosshair at center
-            painter.setPen(QPen(Qt.black, 1))
-            painter.drawLine(size // 2, 0, size // 2, size)
-            painter.drawLine(0, size // 2, size, size // 2)
-            
-            painter.end()
-            
-            self.cursor = QCursor(cursor_pixmap, size // 2, size // 2)
-    
-    def _draw_point(self, point):
-        """Draw a single point on the temporary mask."""
-        if self.temp_mask is None or self.image_shape is None:
-            return
-            
-        x, y = int(point[0]), int(point[1])
+        """
+        Get the cursor for this tool.
         
-        # Ensure point is within bounds
-        if x < 0 or x >= self.image_shape[1] or y < 0 or y >= self.image_shape[0]:
+        Returns:
+            QCursor: The cursor for the freehand tool
+        """
+        return self._cursor
+    
+    def set_line_width(self, width):
+        """
+        Set the line width for drawing.
+        
+        Args:
+            width: Line width in pixels
+        """
+        self.line_width = max(1, int(width))
+    
+    def set_smoothing(self, enabled):
+        """
+        Enable or disable contour smoothing.
+        
+        Args:
+            enabled: Whether smoothing is enabled
+        """
+        self.smoothing_enabled = enabled
+    
+    def set_smoothing_level(self, level):
+        """
+        Set the smoothing level.
+        
+        Args:
+            level: Smoothing level (1-10)
+        """
+        self.smoothing_level = max(1, min(10, level))
+    
+    def get_contour(self):
+        """
+        Get the finalized contour.
+        
+        Returns:
+            The contour as a numpy array of shape (N, 2)
+        """
+        return self.current_contour
+    
+    def _process_contour(self):
+        """Process the collected points to create a finalized contour."""
+        # Convert to numpy array for easier processing
+        if not self.points:
             return
         
-        if self.mode == FreehandMode.PENCIL:
-            # Draw a single pixel
-            self.temp_mask[y, x] = 1
-        elif self.mode == FreehandMode.BRUSH or self.mode == FreehandMode.ERASER:
-            # Draw a circle with radius equal to brush size
-            for dy in range(-self.brush_size, self.brush_size + 1):
-                for dx in range(-self.brush_size, self.brush_size + 1):
-                    # Check if within circle
-                    if dx*dx + dy*dy <= self.brush_size*self.brush_size:
-                        px, py = x + dx, y + dy
-                        # Check if within bounds
-                        if 0 <= px < self.image_shape[1] and 0 <= py < self.image_shape[0]:
-                            self.temp_mask[py, px] = 1
+        points_array = np.array(self.points)
+        
+        # Close the contour if it's not already closed
+        first_point = points_array[0]
+        last_point = points_array[-1]
+        
+        # If the first and last points are not the same, add the first point at the end
+        if not np.array_equal(first_point, last_point):
+            points_array = np.vstack([points_array, first_point])
+        
+        # Apply smoothing if enabled
+        if self.smoothing_enabled and len(points_array) > 3:
+            points_array = self._smooth_contour(points_array)
+        
+        # Store processed contour
+        self.current_contour = points_array
     
-    def _draw_line(self, point1, point2):
-        """Draw a line between two points on the temporary mask."""
-        if self.temp_mask is None or self.image_shape is None:
-            return
-            
-        x1, y1 = int(point1[0]), int(point1[1])
-        x2, y2 = int(point2[0]), int(point2[1])
+    def _smooth_contour(self, points_array):
+        """
+        Apply smoothing to the contour.
         
-        # Use Bresenham's algorithm to draw a line
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        sx = 1 if x1 < x2 else -1
-        sy = 1 if y1 < y2 else -1
-        err = dx - dy
-        
-        while True:
-            # Draw at current point
-            self._draw_point((x1, y1))
+        Args:
+            points_array: Numpy array of shape (N, 2) with contour points
             
-            if x1 == x2 and y1 == y2:
-                break
-                
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x1 += sx
-            if e2 < dx:
-                err += dx
-                y1 += sy
+        Returns:
+            Smoothed contour as numpy array
+        """
+        # Simple moving average smoothing with window size based on smoothing level
+        window_size = max(3, self.smoothing_level * 2 + 1)
+        
+        # If we don't have enough points for the window, reduce it
+        if len(points_array) < window_size:
+            window_size = max(3, len(points_array) - 1)
+            if window_size % 2 == 0:
+                window_size -= 1
+        
+        # Apply moving average smoothing
+        half_window = window_size // 2
+        smoothed_points = np.zeros_like(points_array)
+        
+        # Handle the first and last points (to keep the contour closed)
+        for i in range(len(points_array)):
+            # Create indices array with wrapping around the contour
+            indices = [(i + j) % len(points_array) for j in range(-half_window, half_window + 1)]
+            # Average the points
+            smoothed_points[i] = np.mean(points_array[indices], axis=0)
+        
+        return smoothed_points
+    
+    def _create_cursor(self):
+        """
+        Create a custom cursor for the freehand tool.
+        
+        Returns:
+            QCursor: Custom cursor for the freehand tool
+        """
+        # Create a pixmap for the cursor
+        pixmap = QPixmap(24, 24)
+        pixmap.fill(Qt.transparent)
+        
+        # Draw cursor shape
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Draw circle
+        pen = QPen(Qt.black)
+        pen.setWidth(1)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(QColor(0, 255, 0, 100)))
+        painter.drawEllipse(2, 2, 20, 20)
+        
+        # Draw crosshair
+        painter.setPen(QPen(Qt.black, 1))
+        painter.drawLine(12, 0, 12, 24)  # Vertical line
+        painter.drawLine(0, 12, 24, 12)  # Horizontal line
+        
+        painter.end()
+        
+        # Create cursor with hotspot at center
+        return QCursor(pixmap, 12, 12)
+
 
 class FreehandToolWidget(QWidget):
     """
-    Widget for configuring freehand contouring tool.
+    Widget for controlling the freehand contouring tool.
     
-    This class provides a UI for configuring the freehand contouring tool,
-    allowing the user to select between pencil, brush, and eraser modes
-    and adjust the brush size.
+    This widget provides UI controls for configuring the freehand drawing
+    tool parameters like line width and smoothing.
     """
     
     # Signals
-    toolChanged = pyqtSignal(dict)  # Emitted when tool settings change
+    contour_created = pyqtSignal(object)  # Emits contour when created
     
     def __init__(self, parent=None):
         """Initialize the freehand tool widget."""
         super().__init__(parent)
         
-        # Setup UI
-        self.init_ui()
+        # Create the tool
+        self.tool = FreehandTool()
         
-    def init_ui(self):
+        # Initialize UI
+        self._init_ui()
+    
+    def _init_ui(self):
         """Initialize the user interface."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
         
-        # Tool mode selection
-        mode_group = QGroupBox("Tool Mode")
-        mode_layout = QVBoxLayout(mode_group)
+        # Line width control
+        width_group = QGroupBox("Line Width")
+        width_layout = QHBoxLayout(width_group)
         
-        self.mode_buttons = QButtonGroup(self)
+        self.width_slider = QSlider(Qt.Horizontal)
+        self.width_slider.setRange(1, 10)
+        self.width_slider.setValue(self.tool.line_width)
+        self.width_slider.setTickInterval(1)
+        self.width_slider.setTickPosition(QSlider.TicksBelow)
         
-        self.pencil_btn = QRadioButton("Pencil")
-        self.mode_buttons.addButton(self.pencil_btn, FreehandMode.PENCIL.value)
-        mode_layout.addWidget(self.pencil_btn)
+        self.width_label = QLabel(f"{self.tool.line_width} px")
         
-        self.brush_btn = QRadioButton("Brush")
-        self.brush_btn.setChecked(True)
-        self.mode_buttons.addButton(self.brush_btn, FreehandMode.BRUSH.value)
-        mode_layout.addWidget(self.brush_btn)
+        width_layout.addWidget(self.width_slider)
+        width_layout.addWidget(self.width_label)
         
-        self.eraser_btn = QRadioButton("Eraser")
-        self.mode_buttons.addButton(self.eraser_btn, FreehandMode.ERASER.value)
-        mode_layout.addWidget(self.eraser_btn)
+        # Smoothing controls
+        smoothing_group = QGroupBox("Smoothing")
+        smoothing_layout = QVBoxLayout(smoothing_group)
         
-        self.mode_buttons.buttonClicked.connect(self._on_mode_changed)
+        self.smoothing_checkbox = QCheckBox("Enable Smoothing")
+        self.smoothing_checkbox.setChecked(self.tool.smoothing_enabled)
         
-        main_layout.addWidget(mode_group)
+        smoothing_level_layout = QHBoxLayout()
+        smoothing_level_layout.addWidget(QLabel("Level:"))
         
-        # Brush size
-        brush_group = QGroupBox("Brush Size")
-        brush_layout = QVBoxLayout(brush_group)
+        self.smoothing_slider = QSlider(Qt.Horizontal)
+        self.smoothing_slider.setRange(1, 10)
+        self.smoothing_slider.setValue(self.tool.smoothing_level)
+        self.smoothing_slider.setTickInterval(1)
+        self.smoothing_slider.setTickPosition(QSlider.TicksBelow)
+        self.smoothing_slider.setEnabled(self.tool.smoothing_enabled)
         
-        # Brush preview
-        self.brush_preview = QFrame()
-        self.brush_preview.setFixedSize(50, 50)
-        self.brush_preview.setStyleSheet("background-color: black; border: 1px solid gray;")
-        self.brush_preview.paintEvent = self._paint_brush_preview
-        brush_layout.addWidget(self.brush_preview, 0, Qt.AlignCenter)
+        self.smoothing_label = QLabel(f"{self.tool.smoothing_level}")
         
-        # Size slider
-        size_layout = QHBoxLayout()
-        size_layout.addWidget(QLabel("Size:"))
+        smoothing_level_layout.addWidget(self.smoothing_slider)
+        smoothing_level_layout.addWidget(self.smoothing_label)
         
-        self.size_slider = QSlider(Qt.Horizontal)
-        self.size_slider.setRange(1, 25)
-        self.size_slider.setValue(5)
-        self.size_slider.valueChanged.connect(self.on_brush_size_changed)
-        size_layout.addWidget(self.size_slider)
+        smoothing_layout.addWidget(self.smoothing_checkbox)
+        smoothing_layout.addLayout(smoothing_level_layout)
         
-        self.size_spin = QSpinBox()
-        self.size_spin.setRange(1, 25)
-        self.size_spin.setValue(5)
-        self.size_spin.valueChanged.connect(self.size_slider.setValue)
-        size_layout.addWidget(self.size_spin)
+        # Add all controls to main layout
+        layout.addWidget(width_group)
+        layout.addWidget(smoothing_group)
+        layout.addStretch(1)  # Push everything to the top
         
-        brush_layout.addLayout(size_layout)
-        
-        main_layout.addWidget(brush_group)
-        
-        # Add stretch to push everything to the top
-        main_layout.addStretch(1)
-        
-        # Apply Eclipse-like styling
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 5px;
-            }
-            QRadioButton {
-                spacing: 5px;
-            }
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #cccccc;
-                margin: 2px 0;
-            }
-            QSlider::handle:horizontal {
-                background: #2070c0;
-                width: 14px;
-                margin: -4px 0;
-                border-radius: 7px;
-            }
-        """)
-        
-    def set_mode(self, mode):
-        """Set the drawing mode."""
-        if mode == FreehandMode.PENCIL:
-            self.pencil_btn.setChecked(True)
-        elif mode == FreehandMode.BRUSH:
-            self.brush_btn.setChecked(True)
-        elif mode == FreehandMode.ERASER:
-            self.eraser_btn.setChecked(True)
-            
-        self._update_brush_preview()
-        self._on_tool_changed()
+        # Connect signals
+        self.width_slider.valueChanged.connect(self._on_width_changed)
+        self.smoothing_checkbox.toggled.connect(self._on_smoothing_toggled)
+        self.smoothing_slider.valueChanged.connect(self._on_smoothing_level_changed)
     
-    def on_brush_size_changed(self, size):
-        """Handle brush size changes."""
-        if self.size_spin.value() != size:
-            self.size_spin.setValue(size)
-            
-        self._update_brush_preview()
-        self._on_tool_changed()
+    def on_mouse_press(self, event, image_data=None):
+        """
+        Handle mouse press event.
+        
+        Args:
+            event: Mouse event
+            image_data: Image data
+        """
+        self.tool.on_mouse_press(event, image_data)
     
-    def get_options(self):
-        """Get the current tool options."""
-        # Get the selected mode
-        mode_id = self.mode_buttons.checkedId()
-        mode = FreehandMode(mode_id) if mode_id > 0 else FreehandMode.BRUSH
+    def on_mouse_move(self, event, image_data=None):
+        """
+        Handle mouse move event.
         
-        # Compile options
-        options = {
-            'mode': mode,
-            'brush_size': self.size_slider.value(),
-        }
-        
-        return options
+        Args:
+            event: Mouse event
+            image_data: Image data
+        """
+        self.tool.on_mouse_move(event, image_data)
     
-    def _paint_brush_preview(self, event):
-        """Paint the brush preview area."""
-        painter = QPainter(self.brush_preview)
-        painter.setRenderHint(QPainter.Antialiasing)
+    def on_mouse_release(self, event, image_data=None):
+        """
+        Handle mouse release event.
         
-        # Draw black background
-        painter.fillRect(event.rect(), Qt.black)
+        Args:
+            event: Mouse event
+            image_data: Image data
+        """
+        self.tool.on_mouse_release(event, image_data)
         
-        # Get the selected mode
-        mode_id = self.mode_buttons.checkedId()
-        mode = FreehandMode(mode_id) if mode_id > 0 else FreehandMode.BRUSH
-        
-        # Draw brush circle
-        brush_size = self.size_slider.value()
-        center_x = self.brush_preview.width() / 2
-        center_y = self.brush_preview.height() / 2
-        
-        if mode == FreehandMode.PENCIL:
-            # Draw a small dot for pencil
-            painter.setPen(QPen(Qt.red, 1))
-            painter.setBrush(QBrush(Qt.red))
-            painter.drawEllipse(int(center_x - 1), int(center_y - 1), 2, 2)
-        elif mode == FreehandMode.BRUSH:
-            # Draw a red circle for brush
-            painter.setPen(QPen(Qt.red, 1))
-            painter.setBrush(QBrush(QColor(255, 0, 0, 128)))
-            painter.drawEllipse(int(center_x - brush_size), int(center_y - brush_size), 
-                              brush_size * 2, brush_size * 2)
-        elif mode == FreehandMode.ERASER:
-            # Draw a cyan circle for eraser
-            painter.setPen(QPen(QColor(0, 255, 255), 1))
-            painter.setBrush(QBrush(QColor(0, 255, 255, 128)))
-            painter.drawEllipse(int(center_x - brush_size), int(center_y - brush_size), 
-                              brush_size * 2, brush_size * 2)
-                              
-        painter.end()
+        # Get the contour and emit signal
+        contour = self.tool.get_contour()
+        if contour is not None:
+            self.contour_created.emit(contour)
     
-    def _update_brush_preview(self):
-        """Update the brush preview."""
-        if hasattr(self, 'brush_preview'):
-            self.brush_preview.update()
-    
-    def _on_mode_changed(self):
-        """Handle mode selection change."""
-        # Update the brush preview
-        self._update_brush_preview()
+    def _on_width_changed(self, value):
+        """
+        Handle line width slider change.
         
-        # Update controls based on mode
-        mode_id = self.mode_buttons.checkedId()
-        if mode_id > 0:
-            mode = FreehandMode(mode_id)
-            
-            # Enable/disable brush size controls
-            if mode == FreehandMode.PENCIL:
-                self.size_slider.setEnabled(False)
-                self.size_spin.setEnabled(False)
-            else:
-                self.size_slider.setEnabled(True)
-                self.size_spin.setEnabled(True)
-        
-        self._on_tool_changed()
+        Args:
+            value: New line width value
+        """
+        self.width_label.setText(f"{value} px")
+        self.tool.set_line_width(value)
     
-    def _on_tool_changed(self):
-        """Handle tool changes and emit signal."""
-        options = self.get_options()
-        self.toolChanged.emit(options)
+    def _on_smoothing_toggled(self, checked):
+        """
+        Handle smoothing checkbox toggle.
+        
+        Args:
+            checked: Whether smoothing is enabled
+        """
+        self.smoothing_slider.setEnabled(checked)
+        self.tool.set_smoothing(checked)
+    
+    def _on_smoothing_level_changed(self, value):
+        """
+        Handle smoothing level slider change.
+        
+        Args:
+            value: New smoothing level value
+        """
+        self.smoothing_label.setText(f"{value}")
+        self.tool.set_smoothing_level(value)
+    
+    def get_cursor(self):
+        """
+        Get the cursor for this tool.
+        
+        Returns:
+            QCursor: The tool's cursor
+        """
+        return self.tool.get_cursor()
 
-def test_freehand_tool():
-    """Test function for the freehand tool."""
+
+# For testing
+if __name__ == "__main__":
     import sys
     from PyQt5.QtWidgets import QApplication
     
-    class TestStructure:
-        def __init__(self):
-            self.masks = {}
-        
-        def add_points_to_mask(self, points, slice_index, orientation):
-            key = (slice_index, orientation)
-            if key not in self.masks:
-                self.masks[key] = np.zeros((100, 100), dtype=np.uint8)
-            self.masks[key] |= points
-            
-        def remove_points_from_mask(self, points, slice_index, orientation):
-            key = (slice_index, orientation)
-            if key in self.masks:
-                self.masks[key] &= ~points
-            
-        def add_contour(self, points, slice_index, orientation):
-            print(f"Added contour with {len(points)} points at slice {slice_index} ({orientation})")
-    
-    class TestView(QWidget):
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            self.setFixedSize(500, 500)
-            self.freehand_tool = FreehandContourTool()
-            self.freehand_tool.set_image_shape((500, 500))
-            self.freehand_tool.structure = TestStructure()
-            
-        def paintEvent(self, event):
-            painter = QPainter(self)
-            painter.fillRect(self.rect(), Qt.black)
-            
-            # Draw the temporary mask
-            mask = self.freehand_tool.get_temp_mask()
-            if mask is not None:
-                for y in range(mask.shape[0]):
-                    for x in range(mask.shape[1]):
-                        if mask[y, x]:
-                            painter.setPen(QPen(Qt.red, 1))
-                            painter.drawPoint(x, y)
-            
-        def mousePressEvent(self, event):
-            self.freehand_tool.start_drawing((event.x(), event.y()), 0, "axial")
-            self.update()
-            
-        def mouseMoveEvent(self, event):
-            self.freehand_tool.continue_drawing((event.x(), event.y()))
-            self.update()
-            
-        def mouseReleaseEvent(self, event):
-            self.freehand_tool.stop_drawing()
-            self.update()
-    
     app = QApplication(sys.argv)
     
-    # Create the test view
-    view = TestView()
-    view.show()
-    
-    # Create the tool widget
     widget = FreehandToolWidget()
-    widget.toolChanged.connect(lambda options: set_tool_options(view.freehand_tool, options))
+    widget.setWindowTitle("Freehand Tool Test")
+    widget.resize(300, 200)
     widget.show()
     
-    def set_tool_options(tool, options):
-        tool.set_mode(options['mode'])
-        tool.set_brush_size(options['brush_size'])
-        view.setCursor(tool.get_cursor())
-    
-    return app.exec_()
-
-if __name__ == "__main__":
-    test_freehand_tool() 
+    sys.exit(app.exec_()) 

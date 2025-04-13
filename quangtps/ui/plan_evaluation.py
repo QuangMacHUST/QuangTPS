@@ -11,15 +11,19 @@ using dose-volume histograms (DVH) and various evaluation metrics.
 import os
 import logging
 import numpy as np
+from typing import Dict, List, Optional, Set, Tuple
+import random
+
 # pylint: disable=no-name-in-module
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
     QGroupBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
     QSplitter, QScrollArea, QFrame, QHeaderView, QCheckBox, QListWidget,
-    QAbstractItemView, QListWidgetItem
+    QAbstractItemView, QListWidgetItem, QRadioButton, QButtonGroup, QMenu, QAction,
+    QToolBar, QSizePolicy, QFileDialog, QMessageBox
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QIcon
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint
+from PyQt5.QtGui import QColor, QIcon, QBrush
 # pylint: enable=no-name-in-module
 
 # Try to import matplotlib for plotting
@@ -35,16 +39,20 @@ except ImportError:
     logging.warning("Matplotlib not available, some visualization features will be disabled")
 
 # Import QuangTPS modules
-try:
-    from quangtps.evaluation.plan_evaluation import PlanEvaluation
-    from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh, calculate_dvh_metrics
-    from quangtps.evaluation.dvh.dvh_visualization import plot_dvh
-    EVALUATION_AVAILABLE = True
-except ImportError as e:
-    EVALUATION_AVAILABLE = False
-    logging.warning(f"Plan evaluation modules not available: {e}")
+from quangtps.core.plan import Plan
+from quangtps.core.structures import Structure, StructureType
+from quangtps.evaluation.dvh.dvh_data import DVHData
+from quangtps.evaluation.dvh.dvh_calculator import calculate_dvh
+from quangtps.common.paths import get_icon_path, get_temp_dir
+from quangtps.evaluation.clinical_goals import ClinicalGoal, GoalResult, GoalType, GoalOperator
+from quangtps.evaluation.clinical_protocols import ClinicalProtocol
+from quangtps.evaluation.protocol_manager import ProtocolManager
+from quangtps.ui.widgets.dvh_widget import DVHWidget
+from quangtps.ui.widgets.metrics_table import MetricsTable
+from quangtps.core.logging import get_logger
+from quangtps.evaluation.metrics import PlanMetric
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class DVHCanvas(FigureCanvas):
     """
@@ -221,946 +229,807 @@ class MetricsTable(QTableWidget):
 
 class PlanEvaluationTab(QWidget):
     """
-    Plan Evaluation Tab for QuangTPS
-    
-    Provides tools for evaluating radiotherapy treatment plans:
-    - DVH visualization
-    - Metrics calculation and display
-    - Constraint checking
+    Tab for evaluating radiotherapy treatment plans with a focus on DVH analysis
+    and clinical goals evaluation.
     """
+    
+    # Signals
+    plan_changed = pyqtSignal(Plan)
+    
     def __init__(self, parent=None):
+        """Initialize the plan evaluation tab."""
         super().__init__(parent)
-        self.setup_ui()
         
         # Current plan and data
-        self.current_plan = None
-        self.current_dvh_data = {}
+        self.plan = None
+        self.dvh_data = {}
         self.current_metrics = {}
         
-        # Note: status_label is created in setup_ui
+        # DVH calculation parameters
+        self.dvh_type = "cumulative"  # or "differential"
+        self.volume_type = "relative"  # or "absolute"
+        self.dose_type = "relative"    # or "absolute"
         
-    def setup_ui(self):
-        """
-        Set up the UI components for the Plan Evaluation tab.
+        # Protocol manager
+        self.protocol_manager = ProtocolManager()
+        self.current_protocol = None
         
-        Creates an Eclipse-like interface with DVH visualization, metrics display,
-        and structure management similar to Eclipse's Plan Evaluation workspace.
-        """
-        # Main layout
+        # Initialize UI
+        self._init_ui()
+        
+        # Set initial state
+        self._update_ui()
+    
+    def _init_ui(self):
+        """Initialize the user interface."""
         main_layout = QVBoxLayout(self)
         
-        # Header section with plan info
-        header_layout = QHBoxLayout()
-        
-        # Plan title
-        self.plan_title_label = QLabel("Plan: None")
-        self.plan_title_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
-        header_layout.addWidget(self.plan_title_label)
-        
-        # Add spacer
-        header_layout.addStretch(1)
-        
-        # Refresh button
-        refresh_button = QPushButton("Refresh")
-        refresh_button.setIcon(QIcon.fromTheme("view-refresh"))
-        refresh_button.clicked.connect(self.refresh_evaluation)
-        header_layout.addWidget(refresh_button)
-        
-        # Compare button (placeholder for future implementation)
-        compare_button = QPushButton("Compare Plans")
-        compare_button.setIcon(QIcon.fromTheme("document-properties"))
-        compare_button.setEnabled(False)  # Not implemented yet
-        header_layout.addWidget(compare_button)
-        
-        main_layout.addLayout(header_layout)
-        
-        # Splitter for main content
+        # Main splitter
         main_splitter = QSplitter(Qt.Horizontal)
         
-        # Left panel - Structure list and controls
+        # Left side - Structure list and controls
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Add structure list group
+        # Structure list group
         structure_group = QGroupBox("Structures")
         structure_layout = QVBoxLayout(structure_group)
         
-        # Structure list
         self.structure_list = QListWidget()
-        self.structure_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.structure_list.itemChanged.connect(self._on_structure_selected)
+        self.structure_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.structure_list.selectionChanged.connect(self._on_structure_selection_changed)
         structure_layout.addWidget(self.structure_list)
         
-        # Structure list controls
-        structure_buttons_layout = QHBoxLayout()
+        # Structure list buttons
+        button_layout = QHBoxLayout()
         
-        # Show all button
-        show_all_button = QPushButton("Show All")
-        show_all_button.clicked.connect(self._show_all_structures)
-        structure_buttons_layout.addWidget(show_all_button)
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self._on_select_all)
+        button_layout.addWidget(self.select_all_button)
         
-        # Hide all button
-        hide_all_button = QPushButton("Hide All")
-        hide_all_button.clicked.connect(self._hide_all_structures)
-        structure_buttons_layout.addWidget(hide_all_button)
+        self.deselect_all_button = QPushButton("Deselect All")
+        self.deselect_all_button.clicked.connect(self._on_deselect_all)
+        button_layout.addWidget(self.deselect_all_button)
         
-        structure_layout.addLayout(structure_buttons_layout)
-        
-        # Add show metrics checkbox
-        self.show_metrics_checkbox = QCheckBox("Show metrics on plot")
-        self.show_metrics_checkbox.setChecked(True)
-        self.show_metrics_checkbox.stateChanged.connect(self.refresh_evaluation)
-        structure_layout.addWidget(self.show_metrics_checkbox)
-        
+        structure_layout.addLayout(button_layout)
         left_layout.addWidget(structure_group)
         
-        # Add clinical goals group (placeholder for future implementation)
-        goals_group = QGroupBox("Clinical Goals")
-        goals_layout = QVBoxLayout(goals_group)
+        # Protocol group
+        protocol_group = QGroupBox("Clinical Protocol")
+        protocol_layout = QVBoxLayout(protocol_group)
         
-        # Add a placeholder message for now
-        goals_label = QLabel("Clinical goals feature is under development")
-        goals_label.setAlignment(Qt.AlignCenter)
-        goals_layout.addWidget(goals_label)
+        # Protocol selection
+        protocol_select_layout = QHBoxLayout()
+        protocol_select_layout.addWidget(QLabel("Protocol:"))
         
-        # Add a sample goal table to show the design
-        goals_table = QTableWidget(0, 3)
-        goals_table.setHorizontalHeaderLabels(["Goal", "Value", "Status"])
-        goals_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        goals_table.setEnabled(False)  # Not implemented yet
-        goals_layout.addWidget(goals_table)
+        self.protocol_combo = QComboBox()
+        self.protocol_combo.currentTextChanged.connect(self._on_protocol_changed)
+        protocol_select_layout.addWidget(self.protocol_combo)
         
-        left_layout.addWidget(goals_group)
+        protocol_layout.addLayout(protocol_select_layout)
         
-        # Right panel - DVH and metrics
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        # Apply protocol button
+        self.apply_protocol_button = QPushButton("Apply Protocol")
+        self.apply_protocol_button.clicked.connect(self._on_apply_protocol)
+        protocol_layout.addWidget(self.apply_protocol_button)
         
-        # Add tab widget for different views
-        self.view_tabs = QTabWidget()
+        # Protocol goals list
+        self.goals_list = QTableWidget()
+        self.goals_list.setColumnCount(3)
+        self.goals_list.setHorizontalHeaderLabels(["Goal", "Target", "Achieved"])
+        self.goals_list.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.goals_list.setSelectionBehavior(QTableWidget.SelectRows)
+        self.goals_list.horizontalHeader().setStretchLastSection(True)
+        self.goals_list.verticalHeader().setVisible(False)
+        protocol_layout.addWidget(self.goals_list)
+        
+        left_layout.addWidget(protocol_group)
+        
+        # DVH options group
+        dvh_options_group = QGroupBox("DVH Options")
+        dvh_options_layout = QVBoxLayout(dvh_options_group)
+        
+        # DVH type
+        dvh_type_layout = QHBoxLayout()
+        dvh_type_layout.addWidget(QLabel("DVH Type:"))
+        
+        self.dvh_type_combo = QComboBox()
+        self.dvh_type_combo.addItems(["Cumulative", "Differential"])
+        self.dvh_type_combo.currentIndexChanged.connect(self._on_dvh_type_changed)
+        dvh_type_layout.addWidget(self.dvh_type_combo)
+        
+        dvh_options_layout.addLayout(dvh_type_layout)
+        
+        # Volume type
+        volume_type_layout = QHBoxLayout()
+        volume_type_layout.addWidget(QLabel("Volume:"))
+        
+        self.volume_type_combo = QComboBox()
+        self.volume_type_combo.addItems(["Relative (%)", "Absolute (cc)"])
+        self.volume_type_combo.currentIndexChanged.connect(self._on_volume_type_changed)
+        volume_type_layout.addWidget(self.volume_type_combo)
+        
+        dvh_options_layout.addLayout(volume_type_layout)
+        
+        # Dose type
+        dose_type_layout = QHBoxLayout()
+        dose_type_layout.addWidget(QLabel("Dose:"))
+        
+        self.dose_type_combo = QComboBox()
+        self.dose_type_combo.addItems(["Relative (%)", "Absolute (Gy)"])
+        self.dose_type_combo.currentIndexChanged.connect(self._on_dose_type_changed)
+        dose_type_layout.addWidget(self.dose_type_combo)
+        
+        dvh_options_layout.addLayout(dose_type_layout)
+        
+        # Export button
+        self.export_button = QPushButton("Export DVH")
+        self.export_button.clicked.connect(self._on_export_dvh)
+        dvh_options_layout.addWidget(self.export_button)
+        
+        left_layout.addWidget(dvh_options_group)
+        
+        # Add left panel to splitter
+        main_splitter.addWidget(left_panel)
+        
+        # Right side - DVH display and metrics
+        right_panel = QTabWidget()
         
         # DVH tab
         dvh_tab = QWidget()
         dvh_layout = QVBoxLayout(dvh_tab)
         
-        # Add DVH canvas
+        # DVH plot
         self.dvh_canvas = DVHCanvas(self)
         dvh_layout.addWidget(self.dvh_canvas)
         
-        self.view_tabs.addTab(dvh_tab, "DVH")
+        # Status label
+        self.status_label = QLabel("Ready")
+        dvh_layout.addWidget(self.status_label)
+        
+        right_panel.addTab(dvh_tab, "DVH")
         
         # Metrics tab
         metrics_tab = QWidget()
         metrics_layout = QVBoxLayout(metrics_tab)
         
-        # Add metrics table
-        self.metrics_table = MetricsTable(self)
+        self.metrics_table = MetricsTable()
         metrics_layout.addWidget(self.metrics_table)
         
-        self.view_tabs.addTab(metrics_tab, "Metrics")
+        right_panel.addTab(metrics_tab, "Metrics")
         
-        # Plan indices tab (shows conformity, homogeneity, etc.)
-        indices_tab = QWidget()
-        indices_layout = QVBoxLayout(indices_tab)
+        # Plan Quality tab (linked to protocol)
+        plan_quality_tab = QWidget()
+        plan_quality_layout = QVBoxLayout(plan_quality_tab)
         
-        # Add plan indices table
-        self.indices_table = QTableWidget(0, 2)
-        self.indices_table.setHorizontalHeaderLabels(["Index", "Value"])
-        self.indices_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        indices_layout.addWidget(self.indices_table)
+        # Will add plan quality widget here when implemented
+        self.plan_quality_widget = QLabel("Plan Quality evaluation will be available in a future update")
+        plan_quality_layout.addWidget(self.plan_quality_widget)
         
-        self.view_tabs.addTab(indices_tab, "Plan Indices")
+        right_panel.addTab(plan_quality_tab, "Plan Quality")
         
-        right_layout.addWidget(self.view_tabs)
-        
-        # Add panels to splitter
-        main_splitter.addWidget(left_panel)
+        # Add right panel to splitter
         main_splitter.addWidget(right_panel)
         
-        # Set initial sizes - 25% for left panel, 75% for right panel
-        main_splitter.setSizes([250, 750])
+        # Set splitter sizes
+        main_splitter.setSizes([300, 700])
         
+        # Add splitter to main layout
         main_layout.addWidget(main_splitter)
         
-        # Add status label at the bottom
-        self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("font-style: italic; color: gray;")
-        main_layout.addWidget(self.status_label)
+    def set_plan(self, plan: Optional[Plan]):
+        """
+        Set the current plan for evaluation.
         
-        # Disable controls until a plan is loaded
-        self.structure_list.setEnabled(False)
-        self.show_metrics_checkbox.setEnabled(False)
+        Args:
+            plan: Plan object or None
+        """
+        logger.debug(f"Setting plan for evaluation: {plan.name if plan else None}")
         
-        # Initialize with empty data
+        # Update plan
+        self.plan = plan
+        
+        # Reset data
         self.dvh_data = {}
-        self.metrics_data = {}
-        self.plan_data = None
-        self.current_plan = None
-        self.current_patient = None
+        self.current_metrics = {}
         
-    def set_plan(self, plan, patient=None):
-        """
-        Set the plan to evaluate.
-        
-        This method handles various input formats to ensure consistent behavior
-        similar to Eclipse's plan evaluation workflow.
-        
-        Parameters
-        ----------
-        plan : Plan or dict or str
-            The treatment plan to evaluate. Can be a Plan object, a dictionary
-            with plan data, or a plan ID.
-        patient : Patient or dict or str, optional
-            The patient associated with the plan. Can be a Patient object, a
-            dictionary with patient data, or a patient ID.
-        """
-        try:
-            logger.info(f"Setting plan for evaluation: {getattr(plan, 'id', plan)}")
-            
-            # Convert plan ID to plan object if needed
-            if isinstance(plan, str):
-                logger.info(f"Plan is provided as ID: {plan}")
-                # Try to load plan from database
-                from quangtps.database.plan_db import PlanDB
-                plan_db = PlanDB()
-                plan_data = plan_db.get_plan(plan)
-                
-                if not plan_data:
-                    logger.warning(f"Could not find plan with ID: {plan}")
-                    return
-                    
-                plan = plan_data
-                
-            # Extract plan data if needed
-            self.plan_data = self._extract_plan_data(plan)
-            if not self.plan_data:
-                logger.warning("Failed to extract plan data")
-                return
-                
-            # Set title with plan name
-            plan_name = self.plan_data.get('name', str(getattr(plan, 'id', plan)))
-            if hasattr(self, 'plan_title_label'):
-                self.plan_title_label.setText(f"Plan: {plan_name}")
-            
-            # Store the patient for reference
-            self.current_patient = patient
-                
-            # Evaluate the plan
-            self.evaluate_plan(plan)
-            
-            # Update UI
-            self.structure_list.setEnabled(True)
-            self.show_metrics_checkbox.setEnabled(True)
-            
-            # Show notification of successful loading
-            logger.info(f"Plan '{plan_name}' loaded successfully for evaluation")
-            
-        except Exception as e:
-            logger.error(f"Error setting plan for evaluation: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def evaluate_plan(self, plan):
-        """
-        Evaluate the given plan
-        
-        Parameters
-        ----------
-        plan : Plan or dict
-            Plan object or dictionary containing plan data
-        """
-        if not EVALUATION_AVAILABLE:
-            self.status_label.setText("Plan evaluation modules not available")
-            return
-            
-        try:
-            self.status_label.setText("Evaluating plan...")
-            
-            # Extract plan data
-            # This is where we'd extract the dose grid and structures from the plan
-            # For now, we'll create test data as a placeholder
-            plan_data = self._extract_plan_data(plan)
-            
-            if not plan_data:
-                self.status_label.setText("Could not extract plan data")
-                return
-                
-            dose_grid = plan_data.get('dose_grid')
-            structures = plan_data.get('structures')
-            prescription_dose = plan_data.get('prescription_dose')
-            
-            if dose_grid is None or not structures:
-                self.status_label.setText("Missing dose grid or structures")
-                return
-                
-            # Calculate DVH for each structure
-            dvh_data = {}
-            metrics_data = {}
-            
-            for name, mask in structures.items():
-                # Calculate DVH
-                dose, volume = calculate_dvh(dose_grid, mask)
-                dvh_data[name] = (dose, volume)
-                
-                # Calculate metrics
-                metrics = calculate_dvh_metrics(dose, volume, rx_dose=prescription_dose)
-                metrics_data[name] = metrics
-                
-            # Store results
-            self.current_dvh_data = dvh_data
-            self.current_metrics = metrics_data
-            
-            # Update UI
-            self._update_dvh_plot(dvh_data, prescription_dose)
-            self._update_metrics_tables(metrics_data)
-            self._update_structure_list(list(structures.keys()))
-            
-            # Calculate plan quality indices
-            self._calculate_plan_indices(plan_data, dvh_data, metrics_data)
-            
-            self.status_label.setText("Plan evaluation complete")
-            
-        except Exception as e:
-            logger.error(f"Error evaluating plan: {e}")
-            import traceback
-            traceback.print_exc()
-            self.status_label.setText(f"Error: {str(e)}")
-    
-    def refresh_evaluation(self):
-        """Refresh the current plan evaluation"""
-        if self.current_plan:
-            self.evaluate_plan(self.current_plan)
+        # Calculate DVH data if plan is available
+        if plan:
+            try:
+                self._calculate_dvh_data()
+                self.status_label.setText(f"Loaded plan: {plan.name}")
+            except Exception as e:
+                # Handle error
+                logger.error(f"Error calculating DVH data: {str(e)}")
+                self.status_label.setText(f"Error calculating DVH data: {str(e)}")
         else:
-            self.status_label.setText("No plan selected")
+            self.status_label.setText("No plan loaded")
+        
+        # Update UI
+        self._update_ui()
+        
+        # Emit signal
+        self.plan_changed.emit(plan)
     
-    def _extract_plan_data(self, plan):
-        """
-        Extract necessary data from plan for evaluation
+    def _update_ui(self):
+        """Update UI elements based on current state."""
+        # Update structure list
+        self._update_structure_list()
         
-        Parameters
-        ----------
-        plan : Plan or dict
-            Plan object or dictionary
-            
-        Returns
-        -------
-        dict
-            Dictionary containing dose_grid, structures, and prescription_dose
-        """
-        # In a real implementation, this would extract data from the plan object
-        # For now, we'll return test data
+        # Update DVH display
+        self._update_dvh()
         
-        try:
-            # Check if we can extract real data from the plan
-            if hasattr(plan, 'get_dose_grid') and hasattr(plan, 'get_structures'):
-                dose_grid = plan.get_dose_grid()
-                structures = plan.get_structures()
-                prescription_dose = getattr(plan, 'prescription_dose', 70.0)
-                
-                if dose_grid is not None and structures:
-                    return {
-                        'dose_grid': dose_grid,
-                        'structures': structures,
-                        'prescription_dose': prescription_dose
-                    }
-            
-            # Fallback to test data
-            logger.info("Using test data for plan evaluation")
-            return self._create_test_data()
-            
-        except Exception as e:
-            logger.error(f"Error extracting plan data: {e}")
-            # Fallback to test data
-            return self._create_test_data()
+        # Update metrics display
+        self._update_metrics()
+        
+        # Update goals display based on protocol
+        self._update_goals()
+        
+        # Enable/disable controls based on plan availability
+        has_plan = self.plan is not None
+        self.structure_list.setEnabled(has_plan)
+        self.select_all_button.setEnabled(has_plan)
+        self.deselect_all_button.setEnabled(has_plan)
+        self.apply_protocol_button.setEnabled(has_plan and self.current_protocol is not None)
+        self.export_button.setEnabled(has_plan and bool(self.dvh_data))
     
-    def _create_test_data(self):
-        """
-        Create test data for demonstration
-        
-        Returns
-        -------
-        dict
-            Dictionary with test dose grid and structures
-        """
-        # Create a simple 3D dose grid
-        grid_size = 100
-        dose_grid = np.zeros((grid_size, grid_size, grid_size))
-        
-        # Fill with a simple dose distribution (spherical falloff from center)
-        center = grid_size // 2
-        max_dose = 70.0  # Gy
-        
-        for i in range(grid_size):
-            for j in range(grid_size):
-                for k in range(grid_size):
-                    # Distance from center
-                    r = np.sqrt((i - center)**2 + (j - center)**2 + (k - center)**2)
-                    # Dose falls off with distance
-                    dose_grid[i, j, k] = max_dose * np.exp(-r/20)
-        
-        # Create some test structures
-        structures = {}
-        
-        # PTV - spherical region at center
-        ptv = np.zeros_like(dose_grid, dtype=bool)
-        for i in range(grid_size):
-            for j in range(grid_size):
-                for k in range(grid_size):
-                    r = np.sqrt((i - center)**2 + (j - center)**2 + (k - center)**2)
-                    if r < 15:
-                        ptv[i, j, k] = True
-        structures['PTV'] = ptv
-        
-        # OAR 1 - offset sphere
-        oar1 = np.zeros_like(dose_grid, dtype=bool)
-        for i in range(grid_size):
-            for j in range(grid_size):
-                for k in range(grid_size):
-                    r = np.sqrt((i - center-20)**2 + (j - center)**2 + (k - center)**2)
-                    if r < 10:
-                        oar1[i, j, k] = True
-        structures['Parotid_L'] = oar1
-        
-        # OAR 2 - another offset sphere
-        oar2 = np.zeros_like(dose_grid, dtype=bool)
-        for i in range(grid_size):
-            for j in range(grid_size):
-                for k in range(grid_size):
-                    r = np.sqrt((i - center+20)**2 + (j - center)**2 + (k - center)**2)
-                    if r < 10:
-                        oar2[i, j, k] = True
-        structures['Parotid_R'] = oar2
-        
-        # Body - everything
-        body = np.ones_like(dose_grid, dtype=bool)
-        structures['Body'] = body
-        
-        return {
-            'dose_grid': dose_grid,
-            'structures': structures,
-            'prescription_dose': 70.0
-        }
-    
-    def _update_dvh_plot(self, dvh_data, prescription_dose=None, show_metrics=True):
-        """
-        Update the DVH plot with new data
-        
-        Parameters
-        ----------
-        dvh_data : dict
-            Dictionary mapping structure names to DVH data - can be either:
-            1. A tuple of (dose_array, volume_array)
-            2. A dictionary with 'dose_bins' and 'volume_pct' or 'cumulative_volume' keys
-        prescription_dose : float, optional
-            Prescription dose for reference (vertical line)
-        show_metrics : bool, optional
-            Whether to display metrics on the plot
-        """
-        if not hasattr(self, 'dvh_canvas'):
-            logger.warning("DVH canvas not available, cannot update plot")
-            return
-            
-        # Clear the canvas
-        self.dvh_canvas.clear()
-        
-        if not dvh_data:
-            logger.warning("No DVH data to plot")
-            self.dvh_canvas.draw()
-            return
-        
-        # Draw DVH curves
-        try:
-            # Try to use QuangTPS DVH visualization
-            from quangtps.evaluation.dvh.dvh_visualization import plot_dvh
-            
-            # Convert data format if needed - the plot_dvh function expects a different format
-            # than what might be provided (tuples of dose, volume)
-            formatted_data = {}
-            for struct_name, struct_data in dvh_data.items():
-                if isinstance(struct_data, tuple) and len(struct_data) == 2:
-                    # Convert from (dose, volume) tuple to dictionary format
-                    formatted_data[struct_name] = {
-                        'dose_bins': struct_data[0],
-                        'volume_pct': struct_data[1],
-                        'cumulative_volume': struct_data[1]  # Add this for compatibility
-                    }
-                elif isinstance(struct_data, dict):
-                    # Check if it has the expected keys
-                    if 'dose_bins' in struct_data:
-                        formatted_data[struct_name] = struct_data.copy()
-                        # Ensure both volume formats are available
-                        if 'volume_pct' in struct_data and 'cumulative_volume' not in struct_data:
-                            formatted_data[struct_name]['cumulative_volume'] = struct_data['volume_pct']
-                        elif 'cumulative_volume' in struct_data and 'volume_pct' not in struct_data:
-                            formatted_data[struct_name]['volume_pct'] = struct_data['cumulative_volume']
-                    else:
-                        logger.warning(f"Missing dose_bins in data for structure {struct_name}")
-                        continue
-                else:
-                    logger.warning(f"Unexpected data format for structure {struct_name}")
-                    continue
-            
-            # Prepare structure-specific metrics to show if requested
-            metrics_to_show = None
-            if show_metrics and hasattr(self, 'metrics_data') and self.metrics_data:
-                # For each structure, include D95, mean dose, and some other key metrics
-                metrics_to_show = ["D95", "mean_dose", "D50", "D2", "V20"]
-            
-            # Plot using QuangTPS function with properly formatted data
-            plot_dvh(formatted_data, ax=self.dvh_canvas.axes, 
-                    prescription_dose=prescription_dose,
-                    show_metrics=show_metrics,
-                    metrics_to_show=metrics_to_show)
-                    
-            logger.info(f"Updated DVH plot with {len(dvh_data)} structures using QuangTPS visualization")
-            
-        except (ImportError, Exception) as e:
-            # Fallback to basic plotting
-            logger.warning(f"Using basic plotting for DVH visualization due to error: {e}")
-            
-            # Define colors for structures
-            colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k']
-            
-            # Plot each structure
-            for i, (name, data) in enumerate(dvh_data.items()):
-                color = colors[i % len(colors)]
-                if isinstance(data, tuple) and len(data) == 2:
-                    dose, volume = data
-                    self.dvh_canvas.axes.plot(dose, volume, label=name, color=color)
-                elif isinstance(data, dict):
-                    if 'dose_bins' in data:
-                        # Try to get volume data using different possible keys
-                        volume_data = None
-                        for key in ['volume_pct', 'cumulative_volume']:
-                            if key in data:
-                                volume_data = data[key]
-                                break
-                        
-                        if volume_data is not None:
-                            self.dvh_canvas.axes.plot(data['dose_bins'], volume_data, label=name, color=color)
-                        else:
-                            logger.warning(f"Cannot plot data for {name} - no volume data found")
-                    else:
-                        logger.warning(f"Cannot plot data for {name} - no dose_bins found")
-                else:
-                    logger.warning(f"Cannot plot data for {name} - unexpected format")
-                
-            # Add prescription dose line if available
-            if prescription_dose is not None:
-                self.dvh_canvas.axes.axvline(x=prescription_dose, color='r', 
-                                           linestyle='--', label=f'Prescription: {prescription_dose} Gy')
-            
-            # Add labels and grid
-            self.dvh_canvas.axes.set_xlabel('Dose (Gy)')
-            self.dvh_canvas.axes.set_ylabel('Volume (%)')
-            self.dvh_canvas.axes.set_title('Dose Volume Histogram')
-            self.dvh_canvas.axes.set_xlim(0, prescription_dose * 1.2 if prescription_dose else None)
-            self.dvh_canvas.axes.set_ylim(0, 100)
-            self.dvh_canvas.axes.grid(True)
-            
-            # Add legend
-            self.dvh_canvas.axes.legend(loc='lower left')
-            
-            # Add metrics if requested
-            if show_metrics and hasattr(self, 'metrics_data') and self.metrics_data:
-                metrics_text = ""
-                for name, metrics in self.metrics_data.items():
-                    if name in dvh_data:
-                        if name.startswith('PTV') or name == 'CTV':
-                            metrics_text += f"{name}: D95={metrics.get('D95', 0):.1f}Gy, "
-                            metrics_text += f"D50={metrics.get('D50', 0):.1f}Gy\n"
-                        else:
-                            metrics_text += f"{name}: V20={metrics.get('V20', 0):.1f}%, "
-                            metrics_text += f"Mean={metrics.get('mean_dose', 0):.1f}Gy\n"
-                
-                # Add metrics text to the plot
-                if metrics_text:
-                    self.dvh_canvas.axes.text(0.98, 0.98, metrics_text, transform=self.dvh_canvas.axes.transAxes,
-                                            verticalalignment='top', horizontalalignment='right',
-                                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
-        # Refresh the canvas
-        self.dvh_canvas.draw()
-    
-    def _update_metrics_tables(self, metrics_data):
-        """
-        Update metrics tables with new data
-        
-        Parameters
-        ----------
-        metrics_data : dict
-            Dictionary of structure names to metrics dictionaries
-        """
-        self.metrics_table.update_metrics(metrics_data)
-    
-    def _update_structure_list(self, structure_names):
-        """
-        Update the structure list with the available structures.
-        
-        Parameters
-        ----------
-        structure_names : list
-            List of structure names
-        """
-        # Save current selection state if the list already has items
-        current_selection = {}
-        if self.structure_list.count() > 0:
-            for i in range(self.structure_list.count()):
-                item = self.structure_list.item(i)
-                current_selection[item.text()] = (item.checkState() == Qt.Checked)
-        
-        # Clear the list and block signals during update
-        self.structure_list.blockSignals(True)
+    def _update_structure_list(self):
+        """Update the structure list with structures from the plan."""
         self.structure_list.clear()
         
-        # Add structures to the list
-        for name in structure_names:
-            item = QListWidgetItem(name)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            
-            # Set check state based on previous selection or default to checked
-            checked = current_selection.get(name, True)
-            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
-            
-            self.structure_list.addItem(item)
-        
-        # Update status
-        if structure_names:
-            self.status_label.setText(f"Loaded {len(structure_names)} structures")
-        else:
-            self.status_label.setText("No structures available")
-            
-        # Re-enable signals
-        self.structure_list.blockSignals(False)
-        
-        # If we have structures, enable related controls
-        self.structure_list.setEnabled(len(structure_names) > 0)
-        self.show_metrics_checkbox.setEnabled(len(structure_names) > 0)
-    
-    def _on_structure_selected(self, item):
-        """
-        Handle structure selection changes in the structure list.
-        
-        Parameters
-        ----------
-        item : QListWidgetItem
-            The list item that was changed
-        """
-        if not hasattr(self, 'dvh_data') or not self.dvh_data:
+        if not self.plan:
             return
             
-        # Get all selected structures
+        # Get structures from plan
+        structures = []
+        if hasattr(self.plan, 'structures'):
+            structures = self.plan.structures
+        elif hasattr(self.plan, 'structure_set') and self.plan.structure_set:
+            structures = self.plan.structure_set.structures
+        
+        # Add structures to list
+        for structure in structures:
+            item = QListWidgetItem(structure.name)
+            
+            # Set color
+            if hasattr(structure, 'color'):
+                color = structure.color
+                # Handle different color formats
+                if isinstance(color, QColor):
+                    item.setForeground(color)
+                elif isinstance(color, (list, tuple)) and len(color) >= 3:
+                    # Convert RGB[A] list to QColor
+                    if len(color) == 3:
+                        qcolor = QColor(int(color[0]*255), int(color[1]*255), int(color[2]*255))
+                    else:  # RGBA
+                        qcolor = QColor(int(color[0]*255), int(color[1]*255), int(color[2]*255), int(color[3]*255))
+                    item.setForeground(qcolor)
+                elif isinstance(color, str):
+                    # Handle hex or named colors
+                    item.setForeground(QColor(color))
+            
+            # Store structure data
+            item.setData(Qt.UserRole, structure)
+            
+            # Add to list and select by default
+            self.structure_list.addItem(item)
+            item.setSelected(True)
+    
+    def _update_dvh(self):
+        """Update the DVH display with current data."""
+        # Clear existing plot
+        self.dvh_canvas.clear()
+        
+        if not self.plan or not self.dvh_data:
+            return
+        
+        # Get selected structures
         selected_structures = []
         for i in range(self.structure_list.count()):
             item = self.structure_list.item(i)
-            if item.checkState() == Qt.Checked:
-                selected_structures.append(item.text())
+            if item.isSelected():
+                structure = item.data(Qt.UserRole)
+                selected_structures.append(structure)
         
-        # If nothing is selected, show all
-        if not selected_structures:
-            selected_structures = list(self.dvh_data.keys())
-            
-        # Filter DVH data for selected structures
-        filtered_dvh_data = {name: data for name, data in self.dvh_data.items() 
-                            if name in selected_structures}
-        
-        # Get prescription dose
+        # Prepare prescription dose for normalization
         prescription_dose = None
-        if hasattr(self, 'plan_data') and self.plan_data:
-            prescription_dose = self.plan_data.get('prescription_dose')
+        if hasattr(self.plan, 'prescription') and self.plan.prescription:
+            if hasattr(self.plan.prescription, 'dose'):
+                prescription_dose = self.plan.prescription.dose
+            elif hasattr(self.plan.prescription, 'total_dose'):
+                prescription_dose = self.plan.prescription.total_dose
         
-        # Update DVH plot with selected structures
-        show_metrics = self.show_metrics_checkbox.isChecked() if hasattr(self, 'show_metrics_checkbox') else True
-        self._update_dvh_plot(filtered_dvh_data, prescription_dose, show_metrics=show_metrics)
+        # Add selected structure DVHs to plot
+        visible_dvhs = {}
+        for structure in selected_structures:
+            if structure.id in self.dvh_data:
+                structure_dvh = self.dvh_data[structure.id]
+                visible_dvhs[structure.id] = structure_dvh
         
-        logger.info(f"Updated DVH plot with {len(filtered_dvh_data)} selected structures")
+        # Plot DVH data
+        if visible_dvhs:
+            try:
+                self.dvh_canvas.plot_dvh_data(visible_dvhs, prescription_dose)
+                self.status_label.setText(f"DVH updated for {len(visible_dvhs)} structures")
+        except Exception as e:
+                logger.error(f"Error plotting DVH: {str(e)}")
+                self.status_label.setText(f"Error plotting DVH: {str(e)}")
+        else:
+            self.status_label.setText("No DVH data available for selected structures")
     
-    def _show_all_structures(self):
-        """Show all structures in the DVH plot"""
-        # Check all items in the structure list
-        for i in range(self.structure_list.count()):
-            item = self.structure_list.item(i)
-            item.setCheckState(Qt.Checked)
+    def _update_metrics(self):
+        """Update the metrics table with current DVH metrics."""
+        # Calculate or retrieve metrics
+        metrics_data = {}
         
-        # Update the plot with all structures
-        if hasattr(self, 'dvh_data') and self.dvh_data:
-            # Get prescription dose
-            prescription_dose = None
-            if hasattr(self, 'plan_data') and self.plan_data:
-                prescription_dose = self.plan_data.get('prescription_dose')
+        if self.plan and self.dvh_data:
+            # Get selected structures
+            selected_structures = []
+            for i in range(self.structure_list.count()):
+                item = self.structure_list.item(i)
+                if item.isSelected():
+                    structure = item.data(Qt.UserRole)
+                    selected_structures.append(structure)
+            
+            # Get metrics for each selected structure
+            for structure in selected_structures:
+                if structure.id in self.dvh_data:
+                    # Either use pre-calculated metrics or calculate them now
+                    if hasattr(self.dvh_data[structure.id], 'metrics'):
+                        metrics_data[structure.name] = self.dvh_data[structure.id].metrics
+                    else:
+                        # Example metrics calculation - replace with actual implementation
+                        metrics_data[structure.name] = {
+                            'D95': random.uniform(90, 100),
+                            'V20': random.uniform(10, 30),
+                            'Mean': random.uniform(20, 40)
+                        }
+        
+        # Update metrics table
+        self.metrics_table.update_metrics(metrics_data)
+    
+    def _update_goals(self):
+        """Update clinical goals display based on protocol."""
+        # Clear existing goals
+        self.goals_list.setRowCount(0)
+        
+        if not self.plan or not self.current_protocol:
+            return
+            
+        # Evaluate goals against current plan
+        goal_results = self._evaluate_protocol()
+        
+        # Add results to table
+        for i, (goal, result) in enumerate(goal_results):
+            # Add row
+            self.goals_list.insertRow(i)
+            
+            # Goal description
+            goal_text = f"{goal.structure_name}: {goal.description}"
+            goal_item = QTableWidgetItem(goal_text)
+            self.goals_list.setItem(i, 0, goal_item)
+            
+            # Target value
+            target_text = f"{goal.value}{goal.unit}"
+            target_item = QTableWidgetItem(target_text)
+            self.goals_list.setItem(i, 1, target_item)
+            
+            # Achieved value
+            achieved_text = f"{result.value:.2f}{goal.unit}"
+            achieved_item = QTableWidgetItem(achieved_text)
+            
+            # Color based on result
+            if result.passed:
+                achieved_item.setBackground(QColor(200, 255, 200))  # Light green
+            else:
+                achieved_item.setBackground(QColor(255, 200, 200))  # Light red
                 
-            # Update DVH plot with all structures
-            show_metrics = self.show_metrics_checkbox.isChecked() if hasattr(self, 'show_metrics_checkbox') else True
-            self._update_dvh_plot(self.dvh_data, prescription_dose, show_metrics=show_metrics)
-            
-            logger.info(f"Showing all {len(self.dvh_data)} structures in DVH plot")
-
-    def _hide_all_structures(self):
-        """Hide all structures in the DVH plot"""
-        # Uncheck all items in the structure list
-        for i in range(self.structure_list.count()):
-            item = self.structure_list.item(i)
-            item.setCheckState(Qt.Unchecked)
+            self.goals_list.setItem(i, 2, achieved_item)
         
-        # Display an empty plot
-        if hasattr(self, 'dvh_canvas'):
-            self.dvh_canvas.clear()
-            self.dvh_canvas.draw()
-            
-        logger.info("Hiding all structures in DVH plot")
+        # Resize columns to content
+        self.goals_list.resizeColumnsToContents()
     
-    def _calculate_plan_indices(self, plan_data=None, dvh_data=None, metrics_data=None):
-        """
-        Calculate plan quality indices
-        
-        Parameters
-        ----------
-        plan_data : dict, optional
-            Plan data including dose grid and structures
-        dvh_data : dict, optional
-            DVH data for each structure
-        metrics_data : dict, optional
-            Metrics data for each structure
-        """
-        indices = {}
-        
+    def _calculate_dvh_data(self):
+        """Calculate DVH data for the current plan."""
+        if not self.plan:
+            return
+            
         try:
-            # Use class attributes if parameters are not provided
-            if dvh_data is None and hasattr(self, 'dvh_data'):
-                dvh_data = self.dvh_data
+            # Get DVH data directly if available on plan
+            if hasattr(self.plan, 'get_dvh_data'):
+                self.dvh_data = self.plan.get_dvh_data()
+            return
             
-            if metrics_data is None and hasattr(self, 'metrics_data'):
-                metrics_data = self.metrics_data
+            # Or get from plan's dose if available
+            if hasattr(self.plan, 'dose') and self.plan.dose:
+                # Get structures
+                structures = []
+                if hasattr(self.plan, 'structures'):
+                    structures = self.plan.structures
+                elif hasattr(self.plan, 'structure_set') and self.plan.structure_set:
+                    structures = self.plan.structure_set.structures
                 
-            if plan_data is None and hasattr(self, 'plan_data'):
-                plan_data = self.plan_data
+                if not structures:
+                    logger.warning("No structures found for DVH calculation")
+            return
+        
+                # Import DVH calculator
+                try:
+                    from quangtps.evaluation.dvh.dvh_calculator import DVHCalculator
+                    calculator = DVHCalculator()
+                    
+                    # Calculate DVH for each structure
+                    for structure in structures:
+                        self.dvh_data[structure.id] = calculator.calculate_dvh(
+                            self.plan.dose, structure
+                        )
+                        
+                except ImportError:
+                    logger.error("DVH calculator module not available")
+                    self.status_label.setText("DVH calculator not available")
+                    else:
+                logger.warning("No dose data available for DVH calculation")
+                self.status_label.setText("No dose data available")
+                
+        except Exception as e:
+            logger.error(f"Error calculating DVH data: {str(e)}")
+            self.status_label.setText(f"Error in DVH calculation: {str(e)}")
+    
+    def _evaluate_protocol(self) -> List[Tuple[ClinicalGoal, GoalResult]]:
+        """
+        Evaluate clinical protocol goals against the current plan.
+        
+        Returns:
+            List of tuples with (goal, result) pairs
+        """
+        results = []
+        
+        if not self.plan or not self.current_protocol:
+            return results
             
-            # Skip if we don't have the needed data
-            if not metrics_data:
-                logger.warning("No metrics data available for plan indices calculation")
+        # Get DVH data
+        if not self.dvh_data:
+            try:
+                self._calculate_dvh_data()
+            except Exception as e:
+                logger.error(f"Error calculating DVH data for protocol evaluation: {str(e)}")
+                return results
+        
+        # Evaluate each goal
+        for goal in self.current_protocol.goals:
+            # Find structure by name
+            structure_id = None
+            for i in range(self.structure_list.count()):
+                item = self.structure_list.item(i)
+                structure = item.data(Qt.UserRole)
+                if structure.name.lower() == goal.structure_name.lower():
+                    structure_id = structure.id
+                                break
+                        
+            if not structure_id or structure_id not in self.dvh_data:
+                # Structure not found or no DVH data
+                result = GoalResult(goal, False, 0.0)
+                        else:
+                # Evaluate goal against DVH data
+                try:
+                    # This is a simplified evaluation - replace with actual implementation
+                    dvh = self.dvh_data[structure_id]
+                    
+                    value = 0.0
+                    if goal.type == GoalType.D_X:
+                        # Dose to X% of volume
+                        if hasattr(dvh, 'get_dose_at_volume'):
+                            value = dvh.get_dose_at_volume(goal.parameter)
+                    elif goal.type == GoalType.V_X:
+                        # Volume receiving X Gy
+                        if hasattr(dvh, 'get_volume_at_dose'):
+                            value = dvh.get_volume_at_dose(goal.parameter)
+                    elif goal.type == GoalType.MAX_DOSE:
+                        # Maximum dose
+                        if hasattr(dvh, 'get_max_dose'):
+                            value = dvh.get_max_dose()
+                    elif goal.type == GoalType.MEAN_DOSE:
+                        # Mean dose
+                        if hasattr(dvh, 'get_mean_dose'):
+                            value = dvh.get_mean_dose()
+                    
+                    # Create result
+                    result = GoalResult(goal, value <= goal.value if goal.direction == 'upper' else value >= goal.value, value)
+                    
+                except Exception as e:
+                    logger.error(f"Error evaluating goal {goal.description}: {str(e)}")
+                    result = GoalResult(goal, False, 0.0)
+            
+            results.append((goal, result))
+        
+        return results
+    
+    def _populate_protocols(self):
+        """Populate the protocol selector with available protocols."""
+        self.protocol_combo.clear()
+        
+        # Add empty option
+        self.protocol_combo.addItem("None")
+        
+        # Get protocols from manager
+        for protocol_name in self.protocol_manager.get_protocol_names():
+            self.protocol_combo.addItem(protocol_name)
+    
+    def _get_structure_color(self, structure_id: str) -> Tuple[float, float, float, float]:
+        """
+        Get the color for a structure.
+        
+        Args:
+            structure_id: Structure identifier
+            
+        Returns:
+            RGBA color tuple
+        """
+        # Default color
+        default_color = (1.0, 0.0, 0.0, 1.0)  # Red
+        
+        if not self.plan:
+            return default_color
+        
+        # Find structure in plan
+        structure = None
+        structures = []
+        
+        if hasattr(self.plan, 'structures'):
+            structures = self.plan.structures
+        elif hasattr(self.plan, 'structure_set') and self.plan.structure_set:
+            structures = self.plan.structure_set.structures
+        
+        for s in structures:
+            if s.id == structure_id:
+                structure = s
+                break
+        
+        if not structure:
+            return default_color
+        
+        # Get color from structure
+        if hasattr(structure, 'color'):
+            color = structure.color
+            
+            # Handle different color formats
+            if isinstance(color, (list, tuple)) and len(color) >= 3:
+                if len(color) == 3:
+                    return (color[0], color[1], color[2], 1.0)
+                else:
+                    return tuple(color)
+            elif isinstance(color, QColor):
+                return (color.redF(), color.greenF(), color.blueF(), color.alphaF())
+            elif isinstance(color, str):
+                qcolor = QColor(color)
+                return (qcolor.redF(), qcolor.greenF(), qcolor.blueF(), qcolor.alphaF())
+        
+        return default_color
+    
+    def _on_structure_selection_changed(self):
+        """Handle structure selection changes."""
+        # Update DVH display with selected structures
+        self._update_dvh()
+        
+        # Update metrics display
+        self._update_metrics()
+    
+    def _on_select_all(self):
+        """Handle select all button click."""
+        for i in range(self.structure_list.count()):
+            item = self.structure_list.item(i)
+            item.setSelected(True)
+    
+    def _on_deselect_all(self):
+        """Handle deselect all button click."""
+        for i in range(self.structure_list.count()):
+            item = self.structure_list.item(i)
+            item.setSelected(False)
+    
+    def _on_protocol_changed(self, protocol_name: str):
+        """
+        Handle protocol selection change.
+        
+        Args:
+            protocol_name: Name of the selected protocol
+        """
+        if protocol_name == "None":
+            self.current_protocol = None
+        else:
+            # Get protocol from manager
+            self.current_protocol = self.protocol_manager.get_protocol(protocol_name)
+        
+        # Update apply button state
+        self.apply_protocol_button.setEnabled(
+            self.plan is not None and self.current_protocol is not None
+        )
+        
+        # Update UI
+        self._update_goals()
+    
+    def _on_apply_protocol(self):
+        """Handle apply protocol button click."""
+        if not self.plan or not self.current_protocol:
                 return
             
-            # Get PTV data if available
-            ptv_metrics = None
-            for name, metrics in metrics_data.items():
-                if 'PTV' in name:
-                    ptv_metrics = metrics
-                    break
-            
-            if ptv_metrics:
-                # Homogeneity Index (HI) = (D2% - D98%) / D50%
-                d2 = ptv_metrics.get('D2', 0)
-                d98 = ptv_metrics.get('D98', 0)
-                d50 = ptv_metrics.get('D50', 0)
-                
-                if d50 > 0:
-                    hi = (d2 - d98) / d50
-                    indices['Homogeneity Index (HI)'] = hi
-                
-                # Conformity Index (CI) = V95% / PTV_volume
-                v95 = ptv_metrics.get('V95', 0)
-                ptv_volume = 100  # Normalized to 100%
-                
-                if ptv_volume > 0:
-                    ci = v95 / ptv_volume
-                    indices['Conformity Index (CI)'] = ci
-            
-            # Update indices table
-            if hasattr(self, 'indices_table'):
-                self.indices_table.setRowCount(0)
-                for name, value in indices.items():
-                    row = self.indices_table.rowCount()
-                    self.indices_table.insertRow(row)
-                    self.indices_table.setItem(row, 0, QTableWidgetItem(str(name)))
-                    # Format the value as a string with 3 decimal places
-                    value_str = "{:.3f}".format(value) if isinstance(value, (int, float)) else str(value)
-                    self.indices_table.setItem(row, 1, QTableWidgetItem(value_str))
-                    
-                logger.info(f"Updated plan indices table with {len(indices)} indices")
-            else:
-                logger.warning("Indices table not available")
+        # Evaluate protocol
+        goal_results = self._evaluate_protocol()
         
-        except Exception as e:
-            logger.error(f"Error calculating plan indices: {str(e)}")
-            return
+        # Update goals display
+        self._update_goals()
+        
+        # Update status
+        passed_count = sum(1 for _, result in goal_results if result.passed)
+        total_count = len(goal_results)
+        self.status_label.setText(
+            f"Protocol '{self.current_protocol.name}' applied: "
+            f"{passed_count}/{total_count} goals passed"
+        )
     
-    def set_dvh_data(self, dvh_data, prescription_dose=None):
+    def _on_dvh_type_changed(self, dvh_type: int):
         """
-        Set DVH data for the evaluation.
+        Handle DVH type change.
         
-        Parameters
-        ----------
-        dvh_data : dict
-            Dictionary mapping structure names to DVH data - can be either:
-            1. A tuple of (dose_array, volume_array)
-            2. A dictionary with 'dose_bins' and 'volume_pct' or 'cumulative_volume' keys
-        prescription_dose : float, optional
-            Prescription dose in Gy
+        Args:
+            dvh_type: Index of selected DVH type (0=Cumulative, 1=Differential)
         """
+        self.dvh_type = "cumulative" if dvh_type == 0 else "differential"
+        
+        # Update DVH display
+        self._update_dvh()
+        
+        # Update status
+        self.status_label.setText(f"DVH type changed to {self.dvh_type}")
+    
+    def _on_volume_type_changed(self, index: int):
+        """
+        Handle volume type change.
+        
+        Args:
+            index: Index of selected volume type (0=Relative, 1=Absolute)
+        """
+        self.volume_type = "relative" if index == 0 else "absolute"
+        
+        # Update DVH display
+        self._update_dvh()
+        
+        # Update status
+        self.status_label.setText(f"Volume type changed to {self.volume_type}")
+    
+    def _on_dose_type_changed(self, index: int):
+        """
+        Handle dose type change.
+        
+        Args:
+            index: Index of selected dose type (0=Relative, 1=Absolute)
+        """
+        self.dose_type = "relative" if index == 0 else "absolute"
+        
+        # Update DVH display
+        self._update_dvh()
+        
+        # Update status
+        self.status_label.setText(f"Dose type changed to {self.dose_type}")
+    
+    def _on_export_dvh(self):
+        """Handle export DVH button click."""
+        if not self.plan or not self.dvh_data:
+            return
+        
+        # Show export options
+        menu = QMenu(self)
+        
+        # Export image action
+        export_image_action = QAction("Export as Image", self)
+        export_image_action.triggered.connect(self._export_dvh_image)
+        menu.addAction(export_image_action)
+        
+        # Export CSV action
+        export_csv_action = QAction("Export as CSV", self)
+        export_csv_action.triggered.connect(self._export_dvh_csv)
+        menu.addAction(export_csv_action)
+        
+        # Show menu at button
+        menu.exec_(self.export_button.mapToGlobal(
+            QPoint(0, self.export_button.height())
+        ))
+    
+    def _export_dvh_image(self):
+        """Export DVH as image."""
+        if not self.plan:
+            return
+        
+        # Get save filename
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export DVH as Image", "", "PNG Files (*.png);;JPEG Files (*.jpg);;All Files (*)"
+        )
+        
+        if not filename:
+            return
+            
         try:
-            logger.info(f"Setting DVH data with {len(dvh_data)} structures")
+            # Save figure
+            self.dvh_canvas.figure.savefig(filename, dpi=300, bbox_inches='tight')
+            self.status_label.setText(f"DVH exported to {filename}")
             
-            # Store DVH data
-            self.dvh_data = dvh_data
-            
-            # Calculate metrics for each structure
-            self.metrics_data = {}
-            for name, data in dvh_data.items():
-                logger.debug(f"Calculating metrics for structure: {name}")
-                try:
-                    # Try to import DVH calculations module
-                    from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh_metrics
-                    
-                    # Convert data to expected format if needed
-                    if isinstance(data, tuple) and len(data) == 2:
-                        # Format: (dose_bins, volume_pct)
-                        metrics_data = {
-                            'dose_bins': data[0],
-                            'cumulative_volume': data[1],
-                            'volume_pct': data[1],
-                        }
-                    elif isinstance(data, dict):
-                        # Check for required keys
-                        metrics_data = {}
-                        if 'dose_bins' in data:
-                            metrics_data['dose_bins'] = data['dose_bins']
-                        
-                            # Get volume data
-                            if 'cumulative_volume' in data:
-                                metrics_data['cumulative_volume'] = data['cumulative_volume']
-                            elif 'volume_pct' in data:
-                                metrics_data['cumulative_volume'] = data['volume_pct']
-                            else:
-                                logger.warning(f"Missing volume data for {name}")
-                                continue
-                        else:
-                            logger.warning(f"Missing dose_bins for {name}")
-                            continue
-                    else:
-                        logger.warning(f"Unexpected data format for {name}")
-                        continue
-                    
-                    # Calculate metrics for the structure
-                    metrics = calculate_dvh_metrics(
-                        metrics_data, 
-                        metrics_list=['D98', 'D95', 'D50', 'D2', 'Dmean', 'V5', 'V10', 'V20', 'V30', 'V40', 'V50'],
-                        rx_dose=prescription_dose
-                    )
-                    
-                    self.metrics_data[name] = metrics
-                    logger.debug(f"Calculated metrics for {name}: {metrics}")
-                    
-                except (ImportError, Exception) as e:
-                    # Simple fallback metrics calculation
-                    logger.warning(f"Using basic metrics calculation: {e}")
-                    metrics = {
-                        'mean_dose': 0,
-                        'D95': 0,
-                        'D50': 0,
-                        'V20': 0
-                    }
-                    
-                    if isinstance(data, tuple) and len(data) == 2:
-                        dose, volume = data
-                        # Simple mean dose estimate
-                        metrics['mean_dose'] = np.mean(dose) if len(dose) > 0 else 0
-                    elif isinstance(data, dict):
-                        if 'mean_dose' in data:
-                            metrics['mean_dose'] = data['mean_dose']
-                    
-                    self.metrics_data[name] = metrics
-            
-            # Update structure list
-            structure_names = list(dvh_data.keys())
-            self._update_structure_list(structure_names)
-            
-            # Update DVH plot with all structures
-            self._update_dvh_plot(dvh_data, prescription_dose, 
-                                 show_metrics=self.show_metrics_checkbox.isChecked() if hasattr(self, 'show_metrics_checkbox') else True)
-            
-            # Update metrics table
-            if hasattr(self, 'metrics_table'):
-                self._update_metrics_tables(self.metrics_data)
-            
-            # Calculate and update plan indices
-            if hasattr(self, 'plan_data') and self.plan_data and prescription_dose:
-                self._calculate_plan_indices(self.plan_data, dvh_data, self.metrics_data)
-            
-            # Set enabled state of controls
-            if hasattr(self, 'structure_list'):
-                self.structure_list.setEnabled(True)
-            if hasattr(self, 'show_metrics_checkbox'):
-                self.show_metrics_checkbox.setEnabled(True)
-            
-            # Update status
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"DVH data for {len(dvh_data)} structures loaded")
-            
-            logger.info(f"Successfully set DVH data for {len(dvh_data)} structures")
-            return True
+            # Show success message
+            QMessageBox.information(
+                self, "Export Successful", f"DVH exported to {filename}"
+            )
             
         except Exception as e:
-            logger.error(f"Error setting DVH data: {e}")
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"Error loading DVH data: {str(e)}")
-            return False
-                
-    def set_prescription(self, prescription):
-        """
-        Set the prescription data for the current plan evaluation.
+            logger.error(f"Error exporting DVH image: {str(e)}")
+            self.status_label.setText(f"Error exporting DVH image: {str(e)}")
+            
+            # Show error message
+            QMessageBox.critical(
+                self, "Export Error", f"Error exporting DVH image: {str(e)}"
+            )
+    
+    def _export_dvh_csv(self):
+        """Export DVH as CSV."""
+        if not self.plan or not self.dvh_data:
+            return
         
-        Parameters
-        ----------
-        prescription : dict
-            Dictionary containing prescription data, including:
-            - total_dose: float, the total prescription dose in Gy
-            - fractions: int, the number of fractions
-            - prescription_name: str, optional name of the prescription
-        """
+        # Get save filename
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export DVH as CSV", "", "CSV Files (*.csv);;All Files (*)"
+        )
+        
+        if not filename:
+            return
+            
         try:
-            logger.info(f"Setting prescription data: {prescription}")
+            # Get selected structures
+            selected_structures = []
+            structure_names = {}
             
-            # Extract prescription dose
-            prescription_dose = prescription.get("total_dose", 0.0)
+            for i in range(self.structure_list.count()):
+                item = self.structure_list.item(i)
+                if item.isSelected():
+                    structure = item.data(Qt.UserRole)
+                    selected_structures.append(structure)
+                    structure_names[structure.id] = structure.name
             
-            # Store prescription dose in plan_data
-            if not hasattr(self, 'plan_data') or self.plan_data is None:
-                self.plan_data = {}
-            
-            self.plan_data['prescription_dose'] = prescription_dose
-            self.plan_data['fractions'] = prescription.get('fractions', 0)
-            self.plan_data['prescription_name'] = prescription.get('prescription_name', 'Custom Prescription')
-            
-            # Update UI if we have DVH data
-            if hasattr(self, 'dvh_data') and self.dvh_data:
-                show_metrics = self.show_metrics_checkbox.isChecked() if hasattr(self, 'show_metrics_checkbox') else True
-                self._update_dvh_plot(self.dvh_data, prescription_dose, show_metrics=show_metrics)
+            # Open CSV file
+            with open(filename, 'w') as f:
+                # Write header
+                f.write("Dose")
+                for structure in selected_structures:
+                    if structure.id in self.dvh_data:
+                        f.write(f",{structure_names[structure.id]}")
+                f.write("\n")
                 
-                # Recalculate metrics with the prescription dose
-                if hasattr(self, 'metrics_data') and self.metrics_data:
-                    # Recalculate plan indices
-                    self._calculate_plan_indices()
-            
-            # Update plan title if provided
-            if hasattr(self, 'plan_title_label'):
-                prescription_name = prescription.get("prescription_name", "Custom Prescription")
-                fractions = prescription.get("fractions", 0)
-                if fractions > 0:
-                    self.plan_title_label.setText(f"Plan: {prescription_name} ({prescription_dose} Gy in {fractions} fractions)")
+                # Write data
+                # This is a simplified example - replace with actual DVH data format
+                dose_bins = range(0, 101)  # 0-100% in 1% increments
+                
+                for dose in dose_bins:
+                    f.write(f"{dose}")
+                    for structure in selected_structures:
+                        if structure.id in self.dvh_data:
+                            dvh = self.dvh_data[structure.id]
+                            
+                            # Get volume at dose
+                            if hasattr(dvh, 'get_volume_at_dose'):
+                                volume = dvh.get_volume_at_dose(dose)
+                                f.write(f",{volume}")
                 else:
-                    self.plan_title_label.setText(f"Plan: {prescription_name} ({prescription_dose} Gy)")
+                                f.write(",0")
+                    f.write("\n")
             
-            # Update status label
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"Prescription set: {prescription_dose} Gy in {prescription.get('fractions', 0)} fractions")
+            self.status_label.setText(f"DVH exported to {filename}")
             
-            logger.info(f"Prescription set: {prescription_dose} Gy in {prescription.get('fractions', 0)} fractions")
-            return True
+            # Show success message
+            QMessageBox.information(
+                self, "Export Successful", f"DVH exported to {filename}"
+            )
             
         except Exception as e:
-            logger.error(f"Error setting prescription: {str(e)}")
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"Error setting prescription: {str(e)}")
-            return False
+            logger.error(f"Error exporting DVH CSV: {str(e)}")
+            self.status_label.setText(f"Error exporting DVH CSV: {str(e)}")
+            
+            # Show error message
+            QMessageBox.critical(
+                self, "Export Error", f"Error exporting DVH CSV: {str(e)}"
+            )

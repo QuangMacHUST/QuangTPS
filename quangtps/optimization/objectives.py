@@ -60,7 +60,7 @@ class ObjectiveFunction(ABC):
             Dose distribution
         structure_mask : ndarray
             Binary mask of the structure
-        
+            
         Returns
         -------
         float
@@ -79,7 +79,7 @@ class ObjectiveFunction(ABC):
             Dose distribution
         structure_mask : ndarray
             Binary mask of the structure
-        
+            
         Returns
         -------
         ndarray
@@ -255,8 +255,8 @@ class UpperDoseObjective(DoseObjective):
         """Calculate gradient."""
         gradient = np.zeros_like(dose)
         if np.sum(structure_mask) == 0:
-            return gradient
-        
+        return gradient
+
         masked_indices = structure_mask > 0
         masked_dose = dose[masked_indices]
         
@@ -395,8 +395,8 @@ class MinDoseObjective(DoseObjective):
         # Find the minimum dose value and its index
         min_dose = np.min(masked_dose)
         if min_dose >= self.dose:
-            return gradient
-        
+        return gradient
+
         # Only apply gradient to the voxel(s) with minimum dose
         min_indices = np.where(dose == min_dose)
         gradient[min_indices] = -2 * (self.dose - min_dose) * self.weight
@@ -591,8 +591,8 @@ class ConformityObjective(DoseObjective):
         """Calculate gradient."""
         gradient = np.zeros_like(dose)
         if np.sum(structure_mask) == 0:
-            return gradient
-        
+        return gradient
+
         # Identify voxels just below and just above the threshold
         masked_indices = structure_mask > 0
         masked_dose = dose[masked_indices]
@@ -675,8 +675,8 @@ class HomogeneityObjective(DoseObjective):
         d50_index = int(0.5 * len(sorted_indices))
         
         if d2_index >= len(sorted_indices) or d98_index >= len(sorted_indices) or d50_index >= len(sorted_indices):
-            return gradient
-        
+        return gradient
+
         d2_idx = sorted_indices[d2_index]
         d98_idx = sorted_indices[d98_index]
         d50_idx = sorted_indices[d50_index]
@@ -752,7 +752,7 @@ class ObjectiveCollection:
             Dose distribution
         structures : dict
             Dictionary mapping structure IDs to masks
-        
+            
         Returns
         -------
         float
@@ -793,7 +793,7 @@ class ObjectiveCollection:
             Dose distribution
         structures : dict
             Dictionary mapping structure IDs to masks
-        
+            
         Returns
         -------
         ndarray
@@ -816,7 +816,7 @@ class ObjectiveCollection:
             gradient += obj_gradient
         
         return gradient
-    
+
     def to_dict(self):
         """
         Convert the collection to a dictionary.
@@ -834,14 +834,14 @@ class ObjectiveCollection:
     def from_dict(cls, data):
         """
         Create a collection from a dictionary.
-        
-        Parameters
-        ----------
+    
+    Parameters
+    ----------
         data : dict
             Dictionary with collection data
         
-        Returns
-        -------
+    Returns
+    -------
         ObjectiveCollection
             Created collection
         """

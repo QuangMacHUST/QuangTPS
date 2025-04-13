@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python.analysis.extraPaths": ["./quangtps"],
+		"python.envFile": "${workspaceFolder}/.env"
+	}
+}

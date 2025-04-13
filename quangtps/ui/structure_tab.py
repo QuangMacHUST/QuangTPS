@@ -318,7 +318,7 @@ class StructureTab(QWidget):
         
         # Initialize UI
         self.init_ui()
-    
+        
     def init_ui(self):
         """Initialize the user interface."""
         # Main layout
@@ -591,7 +591,7 @@ class StructureTab(QWidget):
             
             # Emit signal
             self.structureSetChanged.emit(structure_set)
-        else:
+            else:
             # Clear UI if no structure set
             self.structure_list.clear()
             self.struct_set_name.setText("None")
@@ -634,7 +634,7 @@ class StructureTab(QWidget):
         
         if not ok or not name:
             return
-        
+            
         # Select color
         color_dialog = QColorDialog(self)
         color_dialog.setOption(QColorDialog.ShowAlphaChannel, False)
@@ -673,15 +673,15 @@ class StructureTab(QWidget):
         
         # Add to list widget
         self.add_structure_to_list(structure)
-        
-        # Select the new structure
-        for i in range(self.structure_list.count()):
+                        
+                        # Select the new structure
+                        for i in range(self.structure_list.count()):
             item = self.structure_list.item(i)
             if item.data(Qt.UserRole) == structure:
                 self.structure_list.setCurrentItem(item)
-                break
-        
-        # Emit signal
+                                break
+                        
+                        # Emit signal
         self.structureAdded.emit(structure)
     
     def on_structure_selection_changed(self, current, previous):
@@ -702,7 +702,7 @@ class StructureTab(QWidget):
             
             # Emit signal
             self.structureSelectionChanged.emit(structure)
-        else:
+                    else:
             self.selected_structure = None
             
             # Update UI
@@ -730,7 +730,7 @@ class StructureTab(QWidget):
                 voxel_volume = voxel_size[0] * voxel_size[1] * voxel_size[2] / 1000  # Convert to cc
                 structure_volume = self.selected_structure.get_volume(voxel_volume)
                 self.prop_volume.setText(f"Volume: {structure_volume:.2f} cc")
-            else:
+                else:
                 self.prop_volume.setText("Volume: - cc")
         else:
             self.prop_name.setText("Name: -")
@@ -742,7 +742,7 @@ class StructureTab(QWidget):
         """Delete the currently selected structure."""
         if not self.selected_structure:
             return
-        
+            
         # Confirm deletion
         confirm = QMessageBox.question(
             self, "Confirm Deletion",
@@ -775,7 +775,7 @@ class StructureTab(QWidget):
         """Edit properties of the selected structure."""
         if not self.selected_structure:
             return
-        
+            
         # Get new name
         name, ok = QInputDialog.getText(
             self, "Edit Structure", "Structure name:",
@@ -784,7 +784,7 @@ class StructureTab(QWidget):
         
         if not ok:
             return
-        
+            
         if name and name != self.selected_structure.name:
             self.selected_structure.name = name
             
@@ -817,11 +817,11 @@ class StructureTab(QWidget):
         """Show context menu for structures."""
         if not self.structure_list.count():
             return
-        
+            
         selected_item = self.structure_list.itemAt(position)
         if not selected_item:
             return
-        
+            
         # Create context menu
         context_menu = QMenu(self)
         

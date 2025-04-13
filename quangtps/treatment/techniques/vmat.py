@@ -11,174 +11,257 @@ the shape of the radiation beam and dose rate.
 
 import uuid
 import logging
+from typing import List, Dict, Any, Optional, Tuple, Union, TypeVar
+from dataclasses import dataclass
+from enum import Enum
 import numpy as np
-from typing import List, Dict, Any, Optional
+from numpy.typing import NDArray
 
 from quangtps.treatment.mlc.mlc_model import MLCModel
 from quangtps.treatment.techniques.technique_interface import BaseTreatmentTechnique, TechniqueCategory
+from quangtps.structures.structure import Structure
+from quangtps.dose.dose_grid import DoseGrid
+from quangtps.dose.dose_calculator import DoseCalculator
+from quangtps.treatment.mlc.mlc_model_library import MLCModelLibrary
+from quangtps.patient.patient_data import PatientData
+from quangtps.prescription.prescription import Prescription
+from quangtps.dose.dose_constraints import DoseConstraints
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
+
+@dataclass
+class Arc:
+    """Arc parameters for VMAT delivery."""
+    id: str
+    name: str
+    start_angle: float
+    stop_angle: float
+    rotation_direction: str
+    energy: str
+    dose_rate: float
+
+@dataclass 
+class ControlPoint:
+    """Control point parameters for VMAT delivery."""
+    index: int
+    gantry_angle: float
+    mlc_positions: List[List[float]]
+    cumulative_meterset: float
+
+@dataclass
+class DoseObjective:
+    """Dose objective parameters."""
+    structure: str
+    type: str
+    dose: float
+    volume: Optional[float]
+    weight: float = 1.0
+
+@dataclass
+class DoseConstraint:
+    """Dose constraint parameters."""
+    structure: str
+    type: str
+    dose: float
+    volume: Optional[float]
 
 class VMAT(BaseTreatmentTechnique):
     """
     Class representing a Volumetric Modulated Arc Therapy (VMAT) plan.
     
-    VMAT is an advanced form of intensity-modulated radiation therapy (IMRT) that 
-    delivers radiation by rotating the gantry in an arc while simultaneously varying 
-    three parameters:
-    
-    1. The shape of the radiation beam using multi-leaf collimators (MLCs)
-    2. The dose rate
-    3. The speed of rotation
-    
-    This allows for highly conformal dose distributions with improved target coverage 
-    and normal tissue sparing compared to conventional IMRT, typically with shorter 
-    treatment times.
+    Attributes
+    ----------
+    name : str
+        Name of the VMAT plan
+    technique_id : str
+        Unique ID for the plan
+    arcs : List[Arc]
+        List of arc definitions
+    control_points : Dict[str, List[ControlPoint]]
+        Control points for each arc
+    mlc_model : Optional[MLCModel]
+        Multi-leaf collimator model
+    dose_objectives : List[DoseObjective]
+        List of dose objectives
+    constraints : List[DoseConstraint]
+        List of dose constraints
+    parameters : Dict[str, Any]
+        Optimization parameters
+    structures : Dict[str, Structure]
+        Dictionary of structures used in the plan
+    current_dose : Optional[DoseGrid]
+        Current calculated dose distribution
+    dose_calculator : Optional[DoseCalculator]
+        Dose calculation engine
     """
     
-    def __init__(self, plan_name: str, plan_id: Optional[str] = None):
-        """
-        Initialize a VMAT plan.
+    def __init__(self, name: str, technique_id: Optional[str] = None) -> None:
+        """Initialize a VMAT plan."""
+        super().__init__(name=name, technique_id=technique_id, category=TechniqueCategory.ADVANCED)
         
-        Parameters
-        ----------
-        plan_name : str
-            Name of the VMAT plan
-        plan_id : str, optional
-            Unique ID for the plan, if None, a UUID will be generated
-        """
-        super().__init__(name=plan_name, technique_id=plan_id, category=TechniqueCategory.ADVANCED)
+        self.arcs: List[Arc] = []
+        self.control_points: Dict[str, List[ControlPoint]] = {}
+        self.mlc_model: Optional[MLCModel] = None
+        self.dose_objectives: List[DoseObjective] = []
+        self.constraints: List[DoseConstraint] = []
+        self.parameters: Dict[str, Any] = {}
+        self.structures: Dict[str, Structure] = {}
+        self.current_dose: Optional[DoseGrid] = None
+        self.dose_calculator: Optional[DoseCalculator] = None
         
-        # Arc parameters
-        self.arcs = []  # List of arc definitions
-        self.control_points = {}  # Control points for each arc
-        
-        # Optimization parameters
-        self.optimization_iterations = 100
-        self.convergence_threshold = 0.001
-        self.smoothing_factor = 0.5
-        
-        # Plan parameters
-        self.mlc_model = None
-        self.dose_objectives = []
-        self.constraints = []
-        
-        # Using lazy % formatting for logging
         logger.info(
             "Initialized VMAT plan '%s' (ID: %s)",
             self.name, self.technique_id
         )
     
-    def add_arc(self, arc_name: str, start_angle: float, stop_angle: float, 
-               rotation_direction: str, energy: str = "6X", dose_rate: float = 600.0):
+    def add_arc(self, arc: Arc) -> None:
         """
         Add an arc to the VMAT plan.
         
         Parameters
         ----------
-        arc_name : str
-            Name of the arc
-        start_angle : float
-            Starting angle of the arc in degrees
-        stop_angle : float
-            Stopping angle of the arc in degrees
-        rotation_direction : str
-            Direction of rotation ('CW' for clockwise, 'CCW' for counter-clockwise)
-        energy : str, optional
-            Energy of the beam, default is "6X"
-        dose_rate : float, optional
-            Dose rate in MU/min, default is 600.0
-        
-        Returns
-        -------
-        str
-            Unique ID for the created arc
+        arc : Arc
+            Arc to add
         """
-        arc_id = str(uuid.uuid4())
-        
-        arc = {
-            "id": arc_id,
-            "name": arc_name,
-            "start_angle": start_angle,
-            "stop_angle": stop_angle,
-            "rotation_direction": rotation_direction,
-            "energy": energy,
-            "dose_rate": dose_rate
-        }
-        
         self.arcs.append(arc)
-        self.control_points[arc_id] = []  # Initialize empty control points list
-        
-        # Using lazy % formatting for logging
         logger.info(
-            "Added arc '%s' to VMAT plan '%s': %s° to %s° %s, energy=%s, dose_rate=%.1f MU/min",
-            arc_name, self.name, start_angle, stop_angle, rotation_direction, energy, dose_rate
+            "Added arc '%s' to VMAT plan '%s'",
+            arc.name, self.name
         )
-        
-        return arc_id
     
-    def set_mlc_model(self, mlc_model: MLCModel):
+    def add_structure(self, structure: Structure) -> None:
         """
-        Set the MLC model for the VMAT plan.
+        Add a structure to the VMAT plan.
         
         Parameters
         ----------
-        mlc_model : MLCModel
-            Multi-leaf collimator model to use
+        structure : Structure
+            Structure to add
         """
-        self.mlc_model = mlc_model
-        
-        # Using lazy % formatting for logging
+        self.structures[structure.name] = structure
         logger.info(
-            "Set MLC model for VMAT plan '%s': %s",
-            self.name, mlc_model.name
+            "Added structure '%s' to VMAT plan '%s'",
+            structure.name, self.name
         )
-    
-    def add_control_point(self, arc_id: str, gantry_angle: float, 
-                         mlc_positions: List[List[float]], cumulative_meterset: float):
+
+    def get_structure(self, name: str) -> Optional[Structure]:
         """
-        Add a control point to an arc.
+        Get a structure by name.
+        
+        Parameters
+        ----------
+        name : str
+            Name of the structure
+            
+        Returns
+        -------
+        Optional[Structure]
+            Structure if found, None otherwise
+        """
+        return self.structures.get(name)
+
+    def get_arc(self, arc_id: str) -> Optional[Arc]:
+        """
+        Get an arc by ID.
         
         Parameters
         ----------
         arc_id : str
-            ID of the arc to add the control point to
-        gantry_angle : float
-            Gantry angle in degrees for this control point
-        mlc_positions : List[List[float]]
-            MLC leaf positions as [[leaf1A, leaf1B], [leaf2A, leaf2B], ...] where A and B are banks
-        cumulative_meterset : float
-            Cumulative meterset weight (0.0 to 1.0)
+            ID of the arc
+            
+        Returns
+        -------
+        Optional[Arc]
+            Arc if found, None otherwise
+        """
+        for arc in self.arcs:
+            if arc.id == arc_id:
+                return arc
+        return None
+
+    def get_control_points(self, arc_id: str) -> Optional[List[ControlPoint]]:
+        """
+        Get control points for an arc.
+        
+        Parameters
+        ----------
+        arc_id : str
+            ID of the arc
+            
+        Returns
+        -------
+        Optional[List[ControlPoint]]
+            Control points if found, None otherwise
+        """
+        return self.control_points.get(arc_id)
+
+    def validate(self) -> Tuple[bool, List[str]]:
+        """
+        Validate the VMAT plan.
         
         Returns
         -------
-        int
-            Index of the control point
+        Tuple[bool, List[str]]
+            Tuple containing:
+            - bool: True if valid, False otherwise
+            - List[str]: List of validation errors
         """
-        if arc_id not in self.control_points:
-            # Using lazy % formatting for logging
-            logger.warning(
-                "Cannot add control point: Arc ID '%s' not found in VMAT plan '%s'",
-                arc_id, self.name
-            )
-            return -1
+        errors = []
         
-        control_point = {
-            "index": len(self.control_points[arc_id]),
-            "gantry_angle": gantry_angle,
-            "mlc_positions": mlc_positions,
-            "cumulative_meterset": cumulative_meterset
-        }
+        # Check if we have any arcs
+        if not self.arcs:
+            errors.append("No arcs defined")
+            
+        # Check if we have any control points
+        for arc in self.arcs:
+            if not self.control_points.get(arc.id):
+                errors.append(f"No control points defined for arc '{arc.name}'")
+                
+        # Check if we have an MLC model
+        if self.mlc_model is None:
+            errors.append("No MLC model set")
+            
+        # Check if we have a dose calculator
+        if self.dose_calculator is None:
+            errors.append("No dose calculator set")
+            
+        # Check if we have any structures
+        if not self.structures:
+            errors.append("No structures defined")
+            
+        # Check if we have any objectives
+        if not self.dose_objectives:
+            errors.append("No dose objectives defined")
+            
+        return len(errors) == 0, errors
+
+    def __str__(self) -> str:
+        """
+        Get a string representation of the plan.
         
-        self.control_points[arc_id].append(control_point)
+        Returns
+        -------
+        str
+            String representation
+        """
+        return f"VMAT plan '{self.name}' (ID: {self.technique_id})"
+
+    def __repr__(self) -> str:
+        """
+        Get a detailed string representation of the plan.
         
-        # Using lazy % formatting for logging
-        logger.info(
-            "Added control point #%d to arc '%s' in VMAT plan '%s': gantry_angle=%.1f°, meterset=%.3f",
-            control_point["index"], arc_id, self.name, gantry_angle, cumulative_meterset
+        Returns
+        -------
+        str
+            Detailed string representation
+        """
+        return (
+            f"VMAT(name='{self.name}', technique_id='{self.technique_id}', "
+            f"num_arcs={len(self.arcs)}, num_structures={len(self.structures)}, "
+            f"num_objectives={len(self.dose_objectives)}, num_constraints={len(self.constraints)})"
         )
-        
-        return control_point["index"]
     
     def add_objective(self, structure_name: str, objective_type: str, 
                      dose: float, volume: Optional[float] = None, weight: float = 1.0):
@@ -198,13 +281,13 @@ class VMAT(BaseTreatmentTechnique):
         weight : float, optional
             Weight of the objective, default is 1.0
         """
-        objective = {
-            'structure': structure_name,
-            'type': objective_type,
-            'dose': dose,
-            'volume': volume,
-            'weight': weight
-        }
+        objective = DoseObjective(
+            structure=structure_name,
+            type=objective_type,
+            dose=dose,
+            volume=volume,
+            weight=weight
+        )
         
         self.dose_objectives.append(objective)
         
@@ -233,12 +316,12 @@ class VMAT(BaseTreatmentTechnique):
         volume : float, optional
             Volume value (%) for DVH constraints
         """
-        constraint = {
-            'structure': structure_name,
-            'type': constraint_type,
-            'dose': dose,
-            'volume': volume
-        }
+        constraint = DoseConstraint(
+            structure=structure_name,
+            type=constraint_type,
+            dose=dose,
+            volume=volume
+        )
         
         self.constraints.append(constraint)
         
@@ -250,60 +333,6 @@ class VMAT(BaseTreatmentTechnique):
             "Added constraint for structure '%s' in VMAT plan '%s': type=%s, dose=%.2f Gy%s",
             structure_name, self.name, constraint_type, dose, volume_info
         )
-    
-    def set_optimization_parameters(self, **kwargs):
-        """
-        Set optimization parameters.
-        
-        Parameters
-        ----------
-        **kwargs
-            Optimization parameters to set
-        """
-        valid_parameters = {
-            'optimization_iterations': int,
-            'convergence_threshold': float,
-            'smoothing_factor': float,
-            'dose_grid_size': float,
-            'max_leaf_speed': float,
-            'min_leaf_gap': float,
-            'max_dose_rate': float,
-            'min_dose_rate': float,
-            'max_gantry_speed': float,
-            'min_gantry_speed': float
-        }
-        
-        # Initialize parameters dictionary if it doesn't exist
-        if not hasattr(self, 'parameters'):
-            self.parameters = {}
-        
-        # Set default values
-        if 'parameters' not in self.__dict__:
-            self.parameters = {
-                'optimization_iterations': 100,
-                'convergence_threshold': 0.001,
-                'smoothing_factor': 0.5,
-                'dose_grid_size': 0.3,
-                'max_leaf_speed': 2.5,  # cm/s
-                'min_leaf_gap': 0.2,    # cm
-                'max_dose_rate': 600,   # MU/min
-                'min_dose_rate': 100,   # MU/min
-                'max_gantry_speed': 6.0, # deg/s
-                'min_gantry_speed': 0.5  # deg/s
-            }
-        
-        # Update parameters
-        for key, value in kwargs.items():
-            if key in valid_parameters:
-                # Type conversion
-                try:
-                    value = valid_parameters[key](value)
-                    self.parameters[key] = value
-                    logger.info(f"Set VMAT optimization parameter {key} = {value}")
-                except (ValueError, TypeError) as e:
-                    logger.error(f"Invalid value for parameter {key}: {e}")
-            else:
-                logger.warning(f"Unknown optimization parameter: {key}")
     
     def optimize_plan(self, patient_data, structures, prescription, dose_constraints):
         """
@@ -374,10 +403,6 @@ class VMAT(BaseTreatmentTechnique):
                 # Apply optimization step - adjust MLC positions and meterset weights
                 self._optimization_step()
                 
-                # Apply smoothing to MLC positions - now done inside optimization_step
-                # if self.parameters.get('smoothing_factor', 0.5) > 0:
-                #     self._smooth_mlc_positions()
-                
                 # Log progress
                 if current_iteration % progress_interval == 0 or current_iteration == self.optimization_iterations - 1:
                     logger.info(
@@ -435,7 +460,7 @@ class VMAT(BaseTreatmentTechnique):
         for objective in self.dose_objectives:
             # Calculate objective cost based on type
             cost = self._calculate_single_objective_cost(objective)
-            total_cost += cost * objective['weight']
+            total_cost += cost * objective.weight
         
         # Add cost components for each constraint (with higher penalty)
         for constraint in self.constraints:
@@ -455,7 +480,7 @@ class VMAT(BaseTreatmentTechnique):
         
         Parameters
         ----------
-        objective : Dict
+        objective : DoseObjective
             The objective definition
             
         Returns
@@ -478,7 +503,7 @@ class VMAT(BaseTreatmentTechnique):
         
         Parameters
         ----------
-        constraint : Dict
+        constraint : DoseConstraint
             The constraint definition
             
         Returns
@@ -519,7 +544,7 @@ class VMAT(BaseTreatmentTechnique):
                 continue  # Need at least 3 control points for smoothing
             
             # Sort control points by index to ensure proper order
-            sorted_cps = sorted(control_points, key=lambda cp: cp.get('index', 0))
+            sorted_cps = sorted(control_points, key=lambda cp: cp.index)
             
             # Calculate MLC movement penalty
             for i in range(1, len(sorted_cps)):
@@ -531,8 +556,8 @@ class VMAT(BaseTreatmentTechnique):
                     continue
                 
                 # Get gantry angles
-                prev_angle = prev_cp.get('gantry_angle', 0)
-                curr_angle = curr_cp.get('gantry_angle', 0)
+                prev_angle = prev_cp.gantry_angle
+                curr_angle = curr_cp.gantry_angle
                 angle_diff = abs(curr_angle - prev_angle)
                 
                 # Calculate leaf movement relative to gantry rotation
@@ -540,16 +565,16 @@ class VMAT(BaseTreatmentTechnique):
                 leaf_count = 0
                 
                 # For each leaf pair, calculate movement
-                for j in range(min(len(prev_cp['mlc_positions']), len(curr_cp['mlc_positions']))):
+                for j in range(min(len(prev_cp.mlc_positions), len(curr_cp.mlc_positions))):
                     # Skip if either leaf pair doesn't have both banks
-                    if (len(prev_cp['mlc_positions'][j]) != 2 or 
-                        len(curr_cp['mlc_positions'][j]) != 2):
+                    if (len(prev_cp.mlc_positions[j]) != 2 or 
+                        len(curr_cp.mlc_positions[j]) != 2):
                         continue
                     
                     # For each bank
                     for bank in [0, 1]:
-                        prev_pos = prev_cp['mlc_positions'][j][bank]
-                        curr_pos = curr_cp['mlc_positions'][j][bank]
+                        prev_pos = prev_cp.mlc_positions[j][bank]
+                        curr_pos = curr_cp.mlc_positions[j][bank]
                         
                         # Calculate movement per degree of gantry rotation
                         if angle_diff > 0:
@@ -578,9 +603,9 @@ class VMAT(BaseTreatmentTechnique):
                     continue
                 
                 # Calculate weight of this specific control point (not cumulative)
-                prev_weight = prev_cp['cumulative_meterset']
-                curr_weight = curr_cp['cumulative_meterset']
-                next_weight = next_cp['cumulative_meterset']
+                prev_weight = prev_cp.cumulative_meterset
+                curr_weight = curr_cp.cumulative_meterset
+                next_weight = next_cp.cumulative_meterset
                 
                 # Calculate first derivative (rate of change)
                 first_deriv = abs(curr_weight - prev_weight)
@@ -627,7 +652,7 @@ class VMAT(BaseTreatmentTechnique):
         # Iterate through each arc and adjust control points
         for arc_id, control_points in self.control_points.items():
             # Sort control points by index
-            sorted_cps = sorted(control_points, key=lambda cp: cp.get('index', 0))
+            sorted_cps = sorted(control_points, key=lambda cp: cp.index)
             
             # Process control points in sequence
             for i, cp in enumerate(sorted_cps):
@@ -637,7 +662,7 @@ class VMAT(BaseTreatmentTechnique):
                 
                 # Adjust MLC positions using gradient-based method
                 if 'mlc_positions' in cp:
-                    self._perturb_mlc_positions(cp['mlc_positions'])
+                    self._perturb_mlc_positions(cp.mlc_positions)
                 
                 # Adjust meterset weights
                 self._adjust_meterset_weight(cp)
@@ -856,8 +881,8 @@ class VMAT(BaseTreatmentTechnique):
         
         # Lấy thông tin từ các mục tiêu
         for objective in self.dose_objectives:
-            structure_name = objective.get('structure', '')
-            structure_type = objective.get('structure_type', '')
+            structure_name = objective.structure
+            structure_type = objective.type
             
             # Chỉ xem xét các cấu trúc mục tiêu
             if structure_type.lower() in ['ptv', 'target', 'ctv', 'gtv']:
@@ -867,6 +892,7 @@ class VMAT(BaseTreatmentTechnique):
                     targets.append({
                         'name': structure_name,
                         'type': structure_type,
+                        'prescription': objective.dose,
                         'prescription': objective.get('dose', 0.0),
                         'weight': objective.get('weight', 1.0)
                     })
@@ -1189,13 +1215,83 @@ class VMAT(BaseTreatmentTechnique):
         structures : Dict[str, Structure]
             Dictionary of structures with names and contour data
         """
-        # This is a placeholder for the actual dose calculation
-        # In a real implementation, this would calculate the final dose
-        # distribution using a dose calculation algorithm
+        try:
+            # Initialize dose calculator
+            dose_calc = DoseCalculator()
+            
+            # Create dose grid matching patient geometry
+            self.dose_grid = DoseGrid.from_patient_data(patient_data)
+            
+            # Calculate dose for each arc
+            total_dose = np.zeros_like(self.dose_grid.data)
+            
+            for arc in self.arcs:
+                arc_id = arc['id']
+                control_points = self.control_points[arc_id]
+                
+                # Calculate dose contribution from this arc
+                arc_dose = dose_calc.calculate_vmat_arc_dose(
+                    patient_data=patient_data,
+                    structures=structures,
+                    control_points=control_points,
+                    mlc_model=self.mlc_model,
+                    beam_energy=arc['energy'],
+                    dose_rate=arc['dose_rate']
+                )
+                
+                total_dose += arc_dose
+            
+            # Store final dose distribution
+            self.dose_grid.data = total_dose
+            
+            # Calculate and store DVHs for all structures
+            self._calculate_dvhs(structures)
+            
+            logger.info(
+                "Completed final dose calculation for VMAT plan '%s'",
+                self.name
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in final dose calculation: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _calculate_dvhs(self, structures):
+        """
+        Calculate DVHs for all structures.
         
-        logger.info("Calculating final dose for VMAT plan")
-        # In a real implementation, this would call a dose calculation engine
+        Parameters
+        ----------
+        structures : Dict[str, Structure]
+            Dictionary of structures
+        """
+        self.dvhs = {}
         
+        for name, structure in structures.items():
+            try:
+                # Calculate DVH for this structure
+                dvh_data = calculate_dvh(
+                    dose_grid=self.dose_grid,
+                    structure=structure,
+                    dose_bins=100  # Can be parameterized
+                )
+                
+                self.dvhs[name] = dvh_data
+                
+                # Log key DVH metrics
+                d95 = dvh_data.get_dose_at_volume(95)
+                d50 = dvh_data.get_dose_at_volume(50)
+                mean_dose = dvh_data.get_mean_dose()
+                
+                logger.info(
+                    "DVH metrics for structure '%s': D95=%.1f Gy, D50=%.1f Gy, Mean=%.1f Gy",
+                    name, d95, d50, mean_dose
+                )
+                
+            except Exception as e:
+                logger.error(f"Error calculating DVH for structure '{name}': {e}")
+    
     def get_dose_at_point(self, point_coords):
         """
         Get the calculated dose at a specific point.
@@ -1210,12 +1306,22 @@ class VMAT(BaseTreatmentTechnique):
         float
             The dose at the point (Gy)
         """
-        # This is a placeholder for the actual dose lookup
-        # In a real implementation, this would look up the dose at the
-        # specified point from the calculated dose distribution
-        
-        # For now, return a dummy value
-        return 0.0
+        if self.dose_grid is None:
+            logger.warning("No dose grid available")
+            return 0.0
+            
+        try:
+            # Convert physical coordinates to grid indices
+            i, j, k = self.dose_grid.get_indices(point_coords)
+            
+            # Get interpolated dose value
+            dose = self.dose_grid.get_interpolated_value(point_coords)
+            
+            return dose
+            
+        except Exception as e:
+            logger.error(f"Error getting dose at point {point_coords}: {e}")
+            return 0.0
     
     def calculate_dvh(self, structure_name):
         """
@@ -1231,16 +1337,11 @@ class VMAT(BaseTreatmentTechnique):
         Dict
             The DVH data including dose and volume arrays
         """
-        # This is a placeholder for the actual DVH calculation
-        # In a real implementation, this would calculate the DVH for the
-        # specified structure using the calculated dose distribution
-        
-        # For now, return dummy data
-        return {
-            'structure': structure_name,
-            'dose': np.linspace(0, 70, 100),
-            'volume': np.exp(-np.linspace(0, 7, 100))
-        }
+        if not hasattr(self, 'dvhs') or structure_name not in self.dvhs:
+            logger.warning(f"No DVH data available for structure '{structure_name}'")
+            return None
+            
+        return self.dvhs[structure_name]
     
     def export_plan(self, filename):
         """

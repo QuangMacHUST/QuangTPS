@@ -14,14 +14,14 @@ from enum import Enum
 from collections import deque
 from typing import List, Tuple, Dict, Optional, Any, Union
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QPushButton, QComboBox, QGroupBox, QRadioButton,
     QButtonGroup, QSpinBox, QCheckBox, QGridLayout,
     QFormLayout, QSizePolicy
 )
-from PyQt5.QtGui import QIcon, QColor, QCursor
+from PyQt5.QtGui import QIcon, QColor, QCursor, QPainter, QPen, QBrush, QImage, QPixmap
 
 logger = logging.getLogger(__name__)
 
@@ -639,4 +639,205 @@ class ThresholdToolWidget(QWidget):
     def _on_settings_changed(self):
         """Handle settings changes and emit signal."""
         options = self.get_options()
-        self.toolChanged.emit(options) 
+        self.toolChanged.emit(options)
+
+# Add this new class to wrap ThresholdContourTool
+class ThresholdTool:
+    """
+    Threshold-based contouring tool for the segmentation interface.
+    
+    This class implements the standard tool interface required by
+    the SegmentationInterface.
+    """
+    
+    def __init__(self):
+        """Initialize the threshold tool."""
+        self.tool = ThresholdContourTool()
+        self.preview_mode = True
+        self.is_drawing = False
+        self.image_data = None
+        
+        # UI state
+        self.current_slice = 0
+        self.current_orientation = "axial"
+        
+        # Custom cursor
+        self._cursor = self._create_cursor()
+    
+    def on_mouse_press(self, event, image_data=None):
+        """
+        Handle mouse press event.
+        
+        Args:
+            event: Mouse event
+            image_data: Optional image data
+        """
+        if image_data is not None:
+            self.image_data = image_data
+            self.tool.set_image_data(image_data)
+        
+        if self.image_data is None:
+            return
+        
+        # Set seed point for threshold
+        self.tool.set_seed_point(
+            event.pos(), 
+            self.current_slice,
+            self.current_orientation
+        )
+        
+        # Start drawing
+        self.is_drawing = True
+    
+    def on_mouse_move(self, event, image_data=None):
+        """
+        Handle mouse move event.
+        
+        Args:
+            event: Mouse event
+            image_data: Optional image data
+        """
+        if not self.is_drawing:
+            return
+        
+        # Update seed point for interactive feedback
+        self.tool.set_seed_point(
+            event.pos(), 
+            self.current_slice,
+            self.current_orientation
+        )
+    
+    def on_mouse_release(self, event, image_data=None):
+        """
+        Handle mouse release event.
+        
+        Args:
+            event: Mouse event
+            image_data: Optional image data
+        """
+        if not self.is_drawing:
+            return
+        
+        self.is_drawing = False
+        
+        # Apply threshold to create contour
+        if not self.preview_mode:
+            contour = self.tool.apply_threshold()
+            return contour
+    
+    def draw_preview(self, painter, image_data=None):
+        """
+        Draw the threshold preview.
+        
+        Args:
+            painter: QPainter object
+            image_data: Optional image data
+        """
+        if image_data is not None:
+            self.image_data = image_data
+            self.tool.set_image_data(image_data)
+        
+        if self.image_data is None or not self.preview_mode:
+            return
+        
+        # Get the threshold mask
+        mask = self.tool.get_preview_mask()
+        if mask is None:
+            return
+        
+        # Draw the mask as a semi-transparent overlay
+        height, width = mask.shape
+        
+        # Create a QImage for the mask
+        overlay = QImage(width, height, QImage.Format_ARGB32)
+        overlay.fill(Qt.transparent)
+        
+        # Set the mask pixels in the overlay
+        for y in range(height):
+            for x in range(width):
+                if mask[y, x]:
+                    overlay.setPixelColor(x, y, QColor(255, 0, 0, 80))
+        
+        # Draw the overlay
+        painter.drawImage(0, 0, overlay)
+    
+    def get_cursor(self):
+        """Get the cursor for this tool."""
+        return self._cursor
+    
+    def set_thresholds(self, lower_threshold, upper_threshold):
+        """
+        Set the threshold values.
+        
+        Args:
+            lower_threshold: Lower intensity threshold
+            upper_threshold: Upper intensity threshold
+        """
+        self.tool.set_thresholds(lower_threshold, upper_threshold)
+    
+    def set_operation(self, operation):
+        """
+        Set the threshold operation.
+        
+        Args:
+            operation: ThresholdOperation enum value
+        """
+        self.tool.set_operation(operation)
+    
+    def set_preview_mode(self, enabled):
+        """
+        Set whether to show threshold preview.
+        
+        Args:
+            enabled: True to enable preview, False to disable
+        """
+        self.preview_mode = enabled
+    
+    def set_mode(self, mode):
+        """
+        Set the threshold mode.
+        
+        Args:
+            mode: ThresholdMode enum value
+        """
+        self.tool.set_mode(mode)
+    
+    def set_current_slice(self, slice_index, orientation):
+        """
+        Set the current slice and orientation.
+        
+        Args:
+            slice_index: Current slice index
+            orientation: Orientation plane
+        """
+        self.current_slice = slice_index
+        self.current_orientation = orientation
+    
+    def _create_cursor(self):
+        """Create a custom cursor for the threshold tool."""
+        # Create a pixmap for the cursor
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.transparent)
+        
+        # Create a painter for drawing on the pixmap
+        painter = QPainter(pixmap)
+        
+        # Draw a crosshair
+        pen = QPen(Qt.black, 1)
+        painter.setPen(pen)
+        
+        # Draw the circle
+        pen.setColor(Qt.red)
+        painter.setPen(pen)
+        painter.drawEllipse(8, 8, 16, 16)
+        
+        # Draw the crosshair
+        pen.setColor(Qt.black)
+        painter.setPen(pen)
+        painter.drawLine(16, 0, 16, 32)
+        painter.drawLine(0, 16, 32, 16)
+        
+        painter.end()
+        
+        # Create the cursor
+        return QCursor(pixmap, 16, 16) 

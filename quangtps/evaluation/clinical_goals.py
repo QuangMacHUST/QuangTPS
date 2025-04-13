@@ -17,7 +17,13 @@ import os
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union, Any
 
-logger = logging.getLogger(__name__)
+from quangtps.evaluation.dvh.dvh_data import DVHData
+from quangtps.evaluation.metrics import (
+    calculate_d_metric, calculate_v_metric, calculate_mean_dose
+)
+from quangtps.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 class GoalType(Enum):
     """Types of clinical goals."""

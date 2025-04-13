@@ -289,8 +289,8 @@ class ClinicalProtocolDialog(QDialog):
             )
             
             if not file_path:
-                return
-                
+            return
+            
             # Import protocol
             protocol = self.protocol_manager.import_protocol(file_path)
             

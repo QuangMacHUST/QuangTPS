@@ -2,581 +2,369 @@
 # -*- coding: utf-8 -*-
 
 """
-Clinical Protocols Module
-========================
+Clinical Protocols
 
-This module provides functionality for managing clinical protocols and templates
-for plan evaluation, similar to the Protocol Template feature in Eclipse.
+This module provides classes for managing clinical protocols,
+which are collections of clinical goals for different treatment sites.
 """
 
 import os
 import json
+from typing import Dict, List, Optional, Any, Set, Tuple
 import logging
-import datetime
-from typing import Dict, List, Optional, Any, Tuple, Union
-from enum import Enum
-from pathlib import Path
 
-from quangtps.common.paths import get_protocols_dir
 from quangtps.evaluation.clinical_goals import (
-    ClinicalGoal, ClinicalGoalCollection, GoalType, GoalOperator, GoalPriority, GoalResult
+    ClinicalGoal, GoalType, GoalOperator, GoalPriority, 
+    create_d_goal, create_v_goal, create_mean_dose_goal
 )
-from quangtps.core.types import Plan, Structure
-from quangtps.core.services import ServiceRegistry
+from quangtps.common.paths import get_protocols_dir
 from quangtps.core.logging import get_logger
-from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh_metrics
-from quangtps.evaluation.metrics.conformity import calculate_conformity_index
-from quangtps.evaluation.metrics.homogeneity import calculate_homogeneity_index
-from quangtps.evaluation.metrics.gradients import calculate_gradient_measure
 
 logger = get_logger(__name__)
 
 class ClinicalProtocol:
     """
-    Represents a clinical protocol for plan evaluation.
-    
-    A clinical protocol contains metadata and a collection of clinical goals
-    that can be used to evaluate treatment plans.
+    A collection of clinical goals for a specific treatment site.
     """
     
-    def __init__(self, 
-                 name: str,
-                 site: str,
-                 description: str = "",
-                 author: str = "",
-                 version: str = "1.0",
-                 goals: Optional[List[ClinicalGoal]] = None):
+    def __init__(self, name: str, site: str, description: str = ""):
         """
         Initialize a clinical protocol.
         
-        Parameters:
-        -----------
-        name : str
-            Name of the protocol
-        site : str
-            Treatment site (e.g., "Prostate", "Head and Neck")
-        description : str, optional
-            Description of the protocol
-        author : str, optional
-            Author of the protocol
-        version : str, optional
-            Version of the protocol
-        goals : List[ClinicalGoal], optional
-            List of clinical goals for the protocol
+        Args:
+            name: Protocol name
+            site: Treatment site (e.g., "Prostate", "Head and Neck")
+            description: Protocol description
         """
         self.name = name
         self.site = site
         self.description = description
-        self.author = author
-        self.version = version
-        self.goals = goals or []
-        self.created_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        self.modified_date = self.created_date
-        
+        self.goals: List[ClinicalGoal] = []
+    
     def add_goal(self, goal: ClinicalGoal):
-        """Add a clinical goal to the protocol."""
+        """
+        Add a clinical goal to the protocol.
+        
+        Args:
+            goal: Clinical goal to add
+        """
         self.goals.append(goal)
-        self.modified_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    def add_goals(self, goals: List[ClinicalGoal]):
+        """
+        Add multiple clinical goals to the protocol.
         
-    def remove_goal(self, index: int):
-        """Remove a clinical goal from the protocol."""
-        if 0 <= index < len(self.goals):
-            del self.goals[index]
-            self.modified_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        Args:
+            goals: List of clinical goals to add
+        """
+        self.goals.extend(goals)
+    
+    def get_goals_for_structure(self, structure_id: str) -> List[ClinicalGoal]:
+        """
+        Get all goals for a specific structure.
+        
+        Args:
+            structure_id: ID of the structure
             
-    def clear_goals(self):
-        """Remove all clinical goals from the protocol."""
-        self.goals.clear()
-        self.modified_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        
+        Returns:
+            List of clinical goals for the structure
+        """
+        return [goal for goal in self.goals if goal.structure_id == structure_id]
+    
     def to_dict(self) -> Dict[str, Any]:
-        """Convert protocol to dictionary for serialization."""
-        return {
-            "name": self.name,
-            "site": self.site,
-            "description": self.description,
-            "author": self.author,
-            "version": self.version,
-            "created_date": self.created_date,
-            "modified_date": self.modified_date,
-            "goals": [goal.to_dict() for goal in self.goals]
-        }
+        """
+        Convert the protocol to a dictionary for serialization.
         
+        Returns:
+            Dictionary representation of the protocol
+        """
+        return {
+            'name': self.name,
+            'site': self.site,
+            'description': self.description,
+            'goals': [goal.to_dict() for goal in self.goals]
+        }
+    
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ClinicalProtocol':
-        """Create a protocol from a dictionary."""
+        """
+        Create a protocol from a dictionary.
+        
+        Args:
+            data: Dictionary containing protocol data
+            
+        Returns:
+            A new ClinicalProtocol object
+        """
         protocol = cls(
-            name=data.get("name", "Unnamed Protocol"),
-            site=data.get("site", "Unknown"),
-            description=data.get("description", ""),
-            author=data.get("author", ""),
-            version=data.get("version", "1.0")
+            name=data['name'],
+            site=data['site'],
+            description=data.get('description', '')
         )
         
-        # Add created and modified dates if available
-        if "created_date" in data:
-            protocol.created_date = data["created_date"]
-        if "modified_date" in data:
-            protocol.modified_date = data["modified_date"]
-            
         # Add goals
-        for goal_data in data.get("goals", []):
-            try:
+        if 'goals' in data:
+            for goal_data in data['goals']:
                 goal = ClinicalGoal.from_dict(goal_data)
-                protocol.goals.append(goal)
-            except Exception as e:
-                logger.warning(f"Failed to load goal: {e}")
-                
+                protocol.add_goal(goal)
+        
+        return protocol
+    
+    def to_json(self) -> str:
+        """
+        Convert the protocol to a JSON string.
+        
+        Returns:
+            JSON string representation of the protocol
+        """
+        return json.dumps(self.to_dict(), indent=2)
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'ClinicalProtocol':
+        """
+        Create a protocol from a JSON string.
+        
+        Args:
+            json_str: JSON string containing protocol data
+            
+        Returns:
+            A new ClinicalProtocol object
+        """
+        data = json.loads(json_str)
+        return cls.from_dict(data)
+    
+    def save(self, directory: str = None) -> str:
+        """
+        Save the protocol to a JSON file.
+        
+        Args:
+            directory: Directory to save the protocol file (default: protocols directory)
+            
+        Returns:
+            Path to the saved file
+        """
+        if directory is None:
+            directory = get_protocols_dir()
+        
+        # Create directory if it doesn't exist
+        os.makedirs(directory, exist_ok=True)
+        
+        # Create filename from protocol name
+        filename = f"{self.name.replace(' ', '_').lower()}.json"
+        file_path = os.path.join(directory, filename)
+        
+        # Save to file
+        with open(file_path, 'w') as f:
+            f.write(self.to_json())
+        
+        logger.info(f"Saved protocol '{self.name}' to {file_path}")
+        return file_path
+
+# Protocol templates for common treatment sites
+
+def create_lung_sbrt_protocol() -> ClinicalProtocol:
+    """
+    Create a protocol for lung SBRT treatment.
+    
+    Returns:
+        ClinicalProtocol object
+    """
+    protocol = ClinicalProtocol(
+        name="Lung SBRT",
+        site="Lung",
+        description="Protocol for stereotactic body radiation therapy (SBRT) of lung tumors"
+    )
+    
+    # PTV coverage goals
+    protocol.add_goal(create_d_goal("PTV", 95, 54, GoalOperator.GREATER_OR_EQUAL))
+    
+    # OAR constraints
+    protocol.add_goal(create_v_goal("HEART", 30, 10, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("LUNGS-GTV", 20, 10, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("SPINAL_CORD", 18, 0.35, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("ESOPHAGUS", 27, 5, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_mean_dose_goal("LUNGS-GTV", 7, GoalOperator.LESS_THAN))
+    
+    return protocol
+
+def create_prostate_protocol() -> ClinicalProtocol:
+    """
+    Create a protocol for prostate treatment.
+    
+    Returns:
+        ClinicalProtocol object
+    """
+    protocol = ClinicalProtocol(
+        name="Prostate Standard",
+        site="Prostate",
+        description="Standard protocol for external beam radiation therapy of prostate cancer"
+    )
+    
+    # PTV coverage goals
+    protocol.add_goal(create_d_goal("PTV", 95, 76, GoalOperator.GREATER_OR_EQUAL))
+    protocol.add_goal(create_d_goal("PTV", 2, 81.7, GoalOperator.LESS_THAN))
+    
+    # OAR constraints
+    protocol.add_goal(create_v_goal("RECTUM", 75, 15, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("RECTUM", 70, 20, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("RECTUM", 65, 25, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("RECTUM", 60, 35, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("RECTUM", 50, 50, GoalOperator.LESS_THAN))
+    
+    protocol.add_goal(create_v_goal("BLADDER", 80, 15, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("BLADDER", 75, 25, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("BLADDER", 70, 35, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("BLADDER", 65, 50, GoalOperator.LESS_THAN))
+    
+    protocol.add_goal(create_v_goal("FEMORAL_HEADS", 50, 5, GoalOperator.LESS_THAN))
+    
+    return protocol
+
+def create_head_neck_protocol() -> ClinicalProtocol:
+    """
+    Create a protocol for head and neck treatment.
+    
+    Returns:
+        ClinicalProtocol object
+    """
+    protocol = ClinicalProtocol(
+        name="Head and Neck Standard",
+        site="Head and Neck",
+        description="Standard protocol for IMRT of head and neck cancer"
+    )
+    
+    # PTV coverage goals
+    protocol.add_goal(create_d_goal("PTV_HIGH", 95, 66, GoalOperator.GREATER_OR_EQUAL))
+    protocol.add_goal(create_d_goal("PTV_MED", 95, 60, GoalOperator.GREATER_OR_EQUAL))
+    protocol.add_goal(create_d_goal("PTV_LOW", 95, 54, GoalOperator.GREATER_OR_EQUAL))
+    
+    # OAR constraints
+    protocol.add_goal(create_d_goal("BRAINSTEM", 0, 54, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_d_goal("SPINAL_CORD", 0, 45, GoalOperator.LESS_THAN))
+    
+    protocol.add_goal(create_mean_dose_goal("PAROTID_L", 26, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_mean_dose_goal("PAROTID_R", 26, GoalOperator.LESS_THAN))
+    
+    protocol.add_goal(create_mean_dose_goal("LARYNX", 45, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_mean_dose_goal("ORAL_CAVITY", 30, GoalOperator.LESS_THAN))
+    
+    return protocol
+
+def create_breast_protocol() -> ClinicalProtocol:
+    """
+    Create a protocol for breast treatment.
+    
+    Returns:
+        ClinicalProtocol object
+    """
+    protocol = ClinicalProtocol(
+        name="Breast Standard",
+        site="Breast",
+        description="Standard protocol for whole breast radiotherapy"
+    )
+    
+    # PTV coverage goals
+    protocol.add_goal(create_d_goal("PTV_BREAST", 95, 42.4, GoalOperator.GREATER_OR_EQUAL))
+    protocol.add_goal(create_d_goal("PTV_BREAST", 105, 45.3, GoalOperator.LESS_THAN))
+    
+    # OAR constraints
+    protocol.add_goal(create_mean_dose_goal("HEART", 4, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("HEART", 25, 5, GoalOperator.LESS_THAN))
+    
+    protocol.add_goal(create_v_goal("IPSILATERAL_LUNG", 20, 30, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("IPSILATERAL_LUNG", 5, 60, GoalOperator.LESS_THAN))
+    
+    protocol.add_goal(create_v_goal("CONTRALATERAL_BREAST", 5, 5, GoalOperator.LESS_THAN))
+    
+    return protocol
+
+def create_boost_protocol() -> ClinicalProtocol:
+    """
+    Create a protocol for various dose boosting scenarios.
+    
+    Returns:
+        ClinicalProtocol object
+    """
+    protocol = ClinicalProtocol(
+        name="Boost Protocol",
+        site="General",
+        description="Protocol for boost treatments to various sites"
+    )
+    
+    # PTV coverage goals
+    protocol.add_goal(create_d_goal("PTV_BOOST", 95, 108, GoalOperator.GREATER_OR_EQUAL))
+    protocol.add_goal(create_d_goal("PTV_BOOST", 2, 115, GoalOperator.LESS_THAN))
+    
+    # Required falloff away from PTV
+    protocol.add_goal(create_v_goal("PTV_BOOST_2CM", 80, 30, GoalOperator.LESS_THAN))
+    protocol.add_goal(create_v_goal("PTV_BOOST_2CM", 50, 75, GoalOperator.LESS_THAN))
+    
+    return protocol
+
+def load_protocol(name: str, directory: str = None) -> Optional[ClinicalProtocol]:
+    """
+    Load a protocol from a file.
+    
+    Args:
+        name: Name of the protocol file (without extension)
+        directory: Directory to load the protocol from (default: protocols directory)
+        
+    Returns:
+        ClinicalProtocol object or None if file not found
+    """
+    if directory is None:
+        directory = get_protocols_dir()
+    
+    # Try to find the file
+    filename = f"{name.replace(' ', '_').lower()}.json"
+    file_path = os.path.join(directory, filename)
+    
+    if not os.path.exists(file_path):
+        # Try exact name if formatted name doesn't exist
+        file_path = os.path.join(directory, f"{name}.json")
+        if not os.path.exists(file_path):
+            logger.warning(f"Protocol file not found: {name}")
+            return None
+    
+    try:
+        # Load from file
+        with open(file_path, 'r') as f:
+            json_str = f.read()
+        
+        protocol = ClinicalProtocol.from_json(json_str)
+        logger.info(f"Loaded protocol '{protocol.name}' from {file_path}")
         return protocol
         
-    def validate(self) -> Tuple[bool, List[str]]:
-        """
-        Validate the protocol for completeness and correctness.
-        
-        Returns:
-        --------
-        bool
-            True if valid, False otherwise
-        List[str]
-            List of validation errors (empty if valid)
-        """
-        errors = []
-        
-        # Basic validation
-        if not self.name:
-            errors.append("Protocol must have a name")
-        if not self.site:
-            errors.append("Protocol must have a treatment site")
-            
-        # Goal validation
-        if not self.goals:
-            errors.append("Protocol must have at least one clinical goal")
-            
-        for i, goal in enumerate(self.goals):
-            if not goal.structure_name:
-                errors.append(f"Goal {i+1} must have a structure name")
-                
-        return len(errors) == 0, errors
+    except Exception as e:
+        logger.error(f"Error loading protocol {name}: {str(e)}")
+        return None
 
-
-class ProtocolManager:
+def save_default_protocols(directory: str = None):
     """
-    Manager for clinical protocols.
+    Create and save default protocols.
     
-    This class provides functionality for loading, saving, and managing
-    clinical protocols.
+    Args:
+        directory: Directory to save protocols to (default: protocols directory)
     """
+    if directory is None:
+        directory = get_protocols_dir()
     
-    def __init__(self, protocols_dir: Optional[str] = None):
-        """
-        Initialize the protocol manager.
-        
-        Parameters:
-        -----------
-        protocols_dir : str, optional
-            Directory for storing protocol files
-        """
-        self.protocols_dir = protocols_dir or get_protocols_dir()
-        self.protocols = {}
-        self.load_protocols()
-        
-    def load_protocols(self):
-        """Load all protocols from the protocols directory."""
-        self.protocols = {}
-        
-        try:
-            os.makedirs(self.protocols_dir, exist_ok=True)
-            
-            # Load all JSON files in the directory
-            for file_path in Path(self.protocols_dir).glob("*.json"):
-                try:
-                    with open(file_path, "r") as f:
-                        data = json.load(f)
-                        
-                    protocol = ClinicalProtocol.from_dict(data)
-                    self.protocols[protocol.name] = protocol
-                    logger.info(f"Loaded protocol: {protocol.name}")
-                except Exception as e:
-                    logger.error(f"Failed to load protocol from {file_path}: {e}")
-                    
-            logger.info(f"Loaded {len(self.protocols)} protocols")
-            
-        except Exception as e:
-            logger.error(f"Error loading protocols: {e}")
-            
-    def save_protocol(self, protocol: ClinicalProtocol) -> bool:
-        """
-        Save a protocol to the protocols directory.
-        
-        Parameters:
-        -----------
-        protocol : ClinicalProtocol
-            Protocol to save
-            
-        Returns:
-        --------
-        bool
-            True if successful, False otherwise
-        """
-        try:
-            # Update modified date
-            protocol.modified_date = datetime.datetime.now().strftime("%Y-%m-%d")
-            
-            # Create protocols directory if it doesn't exist
-            os.makedirs(self.protocols_dir, exist_ok=True)
-            
-            # Generate file path
-            file_name = f"{protocol.name.replace(' ', '_')}.json"
-            file_path = os.path.join(self.protocols_dir, file_name)
-            
-            # Convert to dictionary
-            data = protocol.to_dict()
-            
-            # Save to file
-            with open(file_path, "w") as f:
-                json.dump(data, f, indent=2)
-                
-            # Add to protocols dictionary
-            self.protocols[protocol.name] = protocol
-            
-            logger.info(f"Saved protocol: {protocol.name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to save protocol {protocol.name}: {e}")
-            return False
-            
-    def get_protocol(self, name: str) -> Optional[ClinicalProtocol]:
-        """Get a protocol by name."""
-        return self.protocols.get(name)
-        
-    def get_all_protocols(self) -> List[ClinicalProtocol]:
-        """Get all protocols."""
-        return list(self.protocols.values())
-        
-    def get_protocol_names(self) -> List[str]:
-        """Get names of all protocols."""
-        return list(self.protocols.keys())
-        
-    def get_protocols_by_site(self, site: str) -> List[ClinicalProtocol]:
-        """Get all protocols for a specific treatment site."""
-        return [p for p in self.protocols.values() if p.site == site]
-        
-    def delete_protocol(self, name: str) -> bool:
-        """
-        Delete a protocol.
-        
-        Parameters:
-        -----------
-        name : str
-            Name of the protocol to delete
-            
-        Returns:
-        --------
-        bool
-            True if successful, False otherwise
-        """
-        try:
-            if name not in self.protocols:
-                logger.warning(f"Protocol not found: {name}")
-                return False
-                
-            # Delete file
-            file_name = f"{name.replace(' ', '_')}.json"
-            file_path = os.path.join(self.protocols_dir, file_name)
-            
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                
-            # Remove from dictionary
-            del self.protocols[name]
-            
-            logger.info(f"Deleted protocol: {name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to delete protocol {name}: {e}")
-            return False
-            
-    def import_protocol(self, file_path: str) -> Optional[ClinicalProtocol]:
-        """
-        Import a protocol from a JSON file.
-        
-        Parameters:
-        -----------
-        file_path : str
-            Path to the protocol file
-            
-        Returns:
-        --------
-        ClinicalProtocol or None
-            Imported protocol, or None if import failed
-        """
-        try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
-                
-            protocol = ClinicalProtocol.from_dict(data)
-            
-            # Validate protocol
-            valid, errors = protocol.validate()
-            if not valid:
-                logger.warning(f"Invalid protocol: {', '.join(errors)}")
-                return None
-                
-            # Save to protocols directory
-            self.save_protocol(protocol)
-            
-            logger.info(f"Imported protocol: {protocol.name}")
-            return protocol
-            
-        except Exception as e:
-            logger.error(f"Failed to import protocol from {file_path}: {e}")
-            return None
-            
-    def export_protocol(self, protocol: ClinicalProtocol, file_path: str) -> bool:
-        """
-        Export a protocol to a JSON file.
-        
-        Parameters:
-        -----------
-        protocol : ClinicalProtocol
-            Protocol to export
-        file_path : str
-            Path to export the protocol to
-            
-        Returns:
-        --------
-        bool
-            True if successful, False otherwise
-        """
-        try:
-            # Convert to dictionary
-            data = protocol.to_dict()
-            
-            # Save to file
-            with open(file_path, "w") as f:
-                json.dump(data, f, indent=2)
-                
-            logger.info(f"Exported protocol {protocol.name} to {file_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to export protocol {protocol.name}: {e}")
-            return False
-            
-    def create_default_protocols(self):
-        """Create default protocols if none exist."""
-        if self.protocols:
-            return
-            
-        # Create prostate IMRT protocol
-        prostate = ClinicalProtocol(
-            name="Prostate IMRT",
-            site="Prostate",
-            description="Standard protocol for prostate IMRT",
-            author="System",
-            version="1.0"
-        )
-        
-        # Add goals
-        prostate.add_goal(ClinicalGoal(
-            structure_id="PTV",
-            structure_name="PTV",
-            goal_type=GoalType.DOSE_AT_VOLUME,
-            operator=GoalOperator.GREATER_THAN,
-            value=95.0,
-            priority=GoalPriority.CRITICAL,
-            dose_level=None,
-            volume_level=95.0,
-            notes="Target coverage"
-        ))
-        
-        prostate.add_goal(ClinicalGoal(
-            structure_id="Bladder",
-            structure_name="Bladder",
-            goal_type=GoalType.VOLUME_AT_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=35.0,
-            priority=GoalPriority.MAJOR,
-            dose_level=70.0,
-            volume_level=None,
-            notes="Bladder constraint"
-        ))
-        
-        prostate.add_goal(ClinicalGoal(
-            structure_id="Rectum",
-            structure_name="Rectum",
-            goal_type=GoalType.VOLUME_AT_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=17.0,
-            priority=GoalPriority.MAJOR,
-            dose_level=65.0,
-            volume_level=None,
-            notes="Rectum constraint"
-        ))
-        
-        prostate.add_goal(ClinicalGoal(
-            structure_id="FemoralHeads",
-            structure_name="Femoral Heads",
-            goal_type=GoalType.MEAN_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=35.0,
-            priority=GoalPriority.MINOR,
-            notes="Femoral heads constraint"
-        ))
-        
-        # Save protocol
-        self.save_protocol(prostate)
-        
-        # Create head and neck IMRT protocol
-        hn = ClinicalProtocol(
-            name="Head and Neck IMRT",
-            site="Head and Neck",
-            description="Standard protocol for head and neck IMRT",
-            author="System",
-            version="1.0"
-        )
-        
-        # Add goals
-        hn.add_goal(ClinicalGoal(
-            structure_id="PTV70",
-            structure_name="PTV70",
-            goal_type=GoalType.DOSE_AT_VOLUME,
-            operator=GoalOperator.GREATER_THAN,
-            value=95.0,
-            priority=GoalPriority.CRITICAL,
-            dose_level=None,
-            volume_level=95.0,
-            notes="High dose PTV coverage"
-        ))
-        
-        hn.add_goal(ClinicalGoal(
-            structure_id="PTV59.4",
-            structure_name="PTV59.4",
-            goal_type=GoalType.DOSE_AT_VOLUME,
-            operator=GoalOperator.GREATER_THAN,
-            value=95.0,
-            priority=GoalPriority.CRITICAL,
-            dose_level=None,
-            volume_level=95.0,
-            notes="Intermediate dose PTV coverage"
-        ))
-        
-        hn.add_goal(ClinicalGoal(
-            structure_id="SpinalCord",
-            structure_name="Spinal Cord",
-            goal_type=GoalType.MAX_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=45.0,
-            priority=GoalPriority.CRITICAL,
-            notes="Spinal cord constraint"
-        ))
-        
-        hn.add_goal(ClinicalGoal(
-            structure_id="Brainstem",
-            structure_name="Brainstem",
-            goal_type=GoalType.MAX_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=54.0,
-            priority=GoalPriority.CRITICAL,
-            notes="Brainstem constraint"
-        ))
-        
-        hn.add_goal(ClinicalGoal(
-            structure_id="ParotidL",
-            structure_name="Parotid L",
-            goal_type=GoalType.MEAN_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=26.0,
-            priority=GoalPriority.MAJOR,
-            notes="Left parotid constraint"
-        ))
-        
-        hn.add_goal(ClinicalGoal(
-            structure_id="ParotidR",
-            structure_name="Parotid R",
-            goal_type=GoalType.MEAN_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=26.0,
-            priority=GoalPriority.MAJOR,
-            notes="Right parotid constraint"
-        ))
-        
-        # Save protocol
-        self.save_protocol(hn)
-        
-        # Create lung SBRT protocol
-        lung = ClinicalProtocol(
-            name="Lung SBRT",
-            site="Lung",
-            description="Standard protocol for lung SBRT",
-            author="System",
-            version="1.0"
-        )
-        
-        # Add goals
-        lung.add_goal(ClinicalGoal(
-            structure_id="PTV",
-            structure_name="PTV",
-            goal_type=GoalType.DOSE_AT_VOLUME,
-            operator=GoalOperator.GREATER_THAN,
-            value=95.0,
-            priority=GoalPriority.CRITICAL,
-            dose_level=None,
-            volume_level=95.0,
-            notes="Target coverage"
-        ))
-        
-        lung.add_goal(ClinicalGoal(
-            structure_id="LungsPTV",
-            structure_name="Lungs-PTV",
-            goal_type=GoalType.VOLUME_AT_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=35.0,
-            priority=GoalPriority.MAJOR,
-            dose_level=20.0,
-            volume_level=None,
-            notes="Lung constraint"
-        ))
-        
-        lung.add_goal(ClinicalGoal(
-            structure_id="SpinalCord",
-            structure_name="Spinal Cord",
-            goal_type=GoalType.MAX_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=45.0,
-            priority=GoalPriority.CRITICAL,
-            notes="Spinal cord constraint"
-        ))
-        
-        lung.add_goal(ClinicalGoal(
-            structure_id="Heart",
-            structure_name="Heart",
-            goal_type=GoalType.VOLUME_AT_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=30.0,
-            priority=GoalPriority.MAJOR,
-            dose_level=40.0,
-            volume_level=None,
-            notes="Heart constraint"
-        ))
-        
-        lung.add_goal(ClinicalGoal(
-            structure_id="Esophagus",
-            structure_name="Esophagus",
-            goal_type=GoalType.MEAN_DOSE,
-            operator=GoalOperator.LESS_THAN,
-            value=34.0,
-            priority=GoalPriority.MINOR,
-            notes="Esophagus constraint"
-        ))
-        
-        # Save protocol
-        self.save_protocol(lung)
-        
-        logger.info("Created default protocols")
-
+    # Create directory if it doesn't exist
+    os.makedirs(directory, exist_ok=True)
+    
+    # Create and save protocols
+    protocols = [
+        create_lung_sbrt_protocol(),
+        create_prostate_protocol(),
+        create_head_neck_protocol(),
+        create_breast_protocol(),
+        create_boost_protocol()
+    ]
+    
+    for protocol in protocols:
+        protocol.save(directory)
+    
+    logger.info(f"Saved {len(protocols)} default protocols to {directory}")
 
 # For testing
 if __name__ == "__main__":

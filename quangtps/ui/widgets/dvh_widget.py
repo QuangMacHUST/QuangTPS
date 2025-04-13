@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-DVH (Dose-Volume Histogram) widget for QuangTPS.
+DVH Widget
 
-This module provides a widget for displaying and interacting with DVH data
-in the treatment planning system.
+This module provides a widget for displaying Dose-Volume Histogram (DVH) curves
+for radiotherapy treatment plan evaluation.
 """
 
 import os
@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QCheckBox,
                             QComboBox, QLabel, QPushButton, QFrame, QGroupBox,
                             QTableWidget, QTableWidgetItem, QHeaderView,
                             QSplitter, QTabWidget, QToolButton, QMenu, QAction,
-                            QToolBar)
+                            QToolBar, QSizePolicy, QFileDialog, QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QColor, QIcon, QFont, QPalette
 
@@ -30,8 +30,9 @@ from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh_metrics
 from quangtps.evaluation.dvh.dvh_visualization import get_structure_color
 from quangtps.ui.styles import Colors
 from quangtps.evaluation.dvh.dvh_data import DVHData, DVHCurve
+from quangtps.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DVHPlot(FigureCanvas):
@@ -412,330 +413,239 @@ class DVHMetricsTable(QTableWidget):
 
 
 class DVHWidget(QWidget):
-    """
-    Widget for displaying Dose-Volume Histograms (DVH).
-    Provides interactive visualization of DVH data with options for:
-    - Showing/hiding individual structures
-    - Displaying dose statistics
-    - Exporting data
-    - Customizing display options
-    """
-    
-    selection_changed = pyqtSignal(str)  # structure_id
+    """Widget for displaying DVH curves."""
     
     def __init__(self, parent=None):
+        """
+        Initialize the DVH widget.
+        
+        Args:
+            parent: Parent widget
+        """
         super().__init__(parent)
         
-        self.dvh_data: Optional[DVHData] = None
-        self.selected_structure_id: Optional[str] = None
-        self.structure_visibility: Dict[str, bool] = {}  # structure_id -> visibility
-        self.structure_colors: Dict[str, QColor] = {}  # structure_id -> color
+        # Initialize parameters
+        self.dvh_curves = {}  # Dictionary of DVH data keyed by structure ID
+        self.curve_names = {}  # Dictionary of curve names keyed by structure ID
+        self.curve_colors = {}  # Dictionary of curve colors keyed by structure ID
         
-        # Display options
-        self.display_mode = "cumulative"  # "cumulative" or "differential"
-        self.show_grid = True
-        self.show_legend = True
-        self.x_axis_unit = "Gy"  # "Gy" or "%"
-        self.y_axis_unit = "%"  # "%" or "cc" (cubic centimeters)
+        # Display settings
+        self.dvh_type = "cumulative"  # "cumulative" or "differential"
+        self.volume_type = "relative"  # "relative" or "absolute"
+        self.dose_type = "absolute"  # "relative" or "absolute"
+        
+        # Reference values
+        self.reference_dose = 1.0  # Reference dose for normalization in Gy
         
         # Initialize UI
         self._init_ui()
     
     def _init_ui(self):
-        """Initialize the UI components"""
+        """Initialize the user interface."""
+        # Main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Toolbar for options
-        self.toolbar = QToolBar()
-        
-        # DVH Type combobox
-        self.toolbar.addWidget(QLabel("DVH Type:"))
-        self.dvh_type_combo = QComboBox()
-        self.dvh_type_combo.addItems(["Cumulative", "Differential"])
-        self.dvh_type_combo.setCurrentIndex(0)
-        self.dvh_type_combo.currentIndexChanged.connect(self._on_dvh_type_changed)
-        self.toolbar.addWidget(self.dvh_type_combo)
-        
-        self.toolbar.addSeparator()
-        
-        # X-axis units
-        self.toolbar.addWidget(QLabel("Dose Units:"))
-        self.x_units_combo = QComboBox()
-        self.x_units_combo.addItems(["Gy", "%"])
-        self.x_units_combo.setCurrentIndex(0)
-        self.x_units_combo.currentIndexChanged.connect(self._on_x_units_changed)
-        self.toolbar.addWidget(self.x_units_combo)
-        
-        self.toolbar.addSeparator()
-        
-        # Y-axis units
-        self.toolbar.addWidget(QLabel("Volume Units:"))
-        self.y_units_combo = QComboBox()
-        self.y_units_combo.addItems(["%", "cc"])
-        self.y_units_combo.setCurrentIndex(0)
-        self.y_units_combo.currentIndexChanged.connect(self._on_y_units_changed)
-        self.toolbar.addWidget(self.y_units_combo)
-        
-        self.toolbar.addSeparator()
-        
-        # Display options
-        self.grid_checkbox = QCheckBox("Grid")
-        self.grid_checkbox.setChecked(self.show_grid)
-        self.grid_checkbox.toggled.connect(self._on_grid_toggled)
-        self.toolbar.addWidget(self.grid_checkbox)
-        
-        self.legend_checkbox = QCheckBox("Legend")
-        self.legend_checkbox.setChecked(self.show_legend)
-        self.legend_checkbox.toggled.connect(self._on_legend_toggled)
-        self.toolbar.addWidget(self.legend_checkbox)
-        
-        main_layout.addWidget(self.toolbar)
-        
-        # Matplotlib figure and canvas for DVH plot
-        self.figure = Figure(figsize=(5, 4), dpi=100)
+        # Create figure and canvas for matplotlib
+        self.figure = Figure(figsize=(8, 6), dpi=100)
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setMinimumHeight(300)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # Add matplotlib toolbar
-        nav_toolbar = NavigationToolbar(self.canvas, self)
-        
-        main_layout.addWidget(nav_toolbar)
-        main_layout.addWidget(self.canvas, stretch=1)
-        
-        # Initialize the plot
+        # Create subplot
         self.ax = self.figure.add_subplot(111)
-        self._setup_axes()
         
-        # Connect canvas click event
-        self.canvas.mpl_connect('pick_event', self._on_curve_picked)
+        # Initialize plot
+        self._setup_plot()
+        
+        # Create toolbar
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        
+        # Add to layout
+        main_layout.addWidget(self.toolbar)
+        main_layout.addWidget(self.canvas)
     
-    def _setup_axes(self):
-        """Setup the axes with proper labels and grid"""
+    def _setup_plot(self):
+        """Set up the plot with appropriate labels and grid."""
         self.ax.clear()
         
-        # Set labels based on selected units
-        x_label = f"Dose [{self.x_axis_unit}]"
-        y_label = f"Volume [{self.y_axis_unit}]"
-        
-        self.ax.set_xlabel(x_label)
-        self.ax.set_ylabel(y_label)
-        self.ax.grid(self.show_grid)
-        
-        if self.display_mode == "cumulative":
-            self.ax.set_title("Cumulative Dose Volume Histogram")
-            # For cumulative DVH, y-axis ranges from 0 to 100%
-            if self.y_axis_unit == "%":
-                self.ax.set_ylim(0, 100)
+        # Set labels based on current display settings
+        if self.volume_type == "relative":
+            self.ax.set_ylabel("Volume (%)")
         else:
-            self.ax.set_title("Differential Dose Volume Histogram")
+            self.ax.set_ylabel("Volume (cc)")
         
-        # Set x-axis range based on unit
-        if self.x_axis_unit == "Gy":
-            self.ax.set_xlim(0, 80)  # Typical range for radiotherapy in Gy
+        if self.dose_type == "relative":
+            self.ax.set_xlabel("Dose (%)")
         else:
-            self.ax.set_xlim(0, 120)  # Percentage can go over 100%
+            self.ax.set_xlabel("Dose (Gy)")
         
-        self.figure.tight_layout()
-        self.canvas.draw()
+        # Set title based on DVH type
+        if self.dvh_type == "cumulative":
+            self.ax.set_title("Cumulative Dose-Volume Histogram")
+        else:
+            self.ax.set_title("Differential Dose-Volume Histogram")
+        
+        # Set grid
+        self.ax.grid(True, linestyle='--', alpha=0.7)
+        
+        # Set axes limits
+        if self.volume_type == "relative":
+            self.ax.set_ylim(0, 105)  # 0-105% for relative volume
+        
+        if self.dose_type == "relative":
+            self.ax.set_xlim(0, 105)  # 0-105% for relative dose
+        
+        # Enable legend
+        self.ax.legend()
     
-    def set_dvh_data(self, dvh_data: DVHData):
-        """Set DVH data and update the plot"""
-        self.dvh_data = dvh_data
-        
-        # Initialize visibility and colors
-        structure_ids = dvh_data.get_structure_ids()
-        for struct_id in structure_ids:
-            if struct_id not in self.structure_visibility:
-                self.structure_visibility[struct_id] = True
-            
-            if struct_id not in self.structure_colors:
-                # Assign color based on structure type
-                structure = dvh_data.get_structure(struct_id)
-                if structure:
-                    if "PTV" in structure.name or "CTV" in structure.name or "GTV" in structure.name:
-                        self.structure_colors[struct_id] = QColor(255, 0, 0)  # Red for targets
-                    elif any(oar in structure.name for oar in ["Lung", "Heart", "Liver", "Kidney", "Spinal", "Brain", "Cord"]):
-                        self.structure_colors[struct_id] = QColor(0, 0, 255)  # Blue for OARs
-                    else:
-                        self.structure_colors[struct_id] = QColor(0, 180, 0)  # Green for other structures
-        
-        # Update the plot
-        self._update_plot()
-    
-    def clear(self):
-        """Clear the plot"""
-        self.dvh_data = None
-        self.selected_structure_id = None
-        
-        # Clear the plot
-        self.ax.clear()
-        self._setup_axes()
-    
-    def _update_plot(self):
-        """Update the DVH plot with current data and settings"""
-        if not self.dvh_data:
-            return
-        
-        # Clear the current plot
-        self.ax.clear()
-        self._setup_axes()
-        
-        # Get all structure IDs
-        structure_ids = self.dvh_data.get_structure_ids()
-        
-        # Plot each visible structure
-        legend_entries = []
-        for struct_id in structure_ids:
-            if not self.structure_visibility.get(struct_id, True):
-                continue
-            
-            # Get the structure and its DVH curve
-            structure = self.dvh_data.get_structure(struct_id)
-            curve = self.dvh_data.get_curve(struct_id)
-            
-            if not structure or not curve:
-                continue
-            
-            # Get the color
-            color = self.structure_colors.get(struct_id)
-            matplotlib_color = None
-            if color:
-                matplotlib_color = (color.red()/255.0, color.green()/255.0, color.blue()/255.0)
-            
-            # Set line styles
-            line_style = '-'
-            line_width = 2.0
-            
-            # Highlight selected structure
-            if struct_id == self.selected_structure_id:
-                line_width = 3.0
-            
-            # Get the appropriate data based on display mode and units
-            x_data, y_data = self._get_plot_data(curve)
-            
-            # Plot the curve
-            line, = self.ax.plot(
-                x_data, y_data, 
-                linestyle=line_style, 
-                linewidth=line_width,
-                color=matplotlib_color,
-                label=structure.name,
-                picker=5  # Make the line pickable
-            )
-            
-            # Store for legend
-            legend_entries.append(line)
-        
-        # Add legend if enabled
-        if self.show_legend and legend_entries:
-            self.ax.legend()
-        
-        # Update the canvas
-        self.canvas.draw()
-    
-    def _get_plot_data(self, curve: DVHCurve) -> Tuple[np.ndarray, np.ndarray]:
+    def add_dvh_curve(self, dvh_data: DVHData, name: str, color: Tuple[float, float, float, float] = None):
         """
-        Get the appropriate x and y data for plotting based on the current settings.
+        Add a DVH curve to the plot.
         
         Args:
-            curve: The DVH curve to extract data from
-            
-        Returns:
-            Tuple of (x_data, y_data) as numpy arrays
+            dvh_data: DVH data object
+            name: Name for the curve (usually structure name)
+            color: RGBA color tuple for the curve
         """
-        # Get dose and volume data
-        dose_data = curve.dose_data.copy()
-        volume_data = curve.volume_data.copy()
+        if dvh_data is None:
+            logger.warning(f"Cannot add DVH curve for {name}: DVH data is None")
+            return
         
-        # Transform data based on display mode
-        if self.display_mode == "differential":
-            # Convert cumulative to differential if needed
-            if curve.is_cumulative:
-                # Simple approach: diff between adjacent points
-                # In a real implementation, proper differentiation should be used
-                differential_volume = np.zeros_like(volume_data)
-                differential_volume[1:] = np.diff(volume_data)
-                differential_volume[0] = volume_data[0]
-                volume_data = differential_volume
-        else:  # cumulative
-            # Convert differential to cumulative if needed
-            if not curve.is_cumulative:
-                # Simple approach: running sum
-                # In a real implementation, proper integration should be used
-                volume_data = np.cumsum(volume_data)
-                # Normalize
-                if np.max(volume_data) > 0:
-                    volume_data = 100.0 * volume_data / np.max(volume_data)
+        # Store the data
+        structure_id = dvh_data.structure_id
+        self.dvh_curves[structure_id] = dvh_data
+        self.curve_names[structure_id] = name
         
-        # Transform x-axis (dose) based on units
-        if self.x_axis_unit == "%":
-            # Convert dose to percentage of prescription
-            prescription_dose = self.dvh_data.prescription_dose
-            if prescription_dose > 0:
-                dose_data = 100.0 * dose_data / prescription_dose
+        # Use provided color or generate one
+        if color is None:
+            # Generate a random color if none provided
+            import random
+            color = (random.random(), random.random(), random.random(), 1.0)
         
-        # Transform y-axis (volume) based on units
-        if self.y_axis_unit == "cc":
-            # Convert percentage to absolute volume
-            total_volume = curve.total_volume
-            volume_data = volume_data * total_volume / 100.0
-        
-        return dose_data, volume_data
+        self.curve_colors[structure_id] = color
     
-    def _on_dvh_type_changed(self, index):
-        """Handle DVH type combobox changes"""
-        if index == 0:
-            self.display_mode = "cumulative"
-        else:
-            self.display_mode = "differential"
+    def clear(self):
+        """Clear all DVH curves."""
+        self.dvh_curves.clear()
+        self.curve_names.clear()
+        self.curve_colors.clear()
         
-        self._update_plot()
+        # Reset plot
+        self._setup_plot()
+        self.canvas.draw()
     
-    def _on_x_units_changed(self, index):
-        """Handle X-axis units combobox changes"""
-        if index == 0:
-            self.x_axis_unit = "Gy"
-        else:
-            self.x_axis_unit = "%"
+    def refresh(self):
+        """Refresh the DVH display."""
+        # Reset plot
+        self._setup_plot()
         
-        self._update_plot()
-    
-    def _on_y_units_changed(self, index):
-        """Handle Y-axis units combobox changes"""
-        if index == 0:
-            self.y_axis_unit = "%"
-        else:
-            self.y_axis_unit = "cc"
+        # Plot each curve
+        for structure_id, dvh_data in self.dvh_curves.items():
+            self._plot_dvh_curve(structure_id)
         
-        self._update_plot()
-    
-    def _on_grid_toggled(self, checked):
-        """Handle grid checkbox changes"""
-        self.show_grid = checked
-        self._update_plot()
-    
-    def _on_legend_toggled(self, checked):
-        """Handle legend checkbox changes"""
-        self.show_legend = checked
-        self._update_plot()
-    
-    def _on_curve_picked(self, event):
-        """Handle curve picking (clicking) in the plot"""
-        # Get the artist (line) that was picked
-        artist = event.artist
+        # Draw legend if we have curves
+        if self.dvh_curves:
+            self.ax.legend(loc='upper right')
         
-        # Find the corresponding structure ID
-        structure_ids = self.dvh_data.get_structure_ids()
-        for struct_id in structure_ids:
-            structure = self.dvh_data.get_structure(struct_id)
-            if structure and structure.name == artist.get_label():
-                # Set as selected
-                self.selected_structure_id = struct_id
-                
-                # Emit signal
-                self.selection_changed.emit(struct_id)
-                
-                # Update plot to highlight selected curve
-                self._update_plot()
-                break 
+        # Redraw canvas
+        self.canvas.draw()
+    
+    def _plot_dvh_curve(self, structure_id: str):
+        """
+        Plot a DVH curve for the given structure ID.
+        
+        Args:
+            structure_id: ID of the structure to plot
+        """
+        if structure_id not in self.dvh_curves:
+            return
+        
+        dvh_data = self.dvh_curves[structure_id]
+        name = self.curve_names.get(structure_id, structure_id)
+        color = self.curve_colors.get(structure_id, (0.5, 0.5, 0.5, 1.0))
+        
+        # Get dose bins
+        dose_bins = np.array(dvh_data.dose_bins)
+        
+        # Convert dose if needed
+        if self.dose_type == "relative" and dvh_data.dose_unit == "Gy":
+            if self.reference_dose > 0:
+                dose_bins = dose_bins / self.reference_dose * 100.0
+        
+        # Get appropriate volume data
+        if self.dvh_type == "cumulative":
+            volume_data = np.array(dvh_data.cumulative_volume)
+        else:  # differential
+            volume_data = np.array(dvh_data.differential_volume)
+        
+        # Convert volume if needed
+        if self.volume_type == "relative" and dvh_data.volume_unit == "cc":
+            if dvh_data.total_volume > 0:
+                volume_data = volume_data / dvh_data.total_volume * 100.0
+        elif self.volume_type == "absolute" and dvh_data.volume_unit == "%":
+            if dvh_data.total_volume > 0:
+                volume_data = volume_data * dvh_data.total_volume / 100.0
+        
+        # Plot the curve
+        self.ax.plot(dose_bins, volume_data, label=name, color=color, linewidth=2)
+    
+    def set_dvh_type(self, dvh_type: str):
+        """
+        Set the DVH display type.
+        
+        Args:
+            dvh_type: "cumulative" or "differential"
+        """
+        if dvh_type not in ["cumulative", "differential"]:
+            logger.warning(f"Invalid DVH type: {dvh_type}")
+            return
+            
+        self.dvh_type = dvh_type
+    
+    def set_volume_type(self, volume_type: str):
+        """
+        Set the volume display type.
+        
+        Args:
+            volume_type: "relative" or "absolute"
+        """
+        if volume_type not in ["relative", "absolute"]:
+            logger.warning(f"Invalid volume type: {volume_type}")
+            return
+            
+        self.volume_type = volume_type
+    
+    def set_dose_type(self, dose_type: str):
+        """
+        Set the dose display type.
+        
+        Args:
+            dose_type: "relative" or "absolute"
+        """
+        if dose_type not in ["relative", "absolute"]:
+            logger.warning(f"Invalid dose type: {dose_type}")
+            return
+            
+        self.dose_type = dose_type
+    
+    def set_reference_dose(self, dose: float):
+        """
+        Set the reference dose for normalization.
+        
+        Args:
+            dose: Reference dose in Gy
+        """
+        if dose <= 0:
+            logger.warning(f"Invalid reference dose: {dose}")
+            return
+            
+        self.reference_dose = dose
+    
+    def save_figure(self, file_path: str):
+        """
+        Save the current figure to a file.
+        
+        Args:
+            file_path: Path to save the figure
+        """
+        self.figure.savefig(file_path, dpi=300, bbox_inches='tight') 

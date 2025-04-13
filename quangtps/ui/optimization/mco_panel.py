@@ -734,8 +734,8 @@ class MCOPanel(QWidget):
                     "At least two objectives are required for MCO.\n"
                     "Please add objectives in the optimizer tab first."
                 )
-                return
-            
+            return
+        
             # Set objectives in the MCO navigator
             self.mco_navigator.set_objectives(objectives)
             
@@ -870,7 +870,7 @@ class MCOPanel(QWidget):
         """
         if self.is_updating_sliders or not self.mco_navigator:
             return
-            
+        
         # Find closest solution to current objective values
         objective_values = {}
         
@@ -886,7 +886,7 @@ class MCOPanel(QWidget):
             for slider in self.weight_sliders:
                 if slider.get_index() == closest_idx:
                     slider.set_value(1.0)
-                else:
+            else:
                     slider.set_value(0.0)
                     
             self.is_updating_sliders = False
@@ -904,7 +904,7 @@ class MCOPanel(QWidget):
         """
         if self.is_updating_sliders or not self.mco_navigator:
             return
-            
+        
         # If normalize is checked, adjust other sliders to make weights sum to 1.0
         if self.normalize_weights.isChecked():
             self._normalize_weights(solution_index)
@@ -1004,7 +1004,7 @@ class MCOPanel(QWidget):
         """Update objective sliders based on current solution."""
         if not self.mco_navigator or not self.mco_navigator.current_solution:
             return
-            
+        
         self.is_updating_sliders = True
         
         for slider in self.objective_sliders:

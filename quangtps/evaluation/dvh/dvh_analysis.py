@@ -278,7 +278,7 @@ class DVHAnalysis:
         elif method.lower() == 'lomax':
             # CI_Lomax = TV_RI / TV
             # TV_RI là thể tích của target nhận ít nhất liều kê đơn
-            # Giả định rằng toàn bộ target nhận liều kê đơn
+            # Giả định rằng toàn bộ target nhận đủ liều
             if reference_volume is None:
                 logger.warning("Reference volume is required for Lomax conformity index")
                 return float('nan')

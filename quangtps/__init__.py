@@ -1,12 +1,17 @@
 """
-QuangTPS - Radiation Therapy Treatment Planning System
+QuangTPS: A Modern Radiotherapy Treatment Planning System
 
-This package provides a comprehensive set of tools for radiation therapy
-treatment planning, including image visualization, structure segmentation,
-beam planning, dose calculation, and plan evaluation.
-
-The system is designed primarily for educational and research purposes.
+QuangTPS is a Python-based radiotherapy treatment planning system
+that provides tools for contouring, planning, dose calculation, 
+optimization, and evaluation.
 """
+
+__version__ = "0.2.0"
+__author__ = "QuangTPS Team"
+__license__ = "MIT"
+
+# Import commonly used modules for easier access
+from quangtps.core.logging import get_logger, setup_logging
 
 import os
 import sys
@@ -15,9 +20,6 @@ from pathlib import Path
 
 # Setup logging
 logger = logging.getLogger(__name__)
-
-# Package version
-__version__ = '0.1.0'
 
 # Root directory
 ROOT_DIR = Path(__file__).parent.absolute()

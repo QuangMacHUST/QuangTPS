@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QGroupBox, QHeaderView, QCheckBox, QComboBox, QFileDialog,
     QDoubleSpinBox, QSpinBox, QRadioButton, QFrame, QApplication,
     QFormLayout, QTextEdit, QDateEdit, QDialog, QButtonGroup, QProgressDialog,
-    QToolBar
+    QToolBar, QAction
 )
 
 from quangtps.planning.plan import Plan, PlanStatus, PlanType
@@ -130,39 +130,39 @@ class PlanningTab(QWidget):
         main_layout.setContentsMargins(10, 10, 10, 10)
         
         # Add toolbar for common actions
-        toolbar = QToolBar("Planning Tools")
+        self.toolbar = QToolBar("Planning Tools")
         
         # Add patient/plan selection
         patient_label = QLabel("Patient:")
-        toolbar.addWidget(patient_label)
+        self.toolbar.addWidget(patient_label)
         
         self.patient_combo = QComboBox()
         self.patient_combo.setMinimumWidth(200)
         self.patient_combo.currentIndexChanged.connect(self._on_patient_changed)
-        toolbar.addWidget(self.patient_combo)
-        toolbar.addSeparator()
+        self.toolbar.addWidget(self.patient_combo)
+        self.toolbar.addSeparator()
         
         # Add plan selection
         plan_label = QLabel("Plan:")
-        toolbar.addWidget(plan_label)
+        self.toolbar.addWidget(plan_label)
         
         self.plan_combo = QComboBox()
         self.plan_combo.setMinimumWidth(150)
         self.plan_combo.currentIndexChanged.connect(self._on_plan_changed)
-        toolbar.addWidget(self.plan_combo)
+        self.toolbar.addWidget(self.plan_combo)
         
         # Add plan management buttons
         new_plan_btn = QPushButton("New Plan")
         new_plan_btn.setIcon(QIcon.fromTheme("document-new"))
         new_plan_btn.clicked.connect(self._create_plan_dialog)
-        toolbar.addWidget(new_plan_btn)
+        self.toolbar.addWidget(new_plan_btn)
         
         save_plan_btn = QPushButton("Save Plan")
         save_plan_btn.setIcon(QIcon.fromTheme("document-save"))
         save_plan_btn.clicked.connect(self._save_plan)
-        toolbar.addWidget(save_plan_btn)
+        self.toolbar.addWidget(save_plan_btn)
         
-        main_layout.addWidget(toolbar)
+        main_layout.addWidget(self.toolbar)
         
         # Main splitter
         self.main_splitter = QSplitter(Qt.Horizontal)
@@ -338,6 +338,12 @@ class PlanningTab(QWidget):
         
         # Populate patient list
         self._populate_patient_list()
+        
+        # Add plan comparison action
+        self.compare_plans_action = QAction(QIcon("quangtps/ui/icons/new_icons/compare.png"), "Compare Plans", self)
+        self.compare_plans_action.setStatusTip("Compare multiple treatment plans")
+        self.compare_plans_action.triggered.connect(self._on_compare_plans)
+        self.toolbar.addAction(self.compare_plans_action)
     
     def _on_technique_changed(self, index):
         """
@@ -877,87 +883,155 @@ class PlanningTab(QWidget):
             pass
     
     def run_mco_optimization(self):
-        """Thực hiện tối ưu đa tiêu chí (MCO)."""
+        """Run multi-criteria optimization (MCO)."""
         try:
-            QMessageBox.information(self, "Thông báo", 
-                "Tính năng MCO đang được phát triển và chưa sẵn sàng.")
-            return
-
-            # Phần code bên dưới sẽ bị bỏ qua
-            '''
             if not self.current_plan:
-                QMessageBox.warning(self, "Cảnh báo", "Vui lòng tạo hoặc mở một kế hoạch trước khi tối ưu.")
+                QMessageBox.warning(self, "Warning", "Please create or open a plan before optimization.")
                 return
                 
-            # Hiển thị hộp thoại tiến trình
-            progress_dialog = QProgressDialog("Đang chuẩn bị tối ưu đa tiêu chí...", "Hủy", 0, 100, self)
-            progress_dialog.setWindowTitle("Tối ưu hóa MCO")
+            # Show progress dialog
+            progress_dialog = QProgressDialog("Preparing multi-criteria optimization...", "Cancel", 0, 100, self)
+            progress_dialog.setWindowTitle("MCO Optimization")
             progress_dialog.setWindowModality(Qt.WindowModal)
             progress_dialog.show()
             QApplication.processEvents()
             
-            # Chuẩn bị các tiêu chí
+            # Prepare objectives
             progress_dialog.setValue(10)
             QApplication.processEvents()
             
-            # Kiểm tra số lượng mục tiêu
-            if len(self.objective_collection.objectives) < 2:
+            # Check if objectives exist
+            if not hasattr(self.current_plan, 'objectives') or not self.current_plan.objectives:
                 progress_dialog.close()
-                QMessageBox.warning(self, "Cảnh báo", "Cần ít nhất 2 hàm mục tiêu để thực hiện MCO.")
+                QMessageBox.warning(self, "Warning", "Plan must have objectives defined for MCO.")
+                return
+                
+            # Check number of objectives
+            if len(self.current_plan.objectives) < 2:
+                progress_dialog.close()
+                QMessageBox.warning(self, "Warning", "At least 2 objective functions are required for MCO.")
                 return
             
-            # Thiết lập động cơ MCO
+            # Set up MCO engine
             progress_dialog.setValue(30)
-            progress_dialog.setLabelText("Đang thiết lập động cơ MCO...")
+            progress_dialog.setLabelText("Setting up MCO engine...")
             QApplication.processEvents()
             
-            mco_engine = MCOEngine()
+            mco_engine = MCOEngine(method=MCOMethod.WEIGHTED_SUM)
             
-            # Thêm các mục tiêu vào động cơ MCO
-            for objective in self.objective_collection.objectives:
-                mco_engine.add_objective(objective)
+            # Add objectives to MCO engine
+            for obj in self.current_plan.objectives:
+                # Determine if this is a target or OAR objective
+                obj_type = "Other"
+                if hasattr(obj, 'structure') and obj.structure:
+                    if hasattr(obj.structure, 'type'):
+                        obj_type = obj.structure.type
+                
+                # Set appropriate range and default weight based on objective type
+                if "Target" in obj_type:
+                    weight_range = (0.1, 1.0)
+                    default_weight = 0.7
+                elif "OAR" in obj_type:
+                    weight_range = (0.0, 0.9)
+                    default_weight = 0.3
+                else:
+                    weight_range = (0.0, 1.0)
+                    default_weight = 0.5
+                
+                # Add to MCO engine
+                mco_engine.add_objective(
+                    objective=obj,
+                    name=obj.name if hasattr(obj, 'name') and obj.name else f"Objective {id(obj)}",
+                    weight_range=weight_range,
+                    current_weight=default_weight,
+                    show_in_navigation=True
+                )
             
-            # Thêm các ràng buộc vào động cơ MCO
+            # Add constraints
             progress_dialog.setValue(50)
-            progress_dialog.setLabelText("Đang thêm các ràng buộc vào MCO...")
+            progress_dialog.setLabelText("Adding constraints to MCO...")
             QApplication.processEvents()
             
-            for constraint in self.constraint_collection.constraints:
-                mco_engine.add_constraint(constraint)
+            if hasattr(self.current_plan, 'constraints') and self.current_plan.constraints:
+                for constraint in self.current_plan.constraints:
+                    mco_engine.add_constraint(constraint)
             
-            # Khởi tạo không gian Pareto
+            # Initialize Pareto space
             progress_dialog.setValue(70)
-            progress_dialog.setLabelText("Đang khởi tạo không gian Pareto...")
+            progress_dialog.setLabelText("Initializing Pareto space...")
             QApplication.processEvents()
             
-            # Kiểm tra hủy
+            # Check for cancellation
             if progress_dialog.wasCanceled():
                 return
+            
+            # Get dose grid and structures
+            dose_grid = self.current_plan.dose_grid if hasattr(self.current_plan, 'dose_grid') else None
+            structures = self.current_plan.structures if hasattr(self.current_plan, 'structures') else None
+            
+            # Set initial state if dose grid and structures are available
+            if dose_grid and structures:
+                mco_engine.set_initial_state(dose_grid, structures)
             
             progress_dialog.setValue(90)
             QApplication.processEvents()
             
-            # Hiển thị dialog điều hướng MCO
-            mco_dialog = MCONavigationDialog(mco_engine, self)
+            # Store MCO engine in the plan
+            self.current_plan.mco_engine = mco_engine
+            
+            # Close progress dialog
             progress_dialog.close()
             
-            # Xử lý khi người dùng chấp nhận một kế hoạch
-            mco_dialog.tradeAccepted.connect(self.accept_mco_trade)
+            # Show MCO navigation dialog
+            self._open_mco_dialog()
             
-            # Hiển thị dialog
-            mco_dialog.exec_()
-            '''
         except Exception as e:
-            QMessageBox.critical(self, "Lỗi", f"Lỗi khi thực hiện tối ưu đa tiêu chí: {str(e)}")
+            logger.error(f"Error during MCO optimization: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Error during multi-criteria optimization: {str(e)}")
     
     def accept_mco_trade(self, trade):
-        """Chấp nhận một thỏa hiệp từ MCO."""
-        try:
-            QMessageBox.information(self, "Thông báo", 
-                "Tính năng MCO đang được phát triển và chưa sẵn sàng.")
+        """Accept an MCO trade and apply it to the current plan."""
+        if not self.current_plan:
+            logger.error("Cannot accept MCO trade: No current plan")
             return
+            
+        try:
+            logger.info(f"Applying MCO trade with {len(trade.objective_values)} objective values")
+            
+            # Update the plan's dose grid with the one from the trade
+            if trade.dose_grid is not None:
+                self.current_plan.dose_grid = trade.dose_grid
+                logger.info("Updated plan dose grid from MCO trade")
+            
+            # Update objective weights in the plan to match the trade
+            if hasattr(self.current_plan, 'objectives') and self.current_plan.objectives:
+                for obj in self.current_plan.objectives:
+                    obj_name = obj.name if hasattr(obj, 'name') and obj.name else f"Objective {id(obj)}"
+                    if obj_name in trade.weights:
+                        obj.weight = trade.weights[obj_name]
+                        logger.info(f"Updated weight for objective {obj_name}: {obj.weight}")
+            
+            # Store the DVH data from the trade
+            if trade.dvh_data:
+                self.current_plan.dvh_data = trade.dvh_data
+                logger.info("Updated plan DVH data from MCO trade")
+            
+            # Store the trade itself for reference
+            self.current_plan.selected_mco_trade = trade
+            
+            # Update evaluation metrics
+            self.current_plan.evaluation_metrics = {}
+            for obj_name, obj_value in trade.objective_values.items():
+                self.current_plan.evaluation_metrics[f"MCO_{obj_name}"] = obj_value
+            
+            # Flag plan as modified
+            self.current_plan.modified = True
+            
+            logger.info("Successfully applied MCO trade to current plan")
+            
         except Exception as e:
-            QMessageBox.critical(self, "Lỗi", f"Lỗi khi áp dụng thỏa hiệp MCO: {str(e)}")
+            logger.error(f"Error applying MCO trade: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Could not apply MCO trade: {str(e)}")
 
     def run_kbp_optimization(self):
         """Thực hiện tối ưu hóa dựa trên kiến thức."""
@@ -1037,15 +1111,112 @@ class PlanningTab(QWidget):
             QMessageBox.critical(self, "Lỗi", f"Không thể áp dụng đề xuất KBP: {str(e)}")
             logger.exception("Error applying KBP recommendation")
 
-    def open_mco_navigator(self):
-        """Mở dialog điều hướng MCO."""
-        try:
-            QMessageBox.information(self, "Thông báo", 
-                "Tính năng MCO đang được phát triển và chưa sẵn sàng.")
+    def _open_mco_dialog(self):
+        """Open the MCO navigation dialog."""
+        if not self.current_plan:
+            QMessageBox.warning(self, "No Plan Selected", "Please select a plan first.")
             return
+        
+        # Check for optimization objectives
+        if not hasattr(self.current_plan, 'objectives') or not self.current_plan.objectives:
+            QMessageBox.warning(self, "Missing Objectives", 
+                              "The plan must have optimization objectives defined before using MCO.")
+            return
+        
+        # Check if we have calculated dose or structures available
+        has_dose = hasattr(self.current_plan, 'dose_grid') and self.current_plan.dose_grid is not None
+        has_structures = hasattr(self.current_plan, 'structures') and self.current_plan.structures is not None
+        
+        if not has_dose or not has_structures:
+            response = QMessageBox.question(
+                self,
+                "Missing Data",
+                "MCO works best with a calculated dose grid and defined structures. Do you want to proceed anyway?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if response == QMessageBox.No:
+                return
+        
+        try:
+            # Create MCO engine if it doesn't exist or reset it
+            if not hasattr(self.current_plan, 'mco_engine') or self.current_plan.mco_engine is None:
+                # Set up MCO engine with the current plan's objectives
+                mco_engine = MCOEngine(method=MCOMethod.WEIGHTED_SUM)
+                
+                # Add all objectives from the plan
+                for obj in self.current_plan.objectives:
+                    # Determine if this is a target or OAR objective
+                    obj_type = "Other"
+                    if hasattr(obj, 'structure') and obj.structure:
+                        if hasattr(obj.structure, 'type'):
+                            obj_type = obj.structure.type
+                    
+                    # Set appropriate range and default weight based on objective type
+                    if "Target" in obj_type:
+                        weight_range = (0.1, 1.0)
+                        default_weight = 0.7
+                    elif "OAR" in obj_type:
+                        weight_range = (0.0, 0.9)
+                        default_weight = 0.3
+                    else:
+                        weight_range = (0.0, 1.0)
+                        default_weight = 0.5
+                    
+                    # Add to MCO engine
+                    mco_engine.add_objective(
+                        objective=obj,
+                        name=obj.name if hasattr(obj, 'name') and obj.name else f"Objective {id(obj)}",
+                        weight_range=weight_range,
+                        current_weight=default_weight,
+                        show_in_navigation=True
+                    )
+                
+                # Add constraints if available
+                if hasattr(self.current_plan, 'constraints'):
+                    for constraint in self.current_plan.constraints:
+                        mco_engine.add_constraint(constraint)
+                
+                # Set initial state if dose grid and structures are available
+                if has_dose and has_structures:
+                    mco_engine.set_initial_state(
+                        dose_grid=self.current_plan.dose_grid,
+                        structures=self.current_plan.structures
+                    )
+                
+                # Store the engine in the plan for future use
+                self.current_plan.mco_engine = mco_engine
+            
+            # Create and show the MCO navigation dialog
+            dialog = MCONavigationDialog(self.current_plan.mco_engine, self)
+            
+            # Connect the signal to handle when a trade is accepted
+            dialog.tradeAccepted.connect(self.accept_mco_trade)
+            
+            # Show the dialog
+            result = dialog.exec_()
+            
+            # Handle the result
+            if result == QDialog.Accepted:
+                # The trade has already been applied via the signal connection
+                # Update UI to reflect changes
+                self._update_plan_display()
+                QMessageBox.information(
+                    self,
+                    "Plan Updated",
+                    "The plan has been updated with the selected MCO trade-off."
+                )
+                
+                # Emit signal that plan was updated
+                self.plan_updated.emit(self.current_plan)
+                
         except Exception as e:
-            logger.error(f"Lỗi khi mở điều hướng MCO: {str(e)}")
-            QMessageBox.critical(self, "Lỗi", f"Không thể mở điều hướng MCO: {str(e)}")
+            logger.error(f"Error opening MCO dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "MCO Error",
+                f"An error occurred while setting up MCO: {str(e)}"
+            )
 
     def _check_3d_visualization_dependencies(self):
         """Check if 3D visualization dependencies are available and offer to install them."""
@@ -1197,15 +1368,6 @@ class PlanningTab(QWidget):
         finally:
             progress.close()
 
-    def _open_mco_dialog(self):
-        """Open the MCO navigation dialog."""
-        if not self.current_plan:
-            QMessageBox.warning(self, "No Plan Selected", "Please select a plan first.")
-            return
-            
-        # Implementation for MCO dialog
-        pass
-    
     def _open_robust_optimization(self):
         """Open the robust optimization dialog."""
         if not self.current_plan:
@@ -1248,3 +1410,68 @@ class PlanningTab(QWidget):
             
             # Update the plan
             self.plan_updated.emit(self.current_plan)
+
+    def _on_compare_plans(self):
+        """Open the plan comparison dialog."""
+        # Check if there's an active plan
+        if not self.current_plan:
+            QMessageBox.warning(self, "Compare Plans", "Please select a plan to use as reference.")
+            return
+        
+        # Import here to avoid circular imports
+        from quangtps.ui.plan_comparison_dialog import PlanComparisonDialog
+        
+        # Create and show the dialog
+        dialog = PlanComparisonDialog(self.current_plan, self)
+        dialog.exec_()
+
+    def _create_toolbar(self):
+        # Create toolbar
+        self.toolbar = QToolBar()
+        self.toolbar.setIconSize(QSize(32, 32))
+        
+        # Add plan management actions
+        self.new_plan_action = QAction(QIcon("quangtps/ui/icons/new_plan.png"), "New Plan", self)
+        self.new_plan_action.setStatusTip("Create a new treatment plan")
+        self.new_plan_action.triggered.connect(self._on_new_plan)
+        self.toolbar.addAction(self.new_plan_action)
+        
+        self.open_plan_action = QAction(QIcon("quangtps/ui/icons/open_plan.png"), "Open Plan", self)
+        self.open_plan_action.setStatusTip("Open an existing treatment plan")
+        self.open_plan_action.triggered.connect(self._on_open_plan)
+        self.toolbar.addAction(self.open_plan_action)
+        
+        self.save_plan_action = QAction(QIcon("quangtps/ui/icons/save_plan.png"), "Save Plan", self)
+        self.save_plan_action.setStatusTip("Save the current treatment plan")
+        self.save_plan_action.triggered.connect(self._on_save_plan)
+        self.toolbar.addAction(self.save_plan_action)
+        
+        self.toolbar.addSeparator()
+        
+        # Add calculation actions
+        self.calculate_dose_action = QAction(QIcon("quangtps/ui/icons/calculate.png"), "Calculate Dose", self)
+        self.calculate_dose_action.setStatusTip("Calculate dose for the current plan")
+        self.calculate_dose_action.triggered.connect(self._on_calculate_dose)
+        self.toolbar.addAction(self.calculate_dose_action)
+        
+        self.toolbar.addSeparator()
+        
+        # Add evaluate actions
+        self.evaluate_plan_action = QAction(QIcon("quangtps/ui/icons/evaluate.png"), "Evaluate Plan", self)
+        self.evaluate_plan_action.setStatusTip("Evaluate the current plan")
+        self.evaluate_plan_action.triggered.connect(self._on_evaluate_plan)
+        self.toolbar.addAction(self.evaluate_plan_action)
+        
+        # Add plan comparison action
+        self.compare_plans_action = QAction(QIcon("quangtps/ui/comparison.svg"), "Compare Plans", self)
+        self.compare_plans_action.setStatusTip("Compare multiple treatment plans")
+        self.compare_plans_action.triggered.connect(self._on_compare_plans)
+        self.toolbar.addAction(self.compare_plans_action)
+        
+        self.toolbar.addSeparator()
+        
+        # Add some vertical space above the toolbar
+        layout = QVBoxLayout()
+        layout.addWidget(self.toolbar)
+        
+        return layout

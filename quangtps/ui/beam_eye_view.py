@@ -22,7 +22,7 @@ import matplotlib.colors as mcolors
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QComboBox, QCheckBox, QGroupBox, QSlider, QToolBar, QAction,
-    QToolButton, QSizePolicy, QStyle, QFrame
+    QToolButton, QSizePolicy, QStyle, QFrame, QFormLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QPixmap, QColor

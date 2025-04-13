@@ -27,7 +27,7 @@ def check_dependencies():
         "matplotlib",
         "pydicom",
         "PyQt5",
-        "pillow", 
+        "PIL", 
         "SimpleITK",
         "vtk",
         "pyvista",

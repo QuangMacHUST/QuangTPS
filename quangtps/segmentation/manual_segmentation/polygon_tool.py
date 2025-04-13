@@ -2,461 +2,499 @@
 # -*- coding: utf-8 -*-
 
 """
-Polygon Contour Tool Module
-==========================
+Polygon Contouring Tool
 
-This module provides a polygon-based contouring tool for creating and
-editing contours in radiotherapy treatment planning.
+This module implements the polygon drawing tool for manual structure
+contouring in the QuangTPS treatment planning system.
 """
 
-import os
 import logging
 import numpy as np
-from enum import Enum
-from typing import List, Dict, Tuple, Optional, Any, Union
+from typing import List, Tuple, Optional, Any
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QRadioButton, QButtonGroup, QCheckBox, QSpinBox,
-    QDoubleSpinBox, QGroupBox, QFormLayout, QFrame, QSizePolicy
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QPushButton, QSlider, QCheckBox, QGroupBox
 )
-from PyQt5.QtGui import (
-    QColor, QIcon, QPixmap, QPainter, QPen, QBrush, QCursor,
-    QPainterPath, QPolygon
-)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QPointF
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint, QPointF
+from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QCursor, QPixmap, QPolygonF
 
-logger = logging.getLogger(__name__)
+from quangtps.core.logging import get_logger
 
-class PolygonMode(Enum):
-    """Enum for the different modes of the polygon tool."""
-    CREATE = 1  # Create a new polygon
-    EDIT = 2    # Edit an existing polygon
-    DELETE = 3  # Delete points from a polygon
+logger = get_logger(__name__)
 
-class PolygonContourTool:
+class PolygonTool:
     """
-    Tool for creating and editing contours using polygons.
+    Polygon contouring tool for manual structure delineation.
     
-    This class provides functionality for creating and editing structure
-    contours using polygon-based drawing.
+    This tool allows creating precise polygonal contours by placing vertices
+    at specific points. The user can add, move, and delete vertices to
+    create an accurate contour.
     """
     
-    def __init__(self, mode=PolygonMode.CREATE):
-        """Initialize polygon contour tool with specified mode."""
-        # Tool settings
-        self.mode = mode
-        self.close_threshold = 10  # pixels
-        self.snap_to_points = True
-        self.snap_threshold = 10   # pixels
+    def __init__(self):
+        """Initialize the polygon tool."""
+        # Tool properties
+        self.line_width = 1
+        self.vertex_size = 4
+        self.close_threshold = 15  # Distance in pixels to auto-close polygon
         
-        # State variables
-        self.points = []
-        self.temp_point = None
+        # Drawing state
+        self.points = []  # Points in the polygon
         self.is_drawing = False
-        self.is_closed = False
-        self.structure = None
-        self.slice_index = None
-        self.orientation = None
-        self.image_shape = (512, 512)  # Default shape
+        self.current_contour = None
+        self.hover_point = None  # Point being hovered for move/delete
+        self.selected_point_index = -1  # Index of selected point
+        self.mouse_pos = (0, 0)  # Current mouse position for preview
         
-        # Create cursors
-        self._update_cursor()
+        # Create custom cursor
+        self._cursor = self._create_cursor()
     
-    def start_polygon(self, point, slice_index, orientation):
-        """Start creating a new polygon at the specified point."""
-        self.points = [point]
-        self.temp_point = None
-        self.is_drawing = True
-        self.is_closed = False
-        self.slice_index = slice_index
-        self.orientation = orientation
+    def on_mouse_press(self, event, image_data=None):
+        """
+        Handle mouse press event to add or modify points.
         
-        return True
-    
-    def add_point(self, point):
-        """Add a point to the polygon."""
-        if not self.is_drawing:
-            return False
+        Args:
+            event: Mouse event object
+            image_data: Optional image data for reference
+        """
+        pos = event.pos()
+        point = (pos.x(), pos.y())
         
-        # Check if we're closing the polygon
-        if len(self.points) > 2 and self._is_near_first_point(point):
-            self.is_closed = True
-            self.is_drawing = False
-            
-            # Create contour from points if structure is set
-            if self.structure is not None:
-                # Convert points to numpy array
-                points_array = np.array(self.points)
+        # Check if we're near an existing point
+        near_point_idx = self._find_near_point(point)
+        
+        # Right button: cancel last point or exit drawing
+        if event.button() == Qt.RightButton:
+            if self.points:
+                if self.selected_point_index >= 0:
+                    # Deselect point
+                    self.selected_point_index = -1
+                else:
+                    # Remove last point
+                    self.points.pop()
+                    logger.debug("Removed last point")
+            else:
+                # Exit drawing mode if no points
+                self.is_drawing = False
+            return
+        
+        # Middle button: delete point
+        if event.button() == Qt.MiddleButton and near_point_idx >= 0:
+            self.points.pop(near_point_idx)
+            self.selected_point_index = -1
+            logger.debug(f"Deleted point at index {near_point_idx}")
+            return
+        
+        # Left button
+        if event.button() == Qt.LeftButton:
+            # If we clicked near the first point and have enough points, close the polygon
+            if near_point_idx == 0 and len(self.points) > 2:
+                # Finalize polygon
+                self._finalize_polygon()
+                return
                 
-                # Add contour to structure
-                self.structure.add_contour(
-                    points_array, self.slice_index, self.orientation
-                )
+            # If we're hovering over a point, select it for moving
+            if near_point_idx >= 0:
+                self.selected_point_index = near_point_idx
+                logger.debug(f"Selected point at index {near_point_idx}")
+                return
+                
+            # Otherwise, add a new point
+            self.is_drawing = True
+            self.points.append(point)
+            logger.debug(f"Added point at {point}")
+    
+    def on_mouse_move(self, event, image_data=None):
+        """
+        Handle mouse move event for interactive feedback.
+        
+        Args:
+            event: Mouse event object
+            image_data: Optional image data for reference
+        """
+        pos = event.pos()
+        point = (pos.x(), pos.y())
+        self.mouse_pos = point
+        
+        # If we're dragging a selected point, move it
+        if self.selected_point_index >= 0 and event.buttons() & Qt.LeftButton:
+            self.points[self.selected_point_index] = point
+            logger.debug(f"Moved point {self.selected_point_index} to {point}")
+            return
             
-            # Clear points
-            self.points = []
-            self.temp_point = None
+        # Check if hovering near a point
+        self.hover_point = self._find_near_point(point)
+    
+    def on_mouse_release(self, event, image_data=None):
+        """
+        Handle mouse release event to finish actions.
+        
+        Args:
+            event: Mouse event object
+            image_data: Optional image data for reference
+        """
+        # If we were moving a point, deselect it
+        if self.selected_point_index >= 0 and event.button() == Qt.LeftButton:
+            self.selected_point_index = -1
+    
+    def draw_preview(self, painter, image_data=None):
+        """
+        Draw the current polygon preview.
+        
+        Args:
+            painter: QPainter object
+            image_data: Optional image data for reference
+        """
+        if not self.points:
+            return
             
-            return True
+        # Set up painter
+        painter.setRenderHint(QPainter.Antialiasing)
         
-        # Add point to polygon
-        self.points.append(point)
+        # Draw lines between points
+        pen = QPen(Qt.green)
+        pen.setWidth(self.line_width)
+        painter.setPen(pen)
         
-        return True
-    
-    def move_temp_point(self, point):
-        """Update the temporary point for preview."""
-        if not self.is_drawing:
-            return False
+        # Draw lines connecting points
+        for i in range(1, len(self.points)):
+            x1, y1 = self.points[i-1]
+            x2, y2 = self.points[i]
+            painter.drawLine(x1, y1, x2, y2)
         
-        self.temp_point = point
+        # Draw line from last point to mouse position if in drawing mode
+        if self.is_drawing and self.points:
+            x1, y1 = self.points[-1]
+            x2, y2 = self.mouse_pos
+            painter.setPen(QPen(QColor(0, 255, 0, 150), self.line_width, Qt.DashLine))
+            painter.drawLine(x1, y1, x2, y2)
+            
+            # If we have more than 2 points, also draw line from mouse to first point
+            if len(self.points) > 2:
+                x1, y1 = self.points[0]
+                painter.drawLine(x2, y2, x1, y1)
+                
+                # Check if we're close enough to the first point to close
+                dx = x2 - x1
+                dy = y2 - y1
+                distance = np.sqrt(dx*dx + dy*dy)
+                
+                if distance < self.close_threshold:
+                    # Draw a highlight circle on the first point
+                    painter.setPen(QPen(Qt.yellow, 2))
+                    painter.setBrush(QBrush(QColor(255, 255, 0, 100)))
+                    painter.drawEllipse(x1 - 5, y1 - 5, 10, 10)
         
-        return True
-    
-    def cancel_polygon(self):
-        """Cancel the current polygon drawing."""
-        self.points = []
-        self.temp_point = None
-        self.is_drawing = False
-        self.is_closed = False
-        
-        return True
-    
-    def set_mode(self, mode):
-        """Set the polygon tool mode."""
-        self.mode = mode
-        self._update_cursor()
-    
-    def set_snap_to_points(self, enabled):
-        """Enable or disable snapping to existing points."""
-        self.snap_to_points = enabled
-    
-    def set_image_shape(self, shape):
-        """Set the image shape for drawing."""
-        self.image_shape = shape
+        # Draw points
+        for i, (x, y) in enumerate(self.points):
+            if i == self.selected_point_index:
+                # Selected point
+                painter.setPen(QPen(Qt.yellow, 1))
+                painter.setBrush(QBrush(Qt.yellow))
+                painter.drawEllipse(x - self.vertex_size, y - self.vertex_size, 
+                                  self.vertex_size * 2, self.vertex_size * 2)
+            elif i == self.hover_point:
+                # Hovered point
+                painter.setPen(QPen(Qt.white, 1))
+                painter.setBrush(QBrush(QColor(255, 255, 255, 200)))
+                painter.drawEllipse(x - self.vertex_size, y - self.vertex_size, 
+                                  self.vertex_size * 2, self.vertex_size * 2)
+            elif i == 0:
+                # First point - slightly larger to show it's special
+                painter.setPen(QPen(Qt.green, 1))
+                painter.setBrush(QBrush(QColor(0, 255, 0, 200)))
+                painter.drawEllipse(x - self.vertex_size - 1, y - self.vertex_size - 1, 
+                                  (self.vertex_size + 1) * 2, (self.vertex_size + 1) * 2)
+            else:
+                # Regular points
+                painter.setPen(QPen(Qt.green, 1))
+                painter.setBrush(QBrush(QColor(0, 255, 0, 200)))
+                painter.drawEllipse(x - self.vertex_size, y - self.vertex_size, 
+                                  self.vertex_size * 2, self.vertex_size * 2)
     
     def get_cursor(self):
-        """Get the cursor for the current mode."""
-        return self.cursor
-    
-    def get_preview_points(self):
-        """Get the polygon points for preview display."""
-        preview_points = self.points.copy()
+        """
+        Get the cursor for this tool.
         
-        if self.is_drawing and self.temp_point is not None:
-            preview_points.append(self.temp_point)
-        
-        return preview_points
+        Returns:
+            QCursor: The cursor for the polygon tool
+        """
+        return self._cursor
     
-    def _is_near_first_point(self, point):
-        """Check if a point is near the first point of the polygon."""
+    def set_line_width(self, width):
+        """
+        Set the line width for drawing.
+        
+        Args:
+            width: Line width in pixels
+        """
+        self.line_width = max(1, int(width))
+    
+    def set_vertex_size(self, size):
+        """
+        Set the size of vertices.
+        
+        Args:
+            size: Vertex size in pixels
+        """
+        self.vertex_size = max(2, int(size))
+    
+    def reset(self):
+        """Reset the tool state."""
+        self.points = []
+        self.is_drawing = False
+        self.current_contour = None
+        self.hover_point = None
+        self.selected_point_index = -1
+    
+    def get_contour(self):
+        """
+        Get the finalized contour.
+        
+        Returns:
+            The contour as a numpy array of shape (N, 2)
+        """
+        return self.current_contour
+    
+    def _find_near_point(self, point):
+        """
+        Find the index of a point near the given coordinates.
+        
+        Args:
+            point: Tuple (x, y) coordinates
+            
+        Returns:
+            Index of the nearest point if within threshold, -1 otherwise
+        """
         if not self.points:
-            return False
+            return -1
+            
+        x, y = point
+        threshold = self.vertex_size * 2
         
-        first_point = self.points[0]
-        
-        # Calculate distance
-        dx = point[0] - first_point[0]
-        dy = point[1] - first_point[1]
-        distance = np.sqrt(dx * dx + dy * dy)
-        
-        return distance <= self.close_threshold
+        for i, (px, py) in enumerate(self.points):
+            dx = px - x
+            dy = py - y
+            distance = np.sqrt(dx*dx + dy*dy)
+            
+            if distance < threshold:
+                return i
+                
+        return -1
     
-    def _update_cursor(self):
-        """Update the cursor based on the current mode."""
-        if self.mode == PolygonMode.CREATE:
-            # Create a crosshair cursor
-            pixmap = QPixmap(32, 32)
-            pixmap.fill(Qt.transparent)
+    def _finalize_polygon(self):
+        """Finalize the polygon contour."""
+        if len(self.points) < 3:
+            logger.warning("Not enough points to create a valid polygon")
+            return
             
-            painter = QPainter(pixmap)
-            painter.setPen(QPen(QColor(0, 0, 0), 1))
-            
-            # Draw crosshair
-            painter.drawLine(16, 0, 16, 32)
-            painter.drawLine(0, 16, 32, 16)
-            
-            # Draw small circle at center
-            painter.setPen(QPen(QColor(0, 0, 0), 1))
-            painter.setBrush(QBrush(QColor(255, 255, 255)))
-            painter.drawEllipse(14, 14, 4, 4)
-            
-            painter.end()
-            
-            self.cursor = QCursor(pixmap, 16, 16)
+        # Convert to numpy array
+        points_array = np.array(self.points)
         
-        elif self.mode == PolygonMode.EDIT:
-            # Create a pencil cursor
-            pixmap = QPixmap(32, 32)
-            pixmap.fill(Qt.transparent)
-            
-            painter = QPainter(pixmap)
-            
-            # Draw pencil icon
-            pen = QPen(QColor(0, 0, 0), 1)
-            painter.setPen(pen)
-            
-            # Draw pencil body
-            points = [
-                QPoint(10, 22),
-                QPoint(18, 14),
-                QPoint(22, 18),
-                QPoint(14, 26)
-            ]
-            painter.setBrush(QBrush(QColor(200, 200, 200)))
-            painter.drawPolygon(QPolygon(points))
-            
-            # Draw pencil tip
-            points = [
-                QPoint(8, 24),
-                QPoint(10, 22),
-                QPoint(14, 26),
-                QPoint(12, 28)
-            ]
-            painter.setBrush(QBrush(QColor(50, 50, 50)))
-            painter.drawPolygon(QPolygon(points))
-            
-            painter.end()
-            
-            self.cursor = QCursor(pixmap, 8, 24)
+        # Make sure the polygon is closed
+        if not np.array_equal(points_array[0], points_array[-1]):
+            points_array = np.vstack([points_array, points_array[0]])
         
-        elif self.mode == PolygonMode.DELETE:
-            # Create an eraser cursor
-            pixmap = QPixmap(32, 32)
-            pixmap.fill(Qt.transparent)
-            
-            painter = QPainter(pixmap)
-            
-            # Draw eraser icon
-            pen = QPen(QColor(0, 0, 0), 1)
-            painter.setPen(pen)
-            
-            # Draw eraser body
-            painter.setBrush(QBrush(QColor(220, 220, 220)))
-            painter.drawRect(8, 12, 16, 12)
-            
-            # Draw eraser top
-            painter.setBrush(QBrush(QColor(240, 128, 128)))
-            painter.drawRect(12, 8, 8, 4)
-            
-            painter.end()
-            
-            self.cursor = QCursor(pixmap, 16, 16)
+        # Store the contour
+        self.current_contour = points_array
         
-        else:
-            # Default cursor
-            self.cursor = QCursor(Qt.ArrowCursor)
+        # Reset drawing state
+        self.is_drawing = False
+        
+        logger.debug(f"Finalized polygon with {len(points_array)} points")
+    
+    def _create_cursor(self):
+        """
+        Create a custom cursor for the polygon tool.
+        
+        Returns:
+            QCursor: Custom cursor for the polygon tool
+        """
+        # Create a pixmap for the cursor
+        pixmap = QPixmap(24, 24)
+        pixmap.fill(Qt.transparent)
+        
+        # Draw cursor shape
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Draw crosshair
+        painter.setPen(QPen(Qt.black, 1))
+        painter.drawLine(12, 0, 12, 24)  # Vertical line
+        painter.drawLine(0, 12, 24, 12)  # Horizontal line
+        
+        # Draw small target circle
+        painter.setPen(QPen(Qt.black, 1))
+        painter.setBrush(QBrush(QColor(0, 255, 0, 100)))
+        painter.drawEllipse(8, 8, 8, 8)
+        
+        painter.end()
+        
+        # Create cursor with hotspot at center
+        return QCursor(pixmap, 12, 12)
 
-class PolygonContourToolWidget(QWidget):
+
+class PolygonToolWidget(QWidget):
     """
-    Widget for configuring polygon contouring tool.
+    Widget for controlling the polygon contouring tool.
     
-    This class provides a UI for configuring the polygon contouring tool,
-    allowing the user to select different modes and options.
+    This widget provides UI controls for configuring the polygon drawing
+    tool parameters like line width and vertex size.
     """
     
     # Signals
-    toolChanged = pyqtSignal(dict)  # Emitted when tool settings change
+    contour_created = pyqtSignal(object)  # Emits contour when created
     
     def __init__(self, parent=None):
-        """Initialize polygon tool widget."""
+        """Initialize the polygon tool widget."""
         super().__init__(parent)
         
-        # Initialize tool options
-        self.mode = PolygonMode.CREATE
-        self.snap_to_points = True
+        # Create the tool
+        self.tool = PolygonTool()
         
         # Initialize UI
-        self.init_ui()
+        self._init_ui()
     
-    def init_ui(self):
-        """Initialize the UI components."""
-        # Create layout
+    def _init_ui(self):
+        """Initialize the user interface."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(5, 5, 5, 5)
         
-        # Create mode selection group
-        mode_group = QGroupBox("Polygon Mode")
-        mode_layout = QVBoxLayout(mode_group)
-        
-        # Create mode radio buttons
-        self.create_radio = QRadioButton("Create Polygon")
-        self.create_radio.setChecked(True)
-        self.create_radio.toggled.connect(self._on_mode_changed)
-        mode_layout.addWidget(self.create_radio)
-        
-        self.edit_radio = QRadioButton("Edit Points")
-        self.edit_radio.toggled.connect(self._on_mode_changed)
-        mode_layout.addWidget(self.edit_radio)
-        
-        self.delete_radio = QRadioButton("Delete Points")
-        self.delete_radio.toggled.connect(self._on_mode_changed)
-        mode_layout.addWidget(self.delete_radio)
-        
-        # Group radio buttons
-        self.mode_group = QButtonGroup(self)
-        self.mode_group.addButton(self.create_radio, PolygonMode.CREATE.value)
-        self.mode_group.addButton(self.edit_radio, PolygonMode.EDIT.value)
-        self.mode_group.addButton(self.delete_radio, PolygonMode.DELETE.value)
-        
-        # Add mode group to layout
-        layout.addWidget(mode_group)
-        
-        # Create options group
-        options_group = QGroupBox("Options")
-        options_layout = QVBoxLayout(options_group)
-        
-        # Create options
-        self.snap_checkbox = QCheckBox("Snap to Points")
-        self.snap_checkbox.setChecked(True)
-        self.snap_checkbox.toggled.connect(self._on_snap_changed)
-        options_layout.addWidget(self.snap_checkbox)
-        
-        # Add a separator line
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        options_layout.addWidget(separator)
-        
-        # Add instructions label
+        # Instructions label
         instructions = QLabel(
-            "Click to create points.\n"
-            "Click near first point to close polygon.\n"
-            "Press ESC to cancel."
+            "Left-click: Add/move vertex\n"
+            "Right-click: Remove last vertex\n"
+            "Middle-click: Delete vertex\n"
+            "Close by clicking near first vertex"
         )
-        instructions.setStyleSheet("color: #606060; font-size: 9pt;")
-        options_layout.addWidget(instructions)
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
         
-        # Add options group to layout
-        layout.addWidget(options_group)
+        # Line width control
+        width_group = QGroupBox("Line Width")
+        width_layout = QHBoxLayout(width_group)
         
-        # Add help button
-        help_button = QPushButton("Polygon Tool Help")
-        help_button.clicked.connect(self._show_help)
-        layout.addWidget(help_button)
+        self.width_slider = QSlider(Qt.Horizontal)
+        self.width_slider.setRange(1, 5)
+        self.width_slider.setValue(self.tool.line_width)
+        self.width_slider.setTickInterval(1)
+        self.width_slider.setTickPosition(QSlider.TicksBelow)
         
-        # Add a stretch to push everything to the top
-        layout.addStretch(1)
+        self.width_label = QLabel(f"{self.tool.line_width} px")
         
-        # Apply styling
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 8px;
-            }
-            
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 3px;
-                background-color: #f0f0f0;
-            }
-            
-            QRadioButton, QCheckBox {
-                padding: 2px;
-            }
-            
-            QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #cccccc;
-                border-radius: 3px;
-                padding: 5px;
-            }
-            
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-            
-            QFrame[frameShape="4"] {
-                color: #cccccc;
-                margin: 5px 0;
-            }
-        """)
+        width_layout.addWidget(self.width_slider)
+        width_layout.addWidget(self.width_label)
+        
+        # Vertex size control
+        vertex_group = QGroupBox("Vertex Size")
+        vertex_layout = QHBoxLayout(vertex_group)
+        
+        self.vertex_slider = QSlider(Qt.Horizontal)
+        self.vertex_slider.setRange(2, 8)
+        self.vertex_slider.setValue(self.tool.vertex_size)
+        self.vertex_slider.setTickInterval(1)
+        self.vertex_slider.setTickPosition(QSlider.TicksBelow)
+        
+        self.vertex_label = QLabel(f"{self.tool.vertex_size} px")
+        
+        vertex_layout.addWidget(self.vertex_slider)
+        vertex_layout.addWidget(self.vertex_label)
+        
+        # Reset button
+        self.reset_button = QPushButton("Reset Polygon")
+        
+        # Add all controls to main layout
+        layout.addWidget(width_group)
+        layout.addWidget(vertex_group)
+        layout.addWidget(self.reset_button)
+        layout.addStretch(1)  # Push everything to the top
+        
+        # Connect signals
+        self.width_slider.valueChanged.connect(self._on_width_changed)
+        self.vertex_slider.valueChanged.connect(self._on_vertex_size_changed)
+        self.reset_button.clicked.connect(self._on_reset)
     
-    def set_mode(self, mode):
-        """Set the polygon tool mode."""
-        if mode == PolygonMode.CREATE:
-            self.create_radio.setChecked(True)
-        elif mode == PolygonMode.EDIT:
-            self.edit_radio.setChecked(True)
-        elif mode == PolygonMode.DELETE:
-            self.delete_radio.setChecked(True)
-    
-    def get_options(self):
-        """Get the current polygon tool options."""
-        return {
-            'mode': self.mode,
-            'snap_to_points': self.snap_to_points
-        }
-    
-    def _on_mode_changed(self):
-        """Handle mode radio button changes."""
-        if self.create_radio.isChecked():
-            self.mode = PolygonMode.CREATE
-        elif self.edit_radio.isChecked():
-            self.mode = PolygonMode.EDIT
-        elif self.delete_radio.isChecked():
-            self.mode = PolygonMode.DELETE
+    def on_mouse_press(self, event, image_data=None):
+        """
+        Handle mouse press event.
         
-        # Emit signal
-        self.toolChanged.emit(self.get_options())
-    
-    def _on_snap_changed(self, checked):
-        """Handle snap to points checkbox changes."""
-        self.snap_to_points = checked
+        Args:
+            event: Mouse event
+            image_data: Image data
+        """
+        self.tool.on_mouse_press(event, image_data)
         
-        # Emit signal
-        self.toolChanged.emit(self.get_options())
+        # If the contour was finalized, emit signal
+        contour = self.tool.get_contour()
+        if contour is not None and not self.tool.is_drawing:
+            self.contour_created.emit(contour)
+            self.tool.reset()
     
-    def _show_help(self):
-        """Show help information for the polygon tool."""
-        from PyQt5.QtWidgets import QMessageBox
+    def on_mouse_move(self, event, image_data=None):
+        """
+        Handle mouse move event.
         
-        QMessageBox.information(
-            self,
-            "Polygon Tool Help",
-            """
-            <b>Polygon Contouring Tool</b>
-            <p>This tool allows you to create structure contours using polygons.</p>
-            
-            <b>Create Mode:</b>
-            <ul>
-                <li>Click to add points to the polygon</li>
-                <li>Click near the first point to close the polygon</li>
-                <li>Press ESC to cancel the current polygon</li>
-            </ul>
-            
-            <b>Edit Mode:</b>
-            <ul>
-                <li>Click and drag to move existing points</li>
-                <li>Double-click to add a new point between two existing points</li>
-            </ul>
-            
-            <b>Delete Mode:</b>
-            <ul>
-                <li>Click on a point to remove it from the polygon</li>
-            </ul>
-            
-            <p>Use the "Snap to Points" option to snap points to existing contours.</p>
-            """
-        )
+        Args:
+            event: Mouse event
+            image_data: Image data
+        """
+        self.tool.on_mouse_move(event, image_data)
+    
+    def on_mouse_release(self, event, image_data=None):
+        """
+        Handle mouse release event.
+        
+        Args:
+            event: Mouse event
+            image_data: Image data
+        """
+        self.tool.on_mouse_release(event, image_data)
+    
+    def _on_width_changed(self, value):
+        """
+        Handle line width slider change.
+        
+        Args:
+            value: New line width value
+        """
+        self.width_label.setText(f"{value} px")
+        self.tool.set_line_width(value)
+    
+    def _on_vertex_size_changed(self, value):
+        """
+        Handle vertex size slider change.
+        
+        Args:
+            value: New vertex size value
+        """
+        self.vertex_label.setText(f"{value} px")
+        self.tool.set_vertex_size(value)
+    
+    def _on_reset(self):
+        """Handle reset button click."""
+        self.tool.reset()
+    
+    def get_cursor(self):
+        """
+        Get the cursor for this tool.
+        
+        Returns:
+            QCursor: The tool's cursor
+        """
+        return self.tool.get_cursor()
 
-def test_polygon_tool():
-    """Test function for the polygon contour tool widget."""
+
+# For testing
+if __name__ == "__main__":
     import sys
     from PyQt5.QtWidgets import QApplication
     
     app = QApplication(sys.argv)
     
-    widget = PolygonContourToolWidget()
+    widget = PolygonToolWidget()
+    widget.setWindowTitle("Polygon Tool Test")
+    widget.resize(300, 300)
     widget.show()
     
-    sys.exit(app.exec_())
-
-if __name__ == "__main__":
-    test_polygon_tool() 
+    sys.exit(app.exec_()) 

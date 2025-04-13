@@ -1,0 +1,13 @@
+{
+    "python.analysis.extraPaths": ["./quangtps"],
+    "python.autoComplete.extraPaths": ["./quangtps"],
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "strict",
+
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnusedImport": "none",
+        "reportMissingParameterType": "none",
+        "reportUnknownParameterType": "none"
+    }
+}

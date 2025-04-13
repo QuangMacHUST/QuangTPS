@@ -1,0 +1,37 @@
+# Cấu hình hệ thống QuangTPS
+system:
+  name: "QuangTPS"
+  version: "1.0.0"
+  debug: true
+
+# Cấu hình database
+database:
+  type: "sqlite"
+  path: "data/quangtps.db"
+  backup_path: "data/backup"
+
+# Cấu hình logging
+logging:
+  level: "INFO"
+  file: "logs/quangtps.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+
+# Cấu hình UI
+ui:
+  theme: "light"
+  language: "vi"
+  font_size: 12
+  auto_save_interval: 300  # seconds
+
+# Cấu hình tính toán
+calculation:
+  max_threads: 4
+  precision: 0.001
+  timeout: 3600  # seconds
+
+# Cấu hình bảo mật
+security:
+  password_min_length: 8
+  max_login_attempts: 5
+  session_timeout: 1800  # seconds 

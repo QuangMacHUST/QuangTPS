@@ -1,37 +1,17 @@
 """
-Module manual_segmentation trong QuangTPS.
+Manual Segmentation Tools
 
-Module này cung cấp các công cụ và lớp để hỗ trợ tạo contours thủ công
-cho các cấu trúc giải phẫu và mục tiêu trong kế hoạch xạ trị.
+This package contains tools for manual contouring and segmentation
+in the QuangTPS treatment planning system.
 """
 
-from quangtps.segmentation.manual_segmentation.drawing_tools import (
-    DrawingTool, 
-    DrawingToolType,
-    BrushTool,
-    EraserTool,
-    PolygonTool,
-    RectangleTool,
-    EllipseTool,
-    ThresholdTool,
-    SmartBrushTool,
-    InterpolateTool,
-    FreehandTool
-)
-
-from quangtps.segmentation.manual_segmentation.manual_editor import ManualSegmentationEditor
+# Import tool classes for easy access
+from quangtps.segmentation.manual_segmentation.freehand_tool import FreehandTool, FreehandToolWidget
+from quangtps.segmentation.manual_segmentation.polygon_tool import PolygonTool, PolygonToolWidget
+from quangtps.segmentation.manual_segmentation.threshold_tool import ThresholdTool, ThresholdToolWidget
 
 __all__ = [
-    'DrawingTool',
-    'DrawingToolType',
-    'BrushTool',
-    'EraserTool',
-    'PolygonTool',
-    'RectangleTool',
-    'EllipseTool',
-    'ThresholdTool',
-    'SmartBrushTool',
-    'InterpolateTool',
-    'FreehandTool',
-    'ManualSegmentationEditor'
+    'FreehandTool', 'FreehandToolWidget',
+    'PolygonTool', 'PolygonToolWidget',
+    'ThresholdTool', 'ThresholdToolWidget',
 ] 

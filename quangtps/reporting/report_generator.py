@@ -249,8 +249,15 @@ class ReportGenerator:
                 import weasyprint
                 HAS_WEASYPRINT = True
             except ImportError:
-                logger.warning("WeasyPrint not available. Will generate HTML only.")
+                logger.warning("WeasyPrint not available. Trying alternative PDF generation methods...")
                 HAS_WEASYPRINT = False
+                try:
+                    import pdfkit
+                    HAS_PDFKIT = True
+                    logger.info("Using pdfkit as fallback PDF generator")
+                except ImportError:
+                    logger.warning("pdfkit not available either. Using matplotlib as fallback.")
+                    HAS_PDFKIT = False
             
             # Load template
             template_name = os.path.basename(template_path)
@@ -268,12 +275,84 @@ class ReportGenerator:
             if HAS_WEASYPRINT:
                 weasyprint.HTML(string=html).write_pdf(output_path)
                 return output_path
+            elif HAS_PDFKIT:
+                # Use pdfkit as fallback
+                pdfkit.from_string(html, output_path)
+                return output_path
             else:
-                return html_path
+                # Use matplotlib as last resort fallback
+                try:
+                    self._convert_html_to_pdf_fallback(html, output_path)
+                    return output_path
+                except Exception as fallback_error:
+                    logger.error(f"Fallback PDF generation failed: {str(fallback_error)}")
+                    logger.info("Returning HTML version instead")
+                    return html_path
                 
         except Exception as e:
             logger.error(f"Error generating HTML report: {str(e)}")
             return ""
+    
+    def _convert_html_to_pdf_fallback(self, html, output_path):
+        """
+        Fallback method to convert HTML to PDF when WeasyPrint is not available.
+        Uses matplotlib to create a simple PDF with the content.
+        
+        Parameters
+        ----------
+        html : str
+            HTML content to convert
+        output_path : str
+            Path to save the PDF to
+            
+        Returns
+        -------
+        None
+        """
+        from bs4 import BeautifulSoup
+        import re
+        
+        # Parse HTML
+        soup = BeautifulSoup(html, 'html.parser')
+        text = soup.get_text()
+        
+        # Clean text
+        text = re.sub(r'\n+', '\n', text)
+        text = re.sub(r' +', ' ', text)
+        
+        # Create PDF using matplotlib
+        with PdfPages(output_path) as pdf:
+            fig, ax = plt.subplots(figsize=(8.5, 11))
+            ax.axis('off')
+            
+            # Title
+            title = soup.title.string if soup.title else "Report"
+            ax.text(0.5, 0.95, title, fontsize=16, ha='center', fontweight='bold')
+            
+            # Content - simple text rendering
+            ax.text(0.1, 0.9, "HTML Rendering Not Available - Basic Content:", fontweight='bold')
+            
+            # Split text into chunks that will fit on the page
+            lines = []
+            for line in text.split('\n'):
+                if len(line.strip()) > 0:
+                    lines.append(line.strip())
+            
+            max_lines = 40
+            current_y = 0.85
+            line_height = 0.02
+            
+            for i, line in enumerate(lines[:max_lines]):
+                ax.text(0.1, current_y - (i * line_height), line, fontsize=9)
+            
+            # Footer
+            ax.text(0.5, 0.05, f"Note: This is a fallback PDF as WeasyPrint was not available.",
+                    ha='center', fontsize=8, style='italic')
+            ax.text(0.5, 0.03, f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                    ha='center', fontsize=8)
+            
+            pdf.savefig(fig)
+            plt.close(fig)
     
     def _generate_plan_summary(self, pdf, plan, include_patient=True):
         """

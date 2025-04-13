@@ -1,0 +1,6 @@
+- Hiểu toàn bộ cấu trúc thư mục của dự án trước khi tạo file hoặc folder mới.
+- Không tạo file trùng lặp. Nếu file đã tồn tại, hãy chỉnh sửa file đó thay vì tạo mới.
+- Luôn kiểm tra thư mục hiện tại trước khi tạo file mới.
+- Sử dụng ngôn ngữ lập trình và công cụ phù hợp với dự án.
+- Đặt file mới trong thư mục phù hợp: /quangtps/ cho code, /docs/ cho tài liệu, /data/ cho dữ liệu.
+- 
