@@ -27,14 +27,14 @@ from PyQt5.QtWidgets import (
     QToolBar, QAction
 )
 
-from quangtps.planning.plan import Plan, PlanStatus, PlanType
+from quangtps.planning.plan import Plan, PlanType
 from quangtps.planning.beam import BeamArrangement
 from quangtps.database.plan_db import PlanDB
 from quangtps.ui.dialogs.beam_dialog import BeamDialog
-from quangtps.planning.prescription import Prescription
+from quangtps.common.services import ServiceRegistry
 from quangtps.planning.optimization import OptimizationSettings
 from quangtps.treatment.beams.beam import Beam
-from quangtps.optimization.methods import MCOEngine, MCONavigator, MCOTrade, MCOMethod
+from quangtps.optimization.methods.mco import MCOEngine, MCONavigator, MCOTrade, MCOMethod
 from quangtps.ui.mco_navigation_dialog import MCONavigationDialog
 from quangtps.optimization.objectives import ObjectiveCollection
 from quangtps.optimization import ConstraintCollection
@@ -51,8 +51,7 @@ import importlib
 # Import robust optimization dialog (commented out, using local implementation instead)
 #from quangtps.ui.robust_optimization_dialog import show_robust_optimization_dialog
 from quangtps.core.logging import get_logger
-from quangtps.treatment.techniques.crt.crt_planner import CRTPlanner
-from quangtps.treatment.techniques.imrt.imrt_planner import IMRTPlanner
+from quangtps.ui.imrt_planner import IMRTPlanner
 
 logger = get_logger(__name__)
 

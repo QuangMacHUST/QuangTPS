@@ -255,8 +255,8 @@ class UpperDoseObjective(DoseObjective):
         """Calculate gradient."""
         gradient = np.zeros_like(dose)
         if np.sum(structure_mask) == 0:
-        return gradient
-
+            return gradient
+        
         masked_indices = structure_mask > 0
         masked_dose = dose[masked_indices]
         
@@ -395,7 +395,7 @@ class MinDoseObjective(DoseObjective):
         # Find the minimum dose value and its index
         min_dose = np.min(masked_dose)
         if min_dose >= self.dose:
-        return gradient
+            return gradient
 
         # Only apply gradient to the voxel(s) with minimum dose
         min_indices = np.where(dose == min_dose)
@@ -591,8 +591,8 @@ class ConformityObjective(DoseObjective):
         """Calculate gradient."""
         gradient = np.zeros_like(dose)
         if np.sum(structure_mask) == 0:
-        return gradient
-
+            return gradient
+        
         # Identify voxels just below and just above the threshold
         masked_indices = structure_mask > 0
         masked_dose = dose[masked_indices]
@@ -675,7 +675,7 @@ class HomogeneityObjective(DoseObjective):
         d50_index = int(0.5 * len(sorted_indices))
         
         if d2_index >= len(sorted_indices) or d98_index >= len(sorted_indices) or d50_index >= len(sorted_indices):
-        return gradient
+            return gradient
 
         d2_idx = sorted_indices[d2_index]
         d98_idx = sorted_indices[d98_index]

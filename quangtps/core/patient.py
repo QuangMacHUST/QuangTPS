@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional, Dict, List, Any
 import uuid
+from enum import Enum, auto
 
 @dataclass
 class Patient:
@@ -161,3 +162,66 @@ class Patient:
         today = date.today()
         born = self.dob
         return today.year - born.year - ((today.month, today.day) < (born.month, born.day)) 
+
+class ApprovalStatus(Enum):
+    """Enum representing the approval status of a treatment plan."""
+    DRAFT = auto()      # Initial state, plan is being created/modified
+    PENDING = auto()    # Submitted for review/approval
+    APPROVED = auto()   # Fully approved and ready for treatment
+    REJECTED = auto()   # Rejected, requires modifications
+    DELIVERED = auto()  # Plan has been delivered to patient
+    ARCHIVED = auto()   # Plan is archived and no longer active
+
+class ApprovalAction(Enum):
+    """Enum representing actions that can be taken in the approval workflow."""
+    CREATE = auto()     # Plan creation
+    MODIFY = auto()     # Plan modification
+    SUBMIT = auto()     # Submit for approval
+    APPROVE = auto()    # Approve the plan
+    REJECT = auto()     # Reject the plan
+    ARCHIVE = auto()    # Archive the plan
+    RESTORE = auto()    # Restore from archive
+
+class TreatmentPlan:
+    """Class representing a radiotherapy treatment plan."""
+    
+    def __init__(self, name, patient=None):
+        # ... existing code ...
+        self.approval_status = ApprovalStatus.DRAFT
+        self.approval_history = []
+    
+    # ... existing code ...
+    
+    def update_approval_status(self, status, action, user, comment=""):
+        """
+        Update the approval status of the plan and record in history.
+        
+        Args:
+            status (ApprovalStatus): The new status
+            action (ApprovalAction): The action that caused the status change
+            user (str): The username who performed the action
+            comment (str): Optional comment about the action
+        """
+        import datetime
+        
+        # Record the status change in history
+        history_entry = {
+            "status": status,
+            "action": action,
+            "user": user,
+            "comment": comment,
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        self.approval_history.append(history_entry)
+        self.approval_status = status
+        
+        # If approved, lock the plan to prevent further modifications
+        if status == ApprovalStatus.APPROVED:
+            self.locked = True
+        elif status == ApprovalStatus.DRAFT:
+            self.locked = False
+            
+        return True
+        
+    # ... existing code ... 
