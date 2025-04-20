@@ -11,16 +11,16 @@ từ các chùm tia xạ trị trong kế hoạch điều trị.
 import os
 import logging
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any, Union, TYPE_CHECKING
+from typing import Dict, List, Tuple, Optional, Any, Union
 
 from quangtps.core.types import DoseGrid, BeamParameters
-from quangtps.treatment.beams.beam import Beam
-from quangtps.planning.beam_set import BeamSet
+from quangtps.planning.beam import Beam
 from quangtps.planning.plan import Plan
 from quangtps.imaging.dicom_series import DicomSeries
 from quangtps.imaging.image import Image
 from quangtps.structures.structure_set import StructureSet
 from quangtps.structures.structure import Structure
+from quangtps.beams.beam import BeamSet
 
 logger = logging.getLogger(__name__)
 
@@ -545,9 +545,9 @@ class DoseCalculator:
         self.beam_set = beam_set
         self.is_calculated = False
         logger.info(
-            f"Beam set with {len(beam_set.beams)} beams set for dose calculation"
-        )
         return True
+
+        )
 
     def set_calculation_grid_resolution(self, resolution: Tuple[float, float, float]):
         """Set the calculation grid resolution in mm."""
@@ -581,6 +581,7 @@ class DoseCalculator:
         self.dose_grid = np.zeros_like(self.calculation_grid)
 
         logger.info(f"Calculation grid initialized with shape: {grid_shape}")
+        return True
         return True
 
     def calculate_dose(self) -> Optional[np.ndarray]:
@@ -806,7 +807,7 @@ class DoseCalculator:
 
         # Regions outside the field + penumbra
         beam_dose[~(in_field | in_penumbra)] *= out_field_factor
-        # In-field regions
+                # In-field regions
         beam_dose[in_field] *= in_field_factor
 
         # Penumbra regions (linear falloff)

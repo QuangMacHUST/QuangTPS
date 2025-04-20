@@ -14,18 +14,31 @@ import logging
 try:
     from .services import ServiceRegistry, ServiceBase, service_registry, PatientService
 except ImportError:
-    # Placeholders in case the module is not yet available
-    class ServiceBase:
-        pass
-    
-    class ServiceRegistry:
-        def get_service(self, service_name):
-            return None
-    
-    class PatientService(ServiceBase):
-        pass
-    
-    service_registry = ServiceRegistry()
+    # Import from core services if common services are not available
+    try:
+        from quangtps.core.services import ServiceRegistry, ServiceBase
+
+        service_registry = ServiceRegistry.get_instance()
+
+        class PatientService(ServiceBase):
+            pass
+    except ImportError:
+        # Placeholders in case neither module is available
+        class ServiceBase:
+            pass
+
+        class ServiceRegistry:
+            @classmethod
+            def get_instance(cls):
+                return cls()
+
+            def get_service(self, service_name):
+                return None
+
+        class PatientService(ServiceBase):
+            pass
+
+        service_registry = ServiceRegistry.get_instance()
 
 # Expose other common utilities
 try:
@@ -34,14 +47,18 @@ except ImportError:
     # Placeholders for path utilities
     def get_base_path():
         import os
+
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
+
     def get_data_path():
         import os
+
         return os.path.join(get_base_path(), "data")
-    
+
     def get_config_path():
         import os
+
         return os.path.join(get_base_path(), "config")
+
 
 logger = logging.getLogger(__name__)

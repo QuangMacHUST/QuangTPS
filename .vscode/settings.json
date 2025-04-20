@@ -1,13 +1,40 @@
 {
-    "python.analysis.extraPaths": ["./quangtps"],
-    "python.autoComplete.extraPaths": ["./quangtps"],
+    "python.analysis.extraPaths": [
+        "./quangtps"
+    ],
+    "python.autoComplete.extraPaths": [
+        "./quangtps"
+    ],
     "python.envFile": "${workspaceFolder}/.env",
     "python.languageServer": "Pylance",
-    "python.analysis.typeCheckingMode": "strict",
-
+    "python.analysis.typeCheckingMode": "basic",
     "python.analysis.diagnosticSeverityOverrides": {
         "reportUnusedImport": "none",
         "reportMissingParameterType": "none",
         "reportUnknownParameterType": "none"
-    }
+    },
+    "editor.experimental.treeSitterTelemetry": true,
+    "editor.experimentalEditContextEnabled": true,
+    "editor.experimental.asyncTokenizationVerification": true,
+    "editor.experimental.asyncTokenizationLogging": true,
+    "editor.cursorSmoothCaretAnimation": "on",
+    "diffEditor.codeLens": false,
+    "editor.formatOnType": false,
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "diffEditor.experimental.showEmptyDecorations": false,
+    "diffEditor.experimental.showMoves": true,
+    "diffEditor.hideUnchangedRegions.enabled": true,
+    "editor.minimap.enabled": true,
+    "editor.minimap.renderCharacters": false,
+    "files.autoGuessEncoding": true,
+    "files.autoSave": "afterDelay",
+    "editor.acceptSuggestionOnEnter": "smart",
+    "files.autoSaveWorkspaceFilesOnly": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "files.watcherInclude": [
+        "**/__pycache__/** ",
+        "**/.git/**"
+    ]
 }

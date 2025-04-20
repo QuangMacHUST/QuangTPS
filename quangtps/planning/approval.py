@@ -2,55 +2,75 @@ import enum
 import datetime
 from typing import Dict, List, Optional, Any, cast
 
+# Import ApprovalStatus and ApprovalAction directly from enum module to avoid circular imports
+from enum import Enum, auto
 from quangtps.common.user import User, UserRole
 
-class ApprovalStatus(enum.Enum):
-    """Status of treatment plan approval"""
-    DRAFT = "draft"               # Initial draft - not ready for review
-    PENDING_PHYSICIAN = "pending_physician"  # Ready for physician review
-    PENDING_PHYSICIST = "pending_physicist"  # Ready for physicist review
-    APPROVED = "approved"         # Fully approved and ready for treatment
-    REJECTED = "rejected"         # Rejected - requires revision
+# Use the same enums from core.patient to ensure consistency
+class ApprovalStatus(Enum):
+    """Enum representing the approval status of a treatment plan."""
+    DRAFT = auto()      # Initial state, plan is being created/modified
+    PENDING = auto()    # Submitted for review/approval
+    APPROVED = auto()   # Fully approved and ready for treatment
+    REJECTED = auto()   # Rejected, requires modifications
+    DELIVERED = auto()  # Plan has been delivered to patient
+    ARCHIVED = auto()   # Plan is archived and no longer active
+
+class ApprovalAction(Enum):
+    """Enum representing actions that can be taken in the approval workflow."""
+    CREATE = auto()     # Plan creation
+    MODIFY = auto()     # Plan modification
+    SUBMIT = auto()     # Submit for approval
+    APPROVE = auto()    # Approve the plan
+    REJECT = auto()     # Reject the plan
+    ARCHIVE = auto()    # Archive the plan
+    RESTORE = auto()    # Restore from archive
+
+# Extended functionality for ApprovalStatus
+class ApprovalStatusExtensions:
+    """Extension methods for the ApprovalStatus enum from core."""
     
     @classmethod
-    def get_display_name(cls, status: 'ApprovalStatus') -> str:
+    def get_display_name(cls, status: ApprovalStatus) -> str:
         """Get user-friendly display name for a status"""
         names = {
-            cls.DRAFT: "Draft",
-            cls.PENDING_PHYSICIAN: "Pending Physician Review",
-            cls.PENDING_PHYSICIST: "Pending Physicist Review",
-            cls.APPROVED: "Approved",
-            cls.REJECTED: "Rejected"
+            ApprovalStatus.DRAFT: "Draft",
+            ApprovalStatus.PENDING: "Pending Review",
+            ApprovalStatus.APPROVED: "Approved",
+            ApprovalStatus.REJECTED: "Rejected",
+            ApprovalStatus.DELIVERED: "Delivered",
+            ApprovalStatus.ARCHIVED: "Archived"
         }
         return names.get(status, str(status))
     
     @classmethod
-    def get_color(cls, status: 'ApprovalStatus') -> str:
+    def get_color(cls, status: ApprovalStatus) -> str:
         """Get color associated with a status for UI display"""
         colors = {
-            cls.DRAFT: "#888888",
-            cls.PENDING_PHYSICIAN: "#FFA500",
-            cls.PENDING_PHYSICIST: "#3498DB",
-            cls.APPROVED: "#2ECC71",
-            cls.REJECTED: "#E74C3C"
+            ApprovalStatus.DRAFT: "#888888",
+            ApprovalStatus.PENDING: "#3498DB",
+            ApprovalStatus.APPROVED: "#2ECC71",
+            ApprovalStatus.REJECTED: "#E74C3C",
+            ApprovalStatus.DELIVERED: "#1ABC9C",
+            ApprovalStatus.ARCHIVED: "#7F8C8D"
         }
         return colors.get(status, "#FFFFFF")  # Default white
 
-class ApprovalAction(enum.Enum):
-    """Actions that can be taken on a treatment plan"""
-    SUBMIT = "submit"             # Submit for review
-    APPROVE = "approve"           # Approve the plan
-    REJECT = "reject"             # Reject the plan
-    REVERT = "revert"             # Revert to draft for changes
+# Extend the core ApprovalAction with display names
+class ApprovalActionExtensions:
+    """Extension methods for the ApprovalAction enum from core."""
     
     @classmethod
-    def get_display_name(cls, action: 'ApprovalAction') -> str:
+    def get_display_name(cls, action: ApprovalAction) -> str:
         """Get user-friendly display name for an action"""
         names = {
-            cls.SUBMIT: "Submit for Review",
-            cls.APPROVE: "Approve",
-            cls.REJECT: "Reject",
-            cls.REVERT: "Revert to Draft"
+            ApprovalAction.CREATE: "Create",
+            ApprovalAction.MODIFY: "Modify",
+            ApprovalAction.SUBMIT: "Submit for Review",
+            ApprovalAction.APPROVE: "Approve",
+            ApprovalAction.REJECT: "Reject",
+            ApprovalAction.ARCHIVE: "Archive",
+            ApprovalAction.RESTORE: "Restore"
         }
         return names.get(action, str(action))
 
@@ -74,12 +94,12 @@ class ApprovalHistoryEntry:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
-            "action": self.action.value,
+            "action": self.action.name,
             "user": self.user.username,
             "timestamp": self.timestamp.isoformat(),
             "comment": self.comment,
-            "from_status": self.from_status.value,
-            "to_status": self.to_status.value
+            "from_status": self.from_status.name,
+            "to_status": self.to_status.name
         }
     
     @classmethod
@@ -90,12 +110,12 @@ class ApprovalHistoryEntry:
             raise ValueError(f"User {data['user']} not found in users map")
         
         return cls(
-            action=ApprovalAction(data["action"]),
+            action=ApprovalAction[data["action"]],
             user=user,
             timestamp=datetime.datetime.fromisoformat(data["timestamp"]),
             comment=data["comment"],
-            from_status=ApprovalStatus(data["from_status"]),
-            to_status=ApprovalStatus(data["to_status"])
+            from_status=ApprovalStatus[data["from_status"]],
+            to_status=ApprovalStatus[data["to_status"]]
         )
         
 class ApprovalWorkflow:
@@ -104,69 +124,73 @@ class ApprovalWorkflow:
     def __init__(self):
         self.status_transitions: Dict[tuple[ApprovalStatus, ApprovalAction], ApprovalStatus] = {
             # From DRAFT
-            (ApprovalStatus.DRAFT, ApprovalAction.SUBMIT): ApprovalStatus.PENDING_PHYSICIAN,
+            (ApprovalStatus.DRAFT, ApprovalAction.SUBMIT): ApprovalStatus.PENDING,
             
-            # From PENDING_PHYSICIAN
-            (ApprovalStatus.PENDING_PHYSICIAN, ApprovalAction.APPROVE): ApprovalStatus.PENDING_PHYSICIST,
-            (ApprovalStatus.PENDING_PHYSICIAN, ApprovalAction.REJECT): ApprovalStatus.REJECTED,
-            (ApprovalStatus.PENDING_PHYSICIAN, ApprovalAction.REVERT): ApprovalStatus.DRAFT,
-            
-            # From PENDING_PHYSICIST
-            (ApprovalStatus.PENDING_PHYSICIST, ApprovalAction.APPROVE): ApprovalStatus.APPROVED,
-            (ApprovalStatus.PENDING_PHYSICIST, ApprovalAction.REJECT): ApprovalStatus.REJECTED,
-            (ApprovalStatus.PENDING_PHYSICIST, ApprovalAction.REVERT): ApprovalStatus.PENDING_PHYSICIAN,
+            # From PENDING
+            (ApprovalStatus.PENDING, ApprovalAction.APPROVE): ApprovalStatus.APPROVED,
+            (ApprovalStatus.PENDING, ApprovalAction.REJECT): ApprovalStatus.REJECTED,
+            (ApprovalStatus.PENDING, ApprovalAction.MODIFY): ApprovalStatus.DRAFT,
             
             # From REJECTED
-            (ApprovalStatus.REJECTED, ApprovalAction.REVERT): ApprovalStatus.DRAFT,
+            (ApprovalStatus.REJECTED, ApprovalAction.RESTORE): ApprovalStatus.DRAFT,
             
-            # No actions from APPROVED
+            # From APPROVED
+            (ApprovalStatus.APPROVED, ApprovalAction.ARCHIVE): ApprovalStatus.ARCHIVED,
+            
+            # From ARCHIVED
+            (ApprovalStatus.ARCHIVED, ApprovalAction.RESTORE): ApprovalStatus.DRAFT,
         }
         
         # Define which roles can perform which actions on which statuses
         self.role_permissions: Dict[UserRole, Dict[ApprovalStatus, List[ApprovalAction]]] = {
             # Planner permissions
             UserRole.PLANNER: {
-                ApprovalStatus.DRAFT: [ApprovalAction.SUBMIT],
-                ApprovalStatus.PENDING_PHYSICIAN: [],
-                ApprovalStatus.PENDING_PHYSICIST: [],
+                ApprovalStatus.DRAFT: [ApprovalAction.SUBMIT, ApprovalAction.MODIFY],
+                ApprovalStatus.PENDING: [],
                 ApprovalStatus.APPROVED: [],
-                ApprovalStatus.REJECTED: [ApprovalAction.REVERT]
+                ApprovalStatus.REJECTED: [ApprovalAction.RESTORE],
+                ApprovalStatus.DELIVERED: [],
+                ApprovalStatus.ARCHIVED: []
             },
             
             # Physician permissions
             UserRole.PHYSICIAN: {
                 ApprovalStatus.DRAFT: [ApprovalAction.SUBMIT],
-                ApprovalStatus.PENDING_PHYSICIAN: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.REVERT],
-                ApprovalStatus.PENDING_PHYSICIST: [],
+                ApprovalStatus.PENDING: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.MODIFY],
                 ApprovalStatus.APPROVED: [],
-                ApprovalStatus.REJECTED: [ApprovalAction.REVERT]
+                ApprovalStatus.REJECTED: [ApprovalAction.RESTORE],
+                ApprovalStatus.DELIVERED: [],
+                ApprovalStatus.ARCHIVED: []
             },
             
             # Physicist permissions
             UserRole.PHYSICIST: {
                 ApprovalStatus.DRAFT: [],
-                ApprovalStatus.PENDING_PHYSICIAN: [],
-                ApprovalStatus.PENDING_PHYSICIST: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.REVERT],
-                ApprovalStatus.APPROVED: [],
-                ApprovalStatus.REJECTED: []
+                ApprovalStatus.PENDING: [ApprovalAction.APPROVE, ApprovalAction.REJECT],
+                ApprovalStatus.APPROVED: [ApprovalAction.ARCHIVE],
+                ApprovalStatus.REJECTED: [],
+                ApprovalStatus.DELIVERED: [],
+                ApprovalStatus.ARCHIVED: [ApprovalAction.RESTORE]
             },
             
             # Admin permissions (can do everything)
             UserRole.ADMIN: {
-                ApprovalStatus.DRAFT: [ApprovalAction.SUBMIT],
-                ApprovalStatus.PENDING_PHYSICIAN: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.REVERT],
-                ApprovalStatus.PENDING_PHYSICIST: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.REVERT],
-                ApprovalStatus.APPROVED: [ApprovalAction.REVERT],
-                ApprovalStatus.REJECTED: [ApprovalAction.REVERT]
+                ApprovalStatus.DRAFT: [ApprovalAction.SUBMIT, ApprovalAction.MODIFY],
+                ApprovalStatus.PENDING: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.MODIFY],
+                ApprovalStatus.APPROVED: [ApprovalAction.ARCHIVE, ApprovalAction.MODIFY],
+                ApprovalStatus.REJECTED: [ApprovalAction.RESTORE],
+                ApprovalStatus.DELIVERED: [ApprovalAction.ARCHIVE],
+                ApprovalStatus.ARCHIVED: [ApprovalAction.RESTORE]
             },
             
             # Guest permissions (view only)
             UserRole.GUEST: {
                 ApprovalStatus.DRAFT: [],
-                ApprovalStatus.PENDING_PHYSICIAN: [],
-                ApprovalStatus.PENDING_PHYSICIST: [],
+                ApprovalStatus.PENDING: [],
                 ApprovalStatus.APPROVED: [],
-                ApprovalStatus.REJECTED: []
+                ApprovalStatus.REJECTED: [],
+                ApprovalStatus.DELIVERED: [],
+                ApprovalStatus.ARCHIVED: []
             }
         }
     
@@ -242,7 +266,7 @@ class PlanApproval:
         """Convert to dictionary for serialization"""
         return {
             "plan_id": self.plan_id,
-            "status": self.status.value,
+            "status": self.status.name,
             "history": [entry.to_dict() for entry in self.history],
             "last_modified": self.last_modified.isoformat() if self.last_modified else None,
             "last_modified_by": self.last_modified_by.username if self.last_modified_by else None
@@ -252,7 +276,7 @@ class PlanApproval:
     def from_dict(cls, data: Dict[str, Any], users_map: Dict[str, User]) -> "PlanApproval":
         """Create from dictionary with user mapping"""
         approval = cls(data["plan_id"])
-        approval.status = ApprovalStatus(data["status"])
+        approval.status = ApprovalStatus[data["status"]]
         
         approval.history = [
             ApprovalHistoryEntry.from_dict(entry_data, users_map)
@@ -266,3 +290,8 @@ class PlanApproval:
             approval.last_modified_by = users_map[data["last_modified_by"]]
             
         return approval 
+
+# Export symbols to maintain compatibility with code that imports from core.patient
+__all__ = ['ApprovalStatus', 'ApprovalAction', 'ApprovalHistoryEntry', 
+           'ApprovalWorkflow', 'PlanApproval', 'ApprovalStatusExtensions', 
+           'ApprovalActionExtensions'] 

@@ -5,52 +5,62 @@
 Package for structure handling in QuangTPS.
 
 This package provides functionality for working with anatomical structures
-in the radiotherapy treatment planning system. It re-exports the basic 
-structures from core.structures for backward compatibility.
+in the radiotherapy treatment planning system.
 """
 
 import logging
+from quangtps.core.logging import get_logger
 
-# Re-export from core.structures for backward compatibility
-from quangtps.core.structures import Structure, StructureSet, StructureType
-
-# Import specialized structure handling
-try:
-    from quangtps.segmentation.structures.structure import StructureData
-    from quangtps.segmentation.structures.structure_set import StructureSetData
-    from quangtps.segmentation.structures.structure_templates import StructureTemplate
-    from quangtps.segmentation.structures.structure_library import StructureLibrary
-    from quangtps.segmentation.structures.structure_analysis import StructureAnalyzer
-except ImportError as e:
-    logging.getLogger(__name__).warning(f"Could not import specialized structure modules: {e}")
+# Import directly from local modules - avoid circular imports
+from quangtps.structures.structure import Structure
+from quangtps.structures.structure_set import StructureSet
 
 # Import structure utilities
 try:
     from quangtps.structures.structure_utils import (
-        create_margin, apply_boolean_operation, interpolate_structure,
-        copy_structure, create_margin_from_structure
+        calculate_volume,
+        calculate_centroid,
+        calculate_overlap,
+        calculate_distance,
+        find_closest_structure,
+        calculate_surface_area,
+        calculate_dice_coefficient,
     )
 except ImportError as e:
-    logging.warning(f"Failed to import structure utilities: {e}")
+    logging.getLogger(__name__).warning(f"Failed to import structure utilities: {e}")
 
-# Import structure analysis
-try:
-    from quangtps.structures.structure_analysis import (
-        get_structure_statistics, get_structure_volume,
-        get_structure_centroid, get_overlap_metrics
-    )
-except ImportError as e:
-    logging.warning(f"Failed to import structure analysis: {e}")
+# Setup basic logging
+logger = get_logger(__name__)
+
+# Define structure types for usage throughout the package
+from enum import Enum, auto
+
+
+class StructureType(Enum):
+    """Enumeration of structure types."""
+
+    PTV = "PTV"
+    CTV = "CTV"
+    GTV = "GTV"
+    OAR = "OAR"  # Organ at Risk
+    EXTERNAL = "EXTERNAL"  # Body contour
+    PRV = "PRV"  # Planning organ at Risk Volume
+    CONTROL = "CONTROL"  # Control structure for optimization
+    CUSTOM = "CUSTOM"  # Custom structure
+    UNDEFINED = "UNDEFINED"  # Undefined structure type
+
 
 __all__ = [
-    'Structure',
-    'StructureSet',
-    'StructureType',
-    'StructureData',
-    'StructureSetData',
-    'StructureTemplate',
-    'StructureLibrary',
-    'StructureAnalyzer'
+    "Structure",
+    "StructureSet",
+    "StructureType",
+    "calculate_volume",
+    "calculate_centroid",
+    "calculate_overlap",
+    "calculate_distance",
+    "find_closest_structure",
+    "calculate_surface_area",
+    "calculate_dice_coefficient",
 ]
 
-__version__ = '0.1.0' 
+__version__ = "0.2.0"

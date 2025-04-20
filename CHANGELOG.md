@@ -24,6 +24,16 @@ All notable changes to the QuangTPS radiotherapy treatment planning system will 
   - Integrated planning and evaluation workflow
   - Real-time plan quality metrics during optimization
   
+- Comprehensive MCO Weight Adjustment System:
+  - Automatic weight adjustment for MCO objectives based on multiple methods
+  - Clinical protocol-based weight adjustment with threshold enforcement
+  - Adaptive weight adjustment using objective sensitivity analysis
+  - Constraint-driven weight adjustment for violation correction
+  - Balanced weight adjustment for fair objective consideration
+  - Weight profile management with import/export capabilities
+  - Comprehensive sensitivity calculation based on optimization history
+  - Integration with existing MCO optimization workflow
+  
 - Comprehensive Collision Detection System:
   - Visual 3D room view of treatment setup with all components
   - Real-time collision checking during planning
@@ -148,6 +158,7 @@ All notable changes to the QuangTPS radiotherapy treatment planning system will 
 - Fixed proper dose calculator reference passing
 - Fixed file and directory handling in protocol manager
 - Improved error recovery in dose calculation
+- Fixed empty weight_adjustment.py module with comprehensive implementation
 
 ### Changed
 - Restructured patient database for better DICOM integration

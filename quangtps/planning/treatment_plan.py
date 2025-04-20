@@ -5,7 +5,7 @@ import uuid
 
 from quangtps.planning.approval import PlanApproval, ApprovalStatus, ApprovalAction
 from quangtps.planning.evaluation import PlanEvaluation
-from quangtps.common.user import User
+from quangtps.common.user import User, UserRole
 
 class TreatmentPlan:
     """Treatment plan for a patient"""
@@ -54,7 +54,7 @@ class TreatmentPlan:
         """Check if plan is editable based on approval status and user role"""
         if self.approval_status == ApprovalStatus.DRAFT:
             return True
-        if self.approval_status == ApprovalStatus.REJECTED and user.role.upper() in ["PLANNER", "ADMIN"]:
+        if self.approval_status == ApprovalStatus.REJECTED and user.role in [UserRole.PLANNER, UserRole.ADMIN]:
             return True
         return False
     
