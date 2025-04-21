@@ -131,7 +131,7 @@ class DVHCalculator:
 
         logger.info("DVH calculator initialized")
 
-    def set_dose_calculator(self, dose_calculator):
+    def set_dose_calculator(self, dose_calculator: "DoseCalculator"):
         """Set the dose calculator to use for DVH calculation."""
         self.dose_calculator = dose_calculator
         self.structure_set = dose_calculator.structure_set
@@ -243,8 +243,39 @@ class DVHCalculator:
             logger.error("Dose calculator not set")
             return {}
 
-        # Get dose statistics from dose calculator
-        return self.dose_calculator.get_structure_dose_stats(structure)
+        try:
+            # Try to get dose statistics from dose calculator
+            if hasattr(self.dose_calculator, "get_structure_dose_stats"):
+                return self.dose_calculator.get_structure_dose_stats(structure)
+
+            # Fallback: Calculate basic metrics directly
+            dose_bins, volume_values = self.calculate_dvh(structure)
+            if len(dose_bins) == 0 or len(volume_values) == 0:
+                logger.warning(f"No dose data available for structure {structure.name}")
+                return {}
+
+            # Calculate basic metrics
+            metrics = {}
+            metrics["min_dose"] = np.min(dose_bins) if len(dose_bins) > 0 else 0.0
+            metrics["max_dose"] = np.max(dose_bins) if len(dose_bins) > 0 else 0.0
+
+            # Get dose at specific volume points if available
+            if len(dose_bins) > 0 and len(volume_values) > 0:
+                # Interpolate to get D95, D90, etc.
+                for percent in [95, 90, 50, 5, 2]:
+                    target_volume = percent
+                    # Find closest volume index
+                    idx = np.argmin(np.abs(volume_values - target_volume))
+                    metrics[f"D{percent}"] = (
+                        dose_bins[idx] if idx < len(dose_bins) else 0.0
+                    )
+
+            logger.info(f"Calculated fallback metrics for structure {structure.name}")
+            return metrics
+
+        except Exception as e:
+            logger.error(f"Error calculating DVH metrics for {structure.name}: {e}")
+            return {}
 
     def plot_dvh(
         self,

@@ -486,30 +486,28 @@ class ImagingTab(QWidget):
 
         # Kết nối tín hiệu sự kiện chuột từ image viewer đến tool manager
         if hasattr(self.image_viewer, "axial_view"):
-            if hasattr(self.image_viewer.axial_view, "mouse_pressed"):
-                self.image_viewer.axial_view.mouse_pressed.connect(
+            image_widget = self.image_viewer.axial_view
+
+            # Check for mouse signals
+            if hasattr(image_widget, "mouse_pressed"):
+                image_widget.mouse_pressed.connect(
                     self.contour_tool_manager.mouse_press
                 )
 
-            if hasattr(self.image_viewer.axial_view, "mouse_moved"):
-                self.image_viewer.axial_view.mouse_moved.connect(
-                    self.contour_tool_manager.mouse_move
-                )
+            if hasattr(image_widget, "mouse_moved"):
+                image_widget.mouse_moved.connect(self.contour_tool_manager.mouse_move)
 
-            if hasattr(self.image_viewer.axial_view, "mouse_released"):
-                self.image_viewer.axial_view.mouse_released.connect(
+            if hasattr(image_widget, "mouse_released"):
+                image_widget.mouse_released.connect(
                     self.contour_tool_manager.mouse_release
                 )
 
-            if hasattr(self.image_viewer.axial_view, "key_pressed"):
-                self.image_viewer.axial_view.key_pressed.connect(
-                    self.contour_tool_manager.key_press
-                )
+            # Check for keyboard signals
+            if hasattr(image_widget, "key_pressed"):
+                image_widget.key_pressed.connect(self.contour_tool_manager.key_press)
 
-            if hasattr(self.image_viewer.axial_view, "key_released"):
-                self.image_viewer.axial_view.key_released.connect(
-                    self.contour_tool_manager.key_release
-                )
+            if hasattr(image_widget, "key_released"):
+                image_widget.key_released.connect(self.contour_tool_manager.key_release)
 
         # Kết nối tín hiệu scroll để thay đổi lát cắt trong các view
         if hasattr(self.image_viewer, "axial_view"):
@@ -541,22 +539,25 @@ class ImagingTab(QWidget):
                 )
 
         # Kết nối tín hiệu điều khiển hình ảnh
-        if hasattr(self, "image_control"):
+        if (
+            hasattr(self, "image_control")
+            and self.image_viewer
+            and hasattr(self.image_viewer, "axial_view")
+        ):
+            image_widget = self.image_viewer.axial_view
+
+            # Only connect if both signals and slots exist
             if hasattr(self.image_control, "brightness_changed") and hasattr(
-                self.image_viewer, "axial_view"
+                image_widget, "set_brightness"
             ):
-                if hasattr(self.image_viewer.axial_view, "set_brightness"):
-                    self.image_control.brightness_changed.connect(
-                        self.image_viewer.axial_view.set_brightness
-                    )
+                self.image_control.brightness_changed.connect(
+                    image_widget.set_brightness
+                )
 
             if hasattr(self.image_control, "contrast_changed") and hasattr(
-                self.image_viewer, "axial_view"
+                image_widget, "set_contrast"
             ):
-                if hasattr(self.image_viewer.axial_view, "set_contrast"):
-                    self.image_control.contrast_changed.connect(
-                        self.image_viewer.axial_view.set_contrast
-                    )
+                self.image_control.contrast_changed.connect(image_widget.set_contrast)
 
     def _on_wheel_event_axial(self, event):
         """Xử lý sự kiện cuộn chuột trên view Axial."""

@@ -53,6 +53,7 @@ from PyQt5.QtWidgets import (
     QStackedWidget,
     QAbstractItemView,
     QSizePolicy,
+    QDialogButtonBox,
 )
 from PyQt5.QtGui import QColor, QIcon, QBrush, QPixmap, QImage, QPainter, QPen
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QTimer
@@ -66,13 +67,18 @@ try:
     from quangtps.segmentation.structures.structure_set import StructureSet
     from quangtps.segmentation.contour.contour_manager import ContourManager
     from quangtps.segmentation.contour.polygon_tool import PolygonTool
-    from quangtps.segmentation.contour.margin import MarginTool
+    from quangtps.segmentation.contour.margin import MarginTool, MarginType
     from quangtps.segmentation.contour.boolean_operations import BooleanOperator
     from quangtps.segmentation.contour.interpolation import ContourInterpolator
-    from quangtps.segmentation.contour.advanced_editing import AdvancedContourEditor
-    from quangtps.segmentation.auto_segmentation.semi_automatic import (
-        SemiAutomaticSegmentation,
-    )
+
+    # Handle potentially missing modules
+    try:
+        from quangtps.segmentation.auto_segmentation.semi_automatic import (
+            SemiAutomaticSegmentation,
+        )
+    except ImportError:
+        SemiAutomaticSegmentation = None
+
     from quangtps.segmentation.auto.engine import AutoSegmentationEngine
     from quangtps.ui.image_display import ImageDisplay
     from quangtps.imaging.image import Image
@@ -80,16 +86,27 @@ try:
     from quangtps.core.services import ServiceRegistry
     from quangtps.ui.mpr_viewer import MPRViewer
     from quangtps.segmentation.segmentation_interface import SegmentationInterface
-    from quangtps.segmentation.manual_segmentation.brush_tool import (
-        BrushTool,
-        BrushToolWidget,
-    )
-    from quangtps.segmentation.manual_segmentation.threshold_tool import (
-        ThresholdContourTool,
-        ThresholdToolWidget,
-        ThresholdMode,
-        ThresholdOperation,
-    )
+
+    try:
+        from quangtps.segmentation.manual_segmentation.brush_tool import (
+            BrushTool,
+            BrushToolWidget,
+        )
+    except ImportError:
+        BrushTool = BrushToolWidget = None
+
+    try:
+        from quangtps.segmentation.manual_segmentation.threshold_tool import (
+            ThresholdContourTool,
+            ThresholdToolWidget,
+            ThresholdMode,
+            ThresholdOperation,
+        )
+    except ImportError:
+        ThresholdContourTool = ThresholdToolWidget = ThresholdMode = (
+            ThresholdOperation
+        ) = None
+
 except ImportError as e:
     logging.error(f"Error importing structure modules: {e}")
 
@@ -211,7 +228,7 @@ class ObjectExplorerPanel(QWidget):
 
         # Add image items if available
         try:
-            patient_db = ServiceRegistry.get_service("PatientDB")
+            patient_db = ServiceRegistry.get_instance().get_service("PatientDB")
             if patient_db:
                 # Get images for this patient
                 images = patient_db.get_images_for_patient(self.current_patient.id)
@@ -374,14 +391,19 @@ class StructureTab(QWidget):
     def __init__(self, parent=None):
         """Initialize the structure tab."""
         super().__init__(parent)
-
-        # Internal state
+        self.parent = parent
         self.image = None
         self.structure_set = None
         self.selected_structure = None
+        self.segmentation_interface = None
 
-        # Initialize UI
+        # Initialize tools
+        self.polygon_tool = PolygonTool()
+        self.contour_manager = ContourManager()
+        self.margin_tool = MarginTool()  # Initialize the margin tool properly
+
         self.init_ui()
+        self.setup_connections()
 
     def init_ui(self):
         """Initialize the user interface."""
@@ -944,6 +966,14 @@ class StructureTab(QWidget):
         )
         context_menu.addAction(visibility_action)
 
+        # Add margin tool option
+        context_menu.addSeparator()
+        margin_action = QAction("Apply Margin...", self)
+        margin_action.triggered.connect(
+            lambda: self.apply_margin_to_structure(structure)
+        )
+        context_menu.addAction(margin_action)
+
         # Add copy/paste options
         context_menu.addSeparator()
 
@@ -1044,6 +1074,239 @@ class StructureTab(QWidget):
         """Handle the close event."""
         self.windowClosed.emit()
         super().closeEvent(event)
+
+    def apply_margin_to_structure(self, structure=None):
+        """Apply margin to the selected structure."""
+        if not structure:
+            structure = self.selected_structure
+
+        if not structure:
+            return
+
+        # Ask user for margin value and type
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Apply Margin")
+        layout = QVBoxLayout(dialog)
+
+        # Margin type selection
+        type_group = QGroupBox("Margin Type")
+        type_layout = QVBoxLayout()
+
+        margin_type_combo = QComboBox()
+        margin_type_combo.addItem("Uniform Expansion/Contraction", "UNIFORM")
+        margin_type_combo.addItem("Anisotropic Expansion", "ANISOTROPIC")
+        margin_type_combo.addItem("Ring Structure", "RING")
+        margin_type_combo.addItem("Surface Layer", "SURFACE")
+        type_layout.addWidget(margin_type_combo)
+        type_group.setLayout(type_layout)
+        layout.addWidget(type_group)
+
+        # Uniform margin parameters
+        uniform_group = QGroupBox("Uniform Parameters")
+        uniform_layout = QFormLayout()
+        uniform_margin = QDoubleSpinBox()
+        uniform_margin.setRange(-50, 50)
+        uniform_margin.setSingleStep(0.5)
+        uniform_margin.setValue(5.0)
+        uniform_margin.setSuffix(" mm")
+        uniform_layout.addRow("Margin:", uniform_margin)
+        uniform_group.setLayout(uniform_layout)
+        layout.addWidget(uniform_group)
+
+        # Anisotropic margin parameters
+        aniso_group = QGroupBox("Anisotropic Parameters")
+        aniso_layout = QFormLayout()
+        aniso_anterior = QDoubleSpinBox()
+        aniso_anterior.setRange(-50, 50)
+        aniso_anterior.setSingleStep(0.5)
+        aniso_anterior.setValue(5.0)
+        aniso_anterior.setSuffix(" mm")
+        aniso_layout.addRow("Anterior:", aniso_anterior)
+
+        aniso_posterior = QDoubleSpinBox()
+        aniso_posterior.setRange(-50, 50)
+        aniso_posterior.setSingleStep(0.5)
+        aniso_posterior.setValue(5.0)
+        aniso_posterior.setSuffix(" mm")
+        aniso_layout.addRow("Posterior:", aniso_posterior)
+
+        aniso_left = QDoubleSpinBox()
+        aniso_left.setRange(-50, 50)
+        aniso_left.setSingleStep(0.5)
+        aniso_left.setValue(5.0)
+        aniso_left.setSuffix(" mm")
+        aniso_layout.addRow("Left:", aniso_left)
+
+        aniso_right = QDoubleSpinBox()
+        aniso_right.setRange(-50, 50)
+        aniso_right.setSingleStep(0.5)
+        aniso_right.setValue(5.0)
+        aniso_right.setSuffix(" mm")
+        aniso_layout.addRow("Right:", aniso_right)
+        aniso_group.setLayout(aniso_layout)
+        layout.addWidget(aniso_group)
+
+        # Ring parameters
+        ring_group = QGroupBox("Ring Parameters")
+        ring_layout = QFormLayout()
+        inner_margin = QDoubleSpinBox()
+        inner_margin.setRange(-50, 50)
+        inner_margin.setSingleStep(0.5)
+        inner_margin.setValue(0.0)
+        inner_margin.setSuffix(" mm")
+        ring_layout.addRow("Inner Margin:", inner_margin)
+
+        outer_margin = QDoubleSpinBox()
+        outer_margin.setRange(0, 50)
+        outer_margin.setSingleStep(0.5)
+        outer_margin.setValue(5.0)
+        outer_margin.setSuffix(" mm")
+        ring_layout.addRow("Outer Margin:", outer_margin)
+        ring_group.setLayout(ring_layout)
+        layout.addWidget(ring_group)
+
+        # Surface parameters
+        surface_group = QGroupBox("Surface Parameters")
+        surface_layout = QFormLayout()
+        thickness = QDoubleSpinBox()
+        thickness.setRange(0.1, 20)
+        thickness.setSingleStep(0.1)
+        thickness.setValue(3.0)
+        thickness.setSuffix(" mm")
+        surface_layout.addRow("Thickness:", thickness)
+        surface_group.setLayout(surface_layout)
+        layout.addWidget(surface_group)
+
+        # Structure creation options
+        option_group = QGroupBox("Output Options")
+        option_layout = QVBoxLayout()
+
+        create_new_rb = QRadioButton("Create new structure")
+        create_new_rb.setChecked(True)
+        replace_rb = QRadioButton("Replace existing structure")
+
+        option_layout.addWidget(create_new_rb)
+        option_layout.addWidget(replace_rb)
+
+        name_layout = QHBoxLayout()
+        name_label = QLabel("New structure name:")
+        new_name = QLineEdit()
+        new_name.setText(f"{structure.name}_margin")
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(new_name)
+        option_layout.addLayout(name_layout)
+
+        option_group.setLayout(option_layout)
+        layout.addWidget(option_group)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, dialog
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        # Show/hide parameter groups based on selected type
+        def update_ui():
+            margin_type = margin_type_combo.currentData()
+            uniform_group.setVisible(margin_type == "UNIFORM")
+            aniso_group.setVisible(margin_type == "ANISOTROPIC")
+            ring_group.setVisible(margin_type == "RING")
+            surface_group.setVisible(margin_type == "SURFACE")
+
+        margin_type_combo.currentIndexChanged.connect(update_ui)
+        update_ui()  # Initial update
+
+        # Execute dialog
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        # Get parameters
+        margin_type = margin_type_combo.currentData()
+        create_new = create_new_rb.isChecked()
+        new_structure_name = new_name.text() if create_new else structure.name
+
+        # Get parameters based on margin type
+        margin_params = {}
+        if margin_type == "UNIFORM":
+            margin_params = {"margin_mm": uniform_margin.value()}
+        elif margin_type == "ANISOTROPIC":
+            margin_params = {
+                "margins_mm": {
+                    "ANTERIOR": aniso_anterior.value(),
+                    "POSTERIOR": aniso_posterior.value(),
+                    "LEFT": aniso_left.value(),
+                    "RIGHT": aniso_right.value(),
+                }
+            }
+        elif margin_type == "RING":
+            margin_params = {
+                "inner_margin_mm": inner_margin.value(),
+                "outer_margin_mm": outer_margin.value(),
+            }
+        elif margin_type == "SURFACE":
+            margin_params = {"thickness_mm": thickness.value()}
+
+        # Get actual pixel spacing from image
+        pixel_spacing = (1.0, 1.0)
+        if self.image:
+            if hasattr(self.image, "spacing"):
+                pixel_spacing = (self.image.spacing[0], self.image.spacing[1])
+
+        try:
+            # Apply margin to each contour in the structure
+            from quangtps.segmentation.contour.margin import MarginType
+
+            new_contours = []
+            for slice_num, contours in structure.contours.items():
+                if contours:
+                    # Apply margin operation to all contours on this slice
+                    margin_contours = self.margin_tool.margin_by_type(
+                        contours, MarginType(margin_type), margin_params, pixel_spacing
+                    )
+                    new_contours.append((slice_num, margin_contours))
+
+            if create_new:
+                # Create new structure
+                new_structure = Structure(
+                    id=f"{structure.id}_margin",
+                    name=new_structure_name,
+                    color=structure.color,
+                    type=structure.type,
+                    priority=structure.priority,
+                )
+
+                # Add contours to new structure
+                for slice_num, contours in new_contours:
+                    new_structure.set_contours(slice_num, contours)
+
+                # Add new structure to current structure set
+                if self.structure_set:
+                    self.structure_set.add_structure(new_structure)
+                    self.add_structure_to_list(new_structure)
+
+                    # Select the new structure
+                    for i in range(self.structure_list.count()):
+                        item = self.structure_list.item(i)
+                        if item.data(Qt.UserRole) == new_structure:
+                            self.structure_list.setCurrentItem(item)
+                            break
+            else:
+                # Replace contours in existing structure
+                for slice_num, contours in new_contours:
+                    structure.set_contours(slice_num, contours)
+
+                # Refresh display
+                self.on_structure_modified()
+
+            # Update MPR views
+            self.structureModified.emit(structure)
+
+        except Exception as e:
+            # Show error message
+            QMessageBox.critical(self, "Error", f"Failed to apply margin: {str(e)}")
+            logger.error(f"Error applying margin: {str(e)}")
 
 
 def test_structure_tab():

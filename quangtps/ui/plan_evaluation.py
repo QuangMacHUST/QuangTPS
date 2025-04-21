@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
     QSplitter, QScrollArea, QFrame, QHeaderView, QCheckBox, QListWidget,
     QAbstractItemView, QListWidgetItem, QRadioButton, QButtonGroup, QMenu, QAction,
-    QToolBar, QSizePolicy, QFileDialog, QMessageBox
+    QToolBar, QSizePolicy, QFileDialog, QMessageBox, QSlider
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint
 from PyQt5.QtGui import QColor, QIcon, QBrush, QImage, QPixmap
@@ -33,6 +33,7 @@ try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
     import matplotlib.pyplot as plt
+    import matplotlib.cm as cm  # For color maps
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -50,7 +51,11 @@ from quangtps.evaluation.protocol_manager import ProtocolManager
 from quangtps.ui.widgets.dvh_widget import DVHWidget
 from quangtps.ui.widgets.metrics_table import MetricsTable
 from quangtps.core.logging import get_logger
-from quangtps.evaluation.metrics import PlanMetric
+# Try to import PlanMetric if available
+try:
+    from quangtps.evaluation.metrics import PlanMetric
+except ImportError:
+    logging.warning("PlanMetric module not available, some evaluation features will be disabled")
 
 logger = get_logger(__name__)
 
@@ -142,8 +147,8 @@ class DVHCanvas(FigureCanvas):
             logger.warning("No DVH data to plot")
             return
 
-        # Get color map - we'll use tab10 for up to 10 structures
-        colors = plt.cm.tab10.colors if 'plt' in globals() else [
+        # Get color map for structure visualization
+        colors = [
             (0.12, 0.47, 0.71), (0.85, 0.37, 0.01),
             (0.20, 0.63, 0.17), (0.90, 0.11, 0.11),
             (0.54, 0.34, 0.86), (0.95, 0.51, 0.19),
@@ -178,7 +183,9 @@ class MetricsTable(QTableWidget):
         super().__init__(parent)
         self.setColumnCount(6)
         self.setHorizontalHeaderLabels(["Structure", "Min Dose", "Max Dose", "Mean Dose", "D95", "V20"])
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        header = self.horizontalHeader()
+        if header:
+            header.setSectionResizeMode(QHeaderView.Stretch)
 
     def update_metrics(self, metrics_data):
         """
@@ -402,11 +409,8 @@ class PlanEvaluationTab(QWidget):
         dose_tab = QWidget()
         dose_layout = QVBoxLayout(dose_tab)
 
-        # Create a simple dose display widget
-        self.dose_display = QLabel("Dose Visualization")
-        self.dose_display.setAlignment(Qt.AlignCenter)
-        self.dose_display.setMinimumSize(300, 300)
-        self.dose_display.setStyleSheet("background-color: black; color: white;")
+        # Create a proper dose display widget
+        self.dose_display = DoseDisplayWidget()
         dose_layout.addWidget(self.dose_display)
 
         right_panel.addTab(dose_tab, "Dose Display")
@@ -1048,179 +1052,394 @@ class PlanEvaluationTab(QWidget):
             )
 
 class DoseDisplayWidget(QWidget):
-    """Widget displaying dose distribution on anatomy image."""
+    """
+    Widget for displaying dose distribution overlaid on anatomical images.
 
-    # Signals
-    plan_changed = pyqtSignal(Plan)
+    This widget displays a slice of patient anatomy with dose overlay,
+    allowing for visualization of dose distribution relative to structures.
+    """
 
     def __init__(self, parent=None):
-        """Initialize the plan evaluation tab."""
+        """Initialize the dose display widget."""
         super().__init__(parent)
 
-        # Current plan and data
-        self.plan = None
-        self.dvh_data = {}
-        self.current_metrics = {}
+        # Display data
+        self.anatomy_data = None
+        self.dose_data = None
+        self.structure_overlays = {}
+        self.current_background = None
 
-        # DVH calculation parameters
-        self.dvh_type = "cumulative"  # or "differential"
-        self.volume_type = "relative"  # or "absolute"
-        self.dose_type = "relative"    # or "absolute"
+        # Display properties
+        self.window_width = 400
+        self.window_level = 40
+        self.colormap = "jet"  # For dose display
+        self.dose_opacity = 0.6
+        self.show_colorbar = True
+        self.dose_range = [0, 100]  # % of prescription
 
-        # Protocol manager
-        self.protocol_manager = ProtocolManager()
-        self.current_protocol = None
+        # Slice navigation
+        self.current_slice = 0
+        self.orientation = "axial"  # axial, sagittal, coronal
 
         # Initialize UI
         self._init_ui()
 
-        # Set initial state
-        self._update_ui()
-
-    def _init_ui(self):
-        """Initialize the user interface."""
-        main_layout = QVBoxLayout(self)
-
-        # Create image display
-        self.image_widget = QLabel("Dose Display")
-        self.image_widget.setAlignment(Qt.AlignCenter)
-        self.image_widget.setMinimumSize(300, 300)
-        self.image_widget.setStyleSheet("background-color: black; color: white;")
-
-        # Add the image widget to the layout
-        main_layout.addWidget(self.image_widget)
-
         # Create sample data for testing
         self._create_sample_data()
 
+    def _init_ui(self):
+        """Initialize the user interface."""
+        layout = QVBoxLayout(self)
+
+        # Image display area
+        self.image_widget = QLabel()
+        self.image_widget.setMinimumSize(300, 300)
+        self.image_widget.setAlignment(Qt.AlignCenter)
+        self.image_widget.setStyleSheet("background-color: black;")
+        layout.addWidget(self.image_widget)
+
+        # Controls for navigation and display settings
+        controls_layout = QHBoxLayout()
+
+        # Slice slider
+        slice_layout = QHBoxLayout()
+        slice_layout.addWidget(QLabel("Slice:"))
+
+        self.slice_slider = QSlider(Qt.Horizontal)
+        self.slice_slider.setMinimum(0)
+        self.slice_slider.setMaximum(20)  # Will be updated with data
+        self.slice_slider.setValue(10)
+        self.slice_slider.valueChanged.connect(self.set_slice_data)
+        slice_layout.addWidget(self.slice_slider)
+
+        self.slice_label = QLabel("10/20")
+        slice_layout.addWidget(self.slice_label)
+
+        controls_layout.addLayout(slice_layout)
+
+        # Window/level controls
+        window_level_layout = QHBoxLayout()
+        window_level_layout.addWidget(QLabel("W/L:"))
+
+        self.window_slider = QSlider(Qt.Horizontal)
+        self.window_slider.setMinimum(1)
+        self.window_slider.setMaximum(4000)
+        self.window_slider.setValue(self.window_width)
+        self.window_slider.valueChanged.connect(self.set_window)
+        window_level_layout.addWidget(self.window_slider)
+
+        self.level_slider = QSlider(Qt.Horizontal)
+        self.level_slider.setMinimum(-1000)
+        self.level_slider.setMaximum(3000)
+        self.level_slider.setValue(self.window_level)
+        self.level_slider.valueChanged.connect(self.set_level)
+        window_level_layout.addWidget(self.level_slider)
+
+        controls_layout.addLayout(window_level_layout)
+
+        # Orientation selector
+        orientation_layout = QHBoxLayout()
+        orientation_layout.addWidget(QLabel("View:"))
+
+        self.orientation_combo = QComboBox()
+        self.orientation_combo.addItems(["Axial", "Sagittal", "Coronal"])
+        self.orientation_combo.currentTextChanged.connect(self._on_orientation_changed)
+        orientation_layout.addWidget(self.orientation_combo)
+
+        controls_layout.addLayout(orientation_layout)
+
+        layout.addLayout(controls_layout)
+
     def _create_sample_data(self):
         """Create sample data for testing."""
-        self.anatomy_data = np.zeros((20, 256, 256), dtype=np.float32)
-        self.dose_data = np.zeros((20, 256, 256), dtype=np.float32)
+        try:
+            # Create sample anatomy image (CT-like)
+            size = (20, 256, 256)  # z, y, x
+            self.anatomy_data = np.ones(size, dtype=np.float32) * 40  # Base CT value
 
-        # Create a simple phantom
-        # Create a circular phantom
-        center_x, center_y = 128, 128
-        radius = 100
+            # Add some basic structures
+            center_z, center_y, center_x = 10, 128, 128
+            radius_y, radius_x = 100, 100
 
-        for z in range(self.anatomy_data.shape[0]):
-            for y in range(self.anatomy_data.shape[1]):
-                for x in range(self.anatomy_data.shape[2]):
-                    # Distance from center
-                    dist = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+            # Create a phantom with body and target
+            for z in range(size[0]):
+                for y in range(size[1]):
+                    for x in range(size[2]):
+                        # Calculate distance from center
+                        dist = np.sqrt((y - center_y)**2 + (x - center_x)**2)
 
-                    # Body
-                    if dist < radius:
-                        self.anatomy_data[z, y, x] = 50  # Water-like density
+                        # Body (water)
+                        if dist < radius_y:
+                            self.anatomy_data[z, y, x] = 0  # Water = 0 HU
 
-                        # "Bone" - vertical line
-                        if abs(x - center_x) < 5:
-                            self.anatomy_data[z, y, x] = 1000  # Bone-like density
+                            # Add some bone structures
+                            if 70 < dist < 90 and abs(x - center_x) > 50:
+                                self.anatomy_data[z, y, x] = 700  # Bone ~ 700 HU
 
-                        # "Tumor" - circle in the center of the phantom
-                        if dist < 20 and z >= 5 and z <= 15:
-                            # Create dose distribution centered on the tumor
-                            dose_dist = 50.0 * (1.0 - dist/radius)
-                            self.dose_data[z, y, x] = max(0, dose_dist * np.exp(-(z-10)**2/20))
+                            # Add a target structure
+                            if dist < 30 and abs(z - center_z) < 5:
+                                self.anatomy_data[z, y, x] = 10  # Soft tissue ~ 10 HU
+
+            # Create sample dose data
+            self.dose_data = np.zeros(size, dtype=np.float32)
+
+            # Simple dose distribution - higher in the target
+            for z in range(size[0]):
+                for y in range(size[1]):
+                    for x in range(size[2]):
+                        # Calculate distance from center
+                        dist = np.sqrt((y - center_y)**2 + (x - center_x)**2 + 2 * (z - center_z)**2)
+
+                        # Dose falls off with distance from target center
+                        if dist < 100:  # Only inside "body"
+                            falloff = 1.0 - (dist / 100.0) ** 1.5  # Dose falloff
+                            self.dose_data[z, y, x] = max(0, falloff * 100)  # Max 100% dose
+
+        except Exception as e:
+            print(f"Error creating sample data: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _add_sample_data(self):
-        """Add sample data for testing."""
-        # Generate sample slice for visualization
-        self.set_slice_data(10)  # Display middle slice
+        """Add sample data to the display."""
+        if self.anatomy_data is not None and self.dose_data is not None:
+            self.set_slice_data(10)  # Display a middle slice
 
     def set_slice_data(self, slice_index):
-        """Set the slice data for display."""
-        if not hasattr(self, 'anatomy_data') or self.anatomy_data is None:
+        """
+        Set the current slice to display.
+
+        Parameters
+        ----------
+        slice_index : int
+            Index of the slice to display
+        """
+        if self.anatomy_data is None:
             return
 
-        # Ensure slice index is valid
-        if slice_index < 0 or slice_index >= self.anatomy_data.shape[0]:
-            return
+        # Update current slice index
+        self.current_slice = slice_index
+        self.slice_slider.setValue(slice_index)
+        self.slice_label.setText(f"{slice_index}/{self.anatomy_data.shape[0]-1}")
 
-        # Get the slice data
-        anatomy_slice = self.anatomy_data[slice_index]
-        dose_slice = self.dose_data[slice_index] if self.dose_data is not None else None
+        # Extract the current slice based on orientation
+        if self.orientation == "axial":
+            anatomy_slice = self.anatomy_data[slice_index, :, :]
+            dose_slice = self.dose_data[slice_index, :, :] if self.dose_data is not None else None
+        elif self.orientation == "sagittal":
+            anatomy_slice = self.anatomy_data[:, :, slice_index]
+            dose_slice = self.dose_data[:, :, slice_index] if self.dose_data is not None else None
+        elif self.orientation == "coronal":
+            anatomy_slice = self.anatomy_data[:, slice_index, :]
+            dose_slice = self.dose_data[:, slice_index, :] if self.dose_data is not None else None
 
         # Display the slice
         self.set_background_data(anatomy_slice)
-
-        # If dose data is available, overlay it
         if dose_slice is not None:
             self.set_dose_overlay(dose_slice)
 
+        # Update the display
+        self.update_display()
+
     def set_background_data(self, image_data):
-        """Set the background anatomy image data."""
-        if image_data is None:
+        """
+        Set background image data.
+
+        Parameters
+        ----------
+        image_data : np.ndarray
+            2D array of background image data
+        """
+        if image_data is None or image_data.size == 0:
             return
 
-        # Normalize image to 0-255 for display
-        if image_data.max() > 0:
-            normalized = np.clip(image_data, 0, 2000) / 2000.0 * 255.0
-        else:
-            normalized = np.zeros_like(image_data)
+        # Store the data
+        self.current_background = image_data
 
-        normalized = normalized.astype(np.uint8)
-
-        # Create QImage from numpy array
-        height, width = normalized.shape
-        bytes_per_line = width
-        q_image = QImage(normalized.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
-
-        # Create pixmap and display
-        pixmap = QPixmap.fromImage(q_image)
-
-        # Resize pixmap to fit the label while maintaining aspect ratio
-        pixmap = pixmap.scaled(
-            self.image_widget.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-
-        # Set pixmap to label
-        self.image_widget.setPixmap(pixmap)
+        # Update the display
+        self.update_display()
 
     def set_dose_overlay(self, dose_data):
-        """Set the dose overlay data."""
-        # This would create a colored overlay of the dose distribution
-        # using a colormap like jet or hot
-        pass
+        """
+        Set dose overlay data.
 
-    def set_brightness(self, value):
-        """Adjust brightness of the displayed image."""
-        # This would adjust the brightness of the displayed image
-        # by modifying the window level
-        pass
-
-    def set_contrast(self, value):
-        """Adjust contrast of the displayed image."""
-        # This would adjust the contrast of the displayed image
-        # by modifying the window width
-        pass
-
-    def update_display(self):
-        """Update the display with current data."""
-        # Update the display based on current settings
-        if hasattr(self, 'anatomy_data') and self.anatomy_data is not None:
-            self.set_slice_data(10)  # Default to middle slice
-
-    def set_plan(self, plan):
-        """Set the current plan for evaluation."""
-        self.plan = plan
-
-        # Update display with new plan data
-        self._update_display_with_plan()
-
-        # Emit plan changed signal
-        self.plan_changed.emit(plan)
-
-    def _update_display_with_plan(self):
-        """Update display with data from the current plan."""
-        if self.plan is None:
+        Parameters
+        ----------
+        dose_data : np.ndarray
+            2D array of dose data
+        """
+        if dose_data is None or dose_data.size == 0:
             return
 
-        # Extract dose data from plan
-        if hasattr(self.plan, 'dose') and self.plan.dose is not None:
-            self.dose_data = self.plan.dose.data
+        # Store the data
+        self.current_dose = dose_data
 
-            # Update display
-            self.update_display()
+        # Update the display
+        self.update_display()
+
+    def set_window(self, value):
+        """Set the window width."""
+        self.window_width = value
+        self.update_display()
+
+    def set_level(self, value):
+        """Set the window level."""
+        self.window_level = value
+        self.update_display()
+
+    def set_brightness(self, value):
+        """Set the brightness (window level)."""
+        self.window_level = value
+        self.update_display()
+
+    def set_contrast(self, value):
+        """Set the contrast (window width)."""
+        self.window_width = value
+        self.update_display()
+
+    def update_display(self):
+        """Update the display with current data and settings."""
+        if not hasattr(self, 'current_background') or self.current_background is None:
+            return
+
+        try:
+            # Apply window/level to anatomy image
+            min_val = self.window_level - self.window_width / 2
+            max_val = self.window_level + self.window_width / 2
+
+            normalized = np.clip(self.current_background, min_val, max_val)
+            normalized = (normalized - min_val) / (max_val - min_val) * 255
+            display_data = normalized.astype(np.uint8)
+
+            # Convert to RGB image
+            rgb_image = np.stack([display_data, display_data, display_data], axis=2)
+
+            # Add dose overlay if available
+            if hasattr(self, 'current_dose') and self.current_dose is not None:
+                # Normalize dose to 0-1 range
+                norm_dose = np.clip(self.current_dose, 0, self.dose_range[1]) / self.dose_range[1]
+
+                # Create colormap
+                if self.colormap == "jet":
+                    # Simple jet-like colormap (blue to red)
+                    r = np.clip(np.interp(norm_dose, [0.5, 1.0], [0, 255]), 0, 255)
+                    g = np.clip(np.interp(norm_dose, [0.25, 0.75], [0, 255]), 0, 255)
+                    b = np.clip(np.interp(norm_dose, [0.0, 0.5], [255, 0]), 0, 255)
+
+                    # Create RGBA dose overlay
+                    dose_rgba = np.stack([r, g, b, norm_dose * 255 * self.dose_opacity], axis=2).astype(np.uint8)
+
+                    # Resize dose overlay if needed
+                    if dose_rgba.shape[:2] != rgb_image.shape[:2]:
+                        # Simple resizing - in practice would use proper interpolation
+                        from scipy.ndimage import zoom
+                        zoom_factors = (rgb_image.shape[0] / dose_rgba.shape[0],
+                                        rgb_image.shape[1] / dose_rgba.shape[1], 1)
+                        dose_rgba = zoom(dose_rgba, zoom_factors, order=1)
+
+                    # Alpha blend dose and anatomy
+                    alpha = dose_rgba[:, :, 3:4] / 255.0
+                    rgb_image = rgb_image * (1 - alpha) + dose_rgba[:, :, :3] * alpha
+
+            # Convert to QImage and display
+            height, width = rgb_image.shape[:2]
+            qimage = QImage(rgb_image.astype(np.uint8), width, height, width * 3, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimage)
+
+            # Scale to fit widget while maintaining aspect ratio
+            self.image_widget.setPixmap(pixmap.scaled(
+                self.image_widget.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            ))
+
+        except Exception as e:
+            print(f"Error updating display: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def set_plan(self, plan):
+        """
+        Set the current plan data for display.
+
+        Parameters
+        ----------
+        plan : Plan
+            Plan object containing image, dose, and structure data
+        """
+        if plan is None:
+            return
+
+        # Reset display
+        self.anatomy_data = None
+        self.dose_data = None
+        self.structure_overlays = {}
+
+        # Extract plan data
+        try:
+            # Extract anatomy data from plan
+            if hasattr(plan, 'get_image_data') and callable(plan.get_image_data):
+                self.anatomy_data = plan.get_image_data()
+
+            # Extract dose data from plan
+            if hasattr(plan, 'get_dose_data') and callable(plan.get_dose_data):
+                self.dose_data = plan.get_dose_data()
+
+            # Extract structure data from plan
+            if hasattr(plan, 'get_structures') and callable(plan.get_structures):
+                structures = plan.get_structures()
+                for structure in structures:
+                    self.structure_overlays[structure.id] = {
+                        'data': structure.get_contours() if hasattr(structure, 'get_contours') else None,
+                        'color': structure.color if hasattr(structure, 'color') else (255, 0, 0),
+                        'visible': True
+                    }
+
+            # If we have data, update the display
+            if self.anatomy_data is not None:
+                # Update slice slider range
+                max_slice = self.anatomy_data.shape[0] - 1
+                self.slice_slider.setMaximum(max_slice)
+                self.slice_slider.setValue(max_slice // 2)
+
+                # Update the display
+                self.set_slice_data(max_slice // 2)
+            else:
+                # If no plan data, use sample data
+                self._create_sample_data()
+                self._add_sample_data()
+
+        except Exception as e:
+            print(f"Error loading plan data: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Use sample data as fallback
+            self._create_sample_data()
+            self._add_sample_data()
+
+    def _on_orientation_changed(self, orientation):
+        """Handle orientation change."""
+        orientation = orientation.lower()
+        if orientation in ["axial", "sagittal", "coronal"]:
+            self.orientation = orientation
+
+            # Update slice slider range based on orientation
+            if self.anatomy_data is not None:
+                if orientation == "axial":
+                    max_slice = self.anatomy_data.shape[0] - 1
+                elif orientation == "sagittal":
+                    max_slice = self.anatomy_data.shape[2] - 1
+                elif orientation == "coronal":
+                    max_slice = self.anatomy_data.shape[1] - 1
+
+                self.slice_slider.setMaximum(max_slice)
+                self.slice_slider.setValue(max_slice // 2)
+
+                # Update display
+                self.set_slice_data(max_slice // 2)
+
+    def resizeEvent(self, event):
+        """Handle resize events."""
+        super().resizeEvent(event)
+        self.update_display()  # Refresh display when widget is resized

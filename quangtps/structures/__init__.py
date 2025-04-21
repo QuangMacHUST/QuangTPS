@@ -11,6 +11,9 @@ in the radiotherapy treatment planning system.
 import logging
 from quangtps.core.logging import get_logger
 
+# Setup basic logging
+logger = get_logger(__name__)
+
 # Import directly from local modules - avoid circular imports
 from quangtps.structures.structure import Structure
 from quangtps.structures.structure_set import StructureSet
@@ -27,10 +30,7 @@ try:
         calculate_dice_coefficient,
     )
 except ImportError as e:
-    logging.getLogger(__name__).warning(f"Failed to import structure utilities: {e}")
-
-# Setup basic logging
-logger = get_logger(__name__)
+    logger.warning(f"Failed to import structure utilities: {e}")
 
 # Define structure types for usage throughout the package
 from enum import Enum, auto
