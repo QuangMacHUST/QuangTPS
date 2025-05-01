@@ -1,0 +1,274 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Luồng công việc và đặc tả kỹ thuật cho MLC Editor và BEV
+
+Module MLC Editor và Beam's Eye View (BEV) là các thành phần quan trọng của QuangTPS,
+giúp bác sĩ và kỹ sư vật lý y học thiết kế và tối ưu hóa chùm tia xạ trị.
+
+## Cấu trúc module MLC
+
+### MLCLeaf
+
+Đại diện cho một lá MLC trong bộ chuẩn trực đa lá:
+
+```python
+class MLCLeaf:
+    index: int          # Chỉ số của lá
+    bank: str           # Bank (A hoặc B)
+    position: float     # Vị trí hiện tại của lá (cm)
+    width: float        # Chiều rộng của lá (cm)
+    y_position: float   # Vị trí theo trục Y (cm)
+    max_travel: float   # Khoảng cách di chuyển tối đa
+
+    def __init__(self, index, bank, position=0.0, width=0.5, y_position=0.0, max_travel=20.0):
+        # Khởi tạo lá MLC
+        ...
+
+    def move_to(self, position: float) -> bool:
+        # Di chuyển lá đến vị trí mới, trả về False nếu vượt quá giới hạn
+        ...
+
+    def is_collision(self, other_leaf: 'MLCLeaf') -> bool:
+        # Kiểm tra va chạm với lá khác
+        ...
+```
+
+### MLC
+
+Đại diện cho toàn bộ bộ MLC:
+
+```python
+class MLC:
+    type: str           # Loại MLC (Millennium120, HD120, Agility...)
+    leaves: List[MLCLeaf] # Danh sách các lá
+    max_leaf_travel: float # Khoảng cách di chuyển tối đa
+
+    def __init__(self, mlc_type: str):
+        # Khởi tạo bộ MLC với loại tương ứng
+        ...
+
+    def set_from_shape(self, shape: np.ndarray) -> None:
+        # Thiết lập vị trí lá từ ma trận hình dạng
+        ...
+
+    def get_shape(self, resolution: int = 100) -> np.ndarray:
+        # Chuyển cấu hình MLC thành ma trận hình dạng
+        ...
+
+    def get_transmission_map(self, resolution: int = 100) -> np.ndarray:
+        # Tạo bản đồ truyền qua của MLC
+        ...
+
+    def validate(self) -> Tuple[bool, List[str]]:
+        # Xác thực cấu hình MLC (kiểm tra va chạm, vượt giới hạn...)
+        ...
+```
+
+### MLCEditorController
+
+Điều khiển logic nghiệp vụ cho trình soạn thảo MLC:
+
+```python
+class MLCEditorController:
+    _current_mlc: MLC
+    _target_structure: Structure
+    _oar_structures: List[Structure]
+    _current_beam: Beam
+    _optimization_params: Dict
+
+    def __init__(self):
+        # Khởi tạo controller
+        ...
+
+    def create_shape_based_mlc(self, structure: Structure, mlc_type: str, margin: float = 0.5) -> Optional[MLC]:
+        # Tạo hình dạng MLC dựa trên cấu trúc
+        ...
+
+    def optimize_mlc(self, field_size: float = 40.0) -> Optional[MLC]:
+        # Tối ưu hóa MLC hiện tại
+        ...
+
+    def calculate_coverage_metrics(self) -> Dict[str, float]:
+        # Tính toán các chỉ số bao phủ của MLC hiện tại
+        ...
+```
+
+## Cấu trúc module BEV (Beam's Eye View)
+
+### BEVTransform
+
+Chuyển đổi tọa độ từ hệ tọa độ bệnh nhân sang hệ tọa độ BEV:
+
+```python
+class BEVTransform:
+    gantry_angle: float
+    collimator_angle: float
+    couch_angle: float
+    isocenter: Tuple[float, float, float]
+
+    def __init__(self, gantry_angle: float, collimator_angle: float, couch_angle: float, isocenter: Tuple[float, float, float]):
+        # Khởi tạo đối tượng chuyển đổi BEV
+        ...
+
+    def transform_point(self, point: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        # Chuyển một điểm từ hệ tọa độ bệnh nhân sang hệ tọa độ BEV
+        ...
+
+    def transform_points(self, points: np.ndarray) -> np.ndarray:
+        # Chuyển nhiều điểm từ hệ tọa độ bệnh nhân sang hệ tọa độ BEV
+        ...
+
+    def inverse_transform_point(self, point: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        # Chuyển ngược từ tọa độ BEV sang tọa độ bệnh nhân
+        ...
+```
+
+### BEVViewer
+
+Hiển thị góc nhìn chùm tia:
+
+```python
+class BEVViewer:
+    beam: Beam
+    structures: List[Structure]
+    transform: BEVTransform
+
+    def __init__(self, beam: Beam):
+        # Khởi tạo viewer
+        ...
+
+    def add_structure(self, structure: Structure, color: Optional[Tuple[int, int, int]] = None):
+        # Thêm cấu trúc vào chế độ xem BEV
+        ...
+
+    def get_structure_projection(self, structure: Structure, resolution: int = 100) -> np.ndarray:
+        # Chiếu cấu trúc lên mặt phẳng BEV
+        ...
+
+    def create_drr(self, image_series: Series, resolution: int = 512) -> np.ndarray:
+        # Tạo ảnh DRR (Digitally Reconstructed Radiograph)
+        ...
+
+    def render(self, show_drr: bool = False, show_structures: bool = True) -> np.ndarray:
+        # Tạo ảnh hiển thị BEV
+        ...
+```
+
+## Luồng công việc tích hợp MLC và BEV
+
+### 1. Tạo hình dạng MLC từ cấu trúc
+
+```
+1. Người dùng chọn cấu trúc mục tiêu
+2. Hệ thống tạo chuyển đổi BEV từ thông số chùm tia
+3. Cấu trúc được chiếu lên mặt phẳng BEV
+4. Vị trí lá MLC được tính toán dựa trên hình chiếu
+5. Hiển thị cấu hình MLC trong khung nhìn BEV
+```
+
+### 2. Điều chỉnh thủ công MLC
+
+```
+1. Hiển thị lá MLC trong khung nhìn BEV
+2. Người dùng kéo thả các lá MLC
+3. Hệ thống xác thực các thay đổi (kiểm tra va chạm, giới hạn di chuyển)
+4. Cập nhật hiển thị và dữ liệu chùm tia
+```
+
+### 3. Tối ưu hóa MLC
+
+```
+1. Người dùng chọn thuật toán tối ưu hóa và tham số
+2. Hệ thống thực hiện tối ưu hóa:
+   a. Tạo bản đồ truyền qua MLC
+   b. Tính toán chỉ số bao phủ mục tiêu và phơi nhiễm OAR
+   c. Điều chỉnh vị trí lá MLC để tối ưu hóa mục tiêu
+3. Hiển thị kết quả với các chỉ số định lượng
+4. Người dùng chấp nhận hoặc điều chỉnh thêm
+```
+
+## Thuật toán tối ưu hóa MLC
+
+### 1. Gradient Descent (Mặc định)
+
+```python
+def optimize_mlc_gradient(mlc: MLC, target_map: np.ndarray, oar_maps: List[np.ndarray],
+                         target_weight: float = 1.0, oar_weights: List[float] = None,
+                         iterations: int = 100, step_size: float = 0.1) -> MLC:
+    """
+    Tối ưu hóa MLC bằng thuật toán gradient descent.
+    """
+    # Triển khai thuật toán gradient descent
+    # 1. Tính cost function dựa trên bao phủ mục tiêu và phơi nhiễm OAR
+    # 2. Tính đạo hàm cost function theo vị trí từng lá
+    # 3. Cập nhật vị trí lá theo hướng gradient
+    # 4. Lặp lại cho đến khi hội tụ
+    ...
+```
+
+### 2. Simulated Annealing
+
+```python
+def optimize_mlc_simulated_annealing(mlc: MLC, target_map: np.ndarray, oar_maps: List[np.ndarray],
+                                    target_weight: float = 1.0, oar_weights: List[float] = None,
+                                    iterations: int = 1000, initial_temp: float = 100.0, cooling_rate: float = 0.95) -> MLC:
+    """
+    Tối ưu hóa MLC bằng thuật toán simulated annealing.
+    """
+    # Triển khai thuật toán simulated annealing
+    # 1. Tính cost function ban đầu
+    # 2. Trong mỗi lần lặp:
+    #    a. Tạo một cấu hình MLC mới bằng cách thay đổi ngẫu nhiên vị trí lá
+    #    b. Tính cost function mới
+    #    c. Chấp nhận cấu hình mới nếu tốt hơn hoặc theo xác suất dựa trên nhiệt độ
+    #    d. Giảm nhiệt độ
+    ...
+```
+
+### 3. Genetic Algorithm
+
+```python
+def optimize_mlc_genetic(mlc: MLC, target_map: np.ndarray, oar_maps: List[np.ndarray],
+                        target_weight: float = 1.0, oar_weights: List[float] = None,
+                        population_size: int = 50, generations: int = 100, mutation_rate: float = 0.1) -> MLC:
+    """
+    Tối ưu hóa MLC bằng thuật toán di truyền.
+    """
+    # Triển khai thuật toán di truyền
+    # 1. Tạo quần thể ban đầu các cấu hình MLC
+    # 2. Trong mỗi thế hệ:
+    #    a. Tính fitness của mỗi cá thể (dựa trên bao phủ mục tiêu và phơi nhiễm OAR)
+    #    b. Chọn các cá thể tốt nhất để lai ghép
+    #    c. Tạo thế hệ con bằng lai ghép và đột biến
+    #    d. Thay thế quần thể cũ bằng quần thể mới
+    ...
+```
+
+## Kiểm tra và đảm bảo chất lượng
+
+1. Mỗi khi điều chỉnh MLC (thủ công hoặc tự động), phải kiểm tra:
+   - Giới hạn di chuyển của mỗi lá
+   - Va chạm giữa các lá đối diện
+   - Khoảng cách tối thiểu giữa các lá liền kề
+
+2. Hiển thị cảnh báo và chỉ dẫn sửa lỗi khi phát hiện vấn đề
+
+3. Cung cấp các chỉ số đánh giá:
+   - Phần trăm bao phủ mục tiêu
+   - Phần trăm phơi nhiễm OAR
+   - Sự phù hợp về hình dạng trường xạ
+
+## Tích hợp với UI
+
+1. BEVViewer và MLCEditor cần tích hợp chặt chẽ trong giao diện:
+   - Hiển thị BEV với cấu trúc mục tiêu và OARs
+   - Hiển thị MLC trực tiếp trên BEV
+   - Cho phép kéo thả để điều chỉnh lá MLC
+
+2. Bảng điều khiển cho tối ưu hóa MLC:
+   - Chọn thuật toán (Gradient, Simulated Annealing, Genetic)
+   - Điều chỉnh tham số tối ưu hóa
+   - Hiển thị kết quả tối ưu hóa theo thời gian thực

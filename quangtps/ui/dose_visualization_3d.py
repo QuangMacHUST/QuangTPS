@@ -44,6 +44,7 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QColorDialog,
     QInputDialog,
+    QFileDialog,
 )
 from PyQt5.QtGui import QColor, QIcon, QBrush
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
@@ -455,10 +456,55 @@ class DoseVisualization3D(QWidget):
         self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
 
     def _update_display_mode(self, index: int):
-        """Update display mode for isodose visualization."""
-        # Not implemented yet - would handle different rendering techniques
-        # such as surface, volume, or contour display modes
-        pass
+        """
+        Cập nhật chế độ hiển thị cho phân phối liều.
+
+        Parameters
+        ----------
+        index : int
+            Chỉ số của chế độ hiển thị, 0: Surface, 1: Volume, 2: Contour
+        """
+        mode_names = ["Surface", "Volume", "Contour"]
+        mode = mode_names[index] if index < len(mode_names) else "Surface"
+
+        logger.info(f"Đang thay đổi chế độ hiển thị isodose sang: {mode}")
+
+        # Nếu không có dữ liệu liều, thoát
+        if self.dose_grid is None:
+            return
+
+        # Lấy actor hiện tại
+        for level, isodose in self.isodose_levels.items():
+            if isodose.actor is None:
+                continue
+
+            # Áp dụng chế độ hiển thị phù hợp
+            if mode == "Surface":
+                # Chế độ bề mặt isodose
+                isodose.actor.GetProperty().SetRepresentationToSurface()
+                isodose.actor.GetProperty().SetOpacity(
+                    self.transparency_slider.value() / 100.0
+                )
+
+            elif mode == "Volume":
+                # Chế độ khối lượng với độ trong suốt
+                isodose.actor.GetProperty().SetRepresentationToSurface()
+                isodose.actor.GetProperty().SetOpacity(
+                    min(0.7, self.transparency_slider.value() / 100.0)
+                )
+
+            elif mode == "Contour":
+                # Chế độ đường viền
+                isodose.actor.GetProperty().SetRepresentationToWireframe()
+                isodose.actor.GetProperty().SetLineWidth(2.0)
+                isodose.actor.GetProperty().SetOpacity(1.0)  # Đường viền luôn đặc
+
+        # Cập nhật hiển thị
+        if hasattr(self.vtk_viewer, "vtk_widget") and self.vtk_viewer.vtk_widget:
+            self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
+
+        # Phát tín hiệu thông báo đã cập nhật
+        self.dose_visualization_updated.emit()
 
     def _toggle_structures(self, state: int):
         """Toggle visibility of structures."""
@@ -501,8 +547,73 @@ class DoseVisualization3D(QWidget):
             self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
 
     def _take_screenshot(self):
-        """Take a screenshot of the current view."""
-        self.vtk_viewer.take_screenshot()
+        """Chụp và lưu ảnh màn hình của hiển thị 3D."""
+        try:
+            if (
+                not hasattr(self.vtk_viewer, "vtk_widget")
+                or not self.vtk_viewer.vtk_widget
+            ):
+                logger.error("Không thể chụp màn hình: VTK widget không khởi tạo")
+                return
+
+            # Hiển thị hộp thoại lưu tệp
+            try:
+                from PyQt5.QtWidgets import QFileDialog
+            except ImportError as e:
+                logger.error(f"Không thể import QFileDialog: {e}")
+                return
+
+            # Tạo tên tệp mặc định dựa trên thời gian
+            import datetime
+
+            default_filename = f"dose_visualization_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "Lưu ảnh chụp màn hình",
+                default_filename,
+                "PNG Files (*.png);;JPEG Files (*.jpg);;All Files (*)",
+            )
+
+            if not filename:
+                return  # Người dùng đã hủy
+
+            # Thêm phần mở rộng .png nếu không có phần mở rộng
+            if not any(
+                filename.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg"]
+            ):
+                filename += ".png"
+
+            # Tạo bộ lọc cửa sổ VTK để lưu ảnh chụp màn hình
+            window_to_image_filter = vtk.vtkWindowToImageFilter()
+            window_to_image_filter.SetInput(
+                self.vtk_viewer.vtk_widget.GetRenderWindow()
+            )
+            window_to_image_filter.SetInputBufferTypeToRGB()
+            window_to_image_filter.ReadFrontBufferOff()
+            window_to_image_filter.Update()
+
+            # Xác định bộ ghi tệp dựa trên phần mở rộng
+            if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
+                writer = vtk.vtkJPEGWriter()
+            else:
+                writer = vtk.vtkPNGWriter()
+
+            writer.SetFileName(filename)
+            writer.SetInputConnection(window_to_image_filter.GetOutputPort())
+            writer.Write()
+
+            logger.info(f"Đã lưu ảnh chụp màn hình thành công vào: {filename}")
+
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu ảnh chụp màn hình: {str(e)}")
+            from PyQt5.QtWidgets import QMessageBox
+
+            QMessageBox.warning(
+                self,
+                "Lỗi khi lưu ảnh chụp",
+                f"Không thể lưu ảnh chụp màn hình: {str(e)}",
+            )
 
     def set_dose_grid(self, dose_grid: DoseGrid):
         """

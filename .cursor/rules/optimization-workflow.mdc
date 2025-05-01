@@ -1,0 +1,273 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Luồng công việc và đặc tả kỹ thuật cho tối ưu hóa kế hoạch điều trị
+
+Module Optimization của QuangTPS cung cấp các thuật toán và luồng công việc để tối ưu hóa kế hoạch điều trị xạ trị, đảm bảo đạt được các mục tiêu điều trị đồng thời bảo vệ các cơ quan nguy cấp (OARs).
+
+## Cấu trúc module Optimization
+
+### 1. Objective (Mục tiêu)
+
+```python
+class Objective:
+    structure_id: str         # ID của cấu trúc
+    objective_type: str       # Loại mục tiêu (DVH, Dose, Conformity, ...)
+    parameters: Dict          # Tham số của mục tiêu
+    priority: float           # Độ ưu tiên (0-10)
+    weight: float             # Trọng số trong hàm cost
+
+    def __init__(self, structure_id: str, objective_type: str, parameters: Dict = None, priority: float = 5.0, weight: float = 1.0):
+        # Khởi tạo mục tiêu
+        ...
+
+    def calculate_cost(self, dose: Dose, structures: Dict[str, Structure]) -> float:
+        # Tính giá trị cost function cho mục tiêu
+        ...
+
+    def is_achieved(self, dose: Dose, structures: Dict[str, Structure]) -> bool:
+        # Kiểm tra xem mục tiêu đã đạt được chưa
+        ...
+```
+
+### 2. Constraint (Ràng buộc)
+
+```python
+class Constraint:
+    structure_id: str         # ID của cấu trúc
+    constraint_type: str      # Loại ràng buộc (Max, Mean, D1cc, V20Gy, ...)
+    limit: float              # Giới hạn của ràng buộc
+    priority: str             # Mức độ ưu tiên (CRITICAL, HIGH, MEDIUM, LOW)
+
+    def __init__(self, structure_id: str, constraint_type: str, limit: float, priority: str = "MEDIUM"):
+        # Khởi tạo ràng buộc
+        ...
+
+    def evaluate(self, dose: Dose, structures: Dict[str, Structure]) -> Tuple[bool, float]:
+        # Đánh giá xem ràng buộc có được đáp ứng không và mức độ vi phạm
+        ...
+```
+
+### 3. Optimizer (Bộ tối ưu hóa)
+
+```python
+class Optimizer:
+    objectives: List[Objective]      # Danh sách mục tiêu
+    constraints: List[Constraint]    # Danh sách ràng buộc
+    plan: Plan                       # Kế hoạch cần tối ưu hóa
+
+    def __init__(self, plan: Plan):
+        # Khởi tạo bộ tối ưu hóa
+        ...
+
+    def add_objective(self, objective: Objective):
+        # Thêm mục tiêu vào danh sách
+        ...
+
+    def add_constraint(self, constraint: Constraint):
+        # Thêm ràng buộc vào danh sách
+        ...
+
+    def optimize(self, algorithm: str = "fluence", max_iterations: int = 100) -> Tuple[bool, Plan]:
+        # Tối ưu hóa kế hoạch theo thuật toán đã chọn
+        ...
+```
+
+## Các thuật toán tối ưu hóa
+
+### 1. Fluence Optimization (Tối ưu hóa fluence)
+
+```python
+def optimize_fluence(optimizer: Optimizer, max_iterations: int = 100, convergence_threshold: float = 0.001) -> Tuple[bool, Plan]:
+    """
+    Tối ưu hóa bản đồ fluence của mỗi chùm tia.
+    """
+    # Thuật toán tối ưu hóa fluence
+    # 1. Khởi tạo bản đồ fluence cho mỗi chùm tia
+    # 2. Tính toán liều ban đầu
+    # 3. Vòng lặp tối ưu hóa:
+    #    a. Tính giá trị hàm cost
+    #    b. Tính gradient của hàm cost theo fluence
+    #    c. Cập nhật fluence theo hướng gradient
+    #    d. Áp dụng ràng buộc cho fluence mới
+    #    e. Tính toán lại liều
+    # 4. Chuyển đổi fluence thành MLC segments
+    ...
+```
+
+### 2. IMRT Optimization (Tối ưu hóa IMRT)
+
+```python
+def optimize_imrt(optimizer: Optimizer, max_iterations: int = 100, max_segments: int = 10) -> Tuple[bool, Plan]:
+    """
+    Tối ưu hóa kế hoạch IMRT với phân đoạn trực tiếp.
+    """
+    # Thuật toán tối ưu hóa IMRT
+    # 1. Tối ưu hóa fluence ban đầu
+    # 2. Chuyển đổi fluence thành các phân đoạn MLC
+    # 3. Tối ưu hóa trọng số của mỗi phân đoạn
+    # 4. Tinh chỉnh vị trí MLC của mỗi phân đoạn
+    ...
+```
+
+### 3. VMAT Optimization (Tối ưu hóa VMAT)
+
+```python
+def optimize_vmat(optimizer: Optimizer, max_iterations: int = 100, control_points: int = 90) -> Tuple[bool, Plan]:
+    """
+    Tối ưu hóa kế hoạch VMAT.
+    """
+    # Thuật toán tối ưu hóa VMAT
+    # 1. Khởi tạo các control points cho cung VMAT
+    # 2. Tối ưu hóa fluence ban đầu tại mỗi control point
+    # 3. Chuyển đổi fluence thành MLC positions
+    # 4. Đảm bảo ràng buộc về tốc độ di chuyển lá MLC
+    # 5. Tối ưu hóa tốc độ cung và tốc độ liều
+    ...
+```
+
+### 4. MCO - Multicriteria Optimization (Tối ưu hóa đa tiêu chí)
+
+```python
+def optimize_multicriteria(optimizer: Optimizer, num_plans: int = 5) -> List[Plan]:
+    """
+    Tạo ra một tập các kế hoạch Pareto-optimal.
+    """
+    # Thuật toán tối ưu hóa đa tiêu chí
+    # 1. Xác định các objectives chính
+    # 2. Tạo ra một tập các kế hoạch với trọng số khác nhau
+    # 3. Tối ưu hóa mỗi kế hoạch
+    # 4. Lọc ra các kế hoạch Pareto-optimal
+    ...
+```
+
+### 5. KBP - Knowledge-Based Planning (Lập kế hoạch dựa trên kiến thức)
+
+```python
+def optimize_knowledge_based(optimizer: Optimizer, database: List[Plan], similarity_threshold: float = 0.8) -> Tuple[bool, Plan]:
+    """
+    Tối ưu hóa kế hoạch dựa trên dữ liệu các kế hoạch trước đó.
+    """
+    # Thuật toán lập kế hoạch dựa trên kiến thức
+    # 1. Tìm các kế hoạch tương tự trong cơ sở dữ liệu
+    # 2. Trích xuất mẫu dose distribution và DVH
+    # 3. Tạo objectives dựa trên dữ liệu trước đó
+    # 4. Tối ưu hóa kế hoạch với objectives mới
+    ...
+```
+
+## Các loại Objective (Mục tiêu)
+
+### 1. DVH-based Objectives
+
+- **Minimum Dose Objective**: Đảm bảo liều tối thiểu cho một cấu trúc
+- **Maximum Dose Objective**: Giới hạn liều tối đa cho một cấu trúc
+- **Mean Dose Objective**: Kiểm soát liều trung bình cho một cấu trúc
+- **Dose-Volume Objective**: Đảm bảo một phần trăm thể tích nhận một liều nhất định (ví dụ: V95% > 95%)
+- **Volume-Dose Objective**: Đảm bảo một liều nhất định bao phủ một thể tích nhất định (ví dụ: D95% > 95%)
+
+### 2. Conformity Objectives
+
+- **Conformity Index Objective**: Tối ưu hóa mức độ phù hợp của phân bố liều với cấu trúc mục tiêu
+- **Gradient Index Objective**: Kiểm soát gradient liều xung quanh mục tiêu
+- **Homogeneity Index Objective**: Đảm bảo tính đồng nhất của liều trong mục tiêu
+
+### 3. Biological Objectives
+
+- **EUD Objective**: Tối ưu hóa Equivalent Uniform Dose
+- **NTCP Objective**: Giảm thiểu xác suất biến chứng cho mô bình thường
+- **TCP Objective**: Tối đa hóa xác suất kiểm soát khối u
+
+## Luồng công việc tối ưu hóa
+
+### 1. Thiết lập kế hoạch ban đầu
+
+```
+1. Nhập kế hoạch điều trị với các chùm tia ban đầu
+2. Thiết lập các thông số kỹ thuật (năng lượng, góc, thời gian chiếu xạ)
+3. Tạo hình dạng MLC ban đầu từ cấu trúc mục tiêu
+```
+
+### 2. Thiết lập mục tiêu và ràng buộc
+
+```
+1. Xác định các cấu trúc mục tiêu và OARs
+2. Thiết lập mục tiêu liều lượng cho từng cấu trúc
+3. Thiết lập các ràng buộc cho OARs dựa trên giao thức lâm sàng
+4. Thiết lập độ ưu tiên cho mỗi mục tiêu và ràng buộc
+```
+
+### 3. Tối ưu hóa kế hoạch
+
+```
+1. Chọn thuật toán tối ưu hóa (Fluence, IMRT, VMAT, MCO, KBP)
+2. Thiết lập tham số tối ưu hóa (số lần lặp, ngưỡng hội tụ)
+3. Chạy quy trình tối ưu hóa với hiển thị tiến trình
+4. Hiển thị kết quả trung gian theo thời gian thực
+```
+
+### 4. Đánh giá và tinh chỉnh
+
+```
+1. Đánh giá kế hoạch với DVH và các chỉ số đánh giá
+2. Kiểm tra các ràng buộc và mức độ đạt mục tiêu
+3. Tinh chỉnh tham số tối ưu hóa và trọng số nếu cần
+4. Chạy lại quy trình tối ưu hóa cho đến khi đạt kết quả mong muốn
+```
+
+### 5. Hoàn thiện kế hoạch
+
+```
+1. Chuyển đổi fluence tối ưu thành các phân đoạn MLC thực tế
+2. Tính toán lại liều dựa trên cấu hình MLC thực tế
+3. Kiểm tra tính khả thi của kế hoạch (kiểm tra va chạm, giới hạn máy)
+4. Xuất kế hoạch cuối cùng cho quá trình phê duyệt
+```
+
+## Đánh giá chất lượng kế hoạch
+
+### 1. Chỉ số đánh giá cơ bản
+
+- **V95%**: Phần trăm thể tích nhận 95% liều chỉ định
+- **D95%**: Liều bao phủ 95% thể tích mục tiêu
+- **D2%**: Liều nhận bởi 2% thể tích (gần như liều tối đa)
+- **Dmin**: Liều tối thiểu trong mục tiêu
+- **Dmax**: Liều tối đa trong mục tiêu
+- **Dmean**: Liều trung bình
+
+### 2. Chỉ số đánh giá nâng cao
+
+- **CI (Conformity Index)**: Đánh giá mức độ phù hợp của phân bố liều
+- **HI (Homogeneity Index)**: Đánh giá tính đồng nhất của liều
+- **GI (Gradient Index)**: Đánh giá gradient liều giữa mục tiêu và mô lành
+- **COIN (Conformal Index)**: Kết hợp đánh giá bao phủ mục tiêu và tránh OARs
+
+### 3. Chỉ số sinh học
+
+- **EUD (Equivalent Uniform Dose)**: Liều đồng nhất tương đương
+- **TCP (Tumor Control Probability)**: Xác suất kiểm soát khối u
+- **NTCP (Normal Tissue Complication Probability)**: Xác suất biến chứng mô lành
+
+## Tích hợp với UI
+
+1. Giao diện thân thiện để thiết lập mục tiêu và ràng buộc:
+   - Hỗ trợ đặt mục tiêu từ giao thức lâm sàng
+   - Hiển thị danh sách mục tiêu và ràng buộc dạng bảng
+   - Cho phép điều chỉnh trọng số trực quan
+
+2. Hiển thị quá trình tối ưu hóa:
+   - Thanh tiến trình và thời gian ước tính
+   - Biểu đồ hội tụ của hàm cost
+   - Hiển thị DVH theo thời gian thực
+
+3. Công cụ đánh giá trực quan:
+   - So sánh DVH của các phiên bản kế hoạch
+   - Hiển thị mức độ đạt được của từng mục tiêu
+   - Bản đồ nhiệt cho phân bố liều
+
+4. MCO Pareto Browser:
+   - Hiển thị mặt Pareto cho các mục tiêu đối lập
+   - Cho phép người dùng khám phá không gian giải pháp
+   - Lưu và so sánh các điểm trên mặt Pareto

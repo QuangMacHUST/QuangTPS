@@ -58,6 +58,7 @@ from quangtps.ui.optimization.optimizer_tab import OptimizerTab
 from quangtps.ui.imaging_tab import ImagingTab
 from quangtps.ui.optimization.mco_panel import MCOPanel
 from quangtps.ui.dvh_view import DVHView
+from quangtps.ui.dose_visualization_3d import DoseVisualization3D
 
 from quangtps.core.image import Image
 from quangtps.core.structures import StructureSet, Structure
@@ -169,12 +170,53 @@ class EvaluationView(QWidget):
         self.dvh_view = DVHView()
         self.evaluation_tabs.addTab(self.dvh_view, "DVH Analysis")
 
+        # Add 3D Dose Visualization
+        try:
+            self.dose_3d_view = DoseVisualization3D()
+            self.evaluation_tabs.addTab(self.dose_3d_view, "3D Dose")
+        except Exception as e:
+            logger.error(f"Không thể khởi tạo DoseVisualization3D: {e}")
+
         layout.addWidget(self.evaluation_tabs)
 
     def set_plan(self, plan):
         """Set the plan for all evaluation components"""
         self.evaluation_tab.set_plan(plan)
         self.dvh_view.set_plan(plan)
+
+        # Set plan for 3D dose view if available
+        if hasattr(self, "dose_3d_view") and plan:
+            try:
+                # Set dose grid
+                if hasattr(plan, "get_dose_grid"):
+                    dose_grid = plan.get_dose_grid()
+                    if dose_grid:
+                        self.dose_3d_view.set_dose_grid(dose_grid)
+
+                # Set image data if available
+                image = getattr(plan, "image", None)
+                if image and hasattr(image, "data"):
+                    spacing = getattr(image, "spacing", None)
+                    origin = getattr(image, "origin", None)
+                    self.dose_3d_view.set_image_data(image.data, spacing, origin)
+
+                # Set structures if available
+                if hasattr(plan, "structure_set") and plan.structure_set:
+                    for structure in plan.structure_set.structures:
+                        if structure.mask is not None:
+                            color = (
+                                structure.color
+                                if hasattr(structure, "color")
+                                else (1.0, 0.0, 0.0)
+                            )
+                            self.dose_3d_view.add_structure(
+                                structure.id,
+                                structure.mask,
+                                color=color,
+                                name=structure.name,
+                            )
+            except Exception as e:
+                logger.error(f"Lỗi khi cài đặt kế hoạch cho DoseVisualization3D: {e}")
 
 
 class OptimizationView(QWidget):

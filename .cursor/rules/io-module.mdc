@@ -1,0 +1,485 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# I/O Module of QuangTPS
+
+The I/O module handles all data persistence, file operations, and external communications in the QuangTPS treatment planning system. This module ensures that patient data, images, structures, plans, and calculations can be properly stored, retrieved, imported, and exported.
+
+## DICOM Handling (`/quangtps/io/dicom/`)
+
+Provides comprehensive DICOM standard support for radiotherapy data.
+
+### Key Components:
+
+#### Reader Components
+- `DicomReader` (`reader.py`): Core class for reading DICOM files.
+  - Handles DICOM parsing and interpretation
+  - Supports DICOM directory scanning
+  - Processes RT-specific DICOM objects
+  - Creates internal representations from DICOM
+
+- `DicomPatientReader` (`patient_reader.py`): Specializes in reading patient information.
+  - Extracts patient demographics
+  - Processes study and series information
+  - Handles DICOM patient modules
+
+- `DicomImageReader` (`image_reader.py`): Specializes in medical images.
+  - CT, MR, PET, and other modality support
+  - Image orientation and position handling
+  - Pixel data interpretation
+  - Handles multi-frame and enhanced DICOM
+
+- `DicomStructureReader` (`structure_reader.py`): Focuses on RT Structure Sets.
+  - Contour sequence interpretation
+  - ROI interpretation and naming
+  - Structure set correlation
+
+- `DicomPlanReader` (`plan_reader.py`): Processes RT Plan objects.
+  - Beam configuration extraction
+  - Prescription information
+  - Treatment technique interpretation
+  - Setup and reference point handling
+
+- `DicomDoseReader` (`dose_reader.py`): Handles RT Dose objects.
+  - 3D dose grid interpretation
+  - Dose summation and scaling
+  - Dose reference handling
+
+#### Writer Components
+- `DicomWriter` (`writer.py`): Core class for writing DICOM files.
+  - Handles DICOM data creation
+  - Manages UIDs and references
+  - Ensures DICOM compliance
+
+- `DicomPatientWriter` (`patient_writer.py`): Creates patient DICOM objects.
+  - Generates patient and study modules
+  - Ensures demographic consistency
+
+- `DicomStructureWriter` (`structure_writer.py`): Creates RT Structure Set objects.
+  - Converts internal contours to DICOM format
+  - Generates structure references
+
+- `DicomPlanWriter` (`plan_writer.py`): Creates RT Plan objects.
+  - Converts internal plan to DICOM
+  - Handles beam configurations
+  - Creates control points for IMRT/VMAT
+
+- `DicomDoseWriter` (`dose_writer.py`): Creates RT Dose objects.
+  - Converts dose grids to DICOM
+  - Handles dose scaling and units
+  - Creates dose references
+
+#### Validation Components
+- `DicomValidator` (`validator.py`): Validates DICOM data.
+  - Checks for DICOM compliance
+  - Validates required elements
+  - Ensures semantic correctness
+  - Reports validation issues
+
+### Functionality:
+- Full support for DICOM RT objects (CT, MR, RTSS, RTPLAN, RTDOSE)
+- Interoperability with clinical systems
+- Validation against DICOM standards
+- DICOMDIR support for media exchange
+- DICOM networking capabilities (Query/Retrieve, Storage)
+- Proper handling of UIDs and references
+- Support for DICOM conformance statements
+
+## Database Management (`/quangtps/io/database/`)
+
+Manages persistent storage of application data.
+
+### Key Components:
+
+- `DatabaseModels` (`models.py`): ORM models defining database schema.
+  - Patient model
+  - Image model
+  - Structure model
+  - Plan model
+  - Dose model
+  - Relationship definitions
+
+- `DatabaseSession` (`session.py`): Manages database connections and transactions.
+  - Connection pool management
+  - Transaction handling
+  - Session lifecycle
+  - Error recovery
+
+- `MigrationManager` (`migrations/manager.py`): Handles database schema migrations.
+  - Version tracking
+  - Schema updates
+  - Data migration
+  - Migration rollback capabilities
+
+### Functionality:
+- Persistent storage of all treatment planning data
+- Support for SQLite (local) and PostgreSQL (enterprise)
+- Efficient querying and retrieval of complex data
+- Proper transaction management
+- Data integrity enforcement
+- Schema versioning and migration
+- Backup and recovery capabilities
+- Performance optimization for medical datasets
+
+## Repository Pattern Implementation (`/quangtps/io/repositories/`)
+
+Implements the repository pattern for data access abstraction.
+
+### Key Components:
+
+- `Repository` (`/interfaces/repository.py`): Base repository interface.
+  - Core CRUD operations
+  - Query capabilities
+  - Repository lifecycle
+
+- `PatientRepository` (`patient_repository.py`): Patient data access.
+  - Patient record management
+  - Patient search and filtering
+  - Patient relationship navigation
+
+- `ImageRepository` (`image_repository.py`): Image data access.
+  - Image series management
+  - Image metadata access
+  - Optimized image data retrieval
+
+- `StructureRepository` (`structure_repository.py`): Structure data access.
+  - Structure set management
+  - Structure retrieval by various criteria
+  - Structure relationship handling
+
+- `PlanRepository` (`plan_repository.py`): Plan data access.
+  - Plan versioning and retrieval
+  - Plan component access
+  - Plan status management
+
+- `DoseRepository` (`dose_repository.py`): Dose data access.
+  - Dose distribution retrieval
+  - Dose summation and combination
+  - Dose component access
+
+### Functionality:
+- Abstract data access from storage implementation
+- Support for different backend storage systems
+- Efficient querying of complex domain objects
+- Consistent transaction management
+- Proper entity relationship navigation
+- Caching strategies for performance
+- Domain-driven design principles
+
+## Data Export Capabilities (`/quangtps/io/export/`)
+
+Handles export of system data to various formats.
+
+### Key Components:
+
+- `PDFExporter` (`pdf.py`): Exports reports to PDF format.
+  - Report generation
+  - Plan documentation
+  - Dosimetric summaries
+  - Treatment documentation
+
+- `CSVExporter` (`csv.py`): Exports data to CSV format.
+  - DVH data export
+  - Statistical data export
+  - Tabular data formatting
+
+- `DicomExporter` (`dicom_export.py`): Coordinates DICOM export operations.
+  - Export configuration
+  - DICOM destination management
+  - Export validation
+  - Export workflow coordination
+
+- `ReportGenerator` (`reports.py`): Generates clinical reports.
+  - Report templates
+  - Report composition
+  - Dynamic content generation
+  - Clinical data compilation
+
+### Functionality:
+- Comprehensive reporting capabilities
+- Standards-compliant export formats
+- Integration with clinical workflows
+- Customizable export templates
+- Batch export capabilities
+- Export validation and verification
+- Export history tracking
+
+## Data Import Capabilities (`/quangtps/io/import/`)
+
+Manages import of external data into the system.
+
+### Key Components:
+
+- `DicomImporter` (`dicom_import.py`): Coordinates DICOM import operations.
+  - Import source management
+  - DICOM validation during import
+  - Patient reconciliation
+  - Import workflow coordination
+
+- `OtherFormatImporter` (`other_formats.py`): Handles non-DICOM imports.
+  - Format detection and validation
+  - Conversion to internal representation
+  - Import configuration
+  - Data validation
+
+- `ImportProcessor` (`processor.py`): Processes imported data.
+  - Data normalization
+  - Validation and correction
+  - Integration with existing data
+  - Error handling and reporting
+
+### Functionality:
+- Support for standard data exchange formats
+- Import validation and error detection
+- Patient data reconciliation
+- Handling of duplicate data
+- Progress tracking for large imports
+- Error recovery for failed imports
+- Support for anonymized data import
+
+## Network Communication (`/quangtps/io/network/`)
+
+Manages network-based data exchange.
+
+### Key Components:
+
+- `DicomNetworking` (`dicom_network.py`): DICOM networking capabilities.
+  - DICOM Query/Retrieve SCU/SCP
+  - DICOM Storage SCU/SCP
+  - DICOM Worklist SCU
+  - DICOM networking configuration
+
+- `RESTClient` (`rest_client.py`): Client for REST APIs.
+  - HTTP client for REST services
+  - Authentication handling
+  - Response processing
+  - Error handling
+
+- `NetworkConfiguration` (`configuration.py`): Network settings management.
+  - Connection parameters
+  - Network presets
+  - Security settings
+  - Timeout configurations
+
+### Functionality:
+- Integration with clinical PACS systems
+- Communication with treatment delivery systems
+- Secure data exchange
+- Network error handling and recovery
+- Asynchronous network operations
+- Network diagnostic capabilities
+- Compliance with healthcare networking standards
+
+## File System Management (`/quangtps/io/filesystem/`)
+
+Manages local file system operations.
+
+### Key Components:
+
+- `FileManager` (`file_manager.py`): Core file system operations.
+  - File organization
+  - File access abstraction
+  - Path management
+  - File locking mechanisms
+
+- `TempFileManager` (`temp_files.py`): Manages temporary files.
+  - Secure temporary file creation
+  - Cleanup mechanisms
+  - Resource tracking
+
+- `FileMonitor` (`file_monitor.py`): Monitors file system changes.
+  - File change detection
+  - Import folder monitoring
+  - Change notification
+
+### Functionality:
+- Organized file storage
+- Efficient file access patterns
+- Temporary file management
+- File system monitoring
+- Cross-platform path handling
+- File locking for concurrent access
+- Disk space management
+
+## Caching System (`/quangtps/io/cache/`)
+
+Implements data caching for performance optimization.
+
+### Key Components:
+
+- `DataCache` (`data_cache.py`): Generic data caching.
+  - Cache key management
+  - Expiration policies
+  - Size-limited caching
+  - Cache statistics
+
+- `ImageCache` (`image_cache.py`): Specialized image data caching.
+  - Multi-resolution caching
+  - Tile-based caching
+  - Predictive caching
+
+- `ResultCache` (`result_cache.py`): Caches calculation results.
+  - Dependency tracking
+  - Invalidation logic
+  - Partial result caching
+
+### Functionality:
+- Improve application performance
+- Reduce database load
+- Optimize memory usage
+- Handle large medical datasets efficiently
+- Provide cache statistics and monitoring
+- Implement intelligent cache invalidation
+- Support memory-constrained environments
+
+## Data Conversion (`/quangtps/io/conversion/`)
+
+Handles conversion between data formats.
+
+### Key Components:
+
+- `CoordinateConverter` (`coordinates.py`): Converts between coordinate systems.
+  - DICOM to patient coordinates
+  - Pixel to physical coordinates
+  - Reference frame transformations
+
+- `UnitConverter` (`units.py`): Converts between different units.
+  - Dose unit conversion
+  - Distance unit conversion
+  - Angle unit conversion
+
+- `FormatConverter` (`formats.py`): Converts between file formats.
+  - DICOM to internal format conversion
+  - Third-party format conversion
+  - Legacy format support
+
+### Functionality:
+- Ensure consistent data representation
+- Support for different coordinate systems
+- Handle unit conversions properly
+- Maintain precision during conversions
+- Support legacy data formats
+- Facilitate interoperability with other systems
+- Validate conversion results
+
+## Security Components (`/quangtps/io/security/`)
+
+Implements data security measures.
+
+### Key Components:
+
+- `DataEncryption` (`encryption.py`): Handles data encryption.
+  - Field-level encryption
+  - Export encryption
+  - Key management
+
+- `Anonymization` (`anonymization.py`): Patient data anonymization.
+  - DICOM anonymization
+  - Database anonymization
+  - Configurable anonymization rules
+
+- `AccessControl` (`access_control.py`): Controls data access.
+  - Permission enforcement
+  - Audit logging
+  - Access policies
+
+### Functionality:
+- Protect patient information
+- Comply with privacy regulations
+- Support research anonymization
+- Provide audit trails for data access
+- Secure data exchange
+- Handle consent and data usage policies
+- Implement appropriate authentication mechanisms
+
+## Error Handling (`/quangtps/io/errors/`)
+
+Manages I/O-related errors and exceptions.
+
+### Key Components:
+
+- `IOExceptions` (`exceptions.py`): Custom exception hierarchy.
+  - File access exceptions
+  - Network exceptions
+  - Database exceptions
+  - Conversion exceptions
+
+- `ErrorRecovery` (`recovery.py`): Error recovery strategies.
+  - Transaction rollback
+  - Retry mechanisms
+  - Fallback strategies
+  - Data recovery
+
+- `ErrorReporting` (`reporting.py`): Error reporting mechanisms.
+  - Error logging
+  - Diagnostics collection
+  - User notification formatting
+
+### Functionality:
+- Provide meaningful error information
+- Enable graceful error recovery
+- Protect data integrity during errors
+- Support diagnostics for troubleshooting
+- Implement appropriate retry strategies
+- Handle transient errors appropriately
+- Ensure user is informed of critical issues
+
+## Performance Optimization
+
+The I/O module incorporates several performance optimizations:
+
+1. **Asynchronous I/O**: Non-blocking operations for improved responsiveness.
+
+2. **Batch Processing**: Efficient handling of multiple operations.
+
+3. **Connection Pooling**: Reuse database connections for better performance.
+
+4. **Lazy Loading**: Only load data when it's actually needed.
+
+5. **Strategic Caching**: Cache frequently accessed data for quick retrieval.
+
+6. **Parallel I/O**: Use multiple threads for I/O operations when appropriate.
+
+7. **Optimized Queries**: Use efficient database queries with proper indexing.
+
+8. **Data Compression**: Compress large datasets when appropriate.
+
+9. **Streaming Operations**: Process large data in chunks rather than all at once.
+
+10. **I/O Scheduling**: Prioritize critical I/O operations for responsive UI.
+
+## Integration with Core System
+
+The I/O module integrates with the core system through these mechanisms:
+
+1. **Repository Interfaces**: Core modules interact with data through repository interfaces.
+
+2. **Event Notifications**: I/O operations generate events for system notification.
+
+3. **Unit of Work Pattern**: Manage transactions across multiple repositories.
+
+4. **Result Mapping**: Convert between persistence models and domain models.
+
+5. **Lazy References**: Allow domain objects to load related entities on demand.
+
+6. **Change Tracking**: Track entity changes for efficient updates.
+
+7. **Query Objects**: Encapsulate complex queries behind abstraction.
+
+## Extensibility and Plugins
+
+The I/O module supports extensibility through:
+
+1. **Format Plugins**: Extensible support for different file formats.
+
+2. **Database Adapters**: Pluggable database backend support.
+
+3. **Export Templates**: Customizable export and report templates.
+
+4. **Import Processors**: Custom import processing logic.
+
+5. **Custom Repositories**: Specialized repository implementations.
+
+This architecture ensures the I/O module can adapt to changing requirements and integrate with various external systems.

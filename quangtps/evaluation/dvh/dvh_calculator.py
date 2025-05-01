@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 class DVHPoint:
     """
     Represents a point in a Dose-Volume Histogram.
-    
+
     Attributes
     ----------
     dose : float
@@ -33,6 +33,7 @@ class DVHPoint:
     volume : float
         Volume in cc or as a percentage of the structure volume
     """
+
     dose: float
     volume: float
 
@@ -41,7 +42,7 @@ class DVHPoint:
 class DVHData:
     """
     Container for DVH data.
-    
+
     Attributes
     ----------
     dose_bins : np.ndarray
@@ -65,6 +66,7 @@ class DVHData:
     is_cumulative : bool
         Whether the DVH is cumulative or differential
     """
+
     dose_bins: np.ndarray
     volume_bins: np.ndarray
     structure_name: str
@@ -75,18 +77,18 @@ class DVHData:
     d_x: Dict[float, float] = None
     v_x: Dict[float, float] = None
     is_cumulative: bool = True
-    
+
     def __post_init__(self):
         """Initialize dictionaries if not provided."""
         if self.d_x is None:
             self.d_x = {}
         if self.v_x is None:
             self.v_x = {}
-        
+
         # Compute basic statistics if not already computed
         if self.max_dose == 0.0 and len(self.dose_bins) > 0:
             self.max_dose = np.max(self.dose_bins)
-        
+
         # Min dose is minimum non-zero dose
         if self.min_dose == 0.0 and len(self.dose_bins) > 0:
             non_zero_doses = self.dose_bins[self.dose_bins > 0]
@@ -96,12 +98,12 @@ class DVHData:
     def get_dx(self, percent_volume: float) -> float:
         """
         Get the dose (Gy) that covers a specified percentage of the structure volume.
-        
+
         Parameters
         ----------
         percent_volume : float
             Percentage of volume (0-100)
-            
+
         Returns
         -------
         float
@@ -109,30 +111,32 @@ class DVHData:
         """
         if not self.is_cumulative:
             raise ValueError("Dx values are only defined for cumulative DVHs")
-        
+
         if percent_volume in self.d_x:
             return self.d_x[percent_volume]
-        
+
         if percent_volume < 0 or percent_volume > 100:
             raise ValueError("Percentage must be between 0 and 100")
-        
+
         if len(self.dose_bins) == 0:
             return 0.0
-        
+
         # Normalize volume bins to percent if needed
         vol_percent = self.volume_bins
         if np.max(vol_percent) > 1.1:  # Already in percent (0-100)
             pass
         else:  # In fraction (0-1), convert to percent
             vol_percent = vol_percent * 100
-        
+
         # For cumulative DVH, volume typically decreases with dose
         # Interpolate to find dose at the specified volume
         if vol_percent[0] < vol_percent[-1]:  # If not decreasing, reverse
             dose_interp = np.interp(percent_volume, vol_percent, self.dose_bins)
         else:
-            dose_interp = np.interp(percent_volume, vol_percent[::-1], self.dose_bins[::-1])
-        
+            dose_interp = np.interp(
+                percent_volume, vol_percent[::-1], self.dose_bins[::-1]
+            )
+
         # Cache result
         self.d_x[percent_volume] = dose_interp
         return dose_interp
@@ -140,7 +144,7 @@ class DVHData:
     def get_vx(self, dose: float, percent: bool = True) -> float:
         """
         Get the volume receiving at least the specified dose.
-        
+
         Parameters
         ----------
         dose : float
@@ -148,7 +152,7 @@ class DVHData:
         percent : bool
             If True, return volume as percentage of structure volume
             If False, return absolute volume in cc
-            
+
         Returns
         -------
         float
@@ -156,28 +160,32 @@ class DVHData:
         """
         if not self.is_cumulative:
             raise ValueError("Vx values are only defined for cumulative DVHs")
-        
+
         # Generate a key that combines dose and units
         key = (dose, percent)
         if key in self.v_x:
             return self.v_x[key]
-        
+
         if len(self.dose_bins) == 0:
             return 0.0
-        
+
         # Find the volume receiving at least the specified dose
         # For cumulative DVH, interpolate dose vs volume curve
         if np.max(self.volume_bins) > 1.1:  # In percent (0-100)
             vol_bins = self.volume_bins
         else:  # In fraction (0-1)
-            vol_bins = self.volume_bins * 100 if percent else self.volume_bins * self.structure_volume
-        
+            vol_bins = (
+                self.volume_bins * 100
+                if percent
+                else self.volume_bins * self.structure_volume
+            )
+
         # Interpolate to find volume at the specified dose
         if vol_bins[0] > vol_bins[-1]:  # Decreasing with dose (typical cumulative DVH)
             volume_interp = np.interp(dose, self.dose_bins, vol_bins)
         else:  # If not decreasing, reverse
             volume_interp = np.interp(dose, self.dose_bins[::-1], vol_bins[::-1])
-        
+
         # Cache result
         self.v_x[key] = volume_interp
         return volume_interp
@@ -186,27 +194,28 @@ class DVHData:
 class DVHCalculator:
     """
     Calculator for Dose-Volume Histograms (DVH).
-    
+
     This class provides methods for calculating and analyzing DVHs
     for radiation therapy structures.
     """
-    
+
     def __init__(self, num_bins: int = 1000):
         """
         Initialize DVH calculator.
-        
+
         Parameters
         ----------
         num_bins : int
             Number of bins to use for the DVH calculation
         """
         self.num_bins = num_bins
-    
-    def calculate_dvh(self, dose_image: sitk.Image, roi_mask: sitk.Image, 
-                     cumulative: bool = True) -> Tuple[np.ndarray, np.ndarray]:
+
+    def calculate_dvh(
+        self, dose_image: sitk.Image, roi_mask: sitk.Image, cumulative: bool = True
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calculate DVH for a single structure.
-        
+
         Parameters
         ----------
         dose_image : sitk.Image
@@ -215,7 +224,7 @@ class DVHCalculator:
             Binary mask of the structure of interest
         cumulative : bool
             If True, calculate cumulative DVH; otherwise, differential
-            
+
         Returns
         -------
         tuple
@@ -224,22 +233,22 @@ class DVHCalculator:
         # Make sure images have the same size and spacing
         if dose_image.GetSize() != roi_mask.GetSize():
             raise ValueError("Dose image and ROI mask must have the same size")
-        
+
         # Convert to numpy arrays
         dose_array = sitk.GetArrayFromImage(dose_image)
         mask_array = sitk.GetArrayFromImage(roi_mask)
-        
+
         # Extract doses within the ROI
         roi_doses = dose_array[mask_array > 0]
-        
+
         if len(roi_doses) == 0:
             logger.warning("No voxels in ROI mask")
             return np.array([]), np.array([])
-        
+
         # Calculate min and max dose
         min_dose = np.min(roi_doses)
         max_dose = np.max(roi_doses)
-        
+
         # Create dose bins
         if min_dose == max_dose:
             dose_bins = np.array([min_dose])
@@ -248,29 +257,34 @@ class DVHCalculator:
             # Create histogram
             dose_bins = np.linspace(0, max_dose * 1.05, self.num_bins)
             hist, bin_edges = np.histogram(roi_doses, bins=dose_bins)
-            
+
             # Calculate volume in each bin
             voxel_volume = np.prod(dose_image.GetSpacing()) / 1000  # in cc
             vol_bins = hist * voxel_volume
-            
+
             # Use bin centers for dose bins
             dose_bins = (bin_edges[:-1] + bin_edges[1:]) / 2
-        
+
         # Convert to cumulative if requested
         if cumulative:
             vol_bins = np.cumsum(vol_bins[::-1])[::-1]
-        
+
         # Normalize volume to percentage of total
         total_volume = len(roi_doses) * np.prod(dose_image.GetSpacing()) / 1000  # in cc
         vol_bins = vol_bins / total_volume
-        
+
         return dose_bins, vol_bins
-    
-    def calculate_dvh_data(self, dose_image: sitk.Image, roi_mask: sitk.Image, 
-                          structure_name: str, cumulative: bool = True) -> DVHData:
+
+    def calculate_dvh_data(
+        self,
+        dose_image: sitk.Image,
+        roi_mask: sitk.Image,
+        structure_name: str,
+        cumulative: bool = True,
+    ) -> DVHData:
         """
         Calculate DVH data structure with comprehensive metrics.
-        
+
         Parameters
         ----------
         dose_image : sitk.Image
@@ -281,7 +295,7 @@ class DVHCalculator:
             Name of the structure
         cumulative : bool
             If True, calculate cumulative DVH; otherwise, differential
-            
+
         Returns
         -------
         DVHData
@@ -289,16 +303,16 @@ class DVHCalculator:
         """
         # Calculate basic DVH
         dose_bins, volume_bins = self.calculate_dvh(dose_image, roi_mask, cumulative)
-        
+
         # Calculate structure volume
         mask_array = sitk.GetArrayFromImage(roi_mask)
         voxel_volume = np.prod(dose_image.GetSpacing()) / 1000  # in cc
         structure_volume = np.sum(mask_array > 0) * voxel_volume
-        
+
         # Calculate dose statistics
         dose_array = sitk.GetArrayFromImage(dose_image)
         roi_doses = dose_array[mask_array > 0]
-        
+
         if len(roi_doses) == 0:
             logger.warning(f"No voxels in structure: {structure_name}")
             max_dose = 0.0
@@ -310,7 +324,7 @@ class DVHCalculator:
             # Min dose is minimum non-zero dose
             non_zero_doses = roi_doses[roi_doses > 0]
             min_dose = np.min(non_zero_doses) if len(non_zero_doses) > 0 else 0.0
-        
+
         # Create DVH data object
         dvh_data = DVHData(
             dose_bins=dose_bins,
@@ -320,29 +334,32 @@ class DVHCalculator:
             max_dose=max_dose,
             mean_dose=mean_dose,
             min_dose=min_dose,
-            is_cumulative=cumulative
+            is_cumulative=cumulative,
         )
-        
+
         # Pre-calculate common D-x values
         for percent in [1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 98, 99]:
             if len(dose_bins) > 0:
                 dvh_data.d_x[percent] = dvh_data.get_dx(percent)
-        
+
         # Pre-calculate common V-x values (both absolute and percentage)
         dose_steps = np.linspace(0, max_dose, 20) if max_dose > 0 else [0]
         for dose in dose_steps:
             if len(dose_bins) > 0:
                 dvh_data.v_x[(dose, True)] = dvh_data.get_vx(dose, True)
                 dvh_data.v_x[(dose, False)] = dvh_data.get_vx(dose, False)
-        
+
         return dvh_data
-    
-    def calculate_multiple_dvhs(self, dose_image: sitk.Image, 
-                               structures: Dict[str, sitk.Image],
-                               cumulative: bool = True) -> Dict[str, DVHData]:
+
+    def calculate_multiple_dvhs(
+        self,
+        dose_image: sitk.Image,
+        structures: Dict[str, sitk.Image],
+        cumulative: bool = True,
+    ) -> Dict[str, DVHData]:
         """
         Calculate DVH data for multiple structures.
-        
+
         Parameters
         ----------
         dose_image : sitk.Image
@@ -351,7 +368,7 @@ class DVHCalculator:
             Dictionary of structure masks with names as keys
         cumulative : bool
             If True, calculate cumulative DVH; otherwise, differential
-            
+
         Returns
         -------
         dict
@@ -361,41 +378,41 @@ class DVHCalculator:
         for name, mask in structures.items():
             logger.info(f"Calculating DVH for structure: {name}")
             result[name] = self.calculate_dvh_data(dose_image, mask, name, cumulative)
-        
+
         return result
-    
+
     def get_common_metrics(self, dvh_data: DVHData) -> Dict[str, float]:
         """
         Extract common DVH metrics from a DVH data object.
-        
+
         Parameters
         ----------
         dvh_data : DVHData
             DVH data object
-            
+
         Returns
         -------
         dict
             Dictionary of common metrics
         """
         metrics = {
-            'Structure': dvh_data.structure_name,
-            'Volume (cc)': dvh_data.structure_volume,
-            'Max Dose (Gy)': dvh_data.max_dose,
-            'Mean Dose (Gy)': dvh_data.mean_dose,
-            'Min Dose (Gy)': dvh_data.min_dose,
+            "Structure": dvh_data.structure_name,
+            "Volume (cc)": dvh_data.structure_volume,
+            "Max Dose (Gy)": dvh_data.max_dose,
+            "Mean Dose (Gy)": dvh_data.mean_dose,
+            "Min Dose (Gy)": dvh_data.min_dose,
         }
-        
+
         # Add D-x values
         for percent in [1, 2, 5, 50, 90, 95, 98, 99]:
             if percent in dvh_data.d_x:
-                metrics[f'D{percent}% (Gy)'] = dvh_data.d_x[percent]
-        
+                metrics[f"D{percent}% (Gy)"] = dvh_data.d_x[percent]
+
         # Add V-x values
         for dose_level in [5, 10, 20, 30, 40, 50, 60, 70, 80]:
             if (dose_level, True) in dvh_data.v_x:
-                metrics[f'V{dose_level}Gy (%)'] = dvh_data.v_x[(dose_level, True)]
-        
+                metrics[f"V{dose_level}Gy (%)"] = dvh_data.v_x[(dose_level, True)]
+
         return metrics
 
 
@@ -403,25 +420,27 @@ class DVHMetrics:
     """
     Static methods for computing DVH-based metrics used in plan evaluation.
     """
-    
+
     @staticmethod
-    def calculate_conformity_index(target_dvh: DVHData, prescription_dose: float) -> float:
+    def calculate_conformity_index(
+        target_dvh: DVHData, prescription_dose: float
+    ) -> float:
         """
         Calculate the RTOG Conformity Index.
-        
+
         CI = V_RI / TV
-        
+
         Where:
         - V_RI is the volume of the reference isodose
         - TV is the target volume
-        
+
         Parameters
         ----------
         target_dvh : DVHData
             DVH data for the target structure
         prescription_dose : float
             Prescription dose in Gy
-            
+
         Returns
         -------
         float
@@ -429,34 +448,36 @@ class DVHMetrics:
         """
         if target_dvh.structure_volume <= 0:
             raise ValueError("Target volume must be positive")
-        
+
         # Get volume receiving at least the prescription dose
         v_ri = target_dvh.get_vx(prescription_dose, False)  # in cc
-        
+
         # Calculate CI
         ci = v_ri / target_dvh.structure_volume
-        
+
         return ci
-    
+
     @staticmethod
-    def calculate_homogeneity_index(target_dvh: DVHData, prescription_dose: float) -> float:
+    def calculate_homogeneity_index(
+        target_dvh: DVHData, prescription_dose: float
+    ) -> float:
         """
         Calculate the Homogeneity Index (HI).
-        
+
         HI = (D2% - D98%) / D50%
-        
+
         Where:
         - D2% is the dose to 2% of the target volume
         - D98% is the dose to 98% of the target volume
         - D50% is the dose to 50% of the target volume
-        
+
         Parameters
         ----------
         target_dvh : DVHData
             DVH data for the target structure
         prescription_dose : float
             Prescription dose in Gy (used for validation)
-            
+
         Returns
         -------
         float
@@ -466,28 +487,32 @@ class DVHMetrics:
         d2 = target_dvh.get_dx(2)
         d98 = target_dvh.get_dx(98)
         d50 = target_dvh.get_dx(50)
-        
+
         if d50 <= 0:
             logger.warning("D50% is zero or negative, cannot calculate HI")
-            return float('inf')
-        
+            return float("inf")
+
         # Calculate HI
         hi = (d2 - d98) / d50
-        
+
         return hi
-    
+
     @staticmethod
-    def calculate_gradient_index(target_dvh: DVHData, reference_dvh: DVHData, 
-                               prescription_dose: float, lower_dose: float) -> float:
+    def calculate_gradient_index(
+        target_dvh: DVHData,
+        reference_dvh: DVHData,
+        prescription_dose: float,
+        lower_dose: float,
+    ) -> float:
         """
         Calculate the Gradient Index (GI).
-        
+
         GI = V_R1 / V_R2
-        
+
         Where:
         - V_R1 is the volume of the lower isodose (e.g., 50% of prescription)
         - V_R2 is the volume of the prescription isodose
-        
+
         Parameters
         ----------
         target_dvh : DVHData
@@ -498,7 +523,7 @@ class DVHMetrics:
             Prescription dose in Gy
         lower_dose : float
             Lower dose value in Gy (typically 50% of prescription dose)
-            
+
         Returns
         -------
         float
@@ -507,27 +532,34 @@ class DVHMetrics:
         # Get volumes
         v_r2 = reference_dvh.get_vx(prescription_dose, False)  # in cc
         v_r1 = reference_dvh.get_vx(lower_dose, False)  # in cc
-        
+
         if v_r2 <= 0:
-            logger.warning("Volume receiving prescription dose is zero, cannot calculate GI")
-            return float('inf')
-        
+            logger.warning(
+                "Volume receiving prescription dose is zero, cannot calculate GI"
+            )
+            return float("inf")
+
         # Calculate GI
         gi = v_r1 / v_r2
-        
+
         return gi
 
-def calculate_dvh(dose_grid: DoseGrid, structure_mask: np.ndarray, 
-                  total_volume: float, num_bins: int = 100) -> Optional[DVHData]:
+
+def calculate_dvh(
+    dose_grid: DoseGrid,
+    structure_mask: np.ndarray,
+    total_volume: float,
+    num_bins: int = 100,
+) -> Optional[DVHData]:
     """
     Calculate DVH data for a structure from dose grid and structure mask.
-    
+
     Args:
         dose_grid: Dose grid containing dose values
         structure_mask: Binary mask of the structure (same shape as dose grid)
         total_volume: Total volume of the structure in cc
         num_bins: Number of dose bins to use
-        
+
     Returns:
         DVHData object containing the calculated DVH, or None if calculation fails
     """
@@ -536,79 +568,81 @@ def calculate_dvh(dose_grid: DoseGrid, structure_mask: np.ndarray,
         if dose_grid is None or structure_mask is None:
             logger.error("Dose grid or structure mask is None")
             return None
-        
+
         # Get structure ID
-        structure_id = getattr(structure_mask, 'structure_id', 'unknown')
-        
+        structure_id = getattr(structure_mask, "structure_id", "unknown")
+
         # Extract dose values within the structure
         dose_values = dose_grid.data[structure_mask > 0]
-        
+
         # If no voxels in structure, return empty DVH
         if len(dose_values) == 0:
             logger.warning(f"No dose values found in structure {structure_id}")
             return DVHData.from_raw_data(structure_id, [0.0], [0.0], total_volume)
-        
+
         # Determine dose range
         min_dose = 0.0  # Start from 0 Gy
         max_dose = np.max(dose_values) * 1.05  # Add 5% margin for visualization
-        
+
         # Create dose bins
         dose_bins = np.linspace(min_dose, max_dose, num_bins)
-        
+
         # Calculate differential DVH
         hist, edges = np.histogram(dose_values, bins=dose_bins)
-        
+
         # Convert histogram counts to volume
         if total_volume > 0 and len(dose_values) > 0:
             # Convert counts to percentage of total structure volume
             volume_percent = hist / len(dose_values) * 100.0
         else:
             volume_percent = np.zeros_like(hist, dtype=float)
-        
+
         # Calculate cumulative DVH (reverse sum)
         cumulative_volume = np.zeros_like(dose_bins, dtype=float)
         cumulative_volume[:-1] = 100.0 - np.cumsum(volume_percent)
-        
+
         # Create DVH data object
         dvh = DVHData.from_raw_data(
-            structure_id, 
-            dose_bins.tolist(), 
-            cumulative_volume.tolist(), 
-            total_volume
+            structure_id, dose_bins.tolist(), cumulative_volume.tolist(), total_volume
         )
-        
+
         # Set units
         dvh.dose_unit = "Gy"
         dvh.volume_unit = "%"
-        
+
         # Calculate additional statistics
         dvh.min_dose = float(np.min(dose_values))
         dvh.max_dose = float(np.max(dose_values))
         dvh.mean_dose = float(np.mean(dose_values))
-        
+
         # Calculate median dose
         if len(dose_values) > 0:
             dvh.median_dose = float(np.median(dose_values))
-        
+
         return dvh
-        
+
     except Exception as e:
         logger.error(f"Error calculating DVH: {str(e)}")
         return None
 
-def calculate_dvh_from_3d_data(dose_data: np.ndarray, structure_mask: np.ndarray, 
-                              voxel_size: Tuple[float, float, float], 
-                              structure_id: str, num_bins: int = 100) -> Optional[DVHData]:
+
+def calculate_dvh_from_3d_data(
+    dose_data: np.ndarray,
+    structure_mask: np.ndarray,
+    voxel_size: Tuple[float, float, float],
+    structure_id: str,
+    num_bins: int = 100,
+) -> Optional[DVHData]:
     """
     Calculate DVH data from raw 3D dose data and structure mask.
-    
+
     Args:
         dose_data: 3D numpy array containing dose values (in Gy)
         structure_mask: 3D binary mask of the structure (same shape as dose_data)
         voxel_size: Voxel size in cm (x, y, z)
         structure_id: ID of the structure
         num_bins: Number of dose bins to use
-        
+
     Returns:
         DVHData object containing the calculated DVH, or None if calculation fails
     """
@@ -617,68 +651,123 @@ def calculate_dvh_from_3d_data(dose_data: np.ndarray, structure_mask: np.ndarray
         if dose_data is None or structure_mask is None:
             logger.error("Dose data or structure mask is None")
             return None
-        
+
         if dose_data.shape != structure_mask.shape:
-            logger.error(f"Shape mismatch: dose shape {dose_data.shape}, mask shape {structure_mask.shape}")
+            logger.error(
+                f"Shape mismatch: dose shape {dose_data.shape}, mask shape {structure_mask.shape}"
+            )
             return None
-        
+
         # Calculate structure volume in cc
         voxel_volume = voxel_size[0] * voxel_size[1] * voxel_size[2]  # cm³
         num_voxels = np.sum(structure_mask > 0)
         total_volume = num_voxels * voxel_volume
-        
+
         # Extract dose values within the structure
         dose_values = dose_data[structure_mask > 0]
-        
+
         # If no voxels in structure, return empty DVH
         if len(dose_values) == 0:
             logger.warning(f"No dose values found in structure {structure_id}")
             return DVHData.from_raw_data(structure_id, [0.0], [0.0], total_volume)
-        
+
         # Determine dose range
         min_dose = 0.0  # Start from 0 Gy
         max_dose = np.max(dose_values) * 1.05  # Add 5% margin for visualization
-        
+
         # Create dose bins
         dose_bins = np.linspace(min_dose, max_dose, num_bins)
-        
+
         # Calculate differential DVH
         hist, edges = np.histogram(dose_values, bins=dose_bins)
-        
+
         # Convert histogram counts to volume
         if total_volume > 0 and len(dose_values) > 0:
             # Convert counts to percentage of total structure volume
             volume_percent = hist / len(dose_values) * 100.0
         else:
             volume_percent = np.zeros_like(hist, dtype=float)
-        
+
         # Calculate cumulative DVH (reverse sum)
         cumulative_volume = np.zeros_like(dose_bins, dtype=float)
         cumulative_volume[:-1] = 100.0 - np.cumsum(volume_percent)
-        
+
         # Create DVH data object
         dvh = DVHData.from_raw_data(
-            structure_id, 
-            dose_bins.tolist(), 
-            cumulative_volume.tolist(), 
-            total_volume
+            structure_id, dose_bins.tolist(), cumulative_volume.tolist(), total_volume
         )
-        
+
         # Set units
         dvh.dose_unit = "Gy"
         dvh.volume_unit = "%"
-        
+
         # Calculate additional statistics
         dvh.min_dose = float(np.min(dose_values))
         dvh.max_dose = float(np.max(dose_values))
         dvh.mean_dose = float(np.mean(dose_values))
-        
+
         # Calculate median dose
         if len(dose_values) > 0:
             dvh.median_dose = float(np.median(dose_values))
-        
+
         return dvh
-        
+
     except Exception as e:
         logger.error(f"Error calculating DVH from 3D data: {str(e)}")
         return None
+
+
+# Add this simple function to ensure it exists and can be imported
+def calculate_dvh(
+    dose_grid: np.ndarray, structure_mask: np.ndarray, num_bins: int = 100
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate DVH data for a structure.
+
+    Parameters
+    ----------
+    dose_grid : np.ndarray
+        3D dose grid array
+    structure_mask : np.ndarray
+        3D binary mask of the structure (same shape as dose_grid)
+    num_bins : int, optional
+        Number of dose bins for the histogram
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Tuple of (dose_bins, volume_bins) where dose_bins are the dose values
+        and volume_bins are the cumulative volume percentages
+    """
+    if dose_grid.shape != structure_mask.shape:
+        raise ValueError(
+            f"Dose grid shape {dose_grid.shape} does not match structure mask shape {structure_mask.shape}"
+        )
+
+    # Get dose values within the structure
+    structure_dose = dose_grid[structure_mask > 0]
+
+    # If no dose points, return empty arrays
+    if len(structure_dose) == 0:
+        return np.array([]), np.array([])
+
+    # Get total volume (number of voxels)
+    total_volume = np.sum(structure_mask > 0)
+
+    # Create dose bins
+    min_dose = 0.0  # Start from 0
+    max_dose = np.max(structure_dose) * 1.05  # Add 5% margin
+    dose_bins = np.linspace(min_dose, max_dose, num_bins)
+
+    # Calculate histogram
+    hist, _ = np.histogram(structure_dose, bins=dose_bins)
+
+    # Convert to cumulative histogram (reverse direction)
+    cum_hist = np.cumsum(hist[::-1])[::-1]
+
+    # Normalize to percentage
+    volume_percent = cum_hist / total_volume * 100.0
+
+    # Return dose bins (use bin centers) and volume percentages
+    bin_centers = (dose_bins[:-1] + dose_bins[1:]) / 2
+    return bin_centers, volume_percent

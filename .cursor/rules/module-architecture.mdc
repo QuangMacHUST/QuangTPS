@@ -1,0 +1,61 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# QuangTPS Module Architecture
+
+## Core Module (`quangtps/core/`)
+- The foundation of the treatment planning system
+- Contains base classes for plan data, structure management, and dose calculation
+- Implements the fundamental algorithms for dose calculation and plan manipulation
+- Key files:
+  - `plan.py`: Plan class implementation
+  - `structure.py`: Structure representation
+  - `dose.py`: Dose calculation and grid management
+
+## Evaluation Module (`quangtps/evaluation/`)
+- Handles plan evaluation and comparison
+- Implements DVH calculation and analysis
+- Manages clinical goals and protocols
+- Key files:
+  - `dvh.py`: DVH calculation and analysis
+  - `clinical_goals.py`: Clinical goal definition and evaluation
+  - `metrics.py`: Implementation of various radiotherapy metrics
+
+## Optimization Module (`quangtps/optimization/`)
+- Implements plan optimization algorithms
+- Handles objective functions and constraints
+- Manages optimization workflows
+- Key files:
+  - `objectives.py`: Optimization objective definitions
+  - `optimizer.py`: Core optimization engine
+  - `constraints.py`: Implementation of planning constraints
+
+## UI Module (`quangtps/ui/`)
+- User interface components for the planning system
+- Visualizations for plans, structures, and evaluation results
+- Interactive tools for plan manipulation
+- Key files:
+  - `main_window.py`: Main application window
+  - `plan_evaluation.py`: UI for plan evaluation
+  - `structure_view.py`: Structure visualization
+  - `dose_view.py`: Dose distribution visualization
+
+## IO Module (`quangtps/io/`)
+- Handles file input/output operations
+- Implements DICOM import/export
+- Manages data persistence
+- Key files:
+  - `dicom.py`: DICOM file handling
+  - `file_manager.py`: General file operations
+  - `database.py`: Database interaction for plan storage
+
+## Utilities (`quangtps/utils/`)
+- Common utility functions and helpers
+- Cross-cutting concerns (logging, error handling)
+- Helper algorithms and tools
+- Key files:
+  - `geometry.py`: Geometric calculations and transformations
+  - `interpolation.py`: Data interpolation methods
+  - `logging.py`: Logging infrastructure
