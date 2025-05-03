@@ -2,472 +2,564 @@
 # -*- coding: utf-8 -*-
 
 """
-MLC Editor Controller - Lớp điều khiển cho trình soạn thảo MLC.
+Module cung cấp bộ điều khiển cho trình soạn thảo MLC.
 
-Module này cung cấp lớp điều khiển trung gian giữa giao diện người dùng
-MLC Editor và các thuật toán tối ưu hóa MLC. Nó xử lý logic nghiệp vụ
-cho việc chỉnh sửa và tối ưu hóa MLC.
+Module này triển khai bộ điều khiển trung gian giữa giao diện người dùng
+và mô hình MLC, quản lý các thao tác trên lá MLC và ứng dụng các thuật toán
+tối ưu hóa.
 """
 
-import numpy as np
 import logging
-from typing import List, Dict, Tuple, Optional, Union, Any
+import numpy as np
+from typing import List, Dict, Optional, Tuple, Any, Union
 
-from quangtps.planning.mlc import MLC
-from quangtps.imaging.structures import Structure
+from quangtps.planning.mlc import MLC, MLCLeaf, MLCSequence
 from quangtps.treatment.beams.beam import Beam
-from quangtps.optimization.mlc_optimization import optimize_mlc_shape
 
 logger = logging.getLogger(__name__)
 
 
 class MLCEditorController:
-    """
-    Lớp điều khiển cho MLC Editor giúp kết nối giao diện người dùng
-    với các thuật toán tối ưu hóa.
-    """
+    """Bộ điều khiển cho trình soạn thảo MLC."""
 
     def __init__(self):
-        """Khởi tạo controller với các tham số mặc định."""
-        self._current_mlc = None
-        self._target_structure = None
-        self._oar_structures = []
-        self._current_beam = None
-        self._optimization_params = {
-            "algorithm": "gradient",  # gradient, simulated_annealing, genetic
-            "iterations": 100,
-            "convergence_threshold": 0.001,
-        }
+        """Khởi tạo bộ điều khiển MLC."""
+        self.mlc = None
+        self.beam = None
+        self.current_sequence_index = 0
+        self.sequences = []  # For IMRT/VMAT
+        self.undo_stack = []
+        self.redo_stack = []
+        self.max_history_size = (
+            50  # Giới hạn kích thước lịch sử để tránh sử dụng quá nhiều bộ nhớ
+        )
+        self.batch_operation = False  # Trạng thái cho thao tác hàng loạt
+        self.batch_start_state = None  # Trạng thái trước khi bắt đầu thao tác hàng loạt
 
     def set_mlc(self, mlc: MLC):
-        """
-        Thiết lập MLC hiện tại cho controller.
+        """Thiết lập MLC hiện tại."""
+        self.mlc = mlc
+        self._clear_history()
+        self._save_state()
 
-        Parameters
-        ----------
-        mlc : MLC
-            Đối tượng MLC
-        """
-        self._current_mlc = mlc
+    def set_beam(self, beam: Beam):
+        """Thiết lập chùm tia hiện tại."""
+        self.beam = beam
+        if beam and beam.mlc:
+            self.mlc = beam.mlc
+            self._clear_history()
+            self._save_state()
 
-    def get_mlc(self) -> Optional[MLC]:
-        """
-        Lấy đối tượng MLC hiện tại.
+    def begin_batch_operation(self):
+        """Bắt đầu một thao tác hàng loạt, ví dụ như điều chỉnh nhiều lá MLC cùng lúc."""
+        if not self.batch_operation:
+            self.batch_operation = True
+            self.batch_start_state = self._get_current_state()
 
-        Returns
-        -------
-        Optional[MLC]
-            Đối tượng MLC hiện tại hoặc None nếu chưa được thiết lập
-        """
-        return self._current_mlc
+    def end_batch_operation(self):
+        """Kết thúc thao tác hàng loạt và lưu thay đổi vào lịch sử."""
+        if self.batch_operation:
+            self.batch_operation = False
+            # Chỉ lưu nếu có sự thay đổi
+            current_state = self._get_current_state()
+            if self._states_are_different(self.batch_start_state, current_state):
+                self.undo_stack.append(self.batch_start_state)
+                self._trim_history()
+                # Xóa redo stack sau khi có thay đổi mới
+                self.redo_stack.clear()
 
-    def set_target_structure(self, structure: Structure):
-        """
-        Thiết lập cấu trúc mục tiêu.
+    def cancel_batch_operation(self):
+        """Hủy thao tác hàng loạt và hoàn nguyên về trạng thái ban đầu."""
+        if self.batch_operation and self.batch_start_state:
+            self._restore_state(self.batch_start_state)
+            self.batch_operation = False
+            self.batch_start_state = None
 
-        Parameters
-        ----------
-        structure : Structure
-            Cấu trúc mục tiêu
+    def set_leaf_position(self, leaf_index: int, position: float) -> bool:
         """
-        self._target_structure = structure
+        Thiết lập vị trí cho lá MLC.
 
-    def add_oar_structure(self, structure: Structure):
+        Tham số:
+            leaf_index: Chỉ số của lá MLC
+            position: Vị trí mới cho lá (cm)
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
         """
-        Thêm một cấu trúc OAR vào danh sách.
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return False
 
-        Parameters
-        ----------
-        structure : Structure
-            Cấu trúc OAR cần thêm
+        try:
+            # Lưu trạng thái hiện tại vào ngăn xếp hoàn tác nếu không trong thao tác hàng loạt
+            if not self.batch_operation:
+                self._save_state()
+
+            # Thiết lập vị trí mới
+            result = self.mlc.set_leaf_position(leaf_index, position)
+
+            # Xóa ngăn xếp làm lại khi có thay đổi mới nếu không trong thao tác hàng loạt
+            if not self.batch_operation:
+                self.redo_stack.clear()
+
+            return result
+        except Exception as e:
+            logger.error(f"Lỗi khi thiết lập vị trí lá: {e}")
+            return False
+
+    def set_leaf_bank_positions(self, bank: str, positions: List[float]) -> bool:
         """
-        if structure not in self._oar_structures:
-            self._oar_structures.append(structure)
+        Thiết lập vị trí cho tất cả lá trong một bank.
 
-    def remove_oar_structure(self, structure: Structure) -> bool:
+        Tham số:
+            bank: Bank của lá ('A' hoặc 'B')
+            positions: Danh sách vị trí mới
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
         """
-        Xóa một cấu trúc OAR khỏi danh sách.
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return False
 
-        Parameters
-        ----------
-        structure : Structure
-            Cấu trúc OAR cần xóa
+        try:
+            # Bắt đầu thao tác hàng loạt
+            self.begin_batch_operation()
 
-        Returns
-        -------
-        bool
-            True nếu xóa thành công, False nếu không tìm thấy
-        """
-        if structure in self._oar_structures:
-            self._oar_structures.remove(structure)
+            # Lấy tất cả lá trong bank
+            bank_leaves = [leaf for leaf in self.mlc.leaves if leaf.bank == bank]
+
+            # Kiểm tra kích thước
+            if len(bank_leaves) != len(positions):
+                logger.error(
+                    f"Số lượng vị trí ({len(positions)}) không khớp với số lá trong bank ({len(bank_leaves)})"
+                )
+                self.cancel_batch_operation()
+                return False
+
+            # Thiết lập vị trí mới cho tất cả lá
+            for i, leaf in enumerate(bank_leaves):
+                self.mlc.set_leaf_position(leaf.index, positions[i])
+
+            # Kết thúc thao tác hàng loạt
+            self.end_batch_operation()
+
             return True
-        return False
-
-    def clear_oar_structures(self):
-        """Xóa tất cả các cấu trúc OAR."""
-        self._oar_structures.clear()
-
-    def set_current_beam(self, beam: Beam):
-        """
-        Thiết lập chùm tia hiện tại.
-
-        Parameters
-        ----------
-        beam : Beam
-            Chùm tia hiện tại
-        """
-        self._current_beam = beam
-
-    def set_optimization_parameters(self, **params):
-        """
-        Thiết lập tham số tối ưu hóa.
-
-        Parameters
-        ----------
-        **params : dict
-            Dictionary chứa các tham số tối ưu hóa
-        """
-        for key, value in params.items():
-            if key in self._optimization_params:
-                self._optimization_params[key] = value
-
-    def create_shape_based_mlc(
-        self, structure: Structure, mlc_type: str, margin: float = 0.5
-    ) -> Optional[MLC]:
-        """
-        Tạo hình dạng MLC dựa trên cấu trúc.
-
-        Parameters
-        ----------
-        structure : Structure
-            Cấu trúc mục tiêu
-        mlc_type : str
-            Loại MLC cần tạo
-        margin : float, optional
-            Lề (margin) xung quanh cấu trúc, mặc định là 0.5 cm
-
-        Returns
-        -------
-        Optional[MLC]
-            Đối tượng MLC đã được thiết kế theo hình dạng cấu trúc hoặc None nếu có lỗi
-        """
-        try:
-            # Tạo MLC mới
-            mlc = MLC(mlc_type)
-
-            # Nếu không có chùm tia, sử dụng góc mặc định
-            beam = self._current_beam
-
-            # Kiểm tra xem cấu trúc có dữ liệu không
-            if not structure.has_contour_data():
-                logger.warning(f"Cấu trúc {structure.name} không có dữ liệu contour")
-                return None
-
-            # Chuyển cấu trúc sang góc nhìn BEV
-            from quangtps.treatment.beams.beam_geometry import get_bev_transform
-
-            if beam:
-                transform = get_bev_transform(beam)
-            else:
-                # Tạo transform mặc định nếu không có beam
-                from quangtps.treatment.beams.beam_geometry import BEVTransform
-
-                transform = BEVTransform(0, 0, 0, (0, 0, 0))
-
-            # Lấy contour của cấu trúc từ góc nhìn BEV
-            bev_contour = self._get_structure_bev_contour(structure, transform)
-
-            if not bev_contour:
-                logger.warning(
-                    f"Không thể tạo contour BEV cho cấu trúc {structure.name}"
-                )
-                return None
-
-            # Tính toán vị trí lá MLC dựa trên contour BEV
-            self._set_mlc_positions_from_contour(mlc, bev_contour, margin)
-
-            return mlc
-
         except Exception as e:
-            logger.error(f"Lỗi khi tạo MLC dựa trên cấu trúc: {str(e)}")
-            return None
+            logger.error(f"Lỗi khi thiết lập vị trí lá: {e}")
+            self.cancel_batch_operation()
+            return False
 
-    def _get_structure_bev_contour(
-        self, structure: Structure, transform
-    ) -> List[Tuple[float, float]]:
+    def set_uniform_positions(self, width: float) -> bool:
         """
-        Lấy contour của cấu trúc từ góc nhìn BEV.
+        Thiết lập tất cả các lá ở vị trí đồng đều, tạo ra một trường vuông/chữ nhật.
 
-        Parameters
-        ----------
-        structure : Structure
-            Cấu trúc cần chuyển đổi
-        transform : BEVTransform
-            Đối tượng biến đổi BEV
+        Tham số:
+            width: Chiều rộng của trường (cm, giá trị dương)
 
-        Returns
-        -------
-        List[Tuple[float, float]]
-            Danh sách các điểm contour trong hệ tọa độ BEV
+        Trả về:
+            True nếu thành công, False nếu thất bại
         """
-        try:
-            # Lấy điểm bề mặt của cấu trúc
-            points = structure.get_surface_points()
-
-            if not points or len(points) == 0:
-                return []
-
-            # Chuyển sang tọa độ BEV
-            bev_points = transform.transform_points(points)
-
-            # Tạo contour từ các điểm BEV
-            # Sử dụng thuật toán tạo contour đơn giản
-            import numpy as np
-
-            if len(bev_points) >= 3:  # Cần ít nhất 3 điểm để tạo contour
-                try:
-                    # Sử dụng phương pháp bao lồi đơn giản thay vì ConvexHull
-                    # Tính tâm của các điểm
-                    center = np.mean(bev_points, axis=0)
-
-                    # Tính góc từ tâm đến mỗi điểm
-                    angles = np.arctan2(
-                        bev_points[:, 1] - center[1], bev_points[:, 0] - center[0]
-                    )
-
-                    # Sắp xếp các điểm theo góc tăng dần
-                    sorted_indices = np.argsort(angles)
-                    contour = np.array([bev_points[i] for i in sorted_indices])
-
-                    return contour.tolist()
-                except Exception as e:
-                    logger.warning(f"Không thể tạo bao lồi: {str(e)}")
-
-            # Fallback nếu không thể tạo bao lồi
-            return bev_points.tolist()
-
-        except Exception as e:
-            logger.error(f"Lỗi khi lấy contour BEV: {str(e)}")
-            return []
-
-    def _set_mlc_positions_from_contour(
-        self, mlc: MLC, contour: List[Tuple[float, float]], margin: float
-    ):
-        """
-        Thiết lập vị trí lá MLC dựa trên contour BEV.
-
-        Parameters
-        ----------
-        mlc : MLC
-            Đối tượng MLC cần thiết lập
-        contour : List[Tuple[float, float]]
-            Contour trong hệ tọa độ BEV
-        margin : float
-            Lề (margin) xung quanh contour
-        """
-        if not contour:
-            return
-
-        import numpy as np
-
-        # Chuyển contour thành mảng numpy
-        contour_np = np.array(contour)
-
-        # Sắp xếp lá MLC theo chỉ số
-        leaves_by_index = {}
-        for leaf in mlc.leaves:
-            if leaf.index not in leaves_by_index:
-                leaves_by_index[leaf.index] = {"A": None, "B": None}
-            leaves_by_index[leaf.index][leaf.bank] = leaf
-
-        # Lấy vị trí Y của mỗi lá
-        leaf_y_positions = []
-        for idx in sorted(leaves_by_index.keys()):
-            if "A" in leaves_by_index[idx] and leaves_by_index[idx]["A"]:
-                leaf_y_positions.append(leaves_by_index[idx]["A"].y_position)
-
-        # Với mỗi cặp lá, tìm các điểm giao với contour
-        for idx in sorted(leaves_by_index.keys()):
-            leaf_pair = leaves_by_index[idx]
-
-            # Lấy vị trí Y của lá hiện tại
-            if "A" not in leaf_pair or leaf_pair["A"] is None:
-                continue
-
-            leaf_y = leaf_pair["A"].y_position
-            leaf_half_width = leaf_pair["A"].width / 2
-
-            # Tìm các điểm contour trong dải Y của lá
-            mask = np.logical_and(
-                contour_np[:, 1] >= leaf_y - leaf_half_width,
-                contour_np[:, 1] < leaf_y + leaf_half_width,
-            )
-            points_in_leaf = contour_np[mask]
-
-            if len(points_in_leaf) > 0:
-                # Tìm điểm xa nhất bên trái và bên phải
-                min_x = np.min(points_in_leaf[:, 0]) - margin
-                max_x = np.max(points_in_leaf[:, 0]) + margin
-
-                # Thiết lập vị trí lá
-                if "A" in leaf_pair and leaf_pair["A"]:
-                    leaf_pair["A"].position = min_x
-                if "B" in leaf_pair and leaf_pair["B"]:
-                    leaf_pair["B"].position = max_x
-            else:
-                # Nếu không có điểm nào, đặt lá về vị trí đóng
-                if "A" in leaf_pair and leaf_pair["A"]:
-                    leaf_pair["A"].position = 0
-                if "B" in leaf_pair and leaf_pair["B"]:
-                    leaf_pair["B"].position = 0
-
-    def optimize_mlc(self, field_size: float = 40.0) -> Optional[MLC]:
-        """
-        Tối ưu hóa MLC hiện tại.
-
-        Parameters
-        ----------
-        field_size : float, optional
-            Kích thước trường tối đa (cm)
-
-        Returns
-        -------
-        Optional[MLC]
-            Đối tượng MLC đã được tối ưu hoặc None nếu có lỗi
-        """
-        if not self._current_mlc or not self._target_structure:
-            logger.warning(
-                "Không thể tối ưu hóa: MLC hoặc cấu trúc mục tiêu chưa được thiết lập"
-            )
-            return None
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return False
 
         try:
-            # Gọi hàm tối ưu hóa
-            optimized_mlc = optimize_mlc_shape(
-                original_mlc=self._current_mlc,
-                target=self._target_structure,
-                oars=self._oar_structures,
-                field_size=field_size,
-                beam=self._current_beam,
-                algorithm=self._optimization_params["algorithm"],
-                iterations=self._optimization_params["iterations"],
-                convergence_threshold=self._optimization_params[
-                    "convergence_threshold"
-                ],
-            )
+            # Bắt đầu thao tác hàng loạt
+            self.begin_batch_operation()
 
-            # Cập nhật MLC hiện tại
-            self._current_mlc = optimized_mlc
+            # Thiết lập vị trí cho tất cả lá
+            half_width = width / 2.0
+            for leaf in self.mlc.leaves:
+                if leaf.bank == "A":
+                    self.mlc.set_leaf_position(leaf.index, -half_width)
+                else:
+                    self.mlc.set_leaf_position(leaf.index, half_width)
 
-            return optimized_mlc
+            # Kết thúc thao tác hàng loạt
+            self.end_batch_operation()
 
+            return True
         except Exception as e:
-            logger.error(f"Lỗi khi tối ưu hóa MLC: {str(e)}")
-            return None
+            logger.error(f"Lỗi khi thiết lập vị trí đồng đều: {e}")
+            self.cancel_batch_operation()
+            return False
 
-    def validate_mlc(self) -> Tuple[bool, List[str]]:
+    def get_leaf_positions(self) -> Dict[int, float]:
         """
-        Kiểm tra tính hợp lệ của MLC hiện tại.
+        Lấy vị trí của tất cả lá.
 
-        Returns
-        -------
-        Tuple[bool, List[str]]
-            Tuple chứa kết quả kiểm tra (True/False) và danh sách các thông báo lỗi
+        Trả về:
+            Dictionary với khóa là chỉ số lá và giá trị là vị trí
         """
-        if not self._current_mlc:
-            return False, ["MLC chưa được thiết lập"]
-
-        errors = []
-
-        # Kiểm tra các ràng buộc vật lý
-        for leaf in self._current_mlc.leaves:
-            # Kiểm tra giới hạn di chuyển
-            if abs(leaf.position) > self._current_mlc.max_leaf_travel:
-                errors.append(
-                    f"Lá {leaf.index} ({leaf.bank}) vượt quá giới hạn di chuyển"
-                )
-
-            # Kiểm tra va chạm giữa các lá đối diện
-            opposite_bank = "B" if leaf.bank == "A" else "A"
-            for other_leaf in self._current_mlc.leaves:
-                if other_leaf.index == leaf.index and other_leaf.bank == opposite_bank:
-                    if leaf.bank == "A" and leaf.position > other_leaf.position:
-                        errors.append(
-                            f"Lá {leaf.index}A va chạm với lá {other_leaf.index}B"
-                        )
-                    elif leaf.bank == "B" and leaf.position < other_leaf.position:
-                        errors.append(
-                            f"Lá {leaf.index}B va chạm với lá {other_leaf.index}A"
-                        )
-
-            # Kiểm tra chồng chéo giữa các lá liền kề
-            for other_leaf in self._current_mlc.leaves:
-                if (
-                    other_leaf.bank == leaf.bank
-                    and abs(other_leaf.index - leaf.index) == 1
-                ):
-                    # Hiện tại bỏ qua kiểm tra chồng chéo do phức tạp
-                    pass
-
-        return len(errors) == 0, errors
-
-    def calculate_coverage_metrics(self) -> Dict[str, float]:
-        """
-        Tính toán các chỉ số bao phủ của MLC hiện tại.
-
-        Returns
-        -------
-        Dict[str, float]
-            Dictionary chứa các chỉ số bao phủ
-        """
-        if not self._current_mlc or not self._target_structure:
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
             return {}
 
+        positions = {}
+        for leaf in self.mlc.leaves:
+            positions[leaf.index] = leaf.position
+
+        return positions
+
+    def get_bank_positions(self, bank: str) -> List[float]:
+        """
+        Lấy vị trí của tất cả lá trong một bank.
+
+        Tham số:
+            bank: Bank của lá ('A' hoặc 'B')
+
+        Trả về:
+            Danh sách vị trí của các lá trong bank
+        """
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return []
+
+        # Lấy và sắp xếp lá theo thứ tự index
+        bank_leaves = [leaf for leaf in self.mlc.leaves if leaf.bank == bank]
+        bank_leaves.sort(key=lambda x: x.pair_index)
+
+        return [leaf.position for leaf in bank_leaves]
+
+    def get_all_positions(self) -> Tuple[List[float], List[float]]:
+        """
+        Lấy vị trí của tất cả lá phân tách theo bank.
+
+        Trả về:
+            Tuple chứa danh sách vị trí của bank A và bank B
+        """
+        return (self.get_bank_positions("A"), self.get_bank_positions("B"))
+
+    def open_all_leaves(self) -> bool:
+        """
+        Mở tất cả lá MLC ra tối đa.
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
+        """
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return False
+
         try:
-            # Tạo bản đồ truyền qua từ MLC
-            resolution = 100
-            transmission_map = self._current_mlc.get_transmission_map(
-                resolution=resolution
-            )
+            # Bắt đầu thao tác hàng loạt
+            self.begin_batch_operation()
 
-            # Chuyển cấu trúc sang góc nhìn BEV
-            from quangtps.optimization.mlc_optimization import _structure_to_bev_map
+            # Mở tất cả lá
+            for leaf in self.mlc.leaves:
+                if leaf.bank == "A":
+                    self.mlc.set_leaf_position(
+                        leaf.index, -20.0
+                    )  # Giá trị âm cho bank A
+                else:
+                    self.mlc.set_leaf_position(
+                        leaf.index, 20.0
+                    )  # Giá trị dương cho bank B
 
-            field_size = 40.0  # Giả định kích thước trường
-            bev_target_map = _structure_to_bev_map(
-                self._target_structure, field_size, resolution, self._current_beam
-            )
+            # Kết thúc thao tác hàng loạt
+            self.end_batch_operation()
 
-            # Tính chỉ số bao phủ mục tiêu
-            target_coverage = 0
-            if np.sum(bev_target_map) > 0:
-                target_coverage = np.sum(transmission_map * bev_target_map) / np.sum(
-                    bev_target_map
-                )
-
-            # Tính chỉ số bao phủ OARs
-            oar_metrics = {}
-            for i, oar in enumerate(self._oar_structures):
-                bev_oar_map = _structure_to_bev_map(
-                    oar, field_size, resolution, self._current_beam
-                )
-
-                oar_exposure = 0
-                if np.sum(bev_oar_map) > 0:
-                    oar_exposure = np.sum(transmission_map * bev_oar_map) / np.sum(
-                        bev_oar_map
-                    )
-
-                oar_metrics[f"oar_{oar.name}_exposure"] = oar_exposure
-
-            # Kết hợp các chỉ số
-            metrics = {
-                "target_coverage": target_coverage,
-                **oar_metrics,
-            }
-
-            return metrics
-
+            return True
         except Exception as e:
-            logger.error(f"Lỗi khi tính toán chỉ số bao phủ: {str(e)}")
-            return {"error": str(e)}
+            logger.error(f"Lỗi khi mở tất cả lá: {e}")
+            self.cancel_batch_operation()
+            return False
+
+    def close_all_leaves(self) -> bool:
+        """
+        Đóng tất cả lá MLC (đưa về tâm).
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
+        """
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return False
+
+        try:
+            # Bắt đầu thao tác hàng loạt
+            self.begin_batch_operation()
+
+            # Đóng tất cả lá
+            for leaf in self.mlc.leaves:
+                self.mlc.set_leaf_position(leaf.index, 0.0)  # Đặt tất cả về tâm
+
+            # Kết thúc thao tác hàng loạt
+            self.end_batch_operation()
+
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi đóng tất cả lá: {e}")
+            self.cancel_batch_operation()
+            return False
+
+    def create_rectangular_aperture(self, width: float, height: float) -> bool:
+        """
+        Tạo hình chữ nhật với MLC.
+
+        Tham số:
+            width: Chiều rộng hình chữ nhật (cm)
+            height: Chiều cao hình chữ nhật (cm)
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
+        """
+        if not self.mlc:
+            logger.error("Không có MLC nào được thiết lập")
+            return False
+
+        try:
+            # Bắt đầu thao tác hàng loạt
+            self.begin_batch_operation()
+
+            # Lấy thông tin lá
+            leaves_A = [leaf for leaf in self.mlc.leaves if leaf.bank == "A"]
+            leaves_B = [leaf for leaf in self.mlc.leaves if leaf.bank == "B"]
+
+            # Sắp xếp theo pair_index
+            leaves_A.sort(key=lambda x: x.pair_index)
+            leaves_B.sort(key=lambda x: x.pair_index)
+
+            # Tính toán số lá cần thiết cho chiều cao
+            n_leaves = len(leaves_A)
+            leaf_width = self.mlc.leaf_width
+            height_in_leaves = int(height / leaf_width)
+
+            # Giới hạn chiều cao
+            if height_in_leaves > n_leaves:
+                height_in_leaves = n_leaves
+
+            # Tính toán lá bắt đầu và kết thúc (từ giữa)
+            start_leaf = (n_leaves - height_in_leaves) // 2
+            end_leaf = start_leaf + height_in_leaves
+
+            # Thiết lập vị trí lá
+            half_width = width / 2
+
+            for i, (leaf_A, leaf_B) in enumerate(zip(leaves_A, leaves_B)):
+                if start_leaf <= i < end_leaf:
+                    # Trong phạm vi hình chữ nhật
+                    self.mlc.set_leaf_position(leaf_A.index, -half_width)
+                    self.mlc.set_leaf_position(leaf_B.index, half_width)
+                else:
+                    # Ngoài phạm vi hình chữ nhật
+                    self.mlc.set_leaf_position(leaf_A.index, 0)
+                    self.mlc.set_leaf_position(leaf_B.index, 0)
+
+            # Kết thúc thao tác hàng loạt
+            self.end_batch_operation()
+
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo hình chữ nhật: {e}")
+            self.cancel_batch_operation()
+            return False
+
+    def add_sequence(self, sequence: MLCSequence) -> bool:
+        """
+        Thêm một chuỗi MLC mới (cho IMRT/VMAT).
+
+        Tham số:
+            sequence: Chuỗi MLC mới
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
+        """
+        try:
+            self.sequences.append(sequence)
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi thêm chuỗi MLC: {e}")
+            return False
+
+    def set_current_sequence(self, index: int) -> bool:
+        """
+        Chuyển đến chuỗi MLC được chỉ định.
+
+        Tham số:
+            index: Chỉ số của chuỗi MLC
+
+        Trả về:
+            True nếu thành công, False nếu thất bại
+        """
+        if 0 <= index < len(self.sequences):
+            # Lưu trạng thái hiện tại trước khi chuyển đổi
+            self._save_state()
+
+            self.current_sequence_index = index
+
+            # Áp dụng chuỗi MLC hiện tại vào MLC
+            if self.mlc and self.sequences:
+                sequence = self.sequences[self.current_sequence_index]
+
+                # Bắt đầu thao tác hàng loạt
+                self.begin_batch_operation()
+
+                # Cập nhật vị trí lá từ chuỗi
+                for leaf_index, position in sequence.positions.items():
+                    self.mlc.set_leaf_position(leaf_index, position)
+
+                # Kết thúc thao tác hàng loạt
+                self.end_batch_operation()
+
+                return True
+
+        return False
+
+    def can_undo(self) -> bool:
+        """
+        Kiểm tra xem có thể hoàn tác không.
+
+        Trả về:
+            True nếu có thể hoàn tác, False nếu không
+        """
+        return len(self.undo_stack) > 0 and self.mlc is not None
+
+    def can_redo(self) -> bool:
+        """
+        Kiểm tra xem có thể làm lại không.
+
+        Trả về:
+            True nếu có thể làm lại, False nếu không
+        """
+        return len(self.redo_stack) > 0 and self.mlc is not None
+
+    def undo(self) -> bool:
+        """
+        Hoàn tác thao tác gần nhất.
+
+        Trả về:
+            True nếu hoàn tác thành công, False nếu không có thao tác để hoàn tác
+        """
+        if not self.can_undo():
+            return False
+
+        # Lấy trạng thái hiện tại để đẩy vào redo stack
+        current_state = self._get_current_state()
+        self.redo_stack.append(current_state)
+        self._trim_redo_history()
+
+        # Khôi phục trạng thái trước đó
+        previous_state = self.undo_stack.pop()
+        self._restore_state(previous_state)
+
+        return True
+
+    def redo(self) -> bool:
+        """
+        Làm lại thao tác đã hoàn tác.
+
+        Trả về:
+            True nếu làm lại thành công, False nếu không có thao tác để làm lại
+        """
+        if not self.can_redo():
+            return False
+
+        # Lưu trạng thái hiện tại vào undo stack
+        current_state = self._get_current_state()
+        self.undo_stack.append(current_state)
+        self._trim_history()
+
+        # Khôi phục trạng thái từ redo stack
+        next_state = self.redo_stack.pop()
+        self._restore_state(next_state)
+
+        return True
+
+    def get_history_size(self) -> Tuple[int, int]:
+        """
+        Lấy kích thước lịch sử hoàn tác và làm lại.
+
+        Trả về:
+            Tuple[int, int]: (Số lượng thao tác có thể hoàn tác, Số lượng thao tác có thể làm lại)
+        """
+        return (len(self.undo_stack), len(self.redo_stack))
+
+    def _save_state(self):
+        """Lưu trạng thái hiện tại vào ngăn xếp hoàn tác."""
+        if self.mlc and not self.batch_operation:
+            state = self._get_current_state()
+
+            # Kiểm tra xem trạng thái mới có khác với trạng thái gần nhất trong undo_stack không
+            if len(self.undo_stack) == 0 or self._states_are_different(
+                state, self.undo_stack[-1]
+            ):
+                self.undo_stack.append(state)
+                self._trim_history()
+                # Xóa redo stack khi có thay đổi mới
+                self.redo_stack.clear()
+
+    def _get_current_state(self) -> Dict[int, float]:
+        """
+        Lấy trạng thái hiện tại của MLC.
+
+        Trả về:
+            Dictionary với khóa là chỉ số lá và giá trị là vị trí
+        """
+        state = {}
+        if self.mlc:
+            for leaf in self.mlc.leaves:
+                state[leaf.index] = leaf.position
+        return state
+
+    def _restore_state(self, state: Dict[int, float]):
+        """
+        Khôi phục trạng thái MLC từ state đã lưu.
+
+        Tham số:
+            state: Dictionary với khóa là chỉ số lá và giá trị là vị trí
+        """
+        if self.mlc:
+            # Bắt đầu thao tác hàng loạt để áp dụng tất cả thay đổi cùng lúc
+            was_batch = self.batch_operation
+            if not was_batch:
+                self.batch_operation = True
+
+            for leaf_index, position in state.items():
+                self.mlc.set_leaf_position(leaf_index, position)
+
+            # Khôi phục trạng thái batch
+            if not was_batch:
+                self.batch_operation = False
+
+    def _clear_history(self):
+        """Xóa lịch sử hoàn tác và làm lại."""
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+
+    def _trim_history(self):
+        """Giới hạn kích thước ngăn xếp hoàn tác."""
+        while len(self.undo_stack) > self.max_history_size:
+            self.undo_stack.pop(0)
+
+    def _trim_redo_history(self):
+        """Giới hạn kích thước ngăn xếp làm lại."""
+        while len(self.redo_stack) > self.max_history_size:
+            self.redo_stack.pop(0)
+
+    def _states_are_different(
+        self, state1: Dict[int, float], state2: Dict[int, float]
+    ) -> bool:
+        """
+        Kiểm tra xem hai trạng thái có khác nhau không.
+
+        Tham số:
+            state1: Trạng thái thứ nhất
+            state2: Trạng thái thứ hai
+
+        Trả về:
+            True nếu khác nhau, False nếu giống nhau
+        """
+        # Kiểm tra số lượng lá
+        if set(state1.keys()) != set(state2.keys()):
+            return True
+
+        # Kiểm tra vị trí từng lá
+        for leaf_index, position1 in state1.items():
+            position2 = state2.get(leaf_index)
+            # Sử dụng sai số nhỏ để so sánh số thực
+            if abs(position1 - position2) > 0.001:
+                return True
+
+        return False

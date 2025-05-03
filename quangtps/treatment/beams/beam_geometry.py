@@ -441,6 +441,12 @@ class BEVTransform:
     def _calculate_transformation_matrix(self):
         """
         Tính toán ma trận chuyển đổi từ tọa độ bệnh nhân sang tọa độ BEV.
+
+        Quy trình chuyển đổi tọa độ bao gồm các bước:
+        1. Dịch chuyển hệ tọa độ để isocenter trở thành tâm
+        2. Quay theo góc couch
+        3. Quay theo góc gantry
+        4. Quay theo góc collimator
         """
         # Chuyển các góc sang radian
         gantry_rad = np.radians(self.gantry_angle)
@@ -448,24 +454,27 @@ class BEVTransform:
         couch_rad = np.radians(self.couch_angle)
 
         # Tính ma trận quay cho gantry
+        # Quay quanh trục Y (IEC 61217)
         cos_g = np.cos(gantry_rad)
         sin_g = np.sin(gantry_rad)
         R_gantry = np.array([[cos_g, 0, sin_g], [0, 1, 0], [-sin_g, 0, cos_g]])
 
         # Tính ma trận quay cho bàn điều trị
+        # Quay quanh trục Z
         cos_c = np.cos(couch_rad)
         sin_c = np.sin(couch_rad)
         R_couch = np.array([[cos_c, -sin_c, 0], [sin_c, cos_c, 0], [0, 0, 1]])
 
         # Tính ma trận quay cho collimator
+        # Quay quanh trục Z trong hệ tọa độ sau khi quay gantry
         cos_col = np.cos(collimator_rad)
         sin_col = np.sin(collimator_rad)
         R_collimator = np.array(
             [[cos_col, -sin_col, 0], [sin_col, cos_col, 0], [0, 0, 1]]
         )
 
-        # Kết hợp các ma trận quay
-        # Thứ tự quay: trước tiên là couch, sau đó là gantry, cuối cùng là collimator
+        # Kết hợp các ma trận quay theo thứ tự: couch -> gantry -> collimator
+        # Thứ tự nhân ma trận: R_final = R_collimator * R_gantry * R_couch
         self.rotation_matrix = np.matmul(np.matmul(R_collimator, R_gantry), R_couch)
 
         # Tính ma trận nghịch đảo cho phép biến đổi ngược
@@ -473,6 +482,11 @@ class BEVTransform:
 
         # Tính vị trí nguồn phát xạ trong hệ tọa độ bệnh nhân
         self.source_position = self._calculate_source_position()
+
+        # Tính các ma trận riêng biệt cho ray tracing
+        self.R_couch = R_couch
+        self.R_gantry = R_gantry
+        self.R_collimator = R_collimator
 
     def _calculate_source_position(self) -> np.ndarray:
         """
@@ -483,19 +497,19 @@ class BEVTransform:
         np.ndarray
             Tọa độ nguồn phát xạ (cm)
         """
-        # Chuyển góc gantry sang radian
-        gantry_rad = np.radians(self.gantry_angle)
-        couch_rad = np.radians(self.couch_angle)
+        # Vị trí nguồn trong hệ tọa độ sau khi quay gantry và couch
+        # là (0, 0, -SAD) -> nguồn nằm trên trục Z âm, cách isocenter một khoảng SAD
+        source_in_beam_coords = np.array([0, 0, -self.sad])
 
-        # Tính toán vị trí nguồn theo công thức
-        x = -self.sad * np.sin(gantry_rad) * np.cos(couch_rad)
-        y = -self.sad * np.sin(gantry_rad) * np.sin(couch_rad)
-        z = -self.sad * np.cos(gantry_rad)
+        # Áp dụng phép quay nghịch đảo để chuyển về hệ tọa độ bệnh nhân
+        # Lưu ý: chúng ta chỉ cần áp dụng R_gantry và R_couch, không cần R_collimator
+        # vì nguồn không thay đổi khi quay collimator
+        source_relative = np.matmul(
+            np.matmul(np.linalg.inv(self.R_gantry), np.linalg.inv(self.R_couch)),
+            source_in_beam_coords,
+        )
 
-        # Vị trí nguồn phát xạ tương đối với isocenter
-        source_relative = np.array([x, y, z])
-
-        # Vị trí nguồn phát xạ trong hệ tọa độ bệnh nhân
+        # Vị trí nguồn trong hệ tọa độ bệnh nhân
         source_position = self.isocenter + source_relative
 
         return source_position
@@ -548,13 +562,16 @@ class BEVTransform:
         """
         points_np = np.array(points, dtype=float)
 
+        # Kiểm tra nếu không có điểm
+        if len(points_np) == 0:
+            return np.zeros((0, 2))
+
         # Áp dụng phép dịch chuyển để đưa về tâm tại isocenter
         centered_points = points_np - self.isocenter
 
         # Áp dụng phép quay cho mỗi điểm
-        rotated_points = np.zeros((len(points_np), 3))
-        for i, point in enumerate(centered_points):
-            rotated_points[i] = np.matmul(self.rotation_matrix, point)
+        # Sử dụng phép nhân ma trận cho vectorized performance
+        rotated_points = np.dot(centered_points, self.rotation_matrix.T)
 
         # Trả về các tọa độ x, y trong mặt phẳng BEV
         return rotated_points[:, :2]
@@ -614,6 +631,10 @@ class BEVTransform:
         """
         bev_points_np = np.array(bev_points, dtype=float)
 
+        # Kiểm tra nếu không có điểm
+        if len(bev_points_np) == 0:
+            return np.zeros((0, 3))
+
         # Nếu depths là một số, tạo mảng có cùng kích thước với số điểm BEV
         if isinstance(depths, (int, float)):
             depths = np.full(len(bev_points_np), depths)
@@ -624,10 +645,17 @@ class BEVTransform:
         if len(depths) != len(bev_points_np):
             raise ValueError("Số lượng độ sâu phải bằng số lượng điểm BEV")
 
-        # Áp dụng phép chuyển đổi nghịch đảo cho mỗi điểm
-        patient_points = np.zeros((len(bev_points_np), 3))
-        for i, (bev_point, depth) in enumerate(zip(bev_points_np, depths)):
-            patient_points[i] = self.inverse_transform_point(bev_point, depth)
+        # Tạo mảng 3D với các điểm BEV và độ sâu tương ứng
+        bev_points_3d = np.zeros((len(bev_points_np), 3))
+        bev_points_3d[:, 0] = bev_points_np[:, 0]
+        bev_points_3d[:, 1] = bev_points_np[:, 1]
+        bev_points_3d[:, 2] = depths
+
+        # Áp dụng phép quay nghịch đảo (vectorized)
+        rotated_points = np.dot(bev_points_3d, self.inverse_rotation_matrix.T)
+
+        # Dịch chuyển về hệ tọa độ bệnh nhân
+        patient_points = rotated_points + self.isocenter
 
         return patient_points
 
@@ -647,7 +675,14 @@ class BEVTransform:
         """
         # SAD là khoảng cách từ nguồn đến isocenter
         # Hệ số phóng đại = SAD / (SAD - z)
-        return self.sad / (self.sad - z_distance)
+
+        # Đảm bảo không chia cho 0 hoặc số âm quá nhỏ
+        denominator = self.sad - z_distance
+        if abs(denominator) < 1e-6:
+            # Trả về giá trị lớn nhưng hữu hạn nếu z_distance gần bằng SAD
+            return 1e6 if denominator >= 0 else -1e6
+
+        return self.sad / denominator
 
     def project_to_isocentric_plane(
         self, point: Union[Tuple[float, float, float], np.ndarray]
@@ -678,9 +713,14 @@ class BEVTransform:
         iso_direction = v_source_to_iso / np.linalg.norm(v_source_to_iso)
 
         # Tính tỷ lệ dựa trên công thức chiếu
-        ratio = np.dot(v_source_to_iso, iso_direction) / np.dot(
-            v_source_to_point, iso_direction
-        )
+        dot_product = np.dot(v_source_to_point, iso_direction)
+        if abs(dot_product) < 1e-10:
+            # Điểm nằm trên mặt phẳng vuông góc với v_source_to_iso
+            # Không thể chiếu lên mặt phẳng isocentric
+            logger.warning("Không thể chiếu điểm lên mặt phẳng isocentric")
+            return np.array([0.0, 0.0])
+
+        ratio = np.dot(v_source_to_iso, iso_direction) / dot_product
 
         # Điểm được chiếu trong hệ tọa độ bệnh nhân
         projected_point = self.source_position + ratio * v_source_to_point
@@ -688,81 +728,125 @@ class BEVTransform:
         # Chuyển đổi sang tọa độ BEV
         return self.transform_point(projected_point)
 
-    def ray_trace_to_depth(
-        self,
-        bev_point: Union[Tuple[float, float], np.ndarray],
-        volume: np.ndarray,
-        spacing: Tuple[float, float, float],
-        origin: Tuple[float, float, float],
-    ) -> float:
+    def project_points_to_isocentric_plane(
+        self, points: Union[List[Tuple[float, float, float]], np.ndarray]
+    ) -> np.ndarray:
         """
-        Thực hiện ray tracing từ nguồn qua một điểm BEV để tìm độ sâu đầu tiên gặp cấu trúc.
+        Chiếu nhiều điểm từ không gian 3D lên mặt phẳng isocentric trong tọa độ BEV.
+        Tối ưu hóa cho hiệu suất với nhiều điểm.
 
         Parameters
         ----------
-        bev_point : Union[Tuple[float, float], np.ndarray]
-            Điểm trong hệ tọa độ BEV (cm)
-        volume : np.ndarray
-            Mảng 3D biểu diễn thể tích cần dò tia
-        spacing : Tuple[float, float, float]
-            Khoảng cách giữa các voxel (cm)
-        origin : Tuple[float, float, float]
-            Tọa độ gốc của thể tích trong hệ tọa độ bệnh nhân (cm)
+        points : Union[List[Tuple[float, float, float]], np.ndarray]
+            Danh sách các điểm trong hệ tọa độ bệnh nhân (cm)
 
         Returns
         -------
-        float
-            Độ sâu từ isocenter đến điểm đầu tiên gặp cấu trúc (cm)
-            Nếu không gặp cấu trúc nào, trả về np.inf
+        np.ndarray
+            Mảng các điểm đã chiếu trong hệ tọa độ BEV (cm)
         """
-        # Tìm tia từ nguồn đi qua điểm BEV
-        # Đầu tiên chuyển điểm BEV thành điểm trên mặt phẳng isocentric
-        isocentric_point = self.inverse_transform_point(bev_point)
+        points_np = np.array(points, dtype=float)
 
-        # Tính vector hướng của tia (từ nguồn đến điểm isocentric)
-        ray_direction = isocentric_point - self.source_position
-        ray_direction = ray_direction / np.linalg.norm(ray_direction)
+        # Kiểm tra nếu không có điểm
+        if len(points_np) == 0:
+            return np.zeros((0, 2))
 
-        # Thực hiện ray tracing với bước nhỏ (ví dụ 1mm)
-        step_size = min(spacing) / 2.0  # Nửa khoảng cách nhỏ nhất giữa các voxel
-        max_distance = 50.0  # Khoảng cách tối đa để tìm kiếm (cm)
+        # Vector từ nguồn đến isocenter
+        v_source_to_iso = self.isocenter - self.source_position
 
-        current_point = self.source_position
-        current_distance = 0.0
+        # Hướng chiếu (đơn vị hóa)
+        iso_direction = v_source_to_iso / np.linalg.norm(v_source_to_iso)
 
-        while current_distance < max_distance:
-            # Di chuyển dọc theo tia
-            current_point = current_point + step_size * ray_direction
-            current_distance += step_size
+        # Khoảng cách từ nguồn đến mặt phẳng isocentric dọc theo hướng chiếu
+        iso_distance = np.dot(v_source_to_iso, iso_direction)
 
-            # Chuyển từ tọa độ bệnh nhân sang chỉ số voxel
-            voxel_index = [
-                int((current_point[i] - origin[i]) / spacing[i]) for i in range(3)
-            ]
+        # Tính vector từ nguồn đến mỗi điểm
+        v_source_to_points = points_np - self.source_position
 
-            # Kiểm tra xem voxel có trong volume không
-            if (
-                0 <= voxel_index[0] < volume.shape[0]
-                and 0 <= voxel_index[1] < volume.shape[1]
-                and 0 <= voxel_index[2] < volume.shape[2]
-            ):
-                # Kiểm tra xem voxel có giá trị > 0 không (đại diện cho cấu trúc)
-                if volume[voxel_index[0], voxel_index[1], voxel_index[2]] > 0:
-                    # Tính độ sâu từ isocenter
-                    # Vector từ isocenter đến điểm gặp
-                    v_iso_to_point = current_point - self.isocenter
+        # Tính tỷ lệ chiếu cho mỗi điểm
+        # dot_products[i] = dot(v_source_to_points[i], iso_direction)
+        dot_products = np.dot(v_source_to_points, iso_direction)
 
-                    # Chiếu lên trục chùm tia (z-axis trong hệ tọa độ BEV)
-                    # Lấy trục z từ ma trận quay
-                    beam_axis = self.rotation_matrix[2, :]
+        # Xử lý các điểm có dot_product gần 0 (không thể chiếu)
+        valid_mask = np.abs(dot_products) > 1e-10
 
-                    # Độ sâu là độ dài chiếu của vector lên trục chùm tia
-                    depth = np.dot(v_iso_to_point, beam_axis)
+        # Tạo mảng kết quả với giá trị mặc định
+        projected_points_bev = np.zeros((len(points_np), 2))
 
-                    return depth
+        if np.any(valid_mask):
+            # Tính tỷ lệ chiếu cho các điểm hợp lệ
+            ratios = np.zeros_like(dot_products)
+            ratios[valid_mask] = iso_distance / dot_products[valid_mask]
 
-        # Không tìm thấy giao điểm
-        return np.inf
+            # Áp dụng tỷ lệ để tìm điểm chiếu trong hệ tọa độ bệnh nhân
+            # projected_points[i] = source_position + ratios[i] * v_source_to_points[i]
+
+            # Mở rộng ratios để nhân với mỗi thành phần của vector
+            ratios_expanded = ratios[:, np.newaxis]
+            projected_points = (
+                self.source_position + ratios_expanded * v_source_to_points
+            )
+
+            # Chỉ chuyển đổi các điểm hợp lệ sang BEV
+            valid_projected_points = projected_points[valid_mask]
+            projected_points_bev[valid_mask] = self.transform_points(
+                valid_projected_points
+            )
+
+        # Với các điểm không hợp lệ, đã gán giá trị 0 làm mặc định
+
+        return projected_points_bev
+
+    def ray_trace(
+        self,
+        point: Union[Tuple[float, float, float], np.ndarray],
+        structures: List[Any] = None,
+    ) -> Dict[str, float]:
+        """
+        Thực hiện ray-tracing từ nguồn phát xạ qua điểm đến và xác định các
+        cấu trúc được đi qua và khoảng cách đi qua mỗi cấu trúc.
+
+        Parameters
+        ----------
+        point : Union[Tuple[float, float, float], np.ndarray]
+            Điểm đích trong hệ tọa độ bệnh nhân (cm)
+        structures : List[Any], optional
+            Danh sách các cấu trúc cần kiểm tra
+
+        Returns
+        -------
+        Dict[str, float]
+            Dictionary chứa tên cấu trúc và khoảng cách đi qua (cm)
+        """
+        if structures is None or len(structures) == 0:
+            return {}
+
+        point_np = np.array(point, dtype=float)
+
+        # Vector từ nguồn đến điểm đích
+        ray_vector = point_np - self.source_position
+        ray_length = np.linalg.norm(ray_vector)
+        ray_direction = ray_vector / ray_length
+
+        # Lưu trữ kết quả
+        intersections = {}
+
+        # Kiểm tra mỗi cấu trúc
+        for structure in structures:
+            try:
+                # Gọi phương thức từ cấu trúc để tính khoảng cách giao
+                if hasattr(structure, "compute_ray_intersection"):
+                    distance = structure.compute_ray_intersection(
+                        self.source_position, ray_direction, max_distance=ray_length
+                    )
+                    if distance > 0:
+                        intersections[structure.name] = distance
+            except Exception as e:
+                logger.error(
+                    f"Lỗi khi thực hiện ray-tracing với cấu trúc {structure.name}: {e}"
+                )
+
+        return intersections
 
 
 def get_bev_transform(beam) -> BEVTransform:

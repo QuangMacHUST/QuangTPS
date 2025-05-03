@@ -14,6 +14,8 @@ import logging
 from typing import List, Dict, Tuple, Optional, Union, Any
 import copy
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 from quangtps.planning.mlc import MLC, MLCLeaf
 from quangtps.imaging.structures import Structure
@@ -21,6 +23,9 @@ from quangtps.treatment.beams.beam_geometry import get_bev_transform
 from quangtps.treatment.beams.beam import Beam
 
 logger = logging.getLogger(__name__)
+
+# Số lượng CPU core sẽ sử dụng cho tính toán song song
+NUM_PARALLEL_PROCESSES = max(1, multiprocessing.cpu_count() - 1)
 
 
 def optimize_mlc_shape(
@@ -116,7 +121,7 @@ def _gradient_descent_optimization(
     convergence_threshold: float,
 ) -> MLC:
     """
-    Tối ưu hóa MLC bằng thuật toán gradient descent.
+    Tối ưu hóa MLC bằng thuật toán gradient descent với tỷ lệ học thích ứng.
 
     Parameters
     ----------
@@ -143,37 +148,59 @@ def _gradient_descent_optimization(
     # Tạo biến tạm thời để lưu trữ MLC tốt nhất và điểm số tốt nhất
     best_mlc = copy.deepcopy(mlc)
     best_score = _evaluate_mlc_fitness(best_mlc, target, oars, field_size, beam)
+    current_mlc = copy.deepcopy(mlc)
+    current_score = best_score
 
     logger.info(
         f"Bắt đầu tối ưu hóa gradient descent với điểm ban đầu: {best_score:.4f}"
     )
 
-    # Tham số học
-    learning_rate = 0.5
-    decay_rate = 0.95
+    # Tham số học thích ứng
+    initial_learning_rate = 0.5
+    min_learning_rate = 0.01
+    momentum = 0.8  # Hệ số momentum để cải thiện hội tụ
+
+    # Lưu trữ vận tốc của các lá trong quá trình tối ưu
+    velocities = {}
+    for leaf in current_mlc.leaves:
+        velocities[(leaf.index, leaf.bank)] = 0.0
+
+    # Lưu trữ gradient và scores trước đó để thích ứng tỷ lệ học
+    previous_gradients = {}
+    previous_score = current_score
 
     # Vòng lặp tối ưu hóa
     for iteration in range(iterations):
-        # Giảm tỷ lệ học theo thời gian
-        current_lr = learning_rate * (decay_rate ** (iteration / 10))
-
         # Tính toán gradient cho tất cả các lá
         gradients = {}
+        current_learning_rate = max(
+            min_learning_rate,
+            initial_learning_rate
+            / (1 + 0.05 * iteration),  # Giảm learning rate theo thời gian
+        )
 
-        for leaf in mlc.leaves:
+        for leaf in current_mlc.leaves:
             # Tính gradient bằng cách di chuyển lá một lượng nhỏ và đánh giá thay đổi
             delta = 0.1  # Độ dời nhỏ để ước tính gradient
+
+            # Tăng delta cho các vòng lặp sau để khám phá tốt hơn
+            if iteration > iterations / 2:
+                delta = 0.05  # Giảm delta để có gradient chính xác hơn ở giai đoạn cuối
 
             # Lưu vị trí hiện tại
             original_position = leaf.position
 
             # Di chuyển lá theo chiều dương
             leaf.position = min(original_position + delta, field_size / 2)
-            positive_score = _evaluate_mlc_fitness(mlc, target, oars, field_size, beam)
+            positive_score = _evaluate_mlc_fitness(
+                current_mlc, target, oars, field_size, beam
+            )
 
             # Di chuyển lá theo chiều âm
             leaf.position = max(original_position - delta, -field_size / 2)
-            negative_score = _evaluate_mlc_fitness(mlc, target, oars, field_size, beam)
+            negative_score = _evaluate_mlc_fitness(
+                current_mlc, target, oars, field_size, beam
+            )
 
             # Khôi phục vị trí ban đầu
             leaf.position = original_position
@@ -182,13 +209,35 @@ def _gradient_descent_optimization(
             gradient = (positive_score - negative_score) / (2 * delta)
             gradients[(leaf.index, leaf.bank)] = gradient
 
-        # Cập nhật vị trí lá dựa trên gradient
-        max_change = 0
-        for leaf in mlc.leaves:
-            gradient = gradients.get((leaf.index, leaf.bank), 0)
+            # Áp dụng Nesterov momentum
+            leaf_key = (leaf.index, leaf.bank)
 
-            # Cập nhật vị trí sử dụng gradient
-            new_position = leaf.position + current_lr * gradient
+            # Cập nhật vận tốc với momentum
+            if leaf_key in previous_gradients:
+                # Thích ứng learning rate dựa trên dấu hiệu của gradient
+                # Nếu gradient đổi dấu, giảm learning rate để tránh dao động
+                if previous_gradients[leaf_key] * gradient < 0:
+                    current_learning_rate *= 0.5
+                elif previous_gradients[leaf_key] * gradient > 0:
+                    # Tăng learning rate nếu tiếp tục cùng hướng (nhưng giới hạn)
+                    current_learning_rate = min(1.0, current_learning_rate * 1.05)
+
+            # Cập nhật vận tốc với momentum và gradient mới
+            velocities[leaf_key] = (
+                momentum * velocities[leaf_key] + current_learning_rate * gradient
+            )
+
+            # Lưu gradient này cho lần lặp tiếp theo
+            previous_gradients[leaf_key] = gradient
+
+        # Cập nhật vị trí lá dựa trên gradient và momentum
+        max_change = 0
+        for leaf in current_mlc.leaves:
+            leaf_key = (leaf.index, leaf.bank)
+            velocity = velocities[leaf_key]
+
+            # Cập nhật vị trí
+            new_position = leaf.position + velocity
 
             # Đảm bảo lá trong giới hạn trường
             new_position = max(min(new_position, field_size / 2), -field_size / 2)
@@ -200,15 +249,36 @@ def _gradient_descent_optimization(
             leaf.position = new_position
 
         # Đánh giá MLC mới
-        current_score = _evaluate_mlc_fitness(mlc, target, oars, field_size, beam)
+        current_score = _evaluate_mlc_fitness(
+            current_mlc, target, oars, field_size, beam
+        )
 
-        # Giữ lại MLC tốt nhất
+        # Nếu điểm số giảm, quay lại và giảm learning rate
+        if current_score < previous_score:
+            # Khôi phục MLC tốt nhất trước đó
+            current_mlc = copy.deepcopy(best_mlc)
+            current_score = best_score
+
+            # Giảm mạnh learning rate để thoát khỏi vùng dao động
+            initial_learning_rate *= 0.5
+
+            # Reset velocities
+            for key in velocities:
+                velocities[key] = 0.0
+
+            logger.debug(
+                f"Lặp {iteration + 1}: Điểm số giảm, giảm learning rate xuống {initial_learning_rate:.4f}"
+            )
+
+        # Nếu MLC mới tốt hơn MLC tốt nhất hiện tại, cập nhật MLC tốt nhất
         if current_score > best_score:
             best_score = current_score
-            best_mlc = copy.deepcopy(mlc)
+            best_mlc = copy.deepcopy(current_mlc)
             logger.debug(
                 f"Lặp {iteration + 1}: Cải thiện điểm số MLC lên {best_score:.4f}"
             )
+
+        previous_score = current_score
 
         # Kiểm tra hội tụ
         if max_change < convergence_threshold:
@@ -216,6 +286,12 @@ def _gradient_descent_optimization(
                 f"Tối ưu hóa hội tụ sau {iteration + 1} lần lặp (điểm số: {best_score:.4f})"
             )
             break
+
+        # Logging mỗi 10 lần lặp
+        if (iteration + 1) % 10 == 0:
+            logger.info(
+                f"Lặp {iteration + 1}, điểm số tốt nhất: {best_score:.4f}, learning rate: {current_learning_rate:.4f}"
+            )
 
     return best_mlc
 
@@ -230,9 +306,29 @@ def _simulated_annealing_optimization(
     convergence_threshold: float,
 ) -> MLC:
     """
-    Tối ưu hóa MLC bằng thuật toán ủ mô phỏng (simulated annealing).
+    Tối ưu hóa MLC bằng thuật toán ủ mô phỏng (simulated annealing) với khả năng thoát cực tiểu cục bộ tốt hơn.
 
-    Parameters tương tự với _gradient_descent_optimization.
+    Parameters
+    ----------
+    mlc : MLC
+        MLC cần tối ưu hóa
+    target : Structure
+        Cấu trúc mục tiêu
+    oars : List[Structure]
+        Cơ quan nguy cấp
+    field_size : float
+        Kích thước trường
+    beam : Beam, optional
+        Chùm tia
+    iterations : int
+        Số lần lặp tối đa
+    convergence_threshold : float
+        Ngưỡng hội tụ
+
+    Returns
+    -------
+    MLC
+        MLC đã tối ưu hóa
     """
     # Tạo biến tạm thời để lưu trữ MLC tốt nhất và điểm số tốt nhất
     best_mlc = copy.deepcopy(mlc)
@@ -246,60 +342,293 @@ def _simulated_annealing_optimization(
 
     # Tham số ủ mô phỏng
     initial_temp = 10.0
-    final_temp = 0.1
+    final_temp = 0.01
+
+    # Tham số điều khiển quy trình tái ủ (reheating)
+    reheat_counter = 0
+    reheat_threshold = 10  # Số lần lặp không cải thiện trước khi tái ủ
+    reheat_factor = 0.5  # Tăng nhiệt độ lên bao nhiêu phần so với ban đầu
+
+    # Các tham số vùng cấm
+    tabu_list = []  # Lưu các trạng thái đã thăm
+    tabu_size = 10  # Kích thước danh sách vùng cấm
+    tabu_threshold = 0.1  # Ngưỡng để coi hai trạng thái là giống nhau
 
     # Vòng lặp tối ưu hóa
     for iteration in range(iterations):
-        # Tính nhiệt độ hiện tại (giảm theo thời gian)
-        temp = initial_temp * (final_temp / initial_temp) ** (iteration / iterations)
+        # Tính nhiệt độ hiện tại theo lịch trình làm lạnh
+        # Sử dụng lịch trình làm lạnh hàm mũ để giảm nhiệt độ từ từ
+        alpha = (initial_temp - final_temp) / iterations
+        current_temp = initial_temp - alpha * iteration
 
-        # Chọn ngẫu nhiên một lá để di chuyển
-        leaf_index = np.random.randint(0, len(current_mlc.leaves))
-        leaf = current_mlc.leaves[leaf_index]
+        # Kiểm tra xem có cần tái ủ không
+        if reheat_counter >= reheat_threshold:
+            current_temp = initial_temp * reheat_factor
+            logger.debug(
+                f"Lặp {iteration + 1}: Tái ủ, nhiệt độ tăng lên {current_temp:.4f}"
+            )
+            reheat_counter = 0
 
-        # Lưu vị trí hiện tại
-        original_position = leaf.position
+            # Khi tái ủ, xóa danh sách vùng cấm để khám phá lại không gian tìm kiếm
+            tabu_list = []
 
-        # Tạo vị trí mới ngẫu nhiên trong giới hạn
-        max_move = max(0.5, temp)  # Di chuyển tối đa giảm theo nhiệt độ
-        delta = np.random.uniform(-max_move, max_move)
-        new_position = original_position + delta
+        # Tạo MLC hàng xóm bằng cách biến đổi ngẫu nhiên
+        neighbor_mlc = copy.deepcopy(current_mlc)
 
-        # Đảm bảo lá trong giới hạn trường
-        new_position = max(min(new_position, field_size / 2), -field_size / 2)
+        # Quyết định cách biến đổi hàng xóm dựa trên nhiệt độ
+        # Ở nhiệt độ cao, biến đổi nhiều lá với biên độ lớn
+        # Ở nhiệt độ thấp, biến đổi ít lá với biên độ nhỏ
+        temp_ratio = current_temp / initial_temp
+        num_leaves_to_perturb = max(1, int(len(neighbor_mlc.leaves) * temp_ratio * 0.5))
+        perturbation_scale = 2.0 * temp_ratio + 0.1  # Từ 0.1 đến 2.1
 
-        # Cập nhật vị trí lá
-        leaf.position = new_position
+        # Chọn ngẫu nhiên các lá để biến đổi
+        leaves_to_perturb = np.random.choice(
+            neighbor_mlc.leaves, size=num_leaves_to_perturb, replace=False
+        )
 
-        # Đánh giá MLC mới
-        new_score = _evaluate_mlc_fitness(current_mlc, target, oars, field_size, beam)
+        for leaf in leaves_to_perturb:
+            # Tạo nhiễu ngẫu nhiên tỷ lệ với nhiệt độ
+            noise = np.random.normal(0, perturbation_scale)
 
-        # Quyết định chấp nhận vị trí mới hay không
-        if new_score > current_score or np.random.random() < np.exp(
-            (new_score - current_score) / temp
-        ):
-            # Chấp nhận trạng thái mới
-            current_score = new_score
+            # Cập nhật vị trí với giới hạn
+            new_position = leaf.position + noise
+            new_position = max(min(new_position, field_size / 2), -field_size / 2)
+            leaf.position = new_position
 
-            # Cập nhật MLC tốt nhất nếu cần
-            if new_score > best_score:
-                best_score = new_score
-                best_mlc = copy.deepcopy(current_mlc)
-                logger.debug(
-                    f"Lặp {iteration + 1}: Cải thiện điểm số MLC lên {best_score:.4f}"
-                )
+        # Đảm bảo MLC hàng xóm hợp lệ
+        _ensure_mlc_validity(neighbor_mlc)
+
+        # Kiểm tra xem hàng xóm có trong vùng cấm không
+        in_tabu_list = False
+        for tabu_state in tabu_list:
+            similarity = _calculate_mlc_similarity(neighbor_mlc, tabu_state)
+            if similarity > (1 - tabu_threshold):
+                in_tabu_list = True
+                break
+
+        if in_tabu_list:
+            # Nếu trong vùng cấm, tạo hàng xóm mới với biến đổi lớn hơn
+            continue
+
+        # Đánh giá MLC hàng xóm
+        neighbor_score = _evaluate_mlc_fitness(
+            neighbor_mlc, target, oars, field_size, beam
+        )
+
+        # Quyết định chấp nhận hay từ chối hàng xóm
+        delta_score = neighbor_score - current_score
+
+        # Luôn chấp nhận giải pháp tốt hơn
+        # Chấp nhận giải pháp xấu hơn với xác suất dựa trên nhiệt độ
+        if delta_score > 0 or np.random.random() < np.exp(delta_score / current_temp):
+            current_mlc = neighbor_mlc
+            current_score = neighbor_score
+
+            # Thêm trạng thái mới vào danh sách vùng cấm
+            tabu_list.append(copy.deepcopy(current_mlc))
+            if len(tabu_list) > tabu_size:
+                tabu_list.pop(0)  # Loại bỏ trạng thái cũ nhất
+
+            # Reset bộ đếm tái ủ nếu điểm số cải thiện
+            if delta_score > 0:
+                reheat_counter = 0
+            else:
+                # Tăng bộ đếm tái ủ nếu chấp nhận giải pháp xấu hơn
+                reheat_counter += 1
         else:
-            # Khôi phục vị trí cũ
-            leaf.position = original_position
+            # Không chấp nhận hàng xóm, tăng bộ đếm tái ủ
+            reheat_counter += 1
 
-        # Kiểm tra hội tụ
-        if temp < convergence_threshold:
+        # Cập nhật MLC tốt nhất nếu cần
+        if current_score > best_score:
+            best_score = current_score
+            best_mlc = copy.deepcopy(current_mlc)
+            logger.debug(
+                f"Lặp {iteration + 1}: Cải thiện điểm số MLC lên {best_score:.4f}"
+            )
+
+        # Kiểm tra hội tụ - nếu nhiệt độ đủ thấp và không có cải thiện
+        if current_temp < final_temp and reheat_counter >= reheat_threshold:
             logger.info(
                 f"Tối ưu hóa hội tụ sau {iteration + 1} lần lặp (điểm số: {best_score:.4f})"
             )
             break
 
+        # Logging mỗi 10 lần lặp
+        if (iteration + 1) % 10 == 0:
+            logger.info(
+                f"Lặp {iteration + 1}, điểm số tốt nhất: {best_score:.4f}, nhiệt độ: {current_temp:.4f}"
+            )
+
     return best_mlc
+
+
+def _calculate_mlc_similarity(mlc1: MLC, mlc2: MLC) -> float:
+    """
+    Tính độ tương đồng giữa hai MLC dựa trên vị trí lá.
+
+    Parameters
+    ----------
+    mlc1 : MLC
+        MLC thứ nhất
+    mlc2 : MLC
+        MLC thứ hai
+
+    Returns
+    -------
+    float
+        Độ tương đồng từ 0 (hoàn toàn khác) đến 1 (hoàn toàn giống)
+    """
+    if len(mlc1.leaves) != len(mlc2.leaves):
+        return 0.0
+
+    total_deviation = 0.0
+    max_possible_deviation = 0.0
+
+    # Tính tổng độ lệch giữa các lá tương ứng
+    for i, leaf1 in enumerate(mlc1.leaves):
+        leaf2 = mlc2.leaves[i]
+        if leaf1.index != leaf2.index or leaf1.bank != leaf2.bank:
+            continue
+
+        # Tính độ lệch giữa hai vị trí
+        leaf_deviation = abs(leaf1.position - leaf2.position)
+        total_deviation += leaf_deviation
+
+        # Giả sử lệch tối đa là field_size
+        max_possible_deviation += 40.0  # Field size mặc định
+
+    if max_possible_deviation == 0:
+        return 1.0
+
+    # Chuyển độ lệch thành độ tương đồng
+    similarity = 1.0 - (total_deviation / max_possible_deviation)
+
+    return similarity
+
+
+def _evaluate_fitness_worker(mlc_data, target_data, oars_data, field_size, beam_data):
+    """
+    Hàm worker để tính fitness trong process riêng biệt.
+
+    Parameters
+    ----------
+    mlc_data : dict
+        Dữ liệu đã serialize của MLC
+    target_data : dict
+        Dữ liệu đã serialize của cấu trúc mục tiêu
+    oars_data : list
+        Danh sách dữ liệu đã serialize của các cơ quan nguy cấp
+    field_size : float
+        Kích thước trường
+    beam_data : dict
+        Dữ liệu đã serialize của chùm tia
+
+    Returns
+    -------
+    float
+        Giá trị fitness
+    """
+    try:
+        # Phục hồi các đối tượng từ dữ liệu được truyền
+        mlc = MLC.from_dict(mlc_data)
+        target = Structure.from_dict(target_data)
+
+        oars = []
+        for oar_data in oars_data:
+            oars.append(Structure.from_dict(oar_data))
+
+        beam = None
+        if beam_data:
+            beam = Beam.from_dict(beam_data)
+
+        # Thực hiện đánh giá fitness
+        return _evaluate_mlc_fitness(mlc, target, oars, field_size, beam)
+    except Exception as e:
+        logger.error(f"Lỗi trong worker đánh giá fitness: {str(e)}")
+        return 0.0  # Giá trị mặc định nếu có lỗi
+
+
+def _evaluate_population_parallel(population, target, oars, field_size, beam):
+    """
+    Đánh giá fitness của cả quần thể một cách song song.
+
+    Parameters
+    ----------
+    population : List[MLC]
+        Quần thể MLC cần đánh giá
+    target : Structure
+        Cấu trúc mục tiêu
+    oars : List[Structure]
+        Danh sách các cơ quan nguy cấp
+    field_size : float
+        Kích thước trường
+    beam : Beam, optional
+        Chùm tia
+
+    Returns
+    -------
+    List[float]
+        Danh sách các giá trị fitness tương ứng
+    """
+    # Serialize dữ liệu đầu vào
+    target_data = target.to_dict() if target else None
+    oars_data = [oar.to_dict() for oar in oars] if oars else []
+    beam_data = beam.to_dict() if beam else None
+
+    fitness_values = []
+
+    # Kiểm tra số lượng cá thể
+    if len(population) <= 1:
+        # Nếu chỉ có một cá thể, không cần song song
+        for mlc in population:
+            fitness = _evaluate_mlc_fitness(mlc, target, oars, field_size, beam)
+            fitness_values.append(fitness)
+    else:
+        # Sử dụng số lượng process hợp lý
+        n_processes = min(NUM_PARALLEL_PROCESSES, len(population))
+
+        try:
+            with ProcessPoolExecutor(max_workers=n_processes) as executor:
+                # Chuẩn bị các công việc
+                future_to_index = {}
+                for i, mlc in enumerate(population):
+                    mlc_data = mlc.to_dict()
+                    future = executor.submit(
+                        _evaluate_fitness_worker,
+                        mlc_data,
+                        target_data,
+                        oars_data,
+                        field_size,
+                        beam_data,
+                    )
+                    future_to_index[future] = i
+
+                # Khởi tạo danh sách fitness với giá trị mặc định
+                fitness_values = [0.0] * len(population)
+
+                # Thu thập kết quả khi hoàn thành
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    try:
+                        fitness = future.result()
+                        fitness_values[index] = fitness
+                    except Exception as e:
+                        logger.error(f"Lỗi khi lấy kết quả fitness: {str(e)}")
+                        fitness_values[index] = 0.0
+
+        except (TypeError, ValueError, AttributeError) as e:
+            # Fallback sang phương pháp tuần tự nếu có lỗi
+            logger.warning(
+                f"Không thể thực hiện đánh giá song song: {str(e)}. Sử dụng phương pháp tuần tự."
+            )
+            fitness_values = []
+            for mlc in population:
+                fitness = _evaluate_mlc_fitness(mlc, target, oars, field_size, beam)
+                fitness_values.append(fitness)
+
+    return fitness_values
 
 
 def _genetic_algorithm_optimization(
@@ -312,114 +641,323 @@ def _genetic_algorithm_optimization(
     convergence_threshold: float,
 ) -> MLC:
     """
-    Tối ưu hóa MLC bằng thuật toán di truyền.
+    Tối ưu hóa MLC bằng thuật toán di truyền (genetic algorithm) với tính toán song song.
 
-    Parameters tương tự với _gradient_descent_optimization.
+    Parameters
+    ----------
+    mlc : MLC
+        MLC cần tối ưu hóa
+    target : Structure
+        Cấu trúc mục tiêu
+    oars : List[Structure]
+        Cơ quan nguy cấp
+    field_size : float
+        Kích thước trường
+    beam : Beam, optional
+        Chùm tia
+    iterations : int
+        Số lần lặp tối đa
+    convergence_threshold : float
+        Ngưỡng hội tụ
+
+    Returns
+    -------
+    MLC
+        MLC đã tối ưu hóa
     """
-    # Tham số thuật toán di truyền
-    population_size = 20
+    # Thiết lập thông số di truyền
+    population_size = 20  # Tăng kích thước quần thể để tìm kiếm song song tốt hơn
     mutation_rate = 0.1
+    tournament_size = 3
+    crossover_rate = 0.7
+    elitism_count = 2  # Số cá thể ưu tú được giữ lại mỗi thế hệ
 
-    # Tạo quần thể ban đầu
-    population = [copy.deepcopy(mlc) for _ in range(population_size)]
+    # Sinh quần thể ban đầu
+    population = _initialize_population(mlc, population_size, field_size)
 
-    # Biến đổi quần thể ban đầu (trừ cá thể đầu tiên là MLC gốc)
-    for i in range(1, population_size):
-        for leaf in population[i].leaves:
-            # Tạo vị trí ngẫu nhiên cho mỗi lá
-            if np.random.random() < 0.8:  # 80% cơ hội biến đổi
-                max_move = field_size / 4
-                delta = np.random.uniform(-max_move, max_move)
-                new_position = leaf.position + delta
-                leaf.position = max(min(new_position, field_size / 2), -field_size / 2)
-
-    # Đánh giá quần thể ban đầu
-    fitness_scores = [
-        _evaluate_mlc_fitness(indiv, target, oars, field_size, beam)
-        for indiv in population
-    ]
-
-    # Lưu trữ cá thể tốt nhất
-    best_index = np.argmax(fitness_scores)
-    best_mlc = copy.deepcopy(population[best_index])
-    best_score = fitness_scores[best_index]
-
-    logger.info(
-        f"Bắt đầu tối ưu hóa di truyền với điểm tốt nhất ban đầu: {best_score:.4f}"
+    # Đánh giá fitness của quần thể ban đầu bằng phương pháp song song
+    fitness_values = _evaluate_population_parallel(
+        population, target, oars, field_size, beam
     )
 
-    # Vòng lặp chính của thuật toán di truyền
-    for iteration in range(iterations):
-        # Lựa chọn cha mẹ sử dụng lựa chọn bánh xe roulette
-        fitness_sum = sum(fitness_scores)
-        probabilities = [score / fitness_sum for score in fitness_scores]
+    # Tìm cá thể tốt nhất
+    best_index = np.argmax(fitness_values)
+    best_mlc = copy.deepcopy(population[best_index])
+    best_fitness = fitness_values[best_index]
 
-        # Tạo thế hệ mới
+    logger.info(
+        f"Bắt đầu tối ưu hóa genetic algorithm với fitness ban đầu: {best_fitness:.4f}"
+    )
+
+    # Biến theo dõi hội tụ
+    stagnation_counter = 0
+    last_best_fitness = best_fitness
+
+    # Thực hiện tiến hóa qua các thế hệ
+    for generation in range(iterations):
+        # Tính toán đa dạng di truyền trong quần thể
+        diversity = _calculate_population_diversity(population)
+
+        # Điều chỉnh tỷ lệ đột biến dựa trên đa dạng di truyền
+        # Khi đa dạng thấp, tăng đột biến để tránh hội tụ sớm
+        adaptive_mutation_rate = mutation_rate
+        if diversity < 0.1:
+            adaptive_mutation_rate = min(0.3, mutation_rate * 2)
+
+        # Áp dụng elitism - giữ lại các cá thể tốt nhất
+        elites = []
+        elite_indices = np.argsort(fitness_values)[-elitism_count:]
+        for idx in elite_indices:
+            elites.append(copy.deepcopy(population[idx]))
+
+        # Tạo quần thể mới
         new_population = []
 
-        # Giữ lại cá thể tốt nhất (elitism)
-        new_population.append(copy.deepcopy(best_mlc))
+        # Thêm các cá thể ưu tú vào quần thể mới
+        new_population.extend(elites)
 
-        # Tạo phần còn lại của quần thể
-        for _ in range(population_size - 1):
-            # Chọn hai cha mẹ
-            parent1_idx = np.random.choice(population_size, p=probabilities)
-            parent2_idx = np.random.choice(population_size, p=probabilities)
+        # Tạo phần còn lại của quần thể mới thông qua lai ghép và đột biến
+        while len(new_population) < population_size:
+            # Sử dụng tournament selection để chọn các cá thể
+            parent1 = _tournament_selection(population, fitness_values, tournament_size)
+            parent2 = _tournament_selection(population, fitness_values, tournament_size)
 
-            parent1 = population[parent1_idx]
-            parent2 = population[parent2_idx]
-
-            # Tạo con cái bằng lai ghép (crossover)
-            child = copy.deepcopy(parent1)  # Bắt đầu với bản sao của cha 1
-
-            # Lai ghép dựa trên vị trí lá
-            crossover_point = np.random.randint(0, len(child.leaves))
-            for i in range(crossover_point, len(child.leaves)):
-                child.leaves[i].position = parent2.leaves[i].position
+            # Lai ghép (crossover)
+            if np.random.random() < crossover_rate:
+                child1, child2 = _crossover(parent1, parent2)
+            else:
+                child1, child2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
 
             # Đột biến
-            for leaf in child.leaves:
-                if np.random.random() < mutation_rate:
-                    max_move = field_size / 8
-                    delta = np.random.uniform(-max_move, max_move)
-                    new_position = leaf.position + delta
-                    leaf.position = max(
-                        min(new_position, field_size / 2), -field_size / 2
-                    )
+            _mutate(child1, adaptive_mutation_rate, field_size)
+            _mutate(child2, adaptive_mutation_rate, field_size)
 
-            new_population.append(child)
+            # Thêm vào quần thể mới
+            new_population.append(child1)
+            if len(new_population) < population_size:
+                new_population.append(child2)
 
-        # Cập nhật quần thể
+        # Thay thế quần thể cũ
         population = new_population
 
-        # Đánh giá quần thể mới
-        fitness_scores = [
-            _evaluate_mlc_fitness(indiv, target, oars, field_size, beam)
-            for indiv in population
-        ]
+        # Đánh giá quần thể mới bằng phương pháp song song
+        fitness_values = _evaluate_population_parallel(
+            population, target, oars, field_size, beam
+        )
 
-        # Cập nhật cá thể tốt nhất
-        current_best_index = np.argmax(fitness_scores)
-        current_best_score = fitness_scores[current_best_index]
+        # Tìm cá thể tốt nhất trong thế hệ này
+        current_best_index = np.argmax(fitness_values)
+        current_best_fitness = fitness_values[current_best_index]
 
-        if current_best_score > best_score:
-            best_score = current_best_score
+        # Cập nhật cá thể tốt nhất tổng thể nếu cần
+        if current_best_fitness > best_fitness:
+            best_fitness = current_best_fitness
             best_mlc = copy.deepcopy(population[current_best_index])
             logger.debug(
-                f"Thế hệ {iteration + 1}: Cải thiện điểm số MLC lên {best_score:.4f}"
+                f"Thế hệ {generation + 1}: Cải thiện fitness lên {best_fitness:.4f}"
             )
 
-        # Kiểm tra hội tụ
-        if iteration > 10:
-            # Tính sự khác biệt giữa các cá thể trong quần thể
-            diversity = _calculate_population_diversity(population)
-            if diversity < convergence_threshold:
-                logger.info(
-                    f"Thuật toán di truyền hội tụ sau {iteration + 1} thế hệ (điểm số: {best_score:.4f})"
-                )
-                break
+        # Kiểm tra hội tụ qua theo dõi sự cải thiện
+        if abs(best_fitness - last_best_fitness) < convergence_threshold:
+            stagnation_counter += 1
+        else:
+            stagnation_counter = 0
+            last_best_fitness = best_fitness
+
+        # Dừng nếu không cải thiện sau một số thế hệ nhất định
+        if stagnation_counter >= 5:
+            logger.info(
+                f"Tối ưu hóa hội tụ sau {generation + 1} thế hệ (fitness: {best_fitness:.4f})"
+            )
+            break
+
+        # Logging mỗi 10 thế hệ
+        if (generation + 1) % 10 == 0:
+            logger.info(
+                f"Thế hệ {generation + 1}, fitness tốt nhất: {best_fitness:.4f}, đa dạng: {diversity:.4f}"
+            )
 
     return best_mlc
+
+
+def _initialize_population(
+    mlc: MLC, population_size: int, field_size: float
+) -> List[MLC]:
+    """
+    Khởi tạo quần thể MLCs với nhiều biến thể khác nhau.
+
+    Parameters
+    ----------
+    mlc : MLC
+        MLC gốc để tạo biến thể
+    population_size : int
+        Kích thước quần thể
+    field_size : float
+        Kích thước trường tối đa
+
+    Returns
+    -------
+    List[MLC]
+        Quần thể MLCs
+    """
+    population = [copy.deepcopy(mlc)]
+
+    # Tạo các biến thể ngẫu nhiên
+    for _ in range(population_size - 1):
+        # Tạo bản sao từ MLC gốc
+        new_mlc = copy.deepcopy(mlc)
+
+        # Điều chỉnh ngẫu nhiên vị trí các lá
+        for leaf in new_mlc.leaves:
+            # Điều chỉnh vị trí trong phạm vi field_size/2
+            random_offset = np.random.uniform(-2.0, 2.0)
+            new_position = leaf.position + random_offset
+            new_position = max(min(new_position, field_size / 2), -field_size / 2)
+            leaf.position = new_position
+
+        # Đảm bảo tính hợp lệ của MLC mới
+        _ensure_mlc_validity(new_mlc)
+
+        population.append(new_mlc)
+
+    return population
+
+
+def _tournament_selection(
+    population: List[MLC], fitness_values: List[float], tournament_size: int
+) -> MLC:
+    """
+    Chọn lọc tournament - chọn ngẫu nhiên một tập hợp và trả về cá thể tốt nhất.
+
+    Parameters
+    ----------
+    population : List[MLC]
+        Quần thể MLCs
+    fitness_values : List[float]
+        Giá trị fitness tương ứng
+    tournament_size : int
+        Kích thước tournament
+
+    Returns
+    -------
+    MLC
+        Cá thể được chọn
+    """
+    # Chọn ngẫu nhiên các chỉ số
+    indices = np.random.choice(len(population), size=tournament_size, replace=False)
+
+    # Tìm cá thể có fitness cao nhất
+    best_idx = indices[0]
+    best_fitness = fitness_values[best_idx]
+
+    for idx in indices[1:]:
+        if fitness_values[idx] > best_fitness:
+            best_idx = idx
+            best_fitness = fitness_values[idx]
+
+    return population[best_idx]
+
+
+def _crossover(parent1: MLC, parent2: MLC) -> Tuple[MLC, MLC]:
+    """
+    Lai ghép hai MLC để tạo ra hai MLC con.
+
+    Parameters
+    ----------
+    parent1 : MLC
+        MLC cha thứ nhất
+    parent2 : MLC
+        MLC cha thứ hai
+
+    Returns
+    -------
+    Tuple[MLC, MLC]
+        Hai MLC con
+    """
+    child1 = copy.deepcopy(parent1)
+    child2 = copy.deepcopy(parent2)
+
+    # Lấy tất cả lá
+    leaves1 = [leaf for leaf in child1.leaves]
+    leaves2 = [leaf for leaf in child2.leaves]
+
+    # Chọn điểm cắt ngẫu nhiên
+    crossover_point = np.random.randint(1, len(leaves1) - 1)
+
+    # Hoán đổi vị trí lá từ điểm cắt
+    for i in range(crossover_point, len(leaves1)):
+        # Đảm bảo chúng ta đang làm việc với các lá có cùng index và bank
+        leaf1 = leaves1[i]
+        leaf2 = leaves2[i]
+
+        # Hoán đổi vị trí
+        temp_position = leaf1.position
+        leaf1.position = leaf2.position
+        leaf2.position = temp_position
+
+    # Đảm bảo tính hợp lệ của cả hai MLC
+    _ensure_mlc_validity(child1)
+    _ensure_mlc_validity(child2)
+
+    return child1, child2
+
+
+def _mutate(mlc: MLC, mutation_rate: float, field_size: float) -> None:
+    """
+    Đột biến MLC bằng cách điều chỉnh ngẫu nhiên vị trí các lá.
+
+    Parameters
+    ----------
+    mlc : MLC
+        MLC cần đột biến
+    mutation_rate : float
+        Tỷ lệ đột biến (xác suất mỗi lá bị đột biến)
+    field_size : float
+        Kích thước trường tối đa
+    """
+    for leaf in mlc.leaves:
+        # Áp dụng đột biến với xác suất mutation_rate
+        if np.random.random() < mutation_rate:
+            # Đột biến vị trí với một lượng ngẫu nhiên
+            mutation_amount = np.random.normal(0, 1.0)  # Phân phối chuẩn
+            new_position = leaf.position + mutation_amount
+
+            # Đảm bảo vị trí trong giới hạn
+            new_position = max(min(new_position, field_size / 2), -field_size / 2)
+            leaf.position = new_position
+
+    # Đảm bảo tính hợp lệ của MLC sau đột biến
+    _ensure_mlc_validity(mlc)
+
+
+def _ensure_mlc_validity(mlc: MLC) -> None:
+    """
+    Đảm bảo rằng MLC có các vị trí lá hợp lệ.
+
+    Parameters
+    ----------
+    mlc : MLC
+        MLC cần kiểm tra và điều chỉnh
+    """
+    # Nhóm các lá theo cặp (cùng index, nhưng khác bank)
+    leaf_pairs = {}
+    for leaf in mlc.leaves:
+        if leaf.index not in leaf_pairs:
+            leaf_pairs[leaf.index] = {}
+        leaf_pairs[leaf.index][leaf.bank] = leaf
+
+    # Đảm bảo rằng các lá đối diện không giao nhau
+    for leaf_idx, banks in leaf_pairs.items():
+        if "A" in banks and "B" in banks:
+            leaf_A = banks["A"]
+            leaf_B = banks["B"]
+
+            # Đảm bảo leaf_A.position <= leaf_B.position
+            if leaf_A.position > leaf_B.position:
+                # Điều chỉnh để tránh giao nhau
+                mid_point = (leaf_A.position + leaf_B.position) / 2
+                leaf_A.position = mid_point
+                leaf_B.position = mid_point
 
 
 def _evaluate_mlc_fitness(

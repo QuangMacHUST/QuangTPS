@@ -1,5 +1,52 @@
 # QuangTPS Changelog
 
+## Phiên bản 0.9.0 (2023-11-05)
+
+### Tính năng mới
+- Nâng cấp toàn diện Module MLC Editor và BEV (Beam's Eye View):
+  - Hoàn thiện triển khai đầy đủ `MLCEditorWidget` để thay thế placeholder, tích hợp đầy đủ với `MLCEditor`
+  - Thêm tính năng tương tác kéo-thả MLC trong BEV viewer, cho phép điều chỉnh lá MLC trực tiếp từ góc nhìn chùm tia
+  - Tích hợp thuật toán tối ưu hóa MLC tự động với 3 phương pháp:
+    - Thuật toán Gradient Descent với học thích ứng cho hội tụ nhanh
+    - Thuật toán Simulated Annealing với khả năng thoát cực tiểu cục bộ
+    - Thuật toán Genetic Algorithm với khả năng tìm kiếm song song
+  - Cải tiến lớp `BEVTransform` với thuật toán chiếu cấu trúc 3D vào mặt phẳng 2D chính xác hơn
+  - Thêm tính năng tính toán ray-tracing từ nguồn tới cấu trúc cho đo đạc đường đi qua cấu trúc
+  - Tạo module mới `mlc_optimization.py` tích hợp đầy đủ các thuật toán tối ưu hóa
+  - Hỗ trợ tạo hình MLC tự động từ cấu trúc mục tiêu và cơ quan nguy cấp với các tham số có thể điều chỉnh
+
+### Cải tiến
+- Hoàn thiện tích hợp giữa các module:
+  - Kết nối `BeamEyeView` với `MLCEditor` để đồng bộ hóa thay đổi MLC từ nhiều góc nhìn
+  - Cải thiện hiệu năng của thuật toán tối ưu hóa MLC với tối ưu hóa song song
+  - Sửa đổi cơ chế hiển thị cấu trúc trong BEV để tăng tốc độ render cho cấu trúc phức tạp
+  - Tối ưu hóa thuật toán tạo hình MLC để đạt độ chính xác cao hơn với thời gian tính toán ngắn hơn
+  - Cải thiện cơ chế chuyển đổi tọa độ 3D-2D với ma trận biến đổi được tối ưu
+- Cải thiện giao diện người dùng:
+  - Thêm hiển thị thông số kỹ thuật và thông số hình học của chùm tia trong BEV
+  - Hỗ trợ hiển thị OAR và target với các mức màu sắc và độ trong suốt khác nhau trong BEV
+  - Cải thiện hiệu ứng kéo-thả cho lá MLC với các hướng dẫn trực quan
+  - Thêm thanh công cụ cho chức năng tối ưu hóa tự động MLC trực tiếp từ BEV
+- Cải tiến thuật toán tối ưu hóa MLC:
+  - Gradient Descent: Thêm cơ chế học thích ứng với momentum để tăng tốc độ hội tụ và tránh dao động
+  - Simulated Annealing: Triển khai cơ chế tái ủ (reheating) và vùng cấm (tabu) để tốt hơn trong việc thoát khỏi cực tiểu cục bộ
+  - Genetic Algorithm: Thêm khả năng tính toán song song cho đánh giá fitness của quần thể, tối ưu hóa đa dạng di truyền
+- Cải tiến BEVTransform:
+  - Cải thiện độ chính xác của ma trận biến đổi cho góc gantry và couch phức tạp
+  - Thêm tính năng project_points_to_isocentric_plane với tối ưu hóa vectorized
+  - Triển khai ray_trace để tính toán đường đi của chùm tia qua các cấu trúc
+  - Tối ưu hóa hiệu suất với việc xử lý cấu trúc phức tạp
+
+### Sửa lỗi
+- Khắc phục lỗi chiếu cấu trúc 3D vào mặt phẳng BEV khi góc gantry và couch phức tạp
+- Sửa lỗi biến dạng của cấu trúc trong BEV khi kích thước trường thay đổi
+- Sửa lỗi không cập nhật thời gian thực khi điều chỉnh lá MLC
+- Khắc phục lỗi tính toán hệ số phóng đại trong BEV cho các vị trí cách xa tâm
+- Sửa lỗi không đồng bộ hóa đúng các thay đổi giữa BEV và MLC Editor
+- Khắc phục lỗi khi tối ưu hóa MLC với cấu trúc phức tạp có nhiều lỗ
+- Sửa lỗi chia cho 0 trong tính toán magnification khi z_distance gần bằng SAD
+- Khắc phục lỗi trong transform_points với cấu trúc rỗng
+
 ## Phiên bản 0.8.2 (2023-10-25)
 
 ### Tính năng mới
