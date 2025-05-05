@@ -12,6 +12,9 @@ import os
 import logging
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union, Any
+import tempfile
+import webbrowser
+from datetime import datetime
 
 try:
     from PyQt5.QtWidgets import (
@@ -38,11 +41,45 @@ try:
         QTabWidget,
         QDialogButtonBox,
         QDialog,
+        QSpacerItem,
+        QSizePolicy,
+        QScrollArea,
+        QToolButton,
+        QApplication,
+        QStyle,
     )
-    from PyQt5.QtCore import Qt, pyqtSignal, QSize
-    from PyQt5.QtGui import QIcon, QColor, QBrush, QFont
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize, QUrl
+    from PyQt5.QtGui import (
+        QIcon,
+        QColor,
+        QBrush,
+        QFont,
+        QPixmap,
+        QPainter,
+        QDesktopServices,
+    )
+
+    QT_AVAILABLE = True
 except ImportError as e:
     logging.error(f"Không thể import các thành phần PyQt5: {e}")
+    QT_AVAILABLE = False
+
+try:
+    import matplotlib
+
+    matplotlib.use("Agg")  # Use non-interactive backend
+    import matplotlib.pyplot as plt
+    import matplotlib.figure as mpl_fig
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qt5agg import (
+        NavigationToolbar2QT as NavigationToolbar,
+    )
+
+    plt.style.use("ggplot")
+    MATPLOTLIB_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import matplotlib: {e}")
+    MATPLOTLIB_AVAILABLE = False
 
 try:
     from quangtps.evaluation.clinical_goals import (
@@ -54,12 +91,19 @@ try:
         GoalResult,
     )
     from quangtps.evaluation.plan_quality import PlanQualityEvaluator, PlanQualityScore
+    from quangtps.evaluation.protocol_manager import ProtocolManager
     from quangtps.evaluation.dvh.dvh_analysis import DVHAnalyzer
+    from quangtps.ui.dialogs.protocol_editor_dialog import ProtocolEditorDialog
+    from quangtps.ui.dialogs.protocol_dialog import ProtocolDialog
+
+    EVALUATION_MODULES_AVAILABLE = True
 except ImportError as e:
     logging.error(f"Không thể import các module đánh giá kế hoạch: {e}")
+    EVALUATION_MODULES_AVAILABLE = False
 
-# Tạo logger
-logger = logging.getLogger(__name__)
+from quangtps.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class PlanQualityWidget(QWidget):
@@ -71,6 +115,7 @@ class PlanQualityWidget(QWidget):
     # Tín hiệu
     goalSelected = pyqtSignal(dict)  # Phát khi một mục tiêu được chọn
     protocolSelected = pyqtSignal(str)  # Phát khi một protocol được chọn
+    planEvaluated = pyqtSignal(dict)  # Phát khi kế hoạch được đánh giá xong
 
     def __init__(self, parent=None):
         """Khởi tạo widget đánh giá chất lượng kế hoạch."""
@@ -81,67 +126,224 @@ class PlanQualityWidget(QWidget):
         self.protocol_manager = None
         self.current_protocol = None
         self.dvh_analyzer = None
+        self.current_results = None
+        self.current_evaluator = None
+        self.radar_figure = None
+        self.radar_canvas = None
 
         # Khởi tạo giao diện
         self._init_ui()
+
+        # Kiểm tra khả dụng của các module
+        if not EVALUATION_MODULES_AVAILABLE:
+            self._show_module_warning()
+
+    def _show_module_warning(self):
+        """Hiển thị cảnh báo khi các module đánh giá không khả dụng."""
+        warning_layout = QVBoxLayout()
+
+        warning_icon = QLabel()
+        warning_icon.setPixmap(
+            QApplication.style()
+            .standardIcon(QStyle.SP_MessageBoxWarning)
+            .pixmap(64, 64)
+        )
+        warning_icon.setAlignment(Qt.AlignCenter)
+
+        warning_text = QLabel(
+            "Các module đánh giá kế hoạch không khả dụng.\nVui lòng kiểm tra cài đặt và import."
+        )
+        warning_text.setAlignment(Qt.AlignCenter)
+        warning_text.setStyleSheet("color: #ED6A5A; font-weight: bold;")
+
+        warning_layout.addItem(
+            QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        )
+        warning_layout.addWidget(warning_icon)
+        warning_layout.addWidget(warning_text)
+        warning_layout.addItem(
+            QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        )
+
+        # Clear and set the layout
+        while self.layout().count():
+            item = self.layout().takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        self.layout().addLayout(warning_layout)
 
     def _init_ui(self):
         """Khởi tạo giao diện người dùng."""
         # Layout chính
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Toolbar
+        # Toolbar với style hiện đại
         toolbar = QToolBar()
-        toolbar.setIconSize(QSize(16, 16))
+        toolbar.setIconSize(QSize(22, 22))
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toolbar.setStyleSheet("""
+            QToolBar {
+                background-color: #F5F5F5;
+                border-bottom: 1px solid #DDDDDD;
+                spacing: 5px;
+                padding: 3px;
+            }
+            QToolButton {
+                border: 1px solid transparent;
+                border-radius: 3px;
+                padding: 3px;
+                color: #333333;
+            }
+            QToolButton:hover {
+                background-color: #E9E9E9;
+                border: 1px solid #CCCCCC;
+            }
+            QToolButton:pressed {
+                background-color: #D0D0D0;
+            }
+            QComboBox {
+                border: 1px solid #CCCCCC;
+                border-radius: 3px;
+                padding: 3px;
+                min-height: 24px;
+            }
+        """)
 
         # Protocol selection
+        protocol_label = QLabel("Protocol:")
+        protocol_label.setStyleSheet("font-weight: bold;")
+        toolbar.addWidget(protocol_label)
+
         self.protocol_combo = QComboBox()
-        self.protocol_combo.setMinimumWidth(200)
+        self.protocol_combo.setMinimumWidth(250)
+        self.protocol_combo.setMaximumWidth(400)
         self.protocol_combo.setToolTip("Chọn protocol lâm sàng")
         self.protocol_combo.currentIndexChanged.connect(self._on_protocol_changed)
-        toolbar.addWidget(QLabel("Protocol:"))
         toolbar.addWidget(self.protocol_combo)
 
         toolbar.addSeparator()
 
         # Evaluate action
-        evaluate_action = QAction("Evaluate", self)
+        evaluate_action = QAction(
+            self.style().standardIcon(QStyle.SP_DialogApplyButton), "Evaluate", self
+        )
         evaluate_action.setToolTip("Đánh giá kế hoạch theo protocol hiện tại")
         evaluate_action.triggered.connect(self._on_evaluate)
         toolbar.addAction(evaluate_action)
 
         # Edit protocol action
-        edit_protocol_action = QAction("Edit Protocol", self)
+        edit_protocol_action = QAction(
+            self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
+            "Edit Protocol",
+            self,
+        )
         edit_protocol_action.setToolTip("Chỉnh sửa protocol hiện tại")
         edit_protocol_action.triggered.connect(self._on_edit_protocol)
         toolbar.addAction(edit_protocol_action)
 
         # Protocol dialog action
-        open_protocol_dialog_action = QAction("Protocol Manager", self)
+        open_protocol_dialog_action = QAction(
+            self.style().standardIcon(QStyle.SP_FileDialogListView),
+            "Protocol Manager",
+            self,
+        )
         open_protocol_dialog_action.setToolTip("Mở hộp thoại quản lý protocol")
         open_protocol_dialog_action.triggered.connect(self._on_open_protocol_dialog)
         toolbar.addAction(open_protocol_dialog_action)
 
-        # Export report action
-        export_action = QAction("Export Report", self)
-        export_action.setToolTip("Xuất báo cáo đánh giá chất lượng kế hoạch")
-        export_action.triggered.connect(self._on_export_report)
-        toolbar.addAction(export_action)
+        toolbar.addSeparator()
+
+        # Export menu
+        export_button = QToolButton()
+        export_button.setText("Export")
+        export_button.setIcon(self.style().standardIcon(QStyle.SP_DialogSaveButton))
+        export_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        export_button.setPopupMode(QToolButton.InstantPopup)
+
+        export_menu = QMenu(export_button)
+
+        export_html_action = QAction("Export as HTML", self)
+        export_html_action.triggered.connect(lambda: self._on_export_report("html"))
+        export_menu.addAction(export_html_action)
+
+        export_pdf_action = QAction("Export as PDF", self)
+        export_pdf_action.triggered.connect(lambda: self._on_export_report("pdf"))
+        export_menu.addAction(export_pdf_action)
+
+        export_button.setMenu(export_menu)
+        toolbar.addAction(export_button)
+
+        # Compare plans action
+        compare_action = QAction(
+            self.style().standardIcon(QStyle.SP_FileDialogContentsView),
+            "Compare Plans",
+            self,
+        )
+        compare_action.setToolTip("So sánh các kế hoạch điều trị")
+        compare_action.triggered.connect(self._on_compare_plans)
+        toolbar.addAction(compare_action)
 
         main_layout.addWidget(toolbar)
 
-        # Vùng hiển thị kết quả đánh giá
-        results_splitter = QSplitter(Qt.Vertical)
+        # Tab widget for different views
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #CCCCCC;
+                background-color: #FFFFFF;
+            }
+            QTabBar::tab {
+                background-color: #F0F0F0;
+                border: 1px solid #CCCCCC;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                padding: 6px 12px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background-color: #FFFFFF;
+                border-bottom: 1px solid #FFFFFF;
+            }
+            QTabBar::tab:hover {
+                background-color: #E0E0E0;
+            }
+        """)
+
+        # Summary tab
+        summary_widget = QWidget()
+        summary_layout = QVBoxLayout(summary_widget)
 
         # Vùng hiển thị điểm đánh giá
         score_group = QGroupBox("Plan Quality Scores")
+        score_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #CCCCCC;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 0 5px;
+            }
+        """)
         score_layout = QVBoxLayout(score_group)
 
         # Overall score
         overall_frame = QFrame()
         overall_layout = QHBoxLayout(overall_frame)
+        overall_layout.setContentsMargins(5, 5, 5, 5)
 
         self.overall_score_label = QLabel("Overall Score:")
+        self.overall_score_label.setStyleSheet("font-weight: bold; min-width: 100px;")
         overall_layout.addWidget(self.overall_score_label)
 
         self.overall_score_bar = QProgressBar()
@@ -149,6 +351,18 @@ class PlanQualityWidget(QWidget):
         self.overall_score_bar.setValue(0)
         self.overall_score_bar.setTextVisible(True)
         self.overall_score_bar.setFormat("%v%")
+        self.overall_score_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #CCCCCC;
+                border-radius: 3px;
+                text-align: center;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 2px;
+            }
+        """)
         overall_layout.addWidget(self.overall_score_bar, 1)
 
         score_layout.addWidget(overall_frame)
@@ -156,8 +370,10 @@ class PlanQualityWidget(QWidget):
         # Target score
         target_frame = QFrame()
         target_layout = QHBoxLayout(target_frame)
+        target_layout.setContentsMargins(5, 5, 5, 5)
 
-        self.target_score_label = QLabel("Target Score:")
+        self.target_score_label = QLabel("Target Coverage:")
+        self.target_score_label.setStyleSheet("font-weight: bold; min-width: 100px;")
         target_layout.addWidget(self.target_score_label)
 
         self.target_score_bar = QProgressBar()
@@ -165,6 +381,18 @@ class PlanQualityWidget(QWidget):
         self.target_score_bar.setValue(0)
         self.target_score_bar.setTextVisible(True)
         self.target_score_bar.setFormat("%v%")
+        self.target_score_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #CCCCCC;
+                border-radius: 3px;
+                text-align: center;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #2196F3;
+                border-radius: 2px;
+            }
+        """)
         target_layout.addWidget(self.target_score_bar, 1)
 
         score_layout.addWidget(target_frame)
@@ -172,8 +400,10 @@ class PlanQualityWidget(QWidget):
         # OAR score
         oar_frame = QFrame()
         oar_layout = QHBoxLayout(oar_frame)
+        oar_layout.setContentsMargins(5, 5, 5, 5)
 
-        self.oar_score_label = QLabel("OAR Score:")
+        self.oar_score_label = QLabel("OAR Sparing:")
+        self.oar_score_label.setStyleSheet("font-weight: bold; min-width: 100px;")
         oar_layout.addWidget(self.oar_score_label)
 
         self.oar_score_bar = QProgressBar()
@@ -181,11 +411,86 @@ class PlanQualityWidget(QWidget):
         self.oar_score_bar.setValue(0)
         self.oar_score_bar.setTextVisible(True)
         self.oar_score_bar.setFormat("%v%")
+        self.oar_score_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #CCCCCC;
+                border-radius: 3px;
+                text-align: center;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #FF9800;
+                border-radius: 2px;
+            }
+        """)
         oar_layout.addWidget(self.oar_score_bar, 1)
 
         score_layout.addWidget(oar_frame)
 
-        results_splitter.addWidget(score_group)
+        summary_layout.addWidget(score_group)
+
+        # Horizontal layout for radar chart and summary metrics
+        radar_metrics_layout = QHBoxLayout()
+
+        # Radar chart
+        radar_group = QGroupBox("Quality Radar")
+        radar_layout = QVBoxLayout(radar_group)
+
+        if MATPLOTLIB_AVAILABLE:
+            self.radar_figure = plt.figure(figsize=(5, 5))
+            self.radar_canvas = FigureCanvas(self.radar_figure)
+            self.radar_canvas.setMinimumSize(300, 300)
+
+            radar_toolbar = NavigationToolbar(self.radar_canvas, self)
+            radar_layout.addWidget(radar_toolbar)
+            radar_layout.addWidget(self.radar_canvas)
+        else:
+            radar_label = QLabel("Matplotlib not available")
+            radar_label.setAlignment(Qt.AlignCenter)
+            radar_layout.addWidget(radar_label)
+
+        radar_metrics_layout.addWidget(radar_group)
+
+        # Summary metrics
+        metrics_group = QGroupBox("Plan Metrics")
+        metrics_layout = QVBoxLayout(metrics_group)
+
+        self.metrics_table = QTableWidget(0, 2)
+        self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value"])
+        self.metrics_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch
+        )
+        self.metrics_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.Stretch
+        )
+        self.metrics_table.verticalHeader().setVisible(False)
+        self.metrics_table.setAlternatingRowColors(True)
+        self.metrics_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.metrics_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #DDDDDD;
+                selection-background-color: #E0E0E0;
+                selection-color: #000000;
+            }
+            QHeaderView::section {
+                background-color: #F0F0F0;
+                padding: 4px;
+                border: 1px solid #DDDDDD;
+                font-weight: bold;
+            }
+        """)
+
+        metrics_layout.addWidget(self.metrics_table)
+        radar_metrics_layout.addWidget(metrics_group)
+
+        summary_layout.addLayout(radar_metrics_layout)
+
+        # Thêm tab
+        self.tab_widget.addTab(summary_widget, "Summary")
+
+        # Clinical Goals tab
+        goals_widget = QWidget()
+        goals_layout = QVBoxLayout(goals_widget)
 
         # Bảng mục tiêu lâm sàng
         self.goals_table = QTableWidget(0, 6)
@@ -196,15 +501,109 @@ class PlanQualityWidget(QWidget):
         self.goals_table.setSelectionMode(QTableWidget.SingleSelection)
         self.goals_table.verticalHeader().setVisible(False)
         self.goals_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.goals_table.setAlternatingRowColors(True)
+        self.goals_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.goals_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #DDDDDD;
+                selection-background-color: #E0E0E0;
+                selection-color: #000000;
+            }
+            QHeaderView::section {
+                background-color: #F0F0F0;
+                padding: 4px;
+                border: 1px solid #DDDDDD;
+                font-weight: bold;
+            }
+        """)
         self.goals_table.itemSelectionChanged.connect(self._on_goal_selected)
 
-        results_splitter.addWidget(self.goals_table)
+        goals_layout.addWidget(self.goals_table)
 
-        main_layout.addWidget(results_splitter, 1)
+        # Thêm tab
+        self.tab_widget.addTab(goals_widget, "Clinical Goals")
+
+        # Target Coverage tab
+        target_widget = QWidget()
+        target_layout = QVBoxLayout(target_widget)
+
+        # Bảng thông tin coverage
+        self.target_table = QTableWidget(0, 7)
+        self.target_table.setHorizontalHeaderLabels(
+            ["Target", "Rx Dose", "D95%", "V95%", "Conformity", "Homogeneity", "Score"]
+        )
+        self.target_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.target_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.target_table.verticalHeader().setVisible(False)
+        self.target_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.target_table.setAlternatingRowColors(True)
+        self.target_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.target_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #DDDDDD;
+                selection-background-color: #E0E0E0;
+                selection-color: #000000;
+            }
+            QHeaderView::section {
+                background-color: #F0F0F0;
+                padding: 4px;
+                border: 1px solid #DDDDDD;
+                font-weight: bold;
+            }
+        """)
+
+        target_layout.addWidget(self.target_table)
+
+        # Thêm tab
+        self.tab_widget.addTab(target_widget, "Target Coverage")
+
+        # OAR Sparing tab
+        oar_widget = QWidget()
+        oar_layout = QVBoxLayout(oar_widget)
+
+        # Bảng thông tin OAR
+        self.oar_table = QTableWidget(0, 4)
+        self.oar_table.setHorizontalHeaderLabels(
+            ["Organ", "Criteria", "Achieved", "Result"]
+        )
+        self.oar_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.oar_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.oar_table.verticalHeader().setVisible(False)
+        self.oar_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.oar_table.setAlternatingRowColors(True)
+        self.oar_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.oar_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #DDDDDD;
+                selection-background-color: #E0E0E0;
+                selection-color: #000000;
+            }
+            QHeaderView::section {
+                background-color: #F0F0F0;
+                padding: 4px;
+                border: 1px solid #DDDDDD;
+                font-weight: bold;
+            }
+        """)
+
+        oar_layout.addWidget(self.oar_table)
+
+        # Thêm tab
+        self.tab_widget.addTab(oar_widget, "OAR Sparing")
+
+        main_layout.addWidget(self.tab_widget)
 
         # Status bar
-        self.status_label = QLabel("Ready")
-        main_layout.addWidget(self.status_label)
+        self.status_bar = QLabel("")
+        self.status_bar.setStyleSheet("""
+            QLabel {
+                background-color: #F5F5F5;
+                border-top: 1px solid #DDDDDD;
+                padding: 3px;
+                color: #666666;
+            }
+        """)
+        main_layout.addWidget(self.status_bar)
 
     def setPlanEvaluation(self, plan_evaluation: Optional[Any]):
         """
@@ -317,8 +716,6 @@ class PlanQualityWidget(QWidget):
 
         # Hiển thị hộp thoại chỉnh sửa protocol
         try:
-            from quangtps.ui.dialogs.protocol_editor_dialog import ProtocolEditorDialog
-
             dialog = ProtocolEditorDialog(self)
             dialog.setProtocol(self.current_protocol)
             if dialog.exec_():
@@ -334,9 +731,7 @@ class PlanQualityWidget(QWidget):
     def _on_open_protocol_dialog(self):
         """Xử lý sự kiện khi nút Protocol Manager được nhấn."""
         try:
-            from quangtps.ui.dialogs.protocol_dialog import ClinicalProtocolDialog
-
-            dialog = ClinicalProtocolDialog(self)
+            dialog = ProtocolDialog(self)
             dialog.setProtocolManager(self.protocol_manager)
             if dialog.exec_():
                 # Cập nhật protocol được chọn
@@ -352,8 +747,8 @@ class PlanQualityWidget(QWidget):
                 self, "Cảnh báo", "Chức năng quản lý protocol chưa được cài đặt."
             )
 
-    def _on_export_report(self):
-        """Xử lý sự kiện khi nút Export Report được nhấn."""
+    def _on_export_report(self, format: str):
+        """Xử lý sự kiện khi nút Export được nhấn."""
         if not self.plan_evaluation:
             QMessageBox.warning(self, "Cảnh báo", "Không có kế hoạch nào để đánh giá.")
             return
@@ -363,7 +758,7 @@ class PlanQualityWidget(QWidget):
             self,
             "Xuất báo cáo",
             "",
-            "HTML Files (*.html);;PDF Files (*.pdf);;All Files (*)",
+            f"{format.upper()} Files (*.{format});;All Files (*)",
         )
 
         if not filename:
@@ -374,12 +769,12 @@ class PlanQualityWidget(QWidget):
             report_generator = PlanQualityReportGenerator(self.plan_evaluation)
 
             # Xuất báo cáo theo định dạng
-            if filename.lower().endswith(".pdf"):
-                report_generator.export_pdf(filename)
-            else:
+            if format == "html":
                 report_generator.export_html(filename)
+            elif format == "pdf":
+                report_generator.export_pdf(filename)
 
-            self.status_label.setText(f"Đã xuất báo cáo tới {filename}")
+            self.status_bar.setText(f"Đã xuất báo cáo tới {filename}")
         except Exception as e:
             logger.error(f"Lỗi khi xuất báo cáo: {e}")
             QMessageBox.critical(self, "Lỗi", f"Không thể xuất báo cáo: {str(e)}")
@@ -412,7 +807,7 @@ class PlanQualityWidget(QWidget):
     def _evaluate_current_protocol(self):
         """Đánh giá kế hoạch dựa trên protocol hiện tại."""
         if not self.plan_evaluation or not self.dvh_analyzer:
-            self.status_label.setText("Không có dữ liệu kế hoạch để đánh giá.")
+            self.status_bar.setText("Không có dữ liệu kế hoạch để đánh giá.")
             return
 
         if not self.current_protocol:
@@ -421,7 +816,7 @@ class PlanQualityWidget(QWidget):
             self.overall_score_bar.setValue(0)
             self.target_score_bar.setValue(0)
             self.oar_score_bar.setValue(0)
-            self.status_label.setText("Không có protocol nào được chọn.")
+            self.status_bar.setText("Không có protocol nào được chọn.")
             return
 
         try:
@@ -436,16 +831,16 @@ class PlanQualityWidget(QWidget):
             results = evaluator.evaluate()
 
             if not results:
-                self.status_label.setText("Không thể đánh giá kế hoạch.")
+                self.status_bar.setText("Không thể đánh giá kế hoạch.")
                 return
 
             # Hiển thị kết quả
             self._display_evaluation_results(results, evaluator)
 
-            self.status_label.setText("Đánh giá kế hoạch hoàn tất.")
+            self.status_bar.setText("Đánh giá kế hoạch hoàn tất.")
         except Exception as e:
             logger.error(f"Lỗi khi đánh giá kế hoạch: {e}")
-            self.status_label.setText(f"Lỗi: {str(e)}")
+            self.status_bar.setText(f"Lỗi: {str(e)}")
 
     def _display_evaluation_results(self, results, evaluator):
         """
@@ -1052,7 +1447,7 @@ class PlanQualityWidget(QWidget):
                     with open(filename, "w", encoding="utf-8") as f:
                         f.write(html)
 
-                self.status_label.setText(f"Đã xuất báo cáo so sánh tới {filename}")
+                self.status_bar.setText(f"Đã xuất báo cáo so sánh tới {filename}")
                 QMessageBox.information(
                     self, "Xuất báo cáo", f"Báo cáo so sánh đã được xuất tới {filename}"
                 )

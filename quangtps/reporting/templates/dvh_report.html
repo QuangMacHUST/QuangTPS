@@ -1,477 +1,687 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ report_title|default('DVH Analysis Report') }}</title>
+    <title>{{ report_title|default('Báo cáo DVH QuangTPS') }}</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --light-bg: #f5f7fa;
+            --text-color: #333;
+            --border-color: #ddd;
+            --highlight-color: #f39c12;
+            --success-color: #2ecc71;
+            --warning-color: #f1c40f;
+            --grid-lines: #ecf0f1;
+        }
+
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            color: #333;
-            background-color: #f5f5f5;
         }
+
+        body {
+            font-family: 'Arial', 'Noto Sans', 'Roboto', sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: white;
+            margin: 0;
+            padding: 0;
+        }
+
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background-color: white;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            color: var(--primary-color);
+            margin-bottom: 0.5em;
+            font-weight: 600;
         }
-        .footer {
-            text-align: center;
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            font-size: 12px;
-            color: #777;
-        }
-        h1, h2, h3 {
-            color: #2c3e50;
-        }
+
         h1 {
-            margin-top: 0;
+            font-size: 24px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--secondary-color);
+            margin-bottom: 20px;
         }
+
+        h2 {
+            font-size: 20px;
+            padding-bottom: 5px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h3 {
+            font-size: 18px;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        .header {
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .header p {
+            color: #777;
+            font-style: italic;
+        }
+
         .dvh-container {
             margin: 20px 0;
             text-align: center;
+            background-color: var(--light-bg);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
+
         .dvh-image {
             max-width: 100%;
             height: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 5px;
+            display: block;
+            margin: 0 auto;
         }
+
+        .plan-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background-color: var(--light-bg);
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+        }
+
+        .plan-info-item {
+            margin-bottom: 10px;
+        }
+
+        .plan-info-label {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-right: 5px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin: 20px 0;
+            font-size: 13px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        th, td {
-            padding: 12px;
+
+        th,
+        td {
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            padding: 10px;
+            border: 1px solid var(--border-color);
         }
+
         th {
-            background-color: #2c3e50;
+            background-color: var(--primary-color);
             color: white;
+            font-weight: bold;
         }
+
         tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: var(--light-bg);
         }
-        .structure-name {
-            font-weight: bold;
+
+        tr:hover {
+            background-color: #e3f2fd;
         }
-        .structure-color {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            margin-right: 5px;
-            border-radius: 2px;
-        }
-        .metric-container {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            margin: 20px 0;
-        }
-        .metric-box {
-            width: 22%;
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .metric-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin: 10px 0;
-        }
-        .metric-title {
-            font-size: 14px;
-            color: #555;
-            margin-bottom: 5px;
-        }
-        .metric-unit {
-            font-size: 12px;
-            color: #777;
-        }
-        .plan-info {
-            display: flex;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
-        .plan-info-item {
-            width: 50%;
-            padding: 8px 0;
-        }
-        .plan-info-label {
-            font-weight: bold;
-            margin-right: 10px;
-        }
+
         .tab-container {
             margin: 20px 0;
         }
+
         .tab-navigation {
             display: flex;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 20px;
         }
+
         .tab-button {
+            background: none;
+            border: none;
             padding: 10px 20px;
-            background-color: #f1f1f1;
-            border: 1px solid #ddd;
-            border-bottom: none;
-            margin-right: 5px;
             cursor: pointer;
-            border-radius: 4px 4px 0 0;
+            font-weight: bold;
+            color: var(--text-color);
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
         }
+
+        .tab-button:hover {
+            color: var(--secondary-color);
+        }
+
         .tab-button.active {
-            background-color: white;
-            border-bottom: 1px solid white;
-            margin-bottom: -1px;
+            color: var(--secondary-color);
+            border-bottom: 3px solid var(--secondary-color);
         }
+
         .tab-content {
             display: none;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-top: none;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 0 5px 5px 5px;
+            background-color: white;
         }
+
         .tab-content.active {
             display: block;
         }
-        .constraint-table {
-            width: 100%;
+
+        .constraint-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
         }
-        .constraint-pass {
-            color: green;
+
+        .constraint-status {
+            padding: 5px 10px;
+            border-radius: 3px;
             font-weight: bold;
         }
-        .constraint-fail {
-            color: red;
+
+        .status-passed {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .status-warning {
+            background-color: var(--warning-color);
+            color: var(--text-color);
+        }
+
+        .status-failed {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .structure-color {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            margin-right: 5px;
+            border-radius: 50%;
+            vertical-align: middle;
+        }
+
+        .structure-name {
             font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            color: #777;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .visualization {
+            margin: 20px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .vis-item {
+            flex: 1;
+            min-width: 300px;
+            background-color: var(--light-bg);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+        }
+
+        .metrics-table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        .metrics-table {
+            min-width: 800px;
+        }
+
+        /* CSS cho các chỉ số DVH */
+        .metrics-card-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .metrics-card {
+            background-color: white;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .metrics-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .metrics-title {
+            margin-left: 10px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .metrics-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .metric-item {
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .metric-value {
+            color: var(--text-color);
+        }
+
+        .icon-info {
+            width: 16px;
+            height: 16px;
+            margin-left: 5px;
+            cursor: help;
+            vertical-align: middle;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        @media print {
+            body {
+                font-size: 12px;
+            }
+
+            .container {
+                width: 100%;
+                max-width: none;
+                padding: 0;
+            }
+
+            .tab-navigation {
+                display: none;
+            }
+
+            .tab-content {
+                display: block;
+                border: none;
+                padding: 0;
+            }
+
+            table {
+                page-break-inside: avoid;
+            }
+
+            h1,
+            h2,
+            h3 {
+                page-break-after: avoid;
+            }
+
+            .dvh-container,
+            .visualization,
+            .metrics-card-container {
+                page-break-inside: avoid;
+            }
         }
     </style>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Tab functionality
-            const tabButtons = document.querySelectorAll('.tab-button');
-            const tabContents = document.querySelectorAll('.tab-content');
-            
-            tabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    // Remove active class from all buttons and contents
-                    tabButtons.forEach(b => b.classList.remove('active'));
-                    tabContents.forEach(c => c.classList.remove('active'));
-                    
-                    // Add active class to clicked button and corresponding content
-                    button.classList.add('active');
-                    const tabId = button.getAttribute('data-tab');
-                    document.getElementById(tabId).classList.add('active');
-                });
-            });
-            
-            // Set first tab as active by default
-            if (tabButtons.length > 0) {
-                tabButtons[0].click();
-            }
-        });
-    </script>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
-            <h1>{{ report_title|default('DVH Analysis Report') }}</h1>
-            <p>Generated on: {{ generated_date|format_date }}</p>
+            <h1>{{ report_title|default('Báo cáo DVH QuangTPS') }}</h1>
+            <p>Được tạo vào: {{ generated_date|format_date }}</p>
         </div>
-        
-        <!-- Plan Information -->
-        <h2>Plan Information</h2>
+
+        <!-- Thông tin Kế hoạch -->
+        <h2>Thông tin Kế hoạch</h2>
         <div class="plan-info">
             <div class="plan-info-item">
-                <span class="plan-info-label">Patient ID:</span>
+                <span class="plan-info-label">ID Bệnh nhân:</span>
                 <span>{{ patient.id }}</span>
             </div>
             <div class="plan-info-item">
-                <span class="plan-info-label">Patient Name:</span>
+                <span class="plan-info-label">Tên bệnh nhân:</span>
                 <span>{{ patient.name }}</span>
             </div>
             <div class="plan-info-item">
-                <span class="plan-info-label">Plan ID:</span>
+                <span class="plan-info-label">ID Kế hoạch:</span>
                 <span>{{ plan.id }}</span>
             </div>
             <div class="plan-info-item">
-                <span class="plan-info-label">Plan Name:</span>
+                <span class="plan-info-label">Tên kế hoạch:</span>
                 <span>{{ plan.name }}</span>
             </div>
             {% if plan.prescription %}
             <div class="plan-info-item">
-                <span class="plan-info-label">Prescription:</span>
-                <span>{{ plan.prescription.total_dose|format_number }} Gy in {{ plan.prescription.num_fractions }} fractions</span>
+                <span class="plan-info-label">Liều điều trị:</span>
+                <span>{{ plan.prescription.total_dose|format_number }} Gy trong {{ plan.prescription.num_fractions }}
+                    phân liều</span>
             </div>
             <div class="plan-info-item">
-                <span class="plan-info-label">Dose per Fraction:</span>
+                <span class="plan-info-label">Liều mỗi phân liều:</span>
                 <span>{{ plan.prescription.dose_per_fraction|format_number }} Gy</span>
             </div>
             {% endif %}
             <div class="plan-info-item">
-                <span class="plan-info-label">Creation Date:</span>
+                <span class="plan-info-label">Ngày tạo:</span>
                 <span>{{ plan.creation_date|format_date }}</span>
             </div>
             <div class="plan-info-item">
-                <span class="plan-info-label">Analysis Date:</span>
+                <span class="plan-info-label">Ngày phân tích:</span>
                 <span>{{ generated_date|format_date }}</span>
             </div>
         </div>
-        
-        <!-- DVH Graph -->
-        <h2>Dose-Volume Histogram</h2>
+
+        <!-- Đồ thị DVH -->
+        <h2>Biểu đồ Liều-Thể tích (DVH)</h2>
         <div class="dvh-container">
             {% if dvh_image %}
-            <img src="{{ dvh_image }}" alt="Dose-Volume Histogram" class="dvh-image">
+            <img src="{{ dvh_image }}" alt="Biểu đồ Liều-Thể tích" class="dvh-image">
             {% else %}
-            <p>DVH image not available</p>
+            <p>Không có hình ảnh DVH</p>
             {% endif %}
         </div>
-        
-        <!-- Tabs for different DVH views -->
+
+        <!-- Các tab cho các chế độ xem DVH khác nhau -->
         <div class="tab-container">
             <div class="tab-navigation">
-                <button class="tab-button active" data-tab="tab-cumulative">Cumulative DVH</button>
-                <button class="tab-button" data-tab="tab-differential">Differential DVH</button>
-                <button class="tab-button" data-tab="tab-metrics">DVH Metrics</button>
-                <button class="tab-button" data-tab="tab-constraints">Constraints</button>
+                <button class="tab-button active" data-tab="tab-cumulative">DVH Tích lũy</button>
+                <button class="tab-button" data-tab="tab-differential">DVH Vi phân</button>
+                <button class="tab-button" data-tab="tab-metrics">Chỉ số DVH</button>
+                <button class="tab-button" data-tab="tab-constraints">Ràng buộc</button>
             </div>
-            
-            <!-- Cumulative DVH Tab -->
+
+            <!-- Tab DVH Tích lũy -->
             <div id="tab-cumulative" class="tab-content active">
                 {% if dvh_cumulative_image %}
                 <div class="dvh-container">
-                    <img src="{{ dvh_cumulative_image }}" alt="Cumulative DVH" class="dvh-image">
+                    <img src="{{ dvh_cumulative_image }}" alt="DVH Tích lũy" class="dvh-image">
                 </div>
                 {% else %}
-                <p>Cumulative DVH image not available</p>
+                <p>Không có hình ảnh DVH tích lũy</p>
                 {% endif %}
-                
-                <p>The cumulative DVH shows the percentage of volume receiving at least a given dose. It represents the integral of the differential DVH from the maximum dose to the dose of interest.</p>
+
+                <p>Biểu đồ DVH tích lũy thể hiện phần trăm thể tích nhận được ít nhất một liều nhất định. Đây là tích
+                    phân của DVH vi phân từ liều tối đa đến liều quan tâm.</p>
             </div>
-            
-            <!-- Differential DVH Tab -->
+
+            <!-- Tab DVH Vi phân -->
             <div id="tab-differential" class="tab-content">
                 {% if dvh_differential_image %}
                 <div class="dvh-container">
-                    <img src="{{ dvh_differential_image }}" alt="Differential DVH" class="dvh-image">
+                    <img src="{{ dvh_differential_image }}" alt="DVH Vi phân" class="dvh-image">
                 </div>
                 {% else %}
-                <p>Differential DVH image not available</p>
+                <p>Không có hình ảnh DVH vi phân</p>
                 {% endif %}
-                
-                <p>The differential DVH shows the volume receiving a specific dose. It represents the distribution of dose throughout a structure.</p>
+
+                <p>Biểu đồ DVH vi phân thể hiện phân bố thể tích theo liều. Mỗi điểm trên đường biểu diễn thể tích (%)
+                    nhận được một liều nhất định.</p>
             </div>
-            
-            <!-- DVH Metrics Tab -->
+
+            <!-- Tab Chỉ số DVH -->
             <div id="tab-metrics" class="tab-content">
-                {% if dvh_metrics %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Structure</th>
-                            <th>Min Dose (Gy)</th>
-                            <th>Mean Dose (Gy)</th>
-                            <th>Max Dose (Gy)</th>
-                            <th>D98 (Gy)</th>
-                            <th>D95 (Gy)</th>
-                            <th>D50 (Gy)</th>
-                            <th>D2 (Gy)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for structure, metrics in dvh_metrics.items() %}
-                        <tr>
-                            <td>
-                                <div class="structure-color" style="background-color: {{ structure_colors[structure]|default('#333') }};"></div>
-                                <span class="structure-name">{{ structure }}</span>
-                            </td>
-                            <td>{{ metrics.Dmin|format_number }}</td>
-                            <td>{{ metrics.Dmean|format_number }}</td>
-                            <td>{{ metrics.Dmax|format_number }}</td>
-                            <td>{{ metrics.D98|format_number }}</td>
-                            <td>{{ metrics.D95|format_number }}</td>
-                            <td>{{ metrics.D50|format_number }}</td>
-                            <td>{{ metrics.D2|format_number }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Structure</th>
-                            <th>V5 (%)</th>
-                            <th>V10 (%)</th>
-                            <th>V20 (%)</th>
-                            <th>V30 (%)</th>
-                            <th>V40 (%)</th>
-                            <th>V50 (%)</th>
-                            <th>Volume (cm³)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for structure, metrics in dvh_metrics.items() %}
-                        <tr>
-                            <td>
-                                <div class="structure-color" style="background-color: {{ structure_colors[structure]|default('#333') }};"></div>
-                                <span class="structure-name">{{ structure }}</span>
-                            </td>
-                            <td>{{ metrics.V5|format_number }}</td>
-                            <td>{{ metrics.V10|format_number }}</td>
-                            <td>{{ metrics.V20|format_number }}</td>
-                            <td>{{ metrics.V30|format_number }}</td>
-                            <td>{{ metrics.V40|format_number }}</td>
-                            <td>{{ metrics.V50|format_number }}</td>
-                            <td>{{ metrics.volume|format_number }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <p>No DVH metrics available</p>
-                {% endif %}
-            </div>
-            
-            <!-- Constraints Tab -->
-            <div id="tab-constraints" class="tab-content">
-                {% if plan.evaluation_metrics and plan.evaluation_metrics.oar_constraints %}
-                <h3>Organ-at-Risk Constraints</h3>
-                <table class="constraint-table">
-                    <thead>
-                        <tr>
-                            <th>Structure</th>
-                            <th>Type</th>
-                            <th>Constraint</th>
-                            <th>Actual Value</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for organ, constraints in plan.evaluation_metrics.oar_constraints.items() %}
-                            {% for name, constraint in constraints.items() %}
+                <h3>Bảng Chỉ số DVH</h3>
+
+                <div class="metrics-table-container">
+                    <table class="metrics-table">
+                        <thead>
                             <tr>
-                                <td>{{ organ }}</td>
-                                <td>{{ constraint.type|default('Dose') }}</td>
-                                <td>{{ name }} {{ constraint.limit }}</td>
-                                <td>{{ constraint.value|format_number }}</td>
-                                <td class="{% if constraint.passed %}constraint-pass{% else %}constraint-fail{% endif %}">
-                                    {% if constraint.passed %}
-                                    ✓ PASS
-                                    {% else %}
-                                    ✗ FAIL
-                                    {% endif %}
+                                <th>Cấu trúc</th>
+                                <th>D<sub>min</sub> (Gy)</th>
+                                <th>D<sub>mean</sub> (Gy)</th>
+                                <th>D<sub>max</sub> (Gy)</th>
+                                <th>D<sub>95</sub> (Gy)</th>
+                                <th>D<sub>50</sub> (Gy)</th>
+                                <th>V<sub>20Gy</sub> (%)</th>
+                                <th>V<sub>30Gy</sub> (%)</th>
+                                {% if plan.prescription %}
+                                <th>V<sub>95%</sub> (%)</th>
+                                {% endif %}
+                                {% if dvh_metrics and 'HI' in dvh_metrics[dvh_metrics.keys()|list|first] %}
+                                <th>HI</th>
+                                {% endif %}
+                                {% if dvh_metrics and 'CI' in dvh_metrics[dvh_metrics.keys()|list|first] %}
+                                <th>CI</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for structure, metrics in dvh_metrics.items() %}
+                            <tr>
+                                <td>
+                                    <div class="structure-color"
+                                        style="background-color: {% if structure.upper() in structure_colors %}{{ structure_colors[structure.upper()] }}{% else %}#333{% endif %}">
+                                    </div>
+                                    <span class="structure-name">{{ structure }}</span>
                                 </td>
+                                <td>{{ metrics.Dmin|format_number }}</td>
+                                <td>{{ metrics.Dmean|format_number }}</td>
+                                <td>{{ metrics.Dmax|format_number }}</td>
+                                <td>{{ metrics.D95|format_number }}</td>
+                                <td>{{ metrics.D50|format_number }}</td>
+                                <td>{{ metrics.V20Gy|format_number }}</td>
+                                <td>{{ metrics.V30Gy|format_number }}</td>
+                                {% if plan.prescription %}
+                                <td>{{ metrics['V95%']|format_number }}</td>
+                                {% endif %}
+                                {% if 'HI' in metrics %}
+                                <td>{{ metrics.HI|format_number }}</td>
+                                {% endif %}
+                                {% if 'CI' in metrics %}
+                                <td>{{ metrics.CI|format_number }}</td>
+                                {% endif %}
                             </tr>
                             {% endfor %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <p>No constraint evaluation data available</p>
-                {% endif %}
-                
-                {% if plan.evaluation_metrics %}
-                <h3>Plan Evaluation Indices</h3>
-                <div class="metric-container">
-                    {% if plan.evaluation_metrics.conformity_index is defined %}
-                    <div class="metric-box">
-                        <div class="metric-title">Conformity Index</div>
-                        <div class="metric-value">{{ plan.evaluation_metrics.conformity_index|format_number }}</div>
-                        <div class="metric-unit">
-                            {% if plan.evaluation_metrics.conformity_index >= 0.9 and plan.evaluation_metrics.conformity_index <= 1.1 %}
-                            <span class="constraint-pass">Good (0.9-1.1)</span>
-                            {% else %}
-                            <span class="constraint-fail">Out of range</span>
-                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>Thẻ Chỉ số DVH</h3>
+
+                <div class="metrics-card-container">
+                    {% for structure, metrics in dvh_metrics.items() %}
+                    <div class="metrics-card">
+                        <div class="metrics-header">
+                            <div class="structure-color"
+                                style="background-color: {% if structure.upper() in structure_colors %}{{ structure_colors[structure.upper()] }}{% else %}#333{% endif %}">
+                            </div>
+                            <div class="metrics-title">{{ structure }}</div>
                         </div>
-                    </div>
-                    {% endif %}
-                    
-                    {% if plan.evaluation_metrics.homogeneity_index is defined %}
-                    <div class="metric-box">
-                        <div class="metric-title">Homogeneity Index</div>
-                        <div class="metric-value">{{ plan.evaluation_metrics.homogeneity_index|format_number }}</div>
-                        <div class="metric-unit">
-                            {% if plan.evaluation_metrics.homogeneity_index <= 0.2 %}
-                            <span class="constraint-pass">Good (≤0.2)</span>
-                            {% else %}
-                            <span class="constraint-fail">Out of range</span>
+                        <div class="metrics-body">
+                            <div class="metric-item">
+                                <span class="metric-label">D<sub>min</sub>:</span>
+                                <span class="metric-value">{{ metrics.Dmin|format_number }} Gy</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">D<sub>mean</sub>:</span>
+                                <span class="metric-value">{{ metrics.Dmean|format_number }} Gy</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">D<sub>max</sub>:</span>
+                                <span class="metric-value">{{ metrics.Dmax|format_number }} Gy</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">D<sub>95</sub>:</span>
+                                <span class="metric-value">{{ metrics.D95|format_number }} Gy</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">D<sub>50</sub>:</span>
+                                <span class="metric-value">{{ metrics.D50|format_number }} Gy</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">V<sub>20Gy</sub>:</span>
+                                <span class="metric-value">{{ metrics.V20Gy|format_number }} %</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">V<sub>30Gy</sub>:</span>
+                                <span class="metric-value">{{ metrics.V30Gy|format_number }} %</span>
+                            </div>
+                            {% if plan.prescription %}
+                            <div class="metric-item">
+                                <span class="metric-label">V<sub>95%</sub>:</span>
+                                <span class="metric-value">{{ metrics['V95%']|format_number }} %</span>
+                            </div>
                             {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    
-                    {% if plan.evaluation_metrics.gradient_index is defined %}
-                    <div class="metric-box">
-                        <div class="metric-title">Gradient Index</div>
-                        <div class="metric-value">{{ plan.evaluation_metrics.gradient_index|format_number }}</div>
-                        <div class="metric-unit">
-                            {% if plan.evaluation_metrics.gradient_index < 3.0 %}
-                            <span class="constraint-pass">Good (<3.0)</span>
-                            {% else %}
-                            <span class="constraint-fail">Out of range</span>
+                            {% if 'HI' in metrics %}
+                            <div class="metric-item tooltip">
+                                <span class="metric-label">HI:</span>
+                                <span class="metric-value">{{ metrics.HI|format_number }}</span>
+                                <span class="tooltip-text">Homogeneity Index: (D2-D98)/Prescription</span>
+                            </div>
                             {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    
-                    {% if plan.evaluation_metrics.target_coverage is defined %}
-                    {% for target, coverage in plan.evaluation_metrics.target_coverage.items() %}
-                    <div class="metric-box">
-                        <div class="metric-title">{{ target }} Coverage</div>
-                        <div class="metric-value">{{ coverage|format_number }}%</div>
-                        <div class="metric-unit">
-                            {% if coverage >= 95 %}
-                            <span class="constraint-pass">Good (≥95%)</span>
-                            {% elif coverage >= 90 %}
-                            <span class="constraint-pass">Acceptable (≥90%)</span>
-                            {% else %}
-                            <span class="constraint-fail">Poor (<90%)</span>
+                            {% if 'CI' in metrics %}
+                            <div class="metric-item tooltip">
+                                <span class="metric-label">CI:</span>
+                                <span class="metric-value">{{ metrics.CI|format_number }}</span>
+                                <span class="tooltip-text">Conformity Index: V95%/VPTV</span>
+                            </div>
                             {% endif %}
                         </div>
                     </div>
                     {% endfor %}
-                    {% endif %}
                 </div>
+
+                <h3>Chú thích</h3>
+                <p>
+                    <strong>D<sub>x</sub></strong>: Liều nhận bởi x% thể tích<br>
+                    <strong>V<sub>xGy</sub></strong>: Phần trăm thể tích nhận ít nhất x Gy<br>
+                    <strong>V<sub>x%</sub></strong>: Phần trăm thể tích nhận ít nhất x% liều điều trị<br>
+                    <strong>HI (Homogeneity Index)</strong>: Chỉ số đồng nhất, tính bằng (D2-D98)/Prescription. Giá trị
+                    càng gần 0 càng tốt.<br>
+                    <strong>CI (Conformity Index)</strong>: Chỉ số phù hợp, tính bằng V95%/VPTV. Giá trị lý tưởng là
+                    1.0.
+                </p>
+            </div>
+
+            <!-- Tab Ràng buộc -->
+            <div id="tab-constraints" class="tab-content">
+                <h3>Ràng buộc Liều và Tuân thủ</h3>
+
+                {% if constraints %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cấu trúc</th>
+                            <th>Mục tiêu</th>
+                            <th>Giá trị thực tế</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for constraint in constraints %}
+                        <tr>
+                            <td>{{ constraint.structure }}</td>
+                            <td>{{ constraint.description }}</td>
+                            <td>{{ constraint.actual_value|format_number }}</td>
+                            <td>
+                                <span class="constraint-status status-{{ constraint.status|lower }}">
+                                    {{ constraint.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>Không có ràng buộc được định nghĩa cho kế hoạch này.</p>
                 {% endif %}
             </div>
         </div>
-        
-        <!-- Structure Information -->
+
+        <!-- Thông tin cấu trúc -->
+        <h2>Thông tin cấu trúc</h2>
         {% if structures %}
-        <h2>Structure Information</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Structure</th>
-                    <th>Type</th>
-                    <th>Volume (cm³)</th>
-                    <th>Description</th>
+                    <th>Cấu trúc</th>
+                    <th>Loại</th>
+                    <th>Thể tích (cm³)</th>
+                    <th>Mô tả</th>
                 </tr>
             </thead>
             <tbody>
                 {% for structure in structures %}
                 <tr>
                     <td>
-                        <div class="structure-color" style="background-color: {{ structure_colors[structure.name]|default('#333') }};"></div>
+                        <div class="structure-color"
+                            style="background-color: {% if structure.name.upper() in structure_colors %}{{ structure_colors[structure.name.upper()] }}{% else %}#333{% endif %}">
+                        </div>
                         <span class="structure-name">{{ structure.name }}</span>
                     </td>
                     <td>{{ structure.type }}</td>
@@ -482,11 +692,35 @@
             </tbody>
         </table>
         {% endif %}
-        
+
         <div class="footer">
-            <p>Generated by QuangTPS Treatment Planning System</p>
-            <p>Report ID: {{ report_id|default('') }} | Version 1.0</p>
+            <p>Được tạo bởi QuangTPS - Hệ thống Lập kế hoạch Xạ trị</p>
+            <p>ID Báo cáo: {{ report_id|default('') }} | Phiên bản 2.0</p>
         </div>
     </div>
+
+    <script>
+        // JavaScript để điều khiển các tab
+        document.addEventListener('DOMContentLoaded', function () {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    // Loại bỏ active class từ tất cả các nút và nội dung
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+
+                    // Thêm active class cho nút được bấm
+                    this.classList.add('active');
+
+                    // Hiển thị nội dung tương ứng
+                    const tabId = this.getAttribute('data-tab');
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+        });
+    </script>
 </body>
-</html> 
+
+</html>

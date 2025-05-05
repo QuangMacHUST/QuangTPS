@@ -2,78 +2,244 @@
 # -*- coding: utf-8 -*-
 
 """
-3D Dose Visualization Component for QuangTPS
+Module DoseVisualization3D cho QuangTPS.
 
-This module provides enhanced 3D dose visualization capabilities with interactive
-isodose control, color mapping, and real-time visualization updates.
-It integrates with the External Beam Planning tab to provide Eclipse-like
-3D dose visualization.
+Cung cấp khả năng hiển thị 3D phân phối liều với các tính năng nâng cao
+như điều chỉnh isodose, colormap, và vùng hiển thị. Được thiết kế để tích hợp
+với tab External Beam Planning.
 """
 
 import os
-import sys
 import logging
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Tuple, Optional, Union, Any
+from datetime import datetime
 
-import vtk
-from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+# Sử dụng try/except cho các import không đảm bảo
+try:
+    import vtk
+    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
-from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QSplitter,
-    QSlider,
-    QFrame,
-    QGridLayout,
-    QSpinBox,
-    QSizePolicy,
-    QToolBar,
-    QAction,
-    QComboBox,
-    QCheckBox,
-    QToolButton,
-    QMenu,
-    QGroupBox,
-    QDoubleSpinBox,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
-    QColorDialog,
-    QInputDialog,
-    QFileDialog,
-)
-from PyQt5.QtGui import QColor, QIcon, QBrush
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
+    VTK_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import VTK: {e}")
+    VTK_AVAILABLE = False
 
-from quangtps.ui.vtk_viewer_3d import VTKViewer3D
+    # Tạo lớp giả cho VTK
+    class vtk:
+        class vtkMarchingCubes:
+            def SetInputData(self, *args):
+                pass
+
+            def SetValue(self, *args):
+                pass
+
+            def Update(self, *args):
+                pass
+
+            def GetOutput(self, *args):
+                return None
+
+        class vtkSmoothPolyDataFilter:
+            def SetInputData(self, *args):
+                pass
+
+            def SetNumberOfIterations(self, *args):
+                pass
+
+            def SetRelaxationFactor(self, *args):
+                pass
+
+            def FeatureEdgeSmoothingOff(self, *args):
+                pass
+
+            def BoundarySmoothingOn(self, *args):
+                pass
+
+            def Update(self, *args):
+                pass
+
+            def GetOutput(self, *args):
+                return None
+
+        class vtkPolyDataMapper:
+            def SetInputData(self, *args):
+                pass
+
+        class vtkActor:
+            def SetMapper(self, *args):
+                pass
+
+            def GetProperty(self, *args):
+                class Property:
+                    def SetColor(self, *args):
+                        pass
+
+                    def SetOpacity(self, *args):
+                        pass
+
+                return Property()
+
+        class vtkImageData:
+            def SetDimensions(self, *args):
+                pass
+
+            def SetSpacing(self, *args):
+                pass
+
+            def SetOrigin(self, *args):
+                pass
+
+            def AllocateScalars(self, *args):
+                pass
+
+            def SetScalarComponentFromFloat(self, *args):
+                pass
+
+        class vtkSmartVolumeMapper:
+            def SetInputData(self, *args):
+                pass
+
+        class vtkVolumeProperty:
+            def ShadeOff(self, *args):
+                pass
+
+            def SetInterpolationTypeToLinear(self, *args):
+                pass
+
+            def SetColor(self, *args):
+                pass
+
+            def SetScalarOpacity(self, *args):
+                pass
+
+        class vtkColorTransferFunction:
+            def AddRGBPoint(self, *args):
+                pass
+
+        class vtkPiecewiseFunction:
+            def AddPoint(self, *args):
+                pass
+
+        class vtkVolume:
+            def SetMapper(self, *args):
+                pass
+
+            def SetProperty(self, *args):
+                pass
+
+        VTK_FLOAT = 10
+
+
+# Khai báo các class VTK để tránh lỗi linter nếu VTK có sẵn
+if VTK_AVAILABLE:
+    vtkMarchingCubes = vtk.vtkMarchingCubes
+    vtkSmoothPolyDataFilter = vtk.vtkSmoothPolyDataFilter
+    vtkPolyDataMapper = vtk.vtkPolyDataMapper
+    vtkActor = vtk.vtkActor
+    vtkImageData = vtk.vtkImageData
+    vtkFloatArray = vtk.vtkFloatArray
+    vtkSmartVolumeMapper = vtk.vtkSmartVolumeMapper
+    vtkVolumeProperty = vtk.vtkVolumeProperty
+    vtkColorTransferFunction = vtk.vtkColorTransferFunction
+    vtkPiecewiseFunction = vtk.vtkPiecewiseFunction
+    vtkVolume = vtk.vtkVolume
+    VTK_FLOAT = vtk.VTK_FLOAT
+else:
+    vtkMarchingCubes = vtk.vtkMarchingCubes
+    vtkSmoothPolyDataFilter = vtk.vtkSmoothPolyDataFilter
+    vtkPolyDataMapper = vtk.vtkPolyDataMapper
+    vtkActor = vtk.vtkActor
+    vtkImageData = vtk.vtkImageData
+    vtkFloatArray = type("vtkFloatArray", (), {})
+    vtkSmartVolumeMapper = vtk.vtkSmartVolumeMapper
+    vtkVolumeProperty = vtk.vtkVolumeProperty
+    vtkColorTransferFunction = vtk.vtkColorTransferFunction
+    vtkPiecewiseFunction = vtk.vtkPiecewiseFunction
+    vtkVolume = vtk.vtkVolume
+    VTK_FLOAT = vtk.VTK_FLOAT
+
+try:
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QSlider,
+        QCheckBox,
+        QComboBox,
+        QGroupBox,
+        QFrame,
+        QSplitter,
+        QSpinBox,
+        QDoubleSpinBox,
+        QTabWidget,
+        QMessageBox,
+        QSizePolicy,
+        QStackedWidget,
+        QApplication,  # Thêm QApplication cho test standalone
+        QDialog,
+        QFileDialog,
+        QToolBar,
+        QAction,
+        QActionGroup,
+        QDialogButtonBox,
+        QInputDialog,
+        QTableWidget,
+        QTableWidgetItem,
+        QProgressBar,
+    )
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer, QThread, pyqtSlot, QPoint
+    from PyQt5.QtGui import QColor, QFont, QIcon, QPixmap, QBrush, QCursor, QPainter
+
+    PYQT5_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import PyQt5: {e}")
+    PYQT5_AVAILABLE = False
+
+    # Tạo các lớp giả cho type checking
+    class QWidget:
+        pass
+
+    class pyqtSignal:
+        def __init__(self, *args):
+            pass
+
+
+# Import các module nội bộ của QuangTPS
+try:
+    from quangtps.ui.vtk_viewer_3d import VTKViewer3D
+    from quangtps.ui.isodose_selector import IsodoseSelector
+    from quangtps.ui.structure_visibility_panel import StructureVisibilityPanel
+    from quangtps.ui.colormap_selector import ColorMapSelector
+    from quangtps.dose.dose_grid import DoseGrid
+    from quangtps.structures.structure_set import StructureSet
+
+    QUANGTPS_MODULES_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import các module QuangTPS: {e}")
+    QUANGTPS_MODULES_AVAILABLE = False
+
 from quangtps.core.logging import get_logger
-from quangtps.dose.dose_grid import DoseGrid
 
 logger = get_logger(__name__)
 
 
 class IsodoseLevel:
-    """Class representing an isodose level with color and visibility settings."""
+    """
+    Đại diện cho một mức isodose và thuộc tính hiển thị của nó.
 
-    def __init__(
-        self, level: float, color: Tuple[float, float, float], visible: bool = True
-    ):
-        """
-        Initialize an isodose level.
+    Attributes:
+        level: float
+            Mức liều (Gy)
+        color: tuple
+            Tuple (r, g, b) thể hiện màu sắc
+        visible: bool
+            Trạng thái hiển thị
+    """
 
-        Parameters
-        ----------
-        level : float
-            Dose level in Gy
-        color : tuple
-            RGB color tuple (values between 0 and 1)
-        visible : bool
-            Whether the isodose level is visible
-        """
+    def __init__(self, level, color, visible=True):
         self.level = level
         self.color = color
         self.visible = visible
@@ -92,6 +258,11 @@ class DoseVisualization3D(QWidget):
 
     dose_visualization_updated = pyqtSignal()
 
+    # Các chế độ hiển thị
+    VOLUME_MODE = "VOLUME"
+    SURFACE_MODE = "SURFACE"
+    CONTOUR_MODE = "CONTOUR"
+
     def __init__(self, parent=None):
         """Initialize the 3D dose visualization component."""
         super().__init__(parent)
@@ -101,6 +272,14 @@ class DoseVisualization3D(QWidget):
         self.prescription_dose = None
         self.isodose_levels = {}  # Dict mapping dose level to IsodoseLevel objects
         self.current_view_mode = "3D"  # "3D", "Axial", "Sagittal", "Coronal"
+        self.isodose_actors = {}
+        self.structure_actors = {}
+        self.structures = []
+        self._current_mode = "surface"  # surface, volume, contour
+        self._enable_memory_management = True
+        self._memory_threshold_mb = 2000  # 2GB
+        self._downsampling_enabled = False
+        self._adaptive_quality = True
 
         # Default isodose levels as percentages of prescription dose
         self.default_level_percentages = [100, 95, 90, 80, 70, 50, 30, 20, 10]
@@ -117,700 +296,481 @@ class DoseVisualization3D(QWidget):
         ]
 
         # Setup UI
-        self._init_ui()
+        self.setup_ui()
 
-    def _init_ui(self):
-        """Initialize the user interface."""
+    def setup_ui(self):
+        """Set up the user interface components."""
+        # Kiểm tra các dependency
+        if not PYQT5_AVAILABLE or not VTK_AVAILABLE or not QUANGTPS_MODULES_AVAILABLE:
+            self._setup_fallback_ui()
+            return
+
         # Main layout
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Add toolbar
-        self.toolbar = QToolBar("Dose Visualization Controls")
-        self.toolbar.setIconSize(QSize(16, 16))
-
-        # Toolbar actions
-        self.action_reset_view = QAction(
-            QIcon("quangtps/ui/icons/reset_view.png"), "Reset View", self
+        # Create VTK viewer for 3D visualization
+        self.vtk_viewer = VTKViewer3D(
+            parent=self, memory_threshold_mb=self._memory_threshold_mb
         )
-        self.action_reset_view.triggered.connect(self._reset_view)
-        self.toolbar.addAction(self.action_reset_view)
+        self.vtk_viewer.setMinimumWidth(600)
 
-        self.view_mode_combo = QComboBox()
-        self.view_mode_combo.addItems(
-            ["3D View", "Axial View", "Sagittal View", "Coronal View"]
+        # Create control panel
+        control_panel = QWidget()
+        control_panel.setMaximumWidth(300)
+        control_panel.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+        control_layout = QVBoxLayout(control_panel)
+
+        # Create isodose selector
+        self.isodose_selector = IsodoseSelector()
+        self.isodose_selector.isodose_levels_changed.connect(
+            self.on_isodose_levels_changed
         )
-        self.view_mode_combo.currentIndexChanged.connect(self._change_view_mode)
-        self.toolbar.addWidget(QLabel("View:"))
-        self.toolbar.addWidget(self.view_mode_combo)
 
-        self.toolbar.addSeparator()
+        # Create structure visibility panel
+        self.structure_panel = StructureVisibilityPanel()
+        self.structure_panel.structure_visibility_changed.connect(
+            self.on_structure_visibility_changed
+        )
 
-        self.toolbar.addWidget(QLabel("Prescription:"))
-        self.prescription_spinbox = QDoubleSpinBox()
-        self.prescription_spinbox.setRange(0.1, 100.0)
-        self.prescription_spinbox.setValue(2.0)
-        self.prescription_spinbox.setSuffix(" Gy")
-        self.prescription_spinbox.setDecimals(1)
-        self.prescription_spinbox.valueChanged.connect(self._update_prescription)
-        self.toolbar.addWidget(self.prescription_spinbox)
+        # Create colormap selector
+        self.colormap_selector = ColorMapSelector()
+        self.colormap_selector.colormap_changed.connect(self.on_colormap_changed)
 
-        # Screenshot button
-        self.screenshot_btn = QPushButton("Screenshot")
-        self.screenshot_btn.clicked.connect(self._take_screenshot)
-        self.toolbar.addWidget(self.screenshot_btn)
+        # Create display mode controls
+        display_mode_group = QGroupBox("Display Mode")
+        display_mode_layout = QVBoxLayout(display_mode_group)
 
-        main_layout.addWidget(self.toolbar)
+        self.mode_surface = QCheckBox("Surface")
+        self.mode_volume = QCheckBox("Volume")
+        self.mode_contour = QCheckBox("Contour")
 
-        # Main splitter for 3D view and controls
+        self.mode_surface.setChecked(self._current_mode == "surface")
+        self.mode_volume.setChecked(self._current_mode == "volume")
+        self.mode_contour.setChecked(self._current_mode == "contour")
+
+        self.mode_surface.toggled.connect(
+            lambda checked: self.set_display_mode("surface") if checked else None
+        )
+        self.mode_volume.toggled.connect(
+            lambda checked: self.set_display_mode("volume") if checked else None
+        )
+        self.mode_contour.toggled.connect(
+            lambda checked: self.set_display_mode("contour") if checked else None
+        )
+
+        display_mode_layout.addWidget(self.mode_surface)
+        display_mode_layout.addWidget(self.mode_volume)
+        display_mode_layout.addWidget(self.mode_contour)
+
+        # Create tabs for organization
+        tabs = QTabWidget()
+
+        # Isodose tab
+        isodose_tab = QWidget()
+        isodose_tab_layout = QVBoxLayout(isodose_tab)
+        isodose_tab_layout.addWidget(self.isodose_selector)
+        isodose_tab_layout.addStretch()
+
+        # Structures tab
+        structures_tab = QWidget()
+        structures_tab_layout = QVBoxLayout(structures_tab)
+        structures_tab_layout.addWidget(self.structure_panel)
+        structures_tab_layout.addStretch()
+
+        # Display tab
+        display_tab = QWidget()
+        display_tab_layout = QVBoxLayout(display_tab)
+        display_tab_layout.addWidget(display_mode_group)
+        display_tab_layout.addWidget(self.colormap_selector)
+        display_tab_layout.addStretch()
+
+        # Add tabs
+        tabs.addTab(isodose_tab, "Isodose")
+        tabs.addTab(structures_tab, "Structures")
+        tabs.addTab(display_tab, "Display")
+
+        # Add tabs to control panel
+        control_layout.addWidget(tabs)
+
+        # Add update button
+        self.update_button = QPushButton("Update Visualization")
+        self.update_button.clicked.connect(self.update_visualization)
+        control_layout.addWidget(self.update_button)
+
+        # Create splitter for resizable panels
         splitter = QSplitter(Qt.Horizontal)
-
-        # 3D viewer
-        self.vtk_viewer = VTKViewer3D()
         splitter.addWidget(self.vtk_viewer)
+        splitter.addWidget(control_panel)
+        splitter.setStretchFactor(0, 3)  # VTK viewer gets more space
+        splitter.setStretchFactor(1, 1)
 
-        # Right side controls
-        controls_widget = QWidget()
-        controls_layout = QVBoxLayout(controls_widget)
-
-        # Isodose controls group
-        isodose_group = QGroupBox("Isodose Controls")
-        isodose_layout = QVBoxLayout(isodose_group)
-
-        # Isodose table
-        self.isodose_table = QTableWidget(0, 3)
-        self.isodose_table.setHorizontalHeaderLabels(["Level", "Color", "Visible"])
-        self.isodose_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        isodose_layout.addWidget(self.isodose_table)
-
-        # Isodose buttons
-        isodose_buttons_layout = QHBoxLayout()
-        self.add_isodose_btn = QPushButton("Add")
-        self.add_isodose_btn.clicked.connect(self._add_isodose_level)
-
-        self.remove_isodose_btn = QPushButton("Remove")
-        self.remove_isodose_btn.clicked.connect(self._remove_isodose_level)
-
-        self.reset_isodose_btn = QPushButton("Reset Default")
-        self.reset_isodose_btn.clicked.connect(self._reset_isodose_levels)
-
-        isodose_buttons_layout.addWidget(self.add_isodose_btn)
-        isodose_buttons_layout.addWidget(self.remove_isodose_btn)
-        isodose_buttons_layout.addWidget(self.reset_isodose_btn)
-        isodose_layout.addLayout(isodose_buttons_layout)
-
-        controls_layout.addWidget(isodose_group)
-
-        # Visualization controls group
-        vis_group = QGroupBox("Visualization Controls")
-        vis_layout = QVBoxLayout(vis_group)
-
-        # Transparency slider
-        transparency_layout = QHBoxLayout()
-        transparency_layout.addWidget(QLabel("Transparency:"))
-        self.transparency_slider = QSlider(Qt.Horizontal)
-        self.transparency_slider.setRange(0, 100)
-        self.transparency_slider.setValue(30)
-        self.transparency_slider.valueChanged.connect(self._update_transparency)
-        transparency_layout.addWidget(self.transparency_slider)
-        vis_layout.addLayout(transparency_layout)
-
-        # Display mode
-        display_layout = QHBoxLayout()
-        display_layout.addWidget(QLabel("Display:"))
-        self.display_mode_combo = QComboBox()
-        self.display_mode_combo.addItems(["Surface", "Volume", "Contour"])
-        self.display_mode_combo.currentIndexChanged.connect(self._update_display_mode)
-        display_layout.addWidget(self.display_mode_combo)
-        vis_layout.addLayout(display_layout)
-
-        # Show/hide structures
-        self.show_structures_check = QCheckBox("Show Structures")
-        self.show_structures_check.setChecked(True)
-        self.show_structures_check.stateChanged.connect(self._toggle_structures)
-        vis_layout.addWidget(self.show_structures_check)
-
-        # Show/hide DVH
-        self.show_dvh_check = QCheckBox("Show DVH")
-        self.show_dvh_check.setChecked(False)
-        self.show_dvh_check.stateChanged.connect(self._toggle_dvh)
-        vis_layout.addWidget(self.show_dvh_check)
-
-        controls_layout.addWidget(vis_group)
-
-        # Add legend/info
-        info_group = QGroupBox("Dose Information")
-        info_layout = QVBoxLayout(info_group)
-
-        # Min, max, mean dose
-        self.dose_info_label = QLabel("Min: N/A  Max: N/A  Mean: N/A")
-        info_layout.addWidget(self.dose_info_label)
-
-        # Statistics
-        self.stats_label = QLabel("No dose data available")
-        info_layout.addWidget(self.stats_label)
-
-        controls_layout.addWidget(info_group)
-
-        # Add a stretch to ensure controls stay at the top
-        controls_layout.addStretch()
-
-        # Add controls to splitter
-        splitter.addWidget(controls_widget)
-
-        # Set initial sizes (70% viewer, 30% controls)
-        splitter.setSizes([700, 300])
-
+        # Add splitter to main layout
         main_layout.addWidget(splitter)
 
-        # Initialize isodose levels
-        self._init_default_isodose_levels()
+        # Initialize visualization timer for performance
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self.update_visualization)
 
-    def _init_default_isodose_levels(self):
-        """Initialize default isodose levels based on prescription dose."""
-        self.isodose_levels.clear()
-        self.isodose_table.setRowCount(0)
+    def _setup_fallback_ui(self):
+        """Set up fallback UI when required dependencies are not available."""
+        layout = QVBoxLayout(self)
 
-        prescription = self.prescription_spinbox.value()
-
-        for i, percent in enumerate(self.default_level_percentages):
-            level = prescription * percent / 100.0
-            if i < len(self.default_colors):
-                color = self.default_colors[i]
-            else:
-                # Generate random color if we run out of defaults
-                color = (np.random.random(), np.random.random(), np.random.random())
-
-            self._add_isodose_to_table(level, color)
-
-    def _add_isodose_to_table(self, level: float, color: Tuple[float, float, float]):
-        """Add an isodose level to the table and internal storage."""
-        # Create IsodoseLevel object
-        isodose = IsodoseLevel(level, color)
-        self.isodose_levels[level] = isodose
-
-        # Add to table
-        row = self.isodose_table.rowCount()
-        self.isodose_table.insertRow(row)
-
-        # Level
-        level_item = QTableWidgetItem(f"{level:.1f} Gy")
-        level_item.setData(Qt.UserRole, level)
-        self.isodose_table.setItem(row, 0, level_item)
-
-        # Color
-        color_item = QTableWidgetItem()
-        color_item.setBackground(
-            QBrush(
-                QColor(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
-            )
+        error_label = QLabel(
+            "Cannot initialize DoseVisualization3D due to missing dependencies."
         )
-        color_item.setData(Qt.UserRole, color)
-        self.isodose_table.setItem(row, 1, color_item)
+        error_label.setStyleSheet("color: red; font-weight: bold;")
 
-        # Visibility checkbox
-        checkbox = QCheckBox()
-        checkbox.setChecked(True)
-        checkbox.stateChanged.connect(
-            lambda state, l=level: self._toggle_isodose_visibility(l, state)
-        )
-        self.isodose_table.setCellWidget(row, 2, checkbox)
-
-    def _add_isodose_level(self):
-        """Add a new isodose level."""
-        prescription = self.prescription_spinbox.value()
-
-        # Ask for percentage of prescription
-        percent, ok = QInputDialog.getDouble(
-            self,
-            "Add Isodose Level",
-            "Enter percentage of prescription dose:",
-            value=50.0,
-            min=1.0,
-            max=200.0,
-            decimals=1,
+        dependencies_label = QLabel(
+            "Please ensure the following dependencies are installed:\n"
+            "- VTK\n"
+            "- PyQt5\n"
+            "- QuangTPS modules"
         )
 
-        if not ok:
-            return
+        layout.addWidget(error_label)
+        layout.addWidget(dependencies_label)
+        layout.addStretch()
 
-        level = prescription * percent / 100.0
-
-        # Check if level already exists
-        if level in self.isodose_levels:
-            return
-
-        # Ask for color
-        color_dialog = QColorDialog(self)
-        color_dialog.setOption(QColorDialog.ShowAlphaChannel, False)
-
-        if color_dialog.exec_():
-            qcolor = color_dialog.selectedColor()
-            color = (
-                qcolor.red() / 255.0,
-                qcolor.green() / 255.0,
-                qcolor.blue() / 255.0,
-            )
-
-            # Add to table
-            self._add_isodose_to_table(level, color)
-
-            # Update visualization if dose grid exists
-            if self.dose_grid is not None:
-                self._update_dose_visualization()
-
-    def _remove_isodose_level(self):
-        """Remove the selected isodose level."""
-        selected_rows = self.isodose_table.selectedIndexes()
-        if not selected_rows:
-            return
-
-        row = selected_rows[0].row()
-        level_item = self.isodose_table.item(row, 0)
-        level = level_item.data(Qt.UserRole)
-
-        # Remove from storage
-        if level in self.isodose_levels:
-            # Remove actor from renderer if it exists
-            isodose = self.isodose_levels[level]
-            if isodose.actor and self.vtk_viewer.renderer:
-                self.vtk_viewer.renderer.RemoveActor(isodose.actor)
-
-            del self.isodose_levels[level]
-
-        # Remove from table
-        self.isodose_table.removeRow(row)
-
-        # Update visualization
-        self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
-
-    def _reset_isodose_levels(self):
-        """Reset isodose levels to defaults."""
-        # Clear existing isodose actors
-        for level, isodose in self.isodose_levels.items():
-            if isodose.actor and self.vtk_viewer.renderer:
-                self.vtk_viewer.renderer.RemoveActor(isodose.actor)
-
-        # Reinitialize default levels
-        self._init_default_isodose_levels()
-
-        # Update visualization if dose grid exists
-        if self.dose_grid is not None:
-            self._update_dose_visualization()
-
-    def _toggle_isodose_visibility(self, level: float, state: int):
-        """Toggle visibility of an isodose level."""
-        if level not in self.isodose_levels:
-            return
-
-        isodose = self.isodose_levels[level]
-        isodose.visible = state == Qt.Checked
-
-        # Update actor visibility if it exists
-        if isodose.actor:
-            isodose.actor.SetVisibility(isodose.visible)
-            self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
-
-    def _update_prescription(self, value: float):
-        """Update isodose levels when prescription changes."""
-        # Store old prescription
-        old_prescription = self.prescription_dose or value
-        self.prescription_dose = value
-
-        # Calculate ratio
-        ratio = value / old_prescription if old_prescription > 0 else 1.0
-
-        # Update levels
-        new_levels = {}
-        for old_level, isodose in self.isodose_levels.items():
-            new_level = old_level * ratio
-            isodose.level = new_level
-            new_levels[new_level] = isodose
-
-        self.isodose_levels = new_levels
-
-        # Update table
-        self.isodose_table.setRowCount(0)
-        for level, isodose in sorted(self.isodose_levels.items(), reverse=True):
-            self._add_isodose_to_table(level, isodose.color)
-
-        # Update visualization if dose grid exists
-        if self.dose_grid is not None:
-            self._update_dose_visualization()
-
-    def _update_transparency(self, opacity_percent):
+    def set_dose_grid(self, dose_grid, prescription_dose=None):
         """
-        Update the transparency of the dose visualization.
+        Set the dose grid to visualize.
 
-        Args:
-            opacity_percent (int): The opacity percentage (0-100)
-        """
-        opacity = max(0.0, min(1.0, opacity_percent / 100.0))
-
-        # Update opacity for all isodose levels
-        for level, isodose in self.isodose_levels.items():
-            if isodose.actor:
-                isodose.actor.GetProperty().SetOpacity(opacity)
-
-        # Render
-        self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
-
-    def _update_display_mode(self, index: int):
-        """
-        Cập nhật chế độ hiển thị cho phân phối liều.
-
-        Parameters
-        ----------
-        index : int
-            Chỉ số của chế độ hiển thị, 0: Surface, 1: Volume, 2: Contour
-        """
-        mode_names = ["Surface", "Volume", "Contour"]
-        mode = mode_names[index] if index < len(mode_names) else "Surface"
-
-        logger.info(f"Đang thay đổi chế độ hiển thị isodose sang: {mode}")
-
-        # Nếu không có dữ liệu liều, thoát
-        if self.dose_grid is None:
-            return
-
-        # Lấy actor hiện tại
-        for level, isodose in self.isodose_levels.items():
-            if isodose.actor is None:
-                continue
-
-            # Áp dụng chế độ hiển thị phù hợp
-            if mode == "Surface":
-                # Chế độ bề mặt isodose
-                isodose.actor.GetProperty().SetRepresentationToSurface()
-                isodose.actor.GetProperty().SetOpacity(
-                    self.transparency_slider.value() / 100.0
-                )
-
-            elif mode == "Volume":
-                # Chế độ khối lượng với độ trong suốt
-                isodose.actor.GetProperty().SetRepresentationToSurface()
-                isodose.actor.GetProperty().SetOpacity(
-                    min(0.7, self.transparency_slider.value() / 100.0)
-                )
-
-            elif mode == "Contour":
-                # Chế độ đường viền
-                isodose.actor.GetProperty().SetRepresentationToWireframe()
-                isodose.actor.GetProperty().SetLineWidth(2.0)
-                isodose.actor.GetProperty().SetOpacity(1.0)  # Đường viền luôn đặc
-
-        # Cập nhật hiển thị
-        if hasattr(self.vtk_viewer, "vtk_widget") and self.vtk_viewer.vtk_widget:
-            self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
-
-        # Phát tín hiệu thông báo đã cập nhật
-        self.dose_visualization_updated.emit()
-
-    def _toggle_structures(self, state: int):
-        """Toggle visibility of structures."""
-        visible = state == Qt.Checked
-        self.vtk_viewer.toggle_structures(visible)
-
-    def _toggle_dvh(self, state: int):
-        """Toggle DVH display."""
-        # Not implemented yet - would show a pop-up DVH window
-        pass
-
-    def _reset_view(self):
-        """Reset the 3D view."""
-        self.vtk_viewer.reset_view()
-
-    def _change_view_mode(self, index: int):
-        """Change the view mode (3D, Axial, Sagittal, Coronal)."""
-        mode_names = ["3D", "Axial", "Sagittal", "Coronal"]
-        if index < len(mode_names):
-            self.current_view_mode = mode_names[index]
-
-            camera = self.vtk_viewer.camera
-            if self.current_view_mode == "3D":
-                camera.SetPosition(0, -500, 0)
-                camera.SetViewUp(0, 0, 1)
-                camera.SetFocalPoint(0, 0, 0)
-            elif self.current_view_mode == "Axial":
-                camera.SetPosition(0, 0, 500)
-                camera.SetViewUp(0, 1, 0)
-                camera.SetFocalPoint(0, 0, 0)
-            elif self.current_view_mode == "Sagittal":
-                camera.SetPosition(500, 0, 0)
-                camera.SetViewUp(0, 0, 1)
-                camera.SetFocalPoint(0, 0, 0)
-            elif self.current_view_mode == "Coronal":
-                camera.SetPosition(0, 500, 0)
-                camera.SetViewUp(0, 0, 1)
-                camera.SetFocalPoint(0, 0, 0)
-
-            self.vtk_viewer.vtk_widget.GetRenderWindow().Render()
-
-    def _take_screenshot(self):
-        """Chụp và lưu ảnh màn hình của hiển thị 3D."""
-        try:
-            if (
-                not hasattr(self.vtk_viewer, "vtk_widget")
-                or not self.vtk_viewer.vtk_widget
-            ):
-                logger.error("Không thể chụp màn hình: VTK widget không khởi tạo")
-                return
-
-            # Hiển thị hộp thoại lưu tệp
-            try:
-                from PyQt5.QtWidgets import QFileDialog
-            except ImportError as e:
-                logger.error(f"Không thể import QFileDialog: {e}")
-                return
-
-            # Tạo tên tệp mặc định dựa trên thời gian
-            import datetime
-
-            default_filename = f"dose_visualization_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-
-            filename, _ = QFileDialog.getSaveFileName(
-                self,
-                "Lưu ảnh chụp màn hình",
-                default_filename,
-                "PNG Files (*.png);;JPEG Files (*.jpg);;All Files (*)",
-            )
-
-            if not filename:
-                return  # Người dùng đã hủy
-
-            # Thêm phần mở rộng .png nếu không có phần mở rộng
-            if not any(
-                filename.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg"]
-            ):
-                filename += ".png"
-
-            # Tạo bộ lọc cửa sổ VTK để lưu ảnh chụp màn hình
-            window_to_image_filter = vtk.vtkWindowToImageFilter()
-            window_to_image_filter.SetInput(
-                self.vtk_viewer.vtk_widget.GetRenderWindow()
-            )
-            window_to_image_filter.SetInputBufferTypeToRGB()
-            window_to_image_filter.ReadFrontBufferOff()
-            window_to_image_filter.Update()
-
-            # Xác định bộ ghi tệp dựa trên phần mở rộng
-            if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-                writer = vtk.vtkJPEGWriter()
-            else:
-                writer = vtk.vtkPNGWriter()
-
-            writer.SetFileName(filename)
-            writer.SetInputConnection(window_to_image_filter.GetOutputPort())
-            writer.Write()
-
-            logger.info(f"Đã lưu ảnh chụp màn hình thành công vào: {filename}")
-
-        except Exception as e:
-            logger.error(f"Lỗi khi lưu ảnh chụp màn hình: {str(e)}")
-            from PyQt5.QtWidgets import QMessageBox
-
-            QMessageBox.warning(
-                self,
-                "Lỗi khi lưu ảnh chụp",
-                f"Không thể lưu ảnh chụp màn hình: {str(e)}",
-            )
-
-    def set_dose_grid(self, dose_grid: DoseGrid):
-        """
-        Set the dose grid for visualization.
-
-        Parameters
-        ----------
+        Parameters:
+        -----------
         dose_grid : DoseGrid
             The dose grid to visualize
+        prescription_dose : float, optional
+            The prescription dose in Gy
         """
+        if not VTK_AVAILABLE:
+            logger.warning("VTK is not available, cannot set dose grid.")
+            return
+
         self.dose_grid = dose_grid
 
-        if dose_grid is None:
-            self._clear_dose()
-            return
+        if prescription_dose is not None:
+            self.prescription_dose = prescription_dose
+        elif self.dose_grid is not None:
+            # Default to maximum dose if no prescription provided
+            self.prescription_dose = dose_grid.get_max_dose()
 
-        # Update dose info
-        if hasattr(dose_grid, "get_statistics"):
-            min_dose, max_dose, mean_dose = dose_grid.get_statistics()
-            self.dose_info_label.setText(
-                f"Min: {min_dose:.2f} Gy  Max: {max_dose:.2f} Gy  Mean: {mean_dose:.2f} Gy"
-            )
-            self.stats_label.setText(f"Grid size: {dose_grid.shape}")
+        # Generate default isodose levels
+        self.create_default_isodose_levels()
+
+        # Update isodose selector
+        if hasattr(self, "isodose_selector"):
+            self.isodose_selector.set_prescription_dose(self.prescription_dose)
 
         # Update visualization
-        self._update_dose_visualization()
+        self.update_visualization()
 
-    def _update_dose_visualization(self):
-        """Update the 3D dose visualization based on current settings."""
-        if self.dose_grid is None:
+    def create_default_isodose_levels(self):
+        """Create default isodose levels based on prescription dose."""
+        if self.prescription_dose is None:
+            logger.warning(
+                "Cannot create isodose levels: prescription dose is not set."
+            )
             return
-
-        # Clear existing isodose surfaces
-        self._clear_dose()
-
-        # Get dose data as numpy array
-        dose_array = getattr(self.dose_grid, "dose_array", None)
-
-        if dose_array is None and hasattr(self.dose_grid, "get_array"):
-            dose_array = self.dose_grid.get_array()
-
-        if dose_array is None:
-            logger.error("Could not get dose array from dose grid")
-            return
-
-        # Get spacing and origin from dose grid
-        spacing = getattr(self.dose_grid, "spacing", (1.0, 1.0, 1.0))
-        origin = getattr(self.dose_grid, "origin", (0.0, 0.0, 0.0))
-
-        # Add dose to VTK viewer with current isodose levels
-        isodose_levels = [
-            (level, isodose.color) for level, isodose in self.isodose_levels.items()
-        ]
-        self.vtk_viewer.add_dose(self.dose_grid, isodose_levels)
-
-        # Store actors for each isodose level
-        if hasattr(self.vtk_viewer, "dose_actors") and self.vtk_viewer.dose_actors:
-            for i, (level, _) in enumerate(isodose_levels):
-                if i < len(self.vtk_viewer.dose_actors):
-                    self.isodose_levels[level].actor = self.vtk_viewer.dose_actors[i]
-
-        # Apply transparency
-        self._update_transparency(self.transparency_slider.value())
-
-        # Apply visibility settings
-        for level, isodose in self.isodose_levels.items():
-            if isodose.actor:
-                isodose.actor.SetVisibility(isodose.visible)
-
-        # Signal that visualization has been updated
-        self.dose_visualization_updated.emit()
-
-    def _clear_dose(self):
-        """Clear all dose visualization."""
-        # Clear isodose actors from renderer
-        for level, isodose in self.isodose_levels.items():
-            if isodose.actor and self.vtk_viewer.renderer:
-                self.vtk_viewer.renderer.RemoveActor(isodose.actor)
-                isodose.actor = None
-
-        # Call VTK viewer's clear method
-        if hasattr(self.vtk_viewer, "clear_dose"):
-            self.vtk_viewer.clear_dose()
-
-        # Reset dose info
-        self.dose_info_label.setText("Min: N/A  Max: N/A  Mean: N/A")
-        self.stats_label.setText("No dose data available")
-
-    def set_image_data(self, image_data, spacing=None, origin=None):
-        """Set the underlying image data for proper dose overlay."""
-        self.vtk_viewer.set_image_data(image_data, spacing, origin)
-
-    def add_structure(
-        self, structure_id, mask, color=(1.0, 0.0, 0.0), opacity=0.5, name=None
-    ):
-        """Add a structure for visualization along with dose."""
-        self.vtk_viewer.add_structure(structure_id, mask, color, opacity, name)
-
-    def clear_all(self):
-        """Clear all visualizations."""
-        self._clear_dose()
-        self.vtk_viewer.clear_all()
-
-    def set_dose_threshold(self, dose_value):
-        """
-        Set the minimum dose threshold for visualization.
-
-        Args:
-            dose_value (float): The minimum dose value to display in Gy
-        """
-        self.dose_threshold = dose_value
-
-        # Update the isodose display
-        if hasattr(self, "dose_array") and self.dose_array is not None:
-            self._update_isodose_display()
-
-        # Log the change
-        logger.info(f"Dose threshold set to {dose_value} Gy")
-
-        # Request a refresh of the display
-        if hasattr(self, "vtk_viewer") and hasattr(self.vtk_viewer, "render"):
-            self.vtk_viewer.render()
-
-    def _update_isodose_display(self):
-        """Update the isodose display based on current settings."""
-        if not hasattr(self, "dose_array") or self.dose_array is None:
-            return
-
-        # Clear existing isodose actors
-        for level, isodose in self.isodose_levels.items():
-            if isodose.actor and self.vtk_viewer.renderer:
-                self.vtk_viewer.renderer.RemoveActor(isodose.actor)
 
         self.isodose_levels.clear()
 
-        # Re-create isodose contours
-        for level in self.isodose_levels:
-            # Skip levels below threshold
-            if level < self.dose_threshold:
-                continue
+        for i, percentage in enumerate(self.default_level_percentages):
+            if i < len(self.default_colors):
+                level_dose = self.prescription_dose * percentage / 100.0
+                color = self.default_colors[i]
 
-            # Create contour at this level
-            color = self.isodose_levels.get(level, (1, 1, 1))
-            isodose = IsodoseLevel(level, color)
-            self.isodose_levels[level] = isodose
+                self.isodose_levels[level_dose] = IsodoseLevel(level_dose, color)
 
-            if isodose.actor:
-                self.vtk_viewer.renderer.AddActor(isodose.actor)
+        # Update isodose selector with new levels
+        if hasattr(self, "isodose_selector"):
+            self.isodose_selector.set_isodose_levels(self.isodose_levels)
 
-        # Request a refresh
-        if hasattr(self, "vtk_viewer") and hasattr(self.vtk_viewer, "render"):
+    def set_structures(self, structures):
+        """
+        Set the structures to visualize.
+
+        Parameters:
+        -----------
+        structures : list
+            List of structure objects to visualize
+        """
+        if not VTK_AVAILABLE:
+            logger.warning("VTK is not available, cannot set structures.")
+            return
+
+        self.structures = structures
+
+        # Update structure panel
+        if hasattr(self, "structure_panel"):
+            self.structure_panel.set_structures(structures)
+
+        # Update visualization
+        self.update_visualization()
+
+    def update_visualization(self):
+        """Update the 3D visualization with current settings."""
+        if not VTK_AVAILABLE or not hasattr(self, "vtk_viewer"):
+            logger.warning("VTK is not available or VTK viewer is not initialized.")
+            return
+
+        if self.dose_grid is None:
+            logger.warning("No dose grid to visualize.")
+            return
+
+        logger.info("Updating dose visualization...")
+
+        try:
+            # Clear existing visualization
+            self.vtk_viewer.clear_scene()
+
+            # Get visible isodose levels
+            visible_isodose_levels = [
+                level for level in self.isodose_levels.values() if level.visible
+            ]
+
+            # Create visualization based on current mode
+            if self._current_mode == "surface":
+                self._create_isodose_surfaces(visible_isodose_levels)
+            elif self._current_mode == "volume":
+                self._create_isodose_volume()
+            elif self._current_mode == "contour":
+                self._create_isodose_contours(visible_isodose_levels)
+
+            # Create structure visualization if structures are available
+            if self.structures and hasattr(self, "structure_panel"):
+                visible_structures = [
+                    s
+                    for s in self.structures
+                    if self.structure_panel.is_structure_visible(s)
+                ]
+                self._create_structure_models(visible_structures)
+
+            # Refresh the view
+            self.vtk_viewer.reset_camera()
             self.vtk_viewer.render()
 
+            # Emit signal that visualization was updated
+            self.dose_visualization_updated.emit()
 
-# Test function
-def test():
-    """Test function for standalone testing."""
+            logger.info("Dose visualization updated successfully.")
+
+        except Exception as e:
+            logger.error(f"Error updating dose visualization: {e}")
+
+    def _create_isodose_surfaces(self, isodose_levels):
+        """Create isodose surfaces for the given levels."""
+        if not isodose_levels:
+            logger.info("No visible isodose levels to display.")
+            return
+
+        logger.info(f"Creating isodose surfaces for {len(isodose_levels)} levels.")
+
+        try:
+            # Convert dose grid to VTK image data
+            dose_vtk_data = self._convert_dose_grid_to_vtk()
+
+            if dose_vtk_data is None:
+                logger.error("Failed to convert dose grid to VTK data.")
+                return
+
+            # Create isosurface for each level
+            for level in isodose_levels:
+                iso_value = level.level
+                color = level.color
+
+                # Create contour filter
+                contour = vtkMarchingCubes()
+                contour.SetInputData(dose_vtk_data)
+                contour.SetValue(0, iso_value)
+                contour.Update()
+
+                # Apply smoothing to get better visual quality
+                smoother = vtkSmoothPolyDataFilter()
+                smoother.SetInputData(contour.GetOutput())
+                smoother.SetNumberOfIterations(15)
+                smoother.SetRelaxationFactor(0.1)
+                smoother.FeatureEdgeSmoothingOff()
+                smoother.BoundarySmoothingOn()
+                smoother.Update()
+
+                # Create mapper
+                mapper = vtkPolyDataMapper()
+                mapper.SetInputData(smoother.GetOutput())
+
+                # Create actor
+                actor = vtkActor()
+                actor.SetMapper(mapper)
+                actor.GetProperty().SetColor(color)
+                actor.GetProperty().SetOpacity(0.7)  # Semi-transparent
+
+                # Store actor reference
+                level.actor = actor
+                self.isodose_actors[iso_value] = actor
+
+                # Add to viewer
+                self.vtk_viewer.add_actor(str(iso_value), actor)
+
+                logger.debug(f"Created isodose surface for level {iso_value} Gy")
+
+        except Exception as e:
+            logger.error(f"Error creating isodose surfaces: {e}")
+
+    def _convert_dose_grid_to_vtk(self):
+        """Convert dose grid to VTK image data."""
+        if not VTK_AVAILABLE or self.dose_grid is None:
+            return None
+
+        try:
+            # Get dose grid data
+            dose_array = self.dose_grid.get_dose_array()
+            spacing = self.dose_grid.get_spacing()
+            origin = self.dose_grid.get_origin()
+
+            # Create VTK image data
+            vtk_image = vtkImageData()
+            vtk_image.SetDimensions(dose_array.shape)
+            vtk_image.SetSpacing(spacing)
+            vtk_image.SetOrigin(origin)
+            vtk_image.AllocateScalars(VTK_FLOAT, 1)
+
+            # Copy dose data to VTK image
+            for i in range(dose_array.shape[0]):
+                for j in range(dose_array.shape[1]):
+                    for k in range(dose_array.shape[2]):
+                        vtk_image.SetScalarComponentFromFloat(
+                            i, j, k, 0, dose_array[i, j, k]
+                        )
+
+            return vtk_image
+
+        except Exception as e:
+            logger.error(f"Error converting dose grid to VTK: {e}")
+            return None
+
+    def _create_isodose_volume(self):
+        """Create volume rendering of dose distribution."""
+        if not VTK_AVAILABLE or self.dose_grid is None:
+            return
+
+        try:
+            # Convert dose grid to VTK image data
+            dose_vtk_data = self._convert_dose_grid_to_vtk()
+
+            if dose_vtk_data is None:
+                return
+
+            # Setup volume mapper
+            mapper = vtkSmartVolumeMapper()
+            mapper.SetInputData(dose_vtk_data)
+
+            # Setup volume properties
+            volume_property = vtkVolumeProperty()
+            volume_property.ShadeOff()
+            volume_property.SetInterpolationTypeToLinear()
+
+            # Setup color and opacity transfer functions
+            color_tf = vtkColorTransferFunction()
+            opacity_tf = vtkPiecewiseFunction()
+
+            # Get dose range
+            max_dose = self.dose_grid.get_max_dose()
+
+            # Set up transfer functions
+            # Add transfer function points for each isodose level
+            for level in sorted(self.isodose_levels.keys()):
+                isodose = self.isodose_levels[level]
+                if isodose.visible:
+                    color_tf.AddRGBPoint(level, *isodose.color)
+                    opacity_tf.AddPoint(level, 0.7 * (level / max_dose))
+
+            # Ensure we have at least entry for 0 dose
+            color_tf.AddRGBPoint(0, 0.0, 0.0, 0.0)  # Black for 0 dose
+            opacity_tf.AddPoint(0, 0.0)  # Transparent for 0 dose
+
+            # Set transfer functions
+            volume_property.SetColor(color_tf)
+            volume_property.SetScalarOpacity(opacity_tf)
+
+            # Create volume
+            volume = vtkVolume()
+            volume.SetMapper(mapper)
+            volume.SetProperty(volume_property)
+
+            # Add to viewer
+            self.vtk_viewer.add_actor("dose_volume", volume)
+
+            logger.info("Created dose volume visualization.")
+
+        except Exception as e:
+            logger.error(f"Error creating dose volume: {e}")
+
+    def _create_isodose_contours(self, isodose_levels):
+        """Create isodose contours for each orthogonal plane."""
+        if not isodose_levels or self.dose_grid is None:
+            return
+
+        logger.info("Creating isodose contours is not fully implemented yet.")
+        # This would require extracting contours from each plane
+        # Implementation would depend on specific requirements
+
+    def _create_structure_models(self, structures):
+        """Create 3D models for the given structures."""
+        if not structures:
+            return
+
+        logger.info(f"Creating structure models for {len(structures)} structures.")
+
+        # Actual implementation would depend on structure representation
+        # Placeholder for future implementation
+
+    # Event handlers
+    def on_isodose_levels_changed(self, isodose_levels):
+        """Handle changes to isodose levels from the selector."""
+        self.isodose_levels = isodose_levels
+        self.update_timer.start(200)  # Debounce updates
+
+    def on_structure_visibility_changed(self):
+        """Handle changes to structure visibility."""
+        self.update_timer.start(200)  # Debounce updates
+
+    def on_colormap_changed(self):
+        """Handle changes to colormap."""
+        self.update_timer.start(200)  # Debounce updates
+
+    def set_display_mode(self, mode):
+        """Set the display mode (surface, volume, contour)."""
+        if mode not in ["surface", "volume", "contour"]:
+            logger.warning(f"Invalid display mode: {mode}")
+            return
+
+        logger.info(f"Setting display mode to {mode}")
+        self._current_mode = mode
+
+        # Update mode checkboxes
+        if hasattr(self, "mode_surface"):
+            self.mode_surface.setChecked(mode == "surface")
+        if hasattr(self, "mode_volume"):
+            self.mode_volume.setChecked(mode == "volume")
+        if hasattr(self, "mode_contour"):
+            self.mode_contour.setChecked(mode == "contour")
+
+        # Update visualization
+        self.update_visualization()
+
+
+# For standalone testing
+if __name__ == "__main__":
     import sys
-    from PyQt5.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
-    widget = DoseVisualization3D()
-    widget.resize(1200, 800)
-    widget.show()
 
-    # Create test dose grid with spherical dose distribution
-    dose_array = np.zeros((100, 100, 100), dtype=np.float32)
-    center = np.array([50, 50, 50])
+    # Create test window
+    viewer = DoseVisualization3D()
+    viewer.resize(1200, 800)
+    viewer.show()
 
-    # Create spherical dose distribution
-    for x in range(100):
-        for y in range(100):
-            for z in range(100):
-                dist = np.sqrt(((np.array([x, y, z]) - center) ** 2).sum())
-                if dist < 40:
-                    dose_array[x, y, z] = max(0, 5.0 * (1.0 - dist / 40.0))
-
-    # Create dummy dose grid
-    class DummyDoseGrid:
-        def __init__(self, dose_array):
-            self.dose_array = dose_array
-            self.shape = dose_array.shape
-            self.spacing = (1.0, 1.0, 1.0)
-            self.origin = (0.0, 0.0, 0.0)
-
-        def get_statistics(self):
-            return (
-                np.min(self.dose_array),
-                np.max(self.dose_array),
-                np.mean(self.dose_array),
-            )
-
-    # Set test dose grid
-    widget.set_dose_grid(DummyDoseGrid(dose_array))
-
+    # Run application
     sys.exit(app.exec_())
-
-
-if __name__ == "__main__":
-    test()

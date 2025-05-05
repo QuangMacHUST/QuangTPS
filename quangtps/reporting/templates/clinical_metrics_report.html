@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Báo cáo Đánh giá Kế hoạch Điều trị</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --success-color: #2ecc71;
+            --warning-color: #f1c40f;
+            --danger-color: #e74c3c;
+            --light-bg: #f5f7fa;
+            --border-color: #ddd;
+            --text-color: #333;
+            --dark-text: #2c3e50;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Arial', 'Roboto', sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: white;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+            color: var(--dark-text);
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        h2 {
+            font-size: 20px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--border-color);
+            margin-top: 30px;
+        }
+
+        h3 {
+            font-size: 18px;
+            margin-top: 20px;
+        }
+
+        p {
+            margin-bottom: 15px;
+        }
+
+        .patient-info,
+        .plan-info {
+            background-color: var(--light-bg);
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .info-item {
+            margin-bottom: 5px;
+        }
+
+        .info-label {
+            font-weight: bold;
+            margin-right: 5px;
+            color: var(--primary-color);
+        }
+
+        .dose-images {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+
+        .dose-image {
+            flex: 1;
+            min-width: 300px;
+            max-width: 400px;
+            text-align: center;
+            background-color: var(--light-bg);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+        }
+
+        .dose-image img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .dose-image-title {
+            margin-top: 10px;
+            font-weight: bold;
+            color: var(--dark-text);
+        }
+
+        .dvh-container {
+            background-color: var(--light-bg);
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        .dvh-image {
+            max-width: 100%;
+            height: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+            border: 1px solid var(--border-color);
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: var(--light-bg);
+        }
+
+        .metrics-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .metric-card {
+            background-color: white;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .metric-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .metric-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            background-color: var(--secondary-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .metric-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: var(--dark-text);
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: var(--dark-text);
+        }
+
+        .metric-description {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .metric-status {
+            margin-top: 10px;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .status-good {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .status-medium {
+            background-color: var(--warning-color);
+            color: var(--dark-text);
+        }
+
+        .status-poor {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .metric-chart {
+            margin-top: 15px;
+            height: 30px;
+            background-color: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .chart-fill {
+            height: 100%;
+            background-color: var(--secondary-color);
+            width: 0;
+            /* Set by inline style */
+            transition: width 1s ease-in-out;
+        }
+
+        .chart-marker {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background-color: var(--accent-color);
+            transition: left 1s ease-in-out;
+        }
+
+        .chart-label {
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 3px;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: var(--dark-text);
+            color: white;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+        }
+
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .tab-container {
+            margin: 20px 0;
+        }
+
+        .tab-navigation {
+            display: flex;
+            overflow-x: auto;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab-button {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+            white-space: nowrap;
+        }
+
+        .tab-button:hover {
+            background-color: var(--light-bg);
+        }
+
+        .tab-button.active {
+            color: var(--secondary-color);
+            border-bottom: 3px solid var(--secondary-color);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            color: #777;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        @media print {
+            body {
+                font-size: 12px;
+            }
+
+            .container {
+                width: 100%;
+                max-width: none;
+                padding: 0;
+            }
+
+            .tab-navigation {
+                display: none;
+            }
+
+            .tab-content {
+                display: block;
+                border: none;
+                padding: 0;
+            }
+
+            table {
+                page-break-inside: avoid;
+            }
+
+            h1,
+            h2,
+            h3 {
+                page-break-after: avoid;
+            }
+
+            .metrics-container {
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>{{ report_title }}</h1>
+            <p>Được tạo vào: {{ generated_date }}</p>
+        </header>
+
+        <div class="tab-container">
+            <div class="tab-navigation">
+                <button class="tab-button active" data-tab="tab-summary">Tổng quan</button>
+                <button class="tab-button" data-tab="tab-metrics">Chỉ số lâm sàng</button>
+                <button class="tab-button" data-tab="tab-dvh">Biểu đồ DVH</button>
+                <button class="tab-button" data-tab="tab-dose">Phân bố liều</button>
+                <button class="tab-button" data-tab="tab-structures">Thông tin cấu trúc</button>
+            </div>
+
+            <!-- Tab Tổng quan -->
+            <div id="tab-summary" class="tab-content active">
+                <h2>Thông tin bệnh nhân</h2>
+                <div class="patient-info">
+                    <div class="info-item">
+                        <span class="info-label">ID:</span>
+                        <span>{{ patient.id }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Tên:</span>
+                        <span>{{ patient.name }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Tuổi:</span>
+                        <span>{{ patient.age }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Giới tính:</span>
+                        <span>{{ patient.gender }}</span>
+                    </div>
+                </div>
+
+                <h2>Thông tin kế hoạch điều trị</h2>
+                <div class="plan-info">
+                    <div class="info-item">
+                        <span class="info-label">ID kế hoạch:</span>
+                        <span>{{ plan.id }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Tên kế hoạch:</span>
+                        <span>{{ plan.name }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Ngày tạo:</span>
+                        <span>{{ plan.creation_date }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Liều kê toa:</span>
+                        <span>{{ plan.prescription.total_dose }} Gy</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Số phân liều:</span>
+                        <span>{{ plan.prescription.num_fractions }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Liều mỗi phân liều:</span>
+                        <span>{{ plan.prescription.dose_per_fraction }} Gy</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Cấu trúc mục tiêu:</span>
+                        <span>{{ target_name }}</span>
+                    </div>
+                </div>
+
+                <h2>Tóm tắt đánh giá kế hoạch</h2>
+                <p>Báo cáo này cung cấp đánh giá toàn diện về kế hoạch điều trị, bao gồm các chỉ số định lượng về chất
+                    lượng kế hoạch. Các chỉ số này giúp đánh giá tính đồng nhất liều trong PTV, sự phù hợp của vùng liều
+                    cao với PTV, và độ dốc liều (gradient) ở ranh giới PTV.</p>
+
+                <div class="metrics-container">
+                    <!-- HI card -->
+                    {% if metrics['HI'] %}
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-icon">H</div>
+                            <div class="metric-title tooltip">
+                                Homogeneity Index
+                                <span class="tooltip-text">Chỉ số đồng nhất, đo lường mức độ đồng đều của liều trong
+                                    PTV.</span>
+                            </div>
+                        </div>
+                        <div class="metric-value">{{ metrics['HI'].value|round(3) }}</div>
+                        <div class="metric-description">{{ metrics['HI'].description }}</div>
+                        <div class="metric-status status-{{ metrics['HI'].get_status()|lower }}">
+                            {{ metrics['HI'].get_status() }}
+                        </div>
+                        <div class="metric-chart">
+                            <div class="chart-fill" style="width: {{ (metrics['HI'].value / 0.2 * 100)|min(100) }}%">
+                            </div>
+                            <div class="chart-marker"
+                                style="left: {{ (metrics['HI'].ideal_value / 0.2 * 100)|min(100) }}%"></div>
+                        </div>
+                        <div class="chart-label">
+                            <span>0</span>
+                            <span>Lý tưởng: {{ metrics['HI'].ideal_value }}</span>
+                            <span>0.2</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- CI card -->
+                    {% if metrics['CI'] %}
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-icon">C</div>
+                            <div class="metric-title tooltip">
+                                Conformity Index
+                                <span class="tooltip-text">Chỉ số phù hợp, đo lường mức độ phù hợp của vùng liều cao với
+                                    PTV.</span>
+                            </div>
+                        </div>
+                        <div class="metric-value">{{ metrics['CI'].value|round(3) }}</div>
+                        <div class="metric-description">{{ metrics['CI'].description }}</div>
+                        <div class="metric-status status-{{ metrics['CI'].get_status()|lower }}">
+                            {{ metrics['CI'].get_status() }}
+                        </div>
+                        <div class="metric-chart">
+                            <div class="chart-fill" style="width: {{ (metrics['CI'].value / 1 * 100)|min(100) }}%">
+                            </div>
+                            <div class="chart-marker"
+                                style="left: {{ (metrics['CI'].ideal_value / 1 * 100)|min(100) }}%"></div>
+                        </div>
+                        <div class="chart-label">
+                            <span>0</span>
+                            <span>Lý tưởng: {{ metrics['CI'].ideal_value }}</span>
+                            <span>1.0</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- GI card -->
+                    {% if metrics['GI'] %}
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-icon">G</div>
+                            <div class="metric-title tooltip">
+                                Gradient Index
+                                <span class="tooltip-text">Chỉ số độ dốc, đo lường độ dốc của liều ở ranh giới
+                                    PTV.</span>
+                            </div>
+                        </div>
+                        <div class="metric-value">{{ metrics['GI'].value|round(3) }}</div>
+                        <div class="metric-description">{{ metrics['GI'].description }}</div>
+                        <div class="metric-status status-{{ metrics['GI'].get_status()|lower }}">
+                            {{ metrics['GI'].get_status() }}
+                        </div>
+                        <div class="metric-chart">
+                            <div class="chart-fill" style="width: {{ (metrics['GI'].value / 5 * 100)|min(100) }}%">
+                            </div>
+                            <div class="chart-marker"
+                                style="left: {{ (metrics['GI'].ideal_value / 5 * 100)|min(100) }}%"></div>
+                        </div>
+                        <div class="chart-label">
+                            <span>1.0</span>
+                            <span>Lý tưởng: {{ metrics['GI'].ideal_value }}</span>
+                            <span>5.0</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Coverage card -->
+                    {% if metrics['Coverage'] %}
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-icon">C</div>
+                            <div class="metric-title tooltip">
+                                Coverage
+                                <span class="tooltip-text">Phần trăm thể tích PTV nhận được ít nhất liều kê toa.</span>
+                            </div>
+                        </div>
+                        <div class="metric-value">{{ metrics['Coverage'].value|round(3) }}%</div>
+                        <div class="metric-description">{{ metrics['Coverage'].description }}</div>
+                        <div class="metric-status status-{{ metrics['Coverage'].get_status()|lower }}">
+                            {{ metrics['Coverage'].get_status() }}
+                        </div>
+                        <div class="metric-chart">
+                            <div class="chart-fill"
+                                style="width: {{ (metrics['Coverage'].value / 100 * 100)|min(100) }}%"></div>
+                            <div class="chart-marker"
+                                style="left: {{ (metrics['Coverage'].ideal_value / 100 * 100)|min(100) }}%"></div>
+                        </div>
+                        <div class="chart-label">
+                            <span>0%</span>
+                            <span>Lý tưởng: {{ metrics['Coverage'].ideal_value }}%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Tab Chỉ số lâm sàng -->
+            <div id="tab-metrics" class="tab-content">
+                <h2>Chỉ số lâm sàng chi tiết</h2>
+                <p>Dưới đây là các chỉ số lâm sàng chi tiết được tính toán cho kế hoạch điều trị này:</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Chỉ số</th>
+                            <th>Giá trị</th>
+                            <th>Giá trị lý tưởng</th>
+                            <th>Khoảng chấp nhận</th>
+                            <th>Trạng thái</th>
+                            <th>Mô tả</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for name, metric in metrics.items() %}
+                        <tr>
+                            <td>{{ name }}</td>
+                            <td>{{ metric.value|round(3) }}{{ metric.unit }}</td>
+                            <td>{{ metric.ideal_value }}{{ metric.unit }}</td>
+                            <td>
+                                {% if metric.acceptable_range %}
+                                {{ metric.acceptable_range[0] }} - {{ metric.acceptable_range[1] }}{{ metric.unit }}
+                                {% else %}
+                                N/A
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="metric-status status-{{ metric.get_status()|lower }}">
+                                    {{ metric.get_status() }}
+                                </div>
+                            </td>
+                            <td>{{ metric.description }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <h3>Giải thích các chỉ số lâm sàng</h3>
+                <p>Các chỉ số lâm sàng này cung cấp cái nhìn định lượng về chất lượng của kế hoạch điều trị:</p>
+                <ul>
+                    <li><strong>Homogeneity Index (HI):</strong> Đo lường mức độ đồng đều của phân bố liều trong PTV.
+                        Giá trị HI càng gần 0 càng tốt, cho thấy liều trong PTV đồng đều hơn.</li>
+                    <li><strong>Conformity Index (CI):</strong> Đo lường mức độ phù hợp của vùng liều cao với thể tích
+                        PTV. Giá trị CI lý tưởng là 1.0, cho thấy sự phù hợp hoàn hảo giữa vùng liều và PTV.</li>
+                    <li><strong>Gradient Index (GI):</strong> Đo lường độ dốc của liều ở ranh giới PTV. Giá trị GI càng
+                        thấp càng tốt, cho thấy liều giảm nhanh khi ra khỏi PTV.</li>
+                    <li><strong>Coverage:</strong> Thể tích phần trăm của PTV nhận được ít nhất liều kê toa. Giá trị lý
+                        tưởng là 100%.</li>
+                    <li><strong>Selectivity:</strong> Thể tích phần trăm của vùng liều cao nằm trong PTV. Giá trị lý
+                        tưởng là 100%.</li>
+                </ul>
+            </div>
+
+            <!-- Tab Biểu đồ DVH -->
+            <div id="tab-dvh" class="tab-content">
+                <h2>Biểu đồ Dose-Volume Histogram (DVH)</h2>
+                <p>Biểu đồ DVH thể hiện mối quan hệ giữa liều và thể tích cho các cấu trúc quan tâm.</p>
+
+                <div class="dvh-container">
+                    {% if dvh_image %}
+                    <img src="{{ dvh_image }}" alt="Biểu đồ DVH" class="dvh-image">
+                    {% else %}
+                    <p>Không có dữ liệu DVH để hiển thị</p>
+                    {% endif %}
+                </div>
+
+                <h3>Phân tích DVH</h3>
+                <p>Biểu đồ DVH cung cấp thông tin về phân bố liều trong các cấu trúc khác nhau. Đường cong dốc cho các
+                    cơ quan nguy cấp (OAR) là mong muốn, trong khi đường cong phẳng gần 100% cho PTV là lý tưởng.</p>
+            </div>
+
+            <!-- Tab Phân bố liều -->
+            <div id="tab-dose" class="tab-content">
+                <h2>Phân bố liều</h2>
+                <p>Các hình ảnh dưới đây thể hiện phân bố liều theo các mặt phẳng khác nhau.</p>
+
+                <div class="dose-images">
+                    <div class="dose-image">
+                        {% if axial_image %}
+                        <img src="{{ axial_image }}" alt="Phân bố liều - Mặt phẳng Axial">
+                        {% else %}
+                        <p>Không có hình ảnh axial</p>
+                        {% endif %}
+                        <div class="dose-image-title">Mặt phẳng Axial</div>
+                    </div>
+
+                    <div class="dose-image">
+                        {% if sagittal_image %}
+                        <img src="{{ sagittal_image }}" alt="Phân bố liều - Mặt phẳng Sagittal">
+                        {% else %}
+                        <p>Không có hình ảnh sagittal</p>
+                        {% endif %}
+                        <div class="dose-image-title">Mặt phẳng Sagittal</div>
+                    </div>
+
+                    <div class="dose-image">
+                        {% if coronal_image %}
+                        <img src="{{ coronal_image }}" alt="Phân bố liều - Mặt phẳng Coronal">
+                        {% else %}
+                        <p>Không có hình ảnh coronal</p>
+                        {% endif %}
+                        <div class="dose-image-title">Mặt phẳng Coronal</div>
+                    </div>
+                </div>
+
+                <h3>Thông tin liều</h3>
+                <div class="plan-info">
+                    <div class="info-item">
+                        <span class="info-label">Liều tối đa:</span>
+                        <span>{{ dose_max|round(2) }} Gy</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Liều tối thiểu:</span>
+                        <span>{{ dose_min|round(2) }} Gy</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Liều trung bình:</span>
+                        <span>{{ dose_mean|round(2) }} Gy</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Thông tin cấu trúc -->
+            <div id="tab-structures" class="tab-content">
+                <h2>Thông tin cấu trúc</h2>
+                <p>Thông tin chi tiết về các cấu trúc được sử dụng trong kế hoạch điều trị.</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên cấu trúc</th>
+                            <th>Loại</th>
+                            <th>Thể tích (cm³)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for structure in structures %}
+                        <tr>
+                            <td>{{ structure.name }}</td>
+                            <td>{{ structure.type }}</td>
+                            <td>{{ structure.volume|round(2) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Được tạo bởi QuangTPS - Hệ thống Lập kế hoạch Xạ trị</p>
+            <p>ID Báo cáo: {{ report_id }} | {{ generated_date }}</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Tab navigation
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    // Remove active class from all buttons and contents
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+
+                    // Add active class to clicked button
+                    this.classList.add('active');
+
+                    // Show corresponding content
+                    const tabId = this.getAttribute('data-tab');
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+
+            // Animate metric charts on load
+            setTimeout(function () {
+                const chartFills = document.querySelectorAll('.chart-fill');
+                const chartMarkers = document.querySelectorAll('.chart-marker');
+
+                chartFills.forEach(fill => {
+                    const width = fill.style.width;
+                    fill.style.width = '0';
+                    setTimeout(() => {
+                        fill.style.width = width;
+                    }, 100);
+                });
+
+                chartMarkers.forEach(marker => {
+                    const left = marker.style.left;
+                    marker.style.left = '0';
+                    setTimeout(() => {
+                        marker.style.left = left;
+                    }, 100);
+                });
+            }, 500);
+        });
+    </script>
+</body>
+
+</html>

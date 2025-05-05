@@ -81,6 +81,13 @@ except ImportError:
 
 from quangtps.ui.review_panel import ReviewPanel
 
+# Tích hợp log viewer
+try:
+    from quangtps.ui.log_viewer import LogViewerWidget
+except ImportError:
+    logging.warning("Không thể tích hợp Log Viewer")
+    LogViewerWidget = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -297,6 +304,15 @@ class MainWindow(QMainWindow):
         self.progress_bar.setMaximum(100)
         self.progress_bar.setMinimumWidth(200)
         self.status_bar.addPermanentWidget(self.progress_bar)
+
+        # Tích hợp log viewer
+        try:
+            self.log_viewer = LogViewerWidget()
+            self.tab_widget.addTab(self.log_viewer, "Log Viewer")
+            logger.info("Tích hợp Log Viewer thành công")
+        except ImportError as e:
+            logger.warning(f"Không thể tích hợp Log Viewer: {e}")
+            self.log_viewer = None
 
         # Show the window
         self.show()

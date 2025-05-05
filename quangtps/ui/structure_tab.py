@@ -14,49 +14,99 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any, Set
 import numpy as np
 
-from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QSplitter,
-    QDialog,
-    QColorDialog,
-    QComboBox,
-    QLineEdit,
-    QFormLayout,
-    QMessageBox,
-    QFileDialog,
-    QTabWidget,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QHeaderView,
-    QProgressDialog,
-    QMenu,
-    QAction,
-    QToolBar,
-    QGroupBox,
-    QRadioButton,
-    QButtonGroup,
-    QCheckBox,
-    QSlider,
-    QSpinBox,
-    QDoubleSpinBox,
-    QToolButton,
-    QFrame,
-    QScrollArea,
-    QGridLayout,
-    QInputDialog,
-    QStackedWidget,
-    QAbstractItemView,
-    QSizePolicy,
-    QDialogButtonBox,
-)
-from PyQt5.QtGui import QColor, QIcon, QBrush, QPixmap, QImage, QPainter, QPen
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QTimer
+# Thêm xử lý exception khi import PyQt5
+try:
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QListWidget,
+        QListWidgetItem,
+        QSplitter,
+        QDialog,
+        QColorDialog,
+        QComboBox,
+        QLineEdit,
+        QFormLayout,
+        QMessageBox,
+        QFileDialog,
+        QTabWidget,
+        QTreeWidget,
+        QTreeWidgetItem,
+        QHeaderView,
+        QProgressDialog,
+        QMenu,
+        QAction,
+        QToolBar,
+        QGroupBox,
+        QRadioButton,
+        QButtonGroup,
+        QCheckBox,
+        QSlider,
+        QSpinBox,
+        QDoubleSpinBox,
+        QToolButton,
+        QFrame,
+        QScrollArea,
+        QGridLayout,
+        QInputDialog,
+        QStackedWidget,
+        QAbstractItemView,
+        QSizePolicy,
+        QDialogButtonBox,
+    )
+    from PyQt5.QtGui import QColor, QIcon, QBrush, QPixmap, QImage, QPainter, QPen
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QTimer
+
+    PYQT_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import PyQt5: {e}")
+    PYQT_AVAILABLE = False
+
+    # Tạo các lớp giả để tránh lỗi cú pháp khi không có PyQt5
+    class DummyQtClass:
+        """Dummy class to replace Qt classes when PyQt5 is not available."""
+
+        pass
+
+    # Tạo các lớp Widget cơ bản
+    QWidget = QVBoxLayout = QHBoxLayout = QPushButton = QLabel = QListWidget = (
+        QListWidgetItem
+    ) = QSplitter = QDialog = DummyQtClass
+    QColorDialog = QComboBox = QLineEdit = QFormLayout = QMessageBox = QFileDialog = (
+        QTabWidget
+    ) = QTreeWidget = DummyQtClass
+    QTreeWidgetItem = QHeaderView = QProgressDialog = QMenu = QAction = QToolBar = (
+        QGroupBox
+    ) = QRadioButton = DummyQtClass
+    QButtonGroup = QCheckBox = QSlider = QSpinBox = QDoubleSpinBox = QToolButton = (
+        QFrame
+    ) = QScrollArea = DummyQtClass
+    QGridLayout = QInputDialog = QStackedWidget = QAbstractItemView = QSizePolicy = (
+        QDialogButtonBox
+    ) = DummyQtClass
+
+    # Tạo các lớp Gui
+    QColor = QIcon = QBrush = QPixmap = QImage = QPainter = QPen = DummyQtClass
+
+    # Tạo các lớp Core
+    Qt = QSize = QPoint = QRect = QTimer = DummyQtClass
+
+    # Tạo lớp signal
+    class pyqtSignal:
+        """Dummy signal class when PyQt5 is not available."""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def connect(self, *args, **kwargs):
+            pass
+
+        def emit(self, *args, **kwargs):
+            pass
+
 
 try:
     from quangtps.segmentation.structures.structure import (
@@ -657,10 +707,12 @@ class StructureTab(QWidget):
 
             # Reset or create a new structure set if needed
             if not self.structure_set:
-                self.structure_set = StructureSet()
-                self.structure_set.name = "RTStruct"
-                self.structure_set.image_ref = image
-                self.structureSetChanged.emit(self.structure_set)
+                try:
+                    # Tạo StructureSet mới
+                    self.structure_set = StructureSet(name="RTStruct")
+                except Exception as e:
+                    logger.error(f"Lỗi khi tạo StructureSet: {e}")
+                    return
 
             # Update structure set name
             self.struct_set_name.setText(self.structure_set.name)
@@ -687,13 +739,21 @@ class StructureTab(QWidget):
 
             # Clear structure list
             self.structure_list.clear()
+            self.structure_items = []
 
             # Add structures to list
             for structure in structure_set.structures:
                 self.add_structure_to_list(structure)
 
-            # Enable the add structure button
+            # Cập nhật trạng thái
+            self.status_label.setText(
+                f"Loaded {len(structure_set.structures)} structures from {structure_set.name}"
+            )
+
+            # Enable/disable buttons
             self.add_structure_btn.setEnabled(True)
+            self.delete_structure_btn.setEnabled(True)
+            self.edit_structure_btn.setEnabled(True)
 
             # Emit signal
             self.structureSetChanged.emit(structure_set)
@@ -771,10 +831,15 @@ class StructureTab(QWidget):
             color = preset_colors[index]
 
         # Create new structure
-        structure = Structure()
-        structure.name = name
-        structure.color = color
-        structure.image_ref = self.image
+        try:
+            # Tạo structure mới
+            structure = Structure(name=name)
+            # Gán các thuộc tính khác
+            structure.color = color
+            structure.image_ref = self.image
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo Structure: {e}")
+            return
 
         # Add to structure set
         self.structure_set.add_structure(structure)
@@ -1083,6 +1148,52 @@ class StructureTab(QWidget):
         if not structure:
             return
 
+        # Lấy pixel spacing từ image
+        pixel_spacing = (1.0, 1.0)
+        if self.image:
+            if hasattr(self.image, "spacing"):
+                pixel_spacing = (self.image.spacing[0], self.image.spacing[1])
+
+        # Sử dụng MarginToolWidget mới thay vì hộp thoại cũ
+        try:
+            from quangtps.segmentation.contour.margin_tool_widget import (
+                show_margin_tool_dialog,
+            )
+
+            # Hiển thị hộp thoại margin tool
+            margin_widget = show_margin_tool_dialog(
+                self, self.structure_set, pixel_spacing
+            )
+
+            # Kết nối signal marginApplied với hàm xử lý
+            margin_widget.marginApplied.connect(self.on_margin_applied)
+
+        except ImportError as e:
+            # Fallback vào hộp thoại cũ nếu không tìm thấy module mới
+            logger.warning(
+                f"Không thể tải MarginToolWidget: {e}. Sử dụng hộp thoại cũ."
+            )
+            self._show_legacy_margin_dialog(structure)
+
+    def on_margin_applied(self, old_structure, new_structure):
+        """Xử lý sau khi áp dụng margin."""
+        # Cập nhật UI
+        if old_structure != new_structure:
+            # Nếu tạo cấu trúc mới, thêm vào danh sách
+            self.add_structure_to_list(new_structure)
+
+            # Chọn cấu trúc mới
+            for i in range(self.structure_list.count()):
+                item = self.structure_list.item(i)
+                if item.data(Qt.UserRole) == new_structure:
+                    self.structure_list.setCurrentItem(item)
+                    break
+        else:
+            # Nếu cập nhật cấu trúc cũ, phát tín hiệu để cập nhật
+            self.structureModified.emit(old_structure)
+
+    def _show_legacy_margin_dialog(self, structure):
+        """Hiển thị hộp thoại margin truyền thống (để dự phòng)."""
         # Ask user for margin value and type
         dialog = QDialog(self)
         dialog.setWindowTitle("Apply Margin")
@@ -1255,9 +1366,7 @@ class StructureTab(QWidget):
                 pixel_spacing = (self.image.spacing[0], self.image.spacing[1])
 
         try:
-            # Apply margin to each contour in the structure
-            from quangtps.segmentation.contour.margin import MarginType
-
+            # Áp dụng margin cho mỗi contour trong cấu trúc
             new_contours = []
             for slice_num, contours in structure.contours.items():
                 if contours:
@@ -1269,17 +1378,27 @@ class StructureTab(QWidget):
 
             if create_new:
                 # Create new structure
-                new_structure = Structure(
-                    id=f"{structure.id}_margin",
-                    name=new_structure_name,
-                    color=structure.color,
-                    type=structure.type,
-                    priority=structure.priority,
-                )
+                new_structure = Structure(name=new_structure_name)
+                new_structure.id = f"{structure.id}_margin"
+                new_structure.color = structure.color
+                if hasattr(structure, "type"):
+                    new_structure.type = structure.type
+                if hasattr(structure, "priority"):
+                    new_structure.priority = structure.priority
 
                 # Add contours to new structure
                 for slice_num, contours in new_contours:
-                    new_structure.set_contours(slice_num, contours)
+                    try:
+                        # Thử phương thức set_contours nếu có
+                        if hasattr(new_structure, "set_contours"):
+                            new_structure.set_contours(slice_num, contours)
+                        else:
+                            # Thử gán trực tiếp vào dictionary contours nếu không có phương thức
+                            if not hasattr(new_structure, "contours"):
+                                new_structure.contours = {}
+                            new_structure.contours[slice_num] = contours
+                    except Exception as e:
+                        logger.error(f"Lỗi khi cập nhật contours: {e}")
 
                 # Add new structure to current structure set
                 if self.structure_set:
@@ -1295,10 +1414,17 @@ class StructureTab(QWidget):
             else:
                 # Replace contours in existing structure
                 for slice_num, contours in new_contours:
-                    structure.set_contours(slice_num, contours)
-
-                # Refresh display
-                self.on_structure_modified()
+                    try:
+                        # Thử phương thức set_contours nếu có
+                        if hasattr(structure, "set_contours"):
+                            structure.set_contours(slice_num, contours)
+                        else:
+                            # Thử gán trực tiếp vào dictionary contours nếu không có phương thức
+                            if not hasattr(structure, "contours"):
+                                structure.contours = {}
+                            structure.contours[slice_num] = contours
+                    except Exception as e:
+                        logger.error(f"Lỗi khi cập nhật contours: {e}")
 
             # Update MPR views
             self.structureModified.emit(structure)
@@ -1320,10 +1446,16 @@ def test_structure_tab():
     main_window = QMainWindow()
 
     # Create test patient
-    class TestPatient(Patient):
+    class TestPatient:
+        """Lớp Patient giả cho mục đích kiểm thử."""
+
         def __init__(self, id, name):
             self.id = id
             self.name = name
+            # Thêm các thuộc tính tương thích với Patient
+            self.image_sets = []
+            self.structure_sets = []
+            self.plans = []
 
     # Create test image
     class TestImage:
@@ -1388,10 +1520,32 @@ def test_structure_tab():
 
     # Register mock services
     ServiceRegistry._services = {}  # Reset services
-    ServiceRegistry.register_service("PatientDB", TestPatientDB())
+    try:
+        # Kiểm tra xem ServiceRegistry có phương thức register_service hay get_instance
+        if hasattr(ServiceRegistry, "get_instance") and hasattr(
+            ServiceRegistry.get_instance(), "register_service"
+        ):
+            ServiceRegistry.get_instance().register_service(
+                "PatientDB", TestPatientDB()
+            )
+        else:
+            ServiceRegistry.register_service("PatientDB", TestPatientDB())
+    except Exception as e:
+        logger.error(f"Lỗi khi đăng ký service: {e}")
 
     # Add test data to mock DB
-    patient_db = ServiceRegistry.get_service("PatientDB")
+    try:
+        # Kiểm tra xem ServiceRegistry có phương thức get_service hay get_instance
+        if hasattr(ServiceRegistry, "get_instance") and hasattr(
+            ServiceRegistry.get_instance(), "get_service"
+        ):
+            patient_db = ServiceRegistry.get_instance().get_service("PatientDB")
+        else:
+            patient_db = ServiceRegistry.get_service("PatientDB")
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy service: {e}")
+        patient_db = TestPatientDB()  # Fallback
+
     patient_db.patients[test_patient.id] = test_patient
     patient_db.images[test_image.id] = test_image
 

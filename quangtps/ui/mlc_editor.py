@@ -44,6 +44,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QStackedWidget,
+    QProgressBar,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon
@@ -461,6 +462,47 @@ class MLCEditor(QWidget):
 
         optimization_form.addRow("Mục tiêu:", self.target_combo)
 
+        # Thêm lựa chọn thuật toán tối ưu hóa
+        self.algorithm_combo = QComboBox()
+        self.algorithm_combo.addItems(
+            [
+                "Gradient Descent (nhanh, có thể bị mắc cực tiểu cục bộ)",
+                "Simulated Annealing (trung bình, thoát tốt cực tiểu cục bộ)",
+                "Genetic Algorithm (chậm, tìm kiếm rộng nhất)",
+            ]
+        )
+        self.algorithm_combo.setCurrentIndex(1)  # Mặc định là Simulated Annealing
+        optimization_form.addRow("Thuật toán:", self.algorithm_combo)
+
+        # Thêm điều khiển tham số tối ưu hóa
+        params_layout = QHBoxLayout()
+
+        iterations_layout = QVBoxLayout()
+        iterations_label = QLabel("Số vòng lặp:")
+        self.iterations_spin = QSpinBox()
+        self.iterations_spin.setRange(10, 1000)
+        self.iterations_spin.setValue(100)
+        self.iterations_spin.setSingleStep(10)
+        iterations_layout.addWidget(iterations_label)
+        iterations_layout.addWidget(self.iterations_spin)
+
+        threshold_layout = QVBoxLayout()
+        threshold_label = QLabel("Ngưỡng hội tụ:")
+        self.threshold_spin = QDoubleSpinBox()
+        self.threshold_spin.setRange(0.0001, 0.01)
+        self.threshold_spin.setValue(0.001)
+        self.threshold_spin.setDecimals(4)
+        self.threshold_spin.setSingleStep(0.0005)
+        threshold_layout.addWidget(threshold_label)
+        threshold_layout.addWidget(self.threshold_spin)
+
+        params_layout.addLayout(iterations_layout)
+        params_layout.addLayout(threshold_layout)
+
+        # Thêm checkbox để hiển thị thông tin chi tiết trong quá trình tối ưu
+        self.verbose_check = QCheckBox("Hiển thị thông tin chi tiết")
+        self.verbose_check.setChecked(False)
+
         self.oar_list = QTableWidget()
         self.oar_list.setColumnCount(2)
         self.oar_list.setHorizontalHeaderLabels(["Cấu trúc", "Ưu tiên"])
@@ -486,11 +528,27 @@ class MLCEditor(QWidget):
             "Tối ưu hóa vị trí lá MLC để bao phủ mục tiêu tốt nhất và tránh cơ quan nguy cấp"
         )
 
+        # Hiển thị tiến trình tối ưu hóa
+        progress_layout = QHBoxLayout()
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        self.cancel_optimize_button = QPushButton("Hủy")
+        self.cancel_optimize_button.clicked.connect(self._cancel_optimization)
+        self.cancel_optimize_button.setVisible(False)
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.cancel_optimize_button)
+
         optimization_layout.addLayout(optimization_form)
+        optimization_layout.addLayout(params_layout)
+        optimization_layout.addWidget(self.verbose_check)
         optimization_layout.addWidget(QLabel("Cơ quan nguy cấp:"))
         optimization_layout.addWidget(self.oar_list)
         optimization_layout.addLayout(oar_buttons_layout)
         optimization_layout.addWidget(self.optimize_button)
+        optimization_layout.addLayout(progress_layout)
         optimization_group.setLayout(optimization_layout)
 
         # Bảng vị trí lá
@@ -619,23 +677,109 @@ class MLCEditor(QWidget):
 
         # Lấy danh sách cơ quan nguy cấp
         oars = []
+        oar_weights = []
         for row in range(self.oar_list.rowCount()):
             structure = self.oar_list.item(row, 0).data(Qt.UserRole)
             priority_combo = self.oar_list.cellWidget(row, 1)
             priority = priority_combo.currentIndex()  # 0: Cao, 1: Trung bình, 2: Thấp
 
-            oars.append({"structure": structure, "priority": priority})
+            # Gán trọng số dựa trên mức ưu tiên
+            if priority == 0:  # Cao
+                weight = 2.0
+            elif priority == 1:  # Trung bình
+                weight = 1.0
+            else:  # Thấp
+                weight = 0.5
 
-        # Tối ưu hóa MLC
-        self.mlc_canvas.optimize_leaf_positions(
-            target, [item["structure"] for item in oars]
-        )
+            oars.append(structure)
+            oar_weights.append(weight)
 
-        # Cập nhật UI
-        self._update_ui()
+        # Lấy thuật toán và các tham số
+        algorithm_idx = self.algorithm_combo.currentIndex()
+        if algorithm_idx == 0:
+            algorithm = "gradient_descent"
+        elif algorithm_idx == 1:
+            algorithm = "simulated_annealing"
+        else:
+            algorithm = "genetic_algorithm"
 
-        # Phát tín hiệu thay đổi
-        self.mlc_changed.emit(self.mlc_canvas.get_mlc())
+        max_iterations = self.iterations_spin.value()
+        convergence_threshold = self.threshold_spin.value()
+        verbose = self.verbose_check.isChecked()
+
+        try:
+            from quangtps.optimization.mlc_optimization import optimize_mlc_shape
+
+            # Hiển thị thanh tiến trình
+            self.progress_bar.setVisible(True)
+            self.cancel_optimize_button.setVisible(True)
+            self.progress_bar.setValue(0)
+
+            # Vô hiệu hóa nút tối ưu để tránh người dùng nhấn nhiều lần
+            self.optimize_button.setEnabled(False)
+
+            # Tiến hành tối ưu hóa (trong thực tế nên sử dụng QThread hoặc Worker)
+            # Ở đây chúng ta sẽ giả lập cập nhật tiến trình
+            QApplication.processEvents()
+
+            # Tối ưu hóa MLC
+            optimized_mlc = optimize_mlc_shape(
+                original_mlc=self.mlc,
+                target=target,
+                oars=oars,
+                oar_weights=oar_weights,
+                field_size=self.field_size_spin.value(),
+                algorithm=algorithm,
+                max_iterations=max_iterations,
+                convergence_threshold=convergence_threshold,
+                verbose=verbose,
+            )
+
+            # Cập nhật thanh tiến trình
+            self.progress_bar.setValue(100)
+
+            # Cập nhật MLC với kết quả tối ưu hóa
+            self.mlc = optimized_mlc
+            self.mlc_canvas.set_mlc(self.mlc)
+
+            # Cập nhật UI
+            self._update_ui()
+
+            # Phát tín hiệu thay đổi
+            self.mlc_changed.emit(self.mlc)
+
+            # Hiển thị thông báo thành công
+            QMessageBox.information(
+                self,
+                "Tối ưu hóa thành công",
+                f"Đã tối ưu hóa MLC thành công sử dụng thuật toán {algorithm} "
+                f"với {len(oars)} cơ quan nguy cấp.",
+            )
+
+            logger.info(
+                f"Tối ưu hóa MLC cho mục tiêu {target.name} với thuật toán {algorithm}"
+            )
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tối ưu hóa vị trí lá MLC: {str(e)}")
+            QMessageBox.critical(
+                self, "Lỗi tối ưu hóa", f"Không thể tối ưu hóa vị trí lá MLC: {str(e)}"
+            )
+        finally:
+            # Ẩn thanh tiến trình và kích hoạt lại nút tối ưu
+            self.progress_bar.setVisible(False)
+            self.cancel_optimize_button.setVisible(False)
+            self.optimize_button.setEnabled(True)
+
+    def _cancel_optimization(self):
+        """Hủy quá trình tối ưu hóa MLC."""
+        # Trong thực tế sẽ cần triển khai cơ chế hủy thread/process
+        logger.info("Hủy tối ưu hóa MLC")
+
+        # Ẩn thanh tiến trình và kích hoạt lại nút tối ưu
+        self.progress_bar.setVisible(False)
+        self.cancel_optimize_button.setVisible(False)
+        self.optimize_button.setEnabled(True)
 
     def _update_field_size(self, value):
         """Cập nhật kích thước trường trong canvas."""

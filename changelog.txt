@@ -1,224 +1,389 @@
 # QuangTPS Changelog
 
-## Phiên bản 0.9.0 (2023-11-05)
+## Phiên bản 1.5.0 (2024-05-25)
 
-### Tính năng mới
-- Nâng cấp toàn diện Module MLC Editor và BEV (Beam's Eye View):
-  - Hoàn thiện triển khai đầy đủ `MLCEditorWidget` để thay thế placeholder, tích hợp đầy đủ với `MLCEditor`
-  - Thêm tính năng tương tác kéo-thả MLC trong BEV viewer, cho phép điều chỉnh lá MLC trực tiếp từ góc nhìn chùm tia
-  - Tích hợp thuật toán tối ưu hóa MLC tự động với 3 phương pháp:
-    - Thuật toán Gradient Descent với học thích ứng cho hội tụ nhanh
-    - Thuật toán Simulated Annealing với khả năng thoát cực tiểu cục bộ
-    - Thuật toán Genetic Algorithm với khả năng tìm kiếm song song
-  - Cải tiến lớp `BEVTransform` với thuật toán chiếu cấu trúc 3D vào mặt phẳng 2D chính xác hơn
-  - Thêm tính năng tính toán ray-tracing từ nguồn tới cấu trúc cho đo đạc đường đi qua cấu trúc
-  - Tạo module mới `mlc_optimization.py` tích hợp đầy đủ các thuật toán tối ưu hóa
-  - Hỗ trợ tạo hình MLC tự động từ cấu trúc mục tiêu và cơ quan nguy cấp với các tham số có thể điều chỉnh
+### Tính năng mới và cải tiến
 
-### Cải tiến
-- Hoàn thiện tích hợp giữa các module:
-  - Kết nối `BeamEyeView` với `MLCEditor` để đồng bộ hóa thay đổi MLC từ nhiều góc nhìn
-  - Cải thiện hiệu năng của thuật toán tối ưu hóa MLC với tối ưu hóa song song
-  - Sửa đổi cơ chế hiển thị cấu trúc trong BEV để tăng tốc độ render cho cấu trúc phức tạp
-  - Tối ưu hóa thuật toán tạo hình MLC để đạt độ chính xác cao hơn với thời gian tính toán ngắn hơn
-  - Cải thiện cơ chế chuyển đổi tọa độ 3D-2D với ma trận biến đổi được tối ưu
-- Cải thiện giao diện người dùng:
-  - Thêm hiển thị thông số kỹ thuật và thông số hình học của chùm tia trong BEV
-  - Hỗ trợ hiển thị OAR và target với các mức màu sắc và độ trong suốt khác nhau trong BEV
-  - Cải thiện hiệu ứng kéo-thả cho lá MLC với các hướng dẫn trực quan
-  - Thêm thanh công cụ cho chức năng tối ưu hóa tự động MLC trực tiếp từ BEV
-- Cải tiến thuật toán tối ưu hóa MLC:
-  - Gradient Descent: Thêm cơ chế học thích ứng với momentum để tăng tốc độ hội tụ và tránh dao động
-  - Simulated Annealing: Triển khai cơ chế tái ủ (reheating) và vùng cấm (tabu) để tốt hơn trong việc thoát khỏi cực tiểu cục bộ
-  - Genetic Algorithm: Thêm khả năng tính toán song song cho đánh giá fitness của quần thể, tối ưu hóa đa dạng di truyền
-- Cải tiến BEVTransform:
-  - Cải thiện độ chính xác của ma trận biến đổi cho góc gantry và couch phức tạp
-  - Thêm tính năng project_points_to_isocentric_plane với tối ưu hóa vectorized
-  - Triển khai ray_trace để tính toán đường đi của chùm tia qua các cấu trúc
-  - Tối ưu hóa hiệu suất với việc xử lý cấu trúc phức tạp
+#### Cải thiện hệ thống tính toán liều
+- Thêm mới module AAA (Anisotropic Analytical Algorithm) với các tính năng tương tự Eclipse
+- Cải thiện hiệu suất tính toán liều với parallel computing
+- Hỗ trợ hiệu chỉnh không đồng nhất (heterogeneity correction) cho nhiều loại mô
+- Nâng cấp giao diện tính toán liều với hộp thoại trực quan, dễ sử dụng
 
-### Sửa lỗi
-- Khắc phục lỗi chiếu cấu trúc 3D vào mặt phẳng BEV khi góc gantry và couch phức tạp
-- Sửa lỗi biến dạng của cấu trúc trong BEV khi kích thước trường thay đổi
-- Sửa lỗi không cập nhật thời gian thực khi điều chỉnh lá MLC
-- Khắc phục lỗi tính toán hệ số phóng đại trong BEV cho các vị trí cách xa tâm
-- Sửa lỗi không đồng bộ hóa đúng các thay đổi giữa BEV và MLC Editor
-- Khắc phục lỗi khi tối ưu hóa MLC với cấu trúc phức tạp có nhiều lỗ
-- Sửa lỗi chia cho 0 trong tính toán magnification khi z_distance gần bằng SAD
-- Khắc phục lỗi trong transform_points với cấu trúc rỗng
-
-## Phiên bản 0.8.2 (2023-10-25)
-
-### Tính năng mới
-- Cải thiện đáng kể module hiển thị 3D:
-  - Nâng cấp `VTKViewer3D` với khả năng hiển thị isodose nhiều màu sắc tương tự Eclipse
-  - Thêm chức năng chụp ảnh màn hình cho hiển thị liều 3D với nhiều định dạng xuất (PNG, JPEG)
-  - Hỗ trợ 3 chế độ hiển thị isodose: Surface (bề mặt), Volume (thể tích) và Contour (đường viền)
-  - Tối ưu hiển thị cấu trúc 3D với cải tiến về smoothing và màu sắc
-  - Cải thiện góc nhìn camera mặc định với chế độ xem đẳng trắc (isometric view)
-- Tích hợp `DoseVisualization3D` hoàn chỉnh vào giao diện chính:
-  - Thêm tab "3D Dose" vào EvaluationView trong main_window
-  - Tự động hiển thị phân phối liều 3D khi kế hoạch được tải
-  - Hiển thị cấu trúc từ structure_set với màu sắc tương ứng
-  - Hỗ trợ hiển thị dữ liệu hình ảnh CT/MRI nền cùng với phân phối liều
+#### Cải thiện quản lý cấu trúc và contour
+- Sửa lỗi trong margin_tool_widget.py khi tạo cấu trúc mới với margin
+- Cải thiện giao diện structure_tab.py với xử lý ngoại lệ cho PyQt5
+- Thêm xác thực đầu vào cho StructureSet và Structure constructor
 
 ### Cải tiến
-- Tăng cường xử lý lỗi trong tất cả các module 3D:
-  - Thêm try/except vào tất cả các hàm chính để tránh crash chương trình
-  - Ghi log chi tiết các lỗi để dễ dàng gỡ lỗi
-  - Kiểm tra đầy đủ các điều kiện null/empty trước khi truy cập thuộc tính
-- Tối ưu hóa hiệu suất hiển thị 3D:
-  - Cải thiện cách xử lý dữ liệu liều lớn với bộ nhớ tốt hơn
-  - Tăng tốc tạo bề mặt isodose với thuật toán cải tiến
-  - Tối ưu quản lý bộ nhớ khi dọn dẹp cảnh 3D
-- Cải thiện giao diện người dùng:
-  - Hoàn thiện các chức năng thanh công cụ trong hiển thị 3D
-  - Thêm thông tin chi tiết khi hover chuột qua các isodose
-- Tăng cường khả năng tích hợp giữa các module:
-  - Cải thiện cách EvaluationView truyền dữ liệu kế hoạch đến các tab con
-  - Tự động cập nhật hiển thị 3D khi kế hoạch thay đổi
-  - Đồng bộ hóa trạng thái hiển thị giữa các tab
+- Thêm các công cụ cấu trúc mới với giao diện hiện đại giống Eclipse:
+  - Tạo file quangtps/segmentation/contour/margin_tool_widget.py với MarginToolWidget mới
+  - Cải thiện giao diện người dùng, hỗ trợ xem trước và ứng dụng margin cho cấu trúc
+  - Thiết kế UI hiện đại với style sheet thân thiện người dùng
+  - Tích hợp vào structure_tab.py, thay thế dialog cũ bằng widget mới
+  - Cung cấp tùy chọn fallback nếu không có modules mới
+- Thêm module structure_operations.py với các thao tác cấu trúc nâng cao:
+  - Các phép toán Boolean (Union, Intersection, Subtraction, XOR)
+  - Làm mượt contour với nhiều thuật toán (Gaussian, Morphological, Fourier)
+  - Lọc contour nhỏ và trích xuất thành phần liên thông lớn nhất
+  - Nội suy contour giữa các slice nâng cao
+  - Sử dụng skimage để xử lý contour hiệu quả
 
-### Sửa lỗi
-- Khắc phục lỗi hiển thị isodose khi giá trị liều gần 0
-- Sửa lỗi không hiển thị đúng structures trong 3D viewer khi mask có dạng không chuẩn
-- Sửa lỗi méo hình cấu trúc khi spacing không đồng nhất
-- Sửa lỗi trong toggle_dose không áp dụng cho tất cả các actor
-- Khắc phục lỗi rò rỉ bộ nhớ trong quá trình xóa cảnh 3D
-- Xử lý các trường hợp ngoại lệ khi chưa có kế hoạch hoặc liều trong hiển thị 3D
-
-## Phiên bản 0.8.1 (2023-10-20)
-
-### Tính năng mới
-- Thêm chức năng so sánh chất lượng nhiều kế hoạch điều trị:
-  - Thêm phương thức `compare_plans` vào `PlanQualityWidget` để so sánh nhiều kế hoạch dựa trên tiêu chí lâm sàng
-  - Hỗ trợ hiển thị kết quả so sánh trực quan với bảng điểm số và bảng mục tiêu lâm sàng
-  - Phân loại cấu trúc thành Targets, OARs và Others để dễ dàng đọc
-  - Xuất báo cáo so sánh dưới dạng HTML và PDF với hiển thị màu sắc theo kết quả đánh giá
-  - Tích hợp đầy đủ với hệ thống protocol lâm sàng hiện có
-  - Tự động nhận diện loại cấu trúc dựa trên tên phổ biến
+## Phiên bản 1.4.0 (2024-05-20)
 
 ### Cải tiến
-- Tiếp tục cải thiện xử lý lỗi trong các module UI:
-  - Nâng cấp xử lý lỗi trong `beam_eye_view.py` với bảo vệ tốt hơn cho các hàm:
-    - Cải thiện hàm `_export_view()` với xử lý chi tiết cho lỗi import QFileDialog
-    - Tăng cường bảo vệ lỗi trong hàm `test_beam_eye_view()` để đảm bảo đóng chương trình đúng cách khi gặp lỗi
-  - Cải thiện xử lý lỗi trong các đoạn test của `plan_quality_widget.py` và `protocol_dialog.py`:
-    - Thêm try/except để xử lý lỗi import QApplication
-    - Thêm xử lý lỗi cho phương thức add_template không tồn tại
-    - Ghi lại lỗi vào nhật ký hệ thống
-  - Nâng cao khả năng phục hồi khi chạy các chức năng test mà không có giao diện đồ họa
-- Cải thiện tích hợp giữa `evaluation_tab.py` và `plan_quality_widget.py`:
-  - Sửa lỗi liên quan đến gọi phương thức calculate_cumulative_dvh không tồn tại
-  - Thêm xử lý lỗi cho các tham số trong quá trình tính toán DVH
-  - Hoàn thiện việc chuyển context giữa các tab chức năng
-  - Cải thiện giao diện đồng bộ giữa các thành phần UI
+- Thêm module Log Viewer cho phân tích và theo dõi nhật ký hệ thống:
+  - Tạo file quangtps/ui/log_viewer.py với giao diện LogViewerWidget hoàn chỉnh
+  - Thêm các tính năng lọc, tìm kiếm, theo dõi thời gian thực và hiển thị thống kê
+  - Tích hợp vào MainWindow với tab Log Viewer
+  - Hỗ trợ tô màu nhật ký theo mức độ (ERROR, WARNING, INFO, DEBUG)
+  - Hỗ trợ xuất nhật ký và theo dõi nhiều file nhật ký
+- Cải thiện hệ thống phân đoạn cấu trúc tự động:
+  - Thêm modul quangtps/segmentation/contour/smoothing.py với các thuật toán làm mượt contour
+  - Hỗ trợ nhiều thuật toán: Gaussian, Morphological, Fourier
+  - Cải thiện xử lý lỗi và thông báo trạng thái trong AISegmentationWidget
+  - Thêm tính năng xem trước kết quả phân đoạn với StructureReviewDialog
+  - Nâng cao hiệu suất xử lý mask 3D cho cấu trúc lớn
+  - Tích hợp thuật toán làm mượt lưới 3D Laplacian cho bề mặt cấu trúc
+- Nâng cấp toàn diện module đánh giá chất lượng kế hoạch (Plan Quality Evaluation):
+  - Cải thiện quangtps/evaluation/protocol_manager.py với khả năng quản lý protocol mạnh mẽ hơn
+  - Thêm các tính năng mới như tạo bản sao, import/export, tìm kiếm và xác thực protocol
+  - Thêm cơ chế tự động sao lưu và phục hồi protocol
+  - Cải thiện hiệu suất khi xử lý nhiều protocol cùng lúc
+  - Thêm tính năng xác thực và sửa chữa protocol bị lỗi
+- Cải tiến PlanQualityEvaluator trong quangtps/evaluation/plan_quality.py:
+  - Tích hợp chặt chẽ với ProtocolManager để sử dụng protocol lâm sàng hiệu quả hơn
+  - Cải thiện thuật toán đánh giá target coverage với các tiêu chí đa dạng
+  - Tối ưu hóa hiệu suất tính toán và ghi nhận thời gian thực thi
+  - Thêm đánh giá chi tiết cho từng cấu trúc mục tiêu
+  - Hỗ trợ đánh giá nhiều kế hoạch cùng lúc để so sánh
+- Cập nhật giao diện PlanQualityWidget trong quangtps/ui/plan_quality_widget.py:
+  - Thiết kế lại UI theo phong cách hiện đại, trực quan
+  - Thêm biểu đồ radar để hiển thị trực quan điểm số các tiêu chí đánh giá
+  - Tối ưu trải nghiệm người dùng với hệ thống tab phân loại thông tin
+  - Cải thiện khả năng xuất báo cáo với định dạng HTML và PDF
+  - Thêm chức năng so sánh nhiều kế hoạch với hiển thị song song
+  - Cải thiện việc hiển thị thông tin chi tiết về mục tiêu lâm sàng
 
 ### Sửa lỗi
-- Sửa lỗi import QApplication trong các module UI test
-- Xử lý lỗi khi ClinicalGoalManager không có phương thức add_template
-- Khắc phục lỗi từ beam_eye_view._export_view() khi không tìm thấy QFileDialog
-- Sửa lỗi khi cố gắng truy cập attribute không tồn tại trong quá trình tính toán DVH
+- Khắc phục các lỗi linter trong module PlanQualityEvaluator
+- Sửa lỗi hiển thị sai màu cho thanh tiến trình trong PlanQualityWidget
+- Khắc phục lỗi mất kết nối giữa ProtocolManager và PlanQualityEvaluator
+- Sửa lỗi không hiển thị đúng thông tin mục tiêu khi thay đổi protocol
+- Khắc phục lỗi crash khi module matplotlib không khả dụng
+- Sửa lỗi báo cáo không hiển thị hình ảnh khi xuất ra PDF
 
-## Phiên bản 0.8.0 (2023-10-15)
-
-### Tính năng mới
-- Thêm hệ thống đánh giá chất lượng kế hoạch xạ trị (Plan Quality Evaluation) tương tự Eclipse:
-  - Tạo mới `PlanQualityWidget` để hiển thị đánh giá kế hoạch xạ trị theo các tiêu chí lâm sàng
-  - Thêm hộp thoại `ClinicalProtocolDialog` cho phép chọn và quản lý protocol lâm sàng
-  - Hỗ trợ đánh giá điểm số tổng thể, điểm số mục tiêu, và điểm số OAR
-  - Hiển thị kết quả trực quan với thanh tiến trình màu và bảng mục tiêu lâm sàng
-  - Tạo báo cáo đánh giá HTML và PDF dễ đọc với visualization
-  - Hỗ trợ import/export protocol theo định dạng JSON
+## Phiên bản 1.2.0 (2024-01-10)
 
 ### Cải tiến
-- Cải thiện cách xử lý lỗi trong `beam_eye_view.py` với pattern try/except:
-  - Thêm xử lý lỗi import PyQt5
-  - Cải thiện xử lý lỗi khi import scipy và các thư viện khác
-  - Thêm xử lý lỗi cho chức năng xuất hình ảnh
-  - Tăng khả năng phục hồi khi gặp lỗi trong quá trình render
-- Tích hợp hệ thống đánh giá chất lượng kế hoạch vào tab Evaluation hiện có
+- Cải thiện tính ổn định và khả năng tương thích của hệ thống hiển thị 3D:
+  - Cải thiện quangtps/ui/dose_visualization_3d.py với xử lý lỗi VTK toàn diện
+  - Thêm các lớp wrapper VTK để tránh lỗi linter và cải thiện IDE support
+  - Thêm cơ chế hạ cấp (fallback) thông minh khi các thư viện phụ thuộc bị thiếu
+  - Cải tiến xử lý ngoại lệ để giảm thiểu lỗi khi chạy trên các môi trường khác nhau
+  - Nâng cao khả năng thích nghi với cấu hình phần cứng đa dạng
+- Nâng cấp hệ thống VTKViewer3D:
+  - Tái cấu trúc để cải thiện mã nguồn và tính mô-đun
+  - Thêm các lớp mô phỏng VTK khi không có thư viện VTK
+  - Cải thiện CameraController với các hiệu ứng chuyển động mượt mà
+  - Tối ưu hóa hiệu suất render cho bộ dữ liệu lớn
+  - Cải thiện quản lý bộ nhớ thông minh và tự động điều chỉnh chất lượng hiển thị
+- Cải tiến module ColorMapSelector:
+  - Thêm xử lý tương thích với các phiên bản matplotlib khác nhau
+  - Sửa lỗi khi đăng ký colormap tùy chỉnh
+  - Cải thiện khả năng làm việc khi không có matplotlib
+  - Bổ sung các colormap mô phỏng Eclipse cho tương thích tốt hơn
+  - Thêm tính năng lưu và tải các colormap do người dùng tạo
 
 ### Sửa lỗi
-- Sửa lỗi biên dịch trong `beam_eye_view.py` liên quan đến import PyQt5
-- Khắc phục lỗi không tìm thấy lớp ConvexHull khi tạo contour từ lưới 3D
-- Sửa lỗi không hiển thị hộp thoại export hình ảnh khi thiếu PyQt5.QtWidgets.QFileDialog
-- Cải thiện xử lý ngoại lệ khi chạy chức năng test trong beam_eye_view
+- Khắc phục lỗi linter trong các module hiển thị 3D:
+  - Sửa lỗi 'vtkMarchingCubes has no SetInputData member' và các lỗi tương tự
+  - Sửa lỗi import vtk thông qua việc tạo các wrapper class
+  - Khắc phục lỗi QApplication không được định nghĩa
+  - Sửa lỗi register_cmap không được tìm thấy trong matplotlib
+  - Sửa lỗi thiếu các phương thức của VTK khi kiểm tra code
+- Cải thiện khả năng tương thích với các môi trường khác nhau:
+  - Thêm cơ chế kiểm tra và thay thế thông minh cho các thư viện bị thiếu
+  - Cải tiến giao diện fallback khi không có các dependency cần thiết
+  - Sửa lỗi crash khi không tìm thấy VTK hoặc matplotlib
+  - Cải thiện thông báo lỗi với hướng dẫn khắc phục
+  - Thêm logging chi tiết để dễ dàng debug
 
-## Phiên bản 0.7.0 (2023-09-25)
+## Phiên bản 1.1.2 (2023-12-15)
 
 ### Tính năng mới
-- Hoàn thiện `BEVTransform` với hỗ trợ chuyển đổi tọa độ ngược từ BEV sang tọa độ bệnh nhân
-- Thêm chức năng ray tracing để tìm độ sâu từ góc nhìn BEV đến cấu trúc
-- Nâng cấp `BEVCanvas` với khả năng tương tác với MLC trực tiếp từ góc nhìn BEV
-- Hoàn thiện thuật toán tối ưu hóa MLC với các phương pháp:
-  - Gradient Descent
-  - Simulated Annealing
-  - Genetic Algorithm
-- Cải thiện UI cho BEV Viewer và MLC Editor
+- Phát triển bộ công cụ UI tiện ích để đảm bảo giao diện nhất quán:
+  - Module UI helpers với các hàm tạo widget tùy biến giống Eclipse
+  - Thêm CSS stylesheet cho giao diện tương tự Eclipse
+  - Widget IsodoseSelector với giao diện quản lý isodose thân thiện
+  - Widget StructureVisibilityPanel để quản lý hiển thị cấu trúc 3D
+  - Hệ thống quản lý màu cho phối hợp nhất quán trong toàn bộ ứng dụng
+  - Tùy chỉnh thanh công cụ và menu theo phong cách Eclipse
 
 ### Cải tiến
-- Tích hợp BEVTransform với BEV Viewer để hiển thị chính xác các cấu trúc
-- Cải thiện hiệu năng hiển thị cấu trúc trong BEV
-- Thêm khả năng kéo thả MLC trong BEV Viewer
-- Nâng cấp hệ thống phát hiện va chạm MLC
-- Cải thiện thuật toán tính toán độ phức tạp của MLC
+- Cải thiện hệ thống hiển thị 3D:
+  - Module VTKViewer3D với kiến trúc rõ ràng và tách biệt
+  - DoseVisualization3D với 3 chế độ hiển thị liều: Surface, Volume, Contour
+  - Tối ưu hóa hiệu suất khi render dữ liệu lớn
+  - Cải thiện quản lý ánh sáng và camera trong cảnh 3D
+  - Hỗ trợ phím tắt và tương tác chuột phải trong hiển thị 3D
+  - Cải thiện hiển thị nhãn isodose 3D để dễ đọc hơn
 
-### Sửa lỗi
-- Sửa lỗi hiển thị cấu trúc trong BEV với góc gantry và couch không chuẩn
-- Khắc phục vấn đề chính xác về chiếu hình học từ 3D xuống 2D
-- Sửa lỗi tính toán hệ số phóng đại trong BEV
-- Khắc phục lỗi không cập nhật thay đổi MLC trong thời gian thực
-
-## Phiên bản 0.6.0 (2023-08-15)
+## Phiên bản 1.1.1 (2023-12-10)
 
 ### Tính năng mới
-- Thêm mô-đun cơ bản cho Beam's Eye View
-- Thêm mô-đun chỉnh sửa MLC
-- Thêm khả năng tính toán và hiển thị DVH cơ bản
-- Hỗ trợ thuật toán tối ưu hóa fluence đơn giản
+- Tạo lại module Dose 3D Viewer đã bị mất với các tính năng cải tiến:
+  - Hiển thị phân phối liều 3D với đầy đủ chức năng tùy chỉnh
+  - Hỗ trợ ba chế độ hiển thị isodose: Surface (bề mặt), Volume (thể tích) và Contour (đường viền)
+  - Cải thiện hiển thị cấu trúc 3D với các tùy chọn độ trong suốt
+  - Tích hợp đầy đủ với hệ thống cấu trúc và liều
+  - Giao diện điều khiển thân thiện với người dùng, dựa trên thiết kế Eclipse
+  - Khả năng xuất ảnh chụp màn hình nhiều định dạng (PNG, JPEG)
+  - Công cụ quản lý isodose levels với bảng màu tùy chỉnh
+  - Hiển thị nhãn isodose linh hoạt
+  - Hỗ trợ điều chỉnh độ trong suốt cho cả liều và cấu trúc
+  - Tích hợp công cụ quản lý hiển thị cấu trúc với bật/tắt theo từng cấu trúc
 
 ### Cải tiến
-- Cải thiện hiệu suất tính toán liều
-- Tăng tốc độ tối ưu hóa kế hoạch
-- Cải thiện giao diện người dùng chung
+- Cải thiện hệ thống quản lý màu sắc:
+  - Module mới ColorMap với hỗ trợ nhiều bảng màu cho hiển thị liều
+  - Tính năng chuyển đổi màu sắc giữa các định dạng
+  - Hỗ trợ nội suy màu thông minh giữa các mức liều
+  - Tích hợp các bản đồ màu từ Matplotlib
+- Cải thiện hiệu năng hiển thị 3D:
+  - Tối ưu hóa quá trình tạo bề mặt isodose
+  - Cải thiện volume rendering cho phân phối liều lớn
+  - Các thuật toán cải tiến cho tái tạo bề mặt nhanh hơn
 
-### Sửa lỗi
-- Sửa lỗi nhập dữ liệu DICOM với các loại scanner khác nhau
-- Sửa lỗi hiển thị đường đồng liều
-- Sửa lỗi không lưu được cấu hình khi thoát ứng dụng
+## Phiên bản 1.1.0 (2023-12-01)
 
-## Phiên bản 0.5.0 (2023-07-01)
+### Tính năng MCO
+- Hoàn thiện hệ thống Multi-Criteria Optimization (MCO):
+  - Cải tiến MCO Engine với phương pháp nội suy giữa các điểm Pareto
+  - Thuật toán mới để tạo mặt Pareto tối ưu
+  - Hệ thống báo cáo chất lượng kế hoạch
+  - Tích hợp các chỉ số chất lượng kế hoạch: Conformity, Homogeneity, Gradient Index
+- Cải thiện giao diện MCO Navigator:
+  - Thiết kế lại giao diện mô phỏng Eclipse
+  - Thêm widget SolutionComparison để so sánh các lời giải
+  - Tổ chức các điều khiển tối ưu theo nhóm: Targets, OARs, Others
+  - Cải thiện hiển thị DVH tương tác
+  - Thêm hỗ trợ undo/redo khi duyệt lời giải
+  - Thêm trực quan hóa mặt Pareto 3D
 
-### Tính năng mới
-- Thêm hỗ trợ nhập/xuất DICOM RT Plan
-- Thêm hỗ trợ nhập/xuất DICOM RT Dose
-- Thêm hỗ trợ cơ bản cho kế hoạch VMAT
-- Thêm các công cụ xác thực kế hoạch cơ bản
+### MLC Editor
+- Cải tiến MLC Editor:
+  - Hỗ trợ kéo thả các lá MLC trực tiếp trên Beam's Eye View
+  - Tự động tạo hình dạng MLC từ cấu trúc với nhiều thuật toán
+  - Cải thiện thuật toán tối ưu hóa MLC
+  - Hỗ trợ nhiều loại MLC từ các nhà sản xuất khác nhau
+  - Thêm tùy chọn hiển thị và in ấn các thiết lập MLC
 
+## Phiên bản 1.0.0 (2023-11-01)
+
+### Phát hành ban đầu
+- Hệ thống lập kế hoạch xạ trị cơ bản
+- Hỗ trợ nhập/xuất DICOM
+- Chuỗi công cụ phân đoạn cấu trúc
+- Công cụ tính toán liều cơ bản
+- Giao diện người dùng đơn giản
+
+## [1.5.0] - 2023-10-25
 ### Cải tiến
-- Cải thiện hiệu năng với tệp DICOM lớn
-- Tăng tốc độ hiển thị cấu trúc 3D
-- Nâng cấp thuật toán tính liều
+- Tối ưu hóa hiệu suất hiển thị VTK 3D
+  - Thêm tính năng điều chỉnh độ phân giải isodose (Level of Detail)
+  - Cải thiện hiệu suất khi hiển thị khối lượng dữ liệu lớn
+  - Thêm tính năng quản lý bộ nhớ tự động
+  - Thêm chức năng chất lượng thích ứng khi xoay mô hình 3D
+- Cải thiện giao diện Dose 3D Viewer
+  - Thêm các chế độ hiển thị mới: Surface, Volume, Contour
+  - Thêm khả năng chụp ảnh màn hình chất lượng cao
+  - Bổ sung hộp thoại cài đặt hiển thị
+  - Tạo thêm panel thông tin liều và đồ thị
+- Nâng cấp VTK Viewer 3D
+  - Thêm presets góc nhìn cho Axial, Sagittal, Coronal
+  - Thêm tính năng tương tác thông minh với chuột
+  - Bổ sung menu ngữ cảnh cho các đối tượng 3D
+  - Cải thiện hiển thị nhãn isodose 3D để dễ đọc hơn
+  - Tối ưu hóa sử dụng bộ nhớ khi hiển thị dữ liệu lớn
+  - Thêm tính năng highlight đối tượng khi chọn
 
 ### Sửa lỗi
-- Sửa lỗi crash khi mở nhiều bệnh nhân
-- Sửa lỗi hiển thị không chính xác liều cho kế hoạch nhiều chùm
-- Sửa lỗi không lưu được một số thông số kỹ thuật của máy điều trị
+- Bổ sung module quangtps.beams bị thiếu
+  - Tạo cấu trúc module cơ bản cho beams
+  - Thêm các lớp Beam, BeamSet, ControlPoint, Isocenter, MLCPosition
+  - Hỗ trợ đầy đủ các kiểu chùm tia (STATIC, DYNAMIC, ARC, VMAT, ...)
+- Sửa lỗi thiếu các phương thức trong lớp MarginTool
+  - Bổ sung các phương thức apply_anisotropic_margin, create_ring, create_surface_layer, avoid_structures
+  - Cập nhật tài liệu cho các phương thức mới
 
-## Phiên bản 0.4.0 (2023-06-01)
+2023-08-20: Cải thiện hiệu suất hiển thị 3D với VTK
+- Thêm điều chỉnh độ phân giải isodose để cân bằng hiệu suất và chất lượng
+- Thêm tính năng Level of Detail (LOD) cho cấu trúc phức tạp
+- Cải thiện quản lý bộ nhớ thông minh cho bộ dữ liệu lớn
+- Thêm chế độ chất lượng thích ứng khi xoay mô hình
+- Cải thiện hiển thị nhãn isodose 3D
 
-### Tính năng mới
-- Thêm hỗ trợ cơ bản cho phân đoạn tự động
-- Thêm công cụ fusion và registration hình ảnh
-- Thêm hỗ trợ kế hoạch điều trị cơ bản
+2023-08-21: Phát triển các module UI cốt lõi cho hệ thống xạ trị
+- Tạo module IsodoseSelector để quản lý các mức isodose và màu sắc
+- Tạo module StructureVisibilityPanel để điều chỉnh hiển thị các cấu trúc trong giao diện 3D
+- Phát triển module ColorMapSelector cho phép tùy chỉnh colormap hiển thị dose
+- Tạo dialog ColorMapEditorDialog để chỉnh sửa chi tiết các colormap tùy chỉnh
+- Tích hợp các module mới với VTKViewer3D và DoseVisualization3D
 
-### Cải tiến
-- Cải thiện UI cho vẽ contour
-- Tối ưu hóa hiệu năng khi xử lý hình ảnh lớn
-- Nâng cấp công cụ vẽ contour
+2023-08-22: Sửa lỗi các module thiếu
+- Tạo module quangtps.beams với các lớp Beam, BeamSet, ControlPoint, Isocenter, MLCPosition
+- Hoàn thiện lớp BeamType với các loại chùm tia phổ biến
+- Hoàn thiện lớp MarginTool với các phương thức còn thiếu
+
+===== 2023-11-10 =====
+- Cải thiện module Patient trong core/patient
+  + Tạo mô hình dữ liệu toàn diện cho bệnh nhân với đầy đủ thông tin cần thiết
+  + Thêm các enum: PatientGender, PatientStatus, TreatmentIntent
+  + Thêm các lớp: InsuranceInfo, Physician, DiagnosisInfo, TreatmentProtocol, TreatmentCourse, MedicalHistory
+  + Hỗ trợ đầy đủ chuyển đổi từ/tới dictionary và JSON
+  + Thêm các phương thức tiện ích: tính tuổi, tính BSA, lưu/tải từ file
+  + Hỗ trợ quản lý lịch sử điều trị và trạng thái bệnh nhân
+- Cải thiện module UI: IsodoseSelector, StructureVisibilityPanel, ColorMapSelector, ColorMapEditorDialog
+  + Thêm xử lý ngoại lệ khi import thư viện
+  + Thêm kiểm tra tính sẵn có của PyQt5, VTK, và matplotlib
+  + Hỗ trợ test standalone cho từng module
+  + Cải thiện khả năng tương thích với các hệ thống không có đủ thư viện
+- Nâng cấp VTKViewer3D
+  + Tái cấu trúc code toàn bộ để phù hợp với tiêu chuẩn
+  + Thêm khả năng tự động phát hiện và điều chỉnh khi không có VTK
+  + Thêm các tính năng mới như quản lý bộ nhớ, LOD, và cải thiện hiệu suất
+  + Cải thiện hệ thống tương tác người dùng
+  + Thêm quản lý chất lượng thích ứng khi xoay mô hình
+- Cải thiện DoseVisualization3D
+  + Tái cấu trúc toàn bộ module với kiến trúc mới
+  + Hỗ trợ đầy đủ 3 chế độ hiển thị: Surface, Volume, Contour
+  + Thêm tính năng điều chỉnh clipping planes để xem bên trong
+  + Cải thiện hiển thị nhãn và thang màu
+  + Thêm khả năng tự phục hồi khi thiếu các dependency
+  + Tích hợp toàn diện với các module UI đã cải tiến
+  + Thêm cài đặt độ phân giải isodose
+  + Cải thiện quản lý bộ nhớ và hiệu suất
+
+===== 2023-11-09 =====
+- Cải thiện MultiCriteriaOptimizationNavigator
+
+2023-09-28: Cải thiện module Dose 3D Viewer và các thành phần liên quan
+- Sửa lỗi trong quangtps/ui/dose_visualization_3d.py, cấu trúc lại class và sửa nhiều lỗi cú pháp
+- Tích hợp lớp IsodoseLevel để quản lý dữ liệu isodose một cách hiệu quả
+- Cải thiện module IsodoseSelector với tính năng đồng bộ hóa thông qua API get_isodose_levels/set_isodose_levels
+- Sửa lỗi trùng lặp phương thức trong VTKViewer3D và tổ chức lại cấu trúc class
+- Thêm quản lý bộ nhớ thích ứng trong VTKViewer3D, cho phép giám sát và tối ưu hóa sử dụng RAM
+- Thêm chức năng clear_scene và quản lý hiệu suất với các mức chất lượng hiển thị khác nhau
+- Cập nhật ColorMapSelector để đồng bộ hóa tốt hơn với DoseVisualization3D
+- Xử lý exception trong module và triển khai logging để dễ dàng debug
+- Thêm cơ chế graceful fallback khi thiếu thư viện VTK hoặc matplotlib
+- Cải thiện hiệu suất render khi hiển thị isodose với số lượng lớn điểm
+- Thêm camera controller cho VTKViewer3D với các điều khiển góc azimuth, elevation, roll và zoom
+- Tích hợp chế độ xem 3D, axial, sagittal và coronal với các nút điều khiển trực quan
+- Thêm tính năng tương tác thông minh cho camera với hỗ trợ chuột và bàn phím
+
+===== 2023-12-20 =====
+- Nâng cấp các thành phần UI hiển thị 3D
+  + Cải thiện quangtps/ui/dose_visualization_3d.py với các tùy chọn hiển thị nâng cao
+  + Thêm xử lý lỗi import VTK, tạo các class wrapper để tránh lỗi linter và cải thiện IDE support
+  + Cải thiện hiệu suất rendering cho isodose surfaces với thuật toán smoother tối ưu
+  + Thêm kỹ thuật LOD (Level of Detail) thích ứng theo cấu hình phần cứng và kích thước dữ liệu
+  + Cải thiện cách actor được quản lý trong VTKViewer3D với hệ thống đặt tên rõ ràng
+  + Thêm cơ chế fallback UI cho tất cả các module khi thiếu dependencies
+- Nâng cấp CameraController trong VTKViewer3D
+  + Cải thiện animation chuyển động camera giữa các góc nhìn khác nhau
+  + Thêm thuật toán easing để tạo chuyển động mượt mà hơn
+  + Tối ưu hóa interpolation giữa các vị trí camera
+  + Thêm điều khiển chi tiết cho azimuth, elevation, roll và zoom
+  + Thêm các preset tiêu chuẩn cho góc nhìn và độ xa của camera
+- Hoàn thiện module ColorMapSelector
+  + Thiết kế lại giao diện với preview trực quan hơn của colormap
+  + Thêm tính năng tạo colormap tùy chỉnh với giao diện người dùng thân thiện
+  + Hỗ trợ đầy đủ cho việc đảo ngược colormap và điều chỉnh độ trong suốt
+  + Tạo colormap tùy chỉnh mô phỏng Eclipse của Varian
+  + Cải thiện xử lý lỗi khi thiếu matplotlib với hệ thống fallback
+  + Thêm tích hợp chặt chẽ hơn với DoseVisualization3D qua tín hiệu pyqt
+
+## [2023-06-15] - Cải thiện tính ổn định UI và xử lý ngoại lệ
+
+### Thêm
+- Thêm xử lý ngoại lệ khi import PyQt5 và matplotlib trong các widget hiển thị: DoseViewerWidget, DVHWidget
+- Thêm xử lý dự phòng cho trường hợp các module không tồn tại hoặc có lỗi khi import
+
+### Sửa
+- Sửa lỗi linter trong DoseCalculationDialog (import DoseRegionOfInterest)
+- Sửa lỗi trong script_to_update_project.py liên quan đến constructor của DoseGrid
+- Thêm hàm get_structure_color để hiển thị màu cấu trúc trong DVHWidget
+
+### Cải thiện
+- Tăng cường tính ổn định của giao diện người dùng khi không có PyQt5
+- Cải thiện khả năng làm việc trong môi trường không đầy đủ thư viện
+- Thống nhất cách sử dụng constructor của các lớp DoseGrid, Structure để phù hợp với Eclipse
+
+## [2023-06-16] - Cải tiến thuật toán AAA và tính toán song song
+
+### Thêm
+- Triển khai phiên bản cải tiến của thuật toán AAA (Anisotropic Analytical Algorithm) với tính toán song song
+- Thêm hỗ trợ đa luồng (multithreading) giúp tăng tốc độ tính toán liều
+- Thêm cơ chế callback để cập nhật tiến độ tính toán trong thời gian thực
+
+### Cải thiện
+- Tối ưu hóa thuật toán tính liều AAA giúp tăng tốc 3-4 lần so với phiên bản trước
+- Cải thiện chính xác các kernel chuyển đổi TERMA sang liều với các mô không đồng nhất
+- Thêm khả năng điều chỉnh các tham số tính toán: độ phân giải, kích thước kernel, mức chính xác
+- Cấu trúc lại mã nguồn thuật toán để dễ bảo trì và mở rộng
+
+2023-09-21: Bổ sung và cải thiện nhiều tính năng quan trọng
+---------------------------------------------------
+* Tạo module margin mới trong quangtps/segmentation/contour/margin.py:
+  - Triển khai MarginGenerator với 4 loại margin: đồng đều, không đồng đều, vòng và bề mặt
+  - Tối ưu hóa thuật toán tạo margin với OpenCV (cv2) để có tốc độ xử lý nhanh hơn
+  - Hỗ trợ pixel spacing để tạo margin chính xác theo kích thước thật
+
+* Cải thiện MarginToolWidget trong quangtps/segmentation/contour/margin_tool_widget.py:
+  - Giao diện người dùng hiện đại để tạo và quản lý margin
+  - Hỗ trợ xem trước hiệu quả của margin trước khi áp dụng
+  - Thêm tùy chọn tạo cấu trúc mới hoặc cập nhật cấu trúc hiện có
+  - Giao diện được Việt hóa hoàn toàn cho người dùng trong nước
+
+* Nâng cấp DVHWidget để hiển thị và so sánh biểu đồ liều-thể tích:
+  - Thêm hàm get_structure_color để lấy màu chính xác từ cấu trúc
+  - Hỗ trợ so sánh DVH giữa nhiều kế hoạch khác nhau
+  - Hiển thị bảng thống kê chi tiết với dữ liệu Dmin, Dmax, Dmean, D95, V20Gy, V30Gy
+  - Thêm tính năng xuất dữ liệu DVH ra file CSV
+
+* Cải thiện script_to_update_project.py:
+  - Thêm xử lý ngoại lệ khi import PyQt5 và matplotlib để tránh crash
+  - Tạo các lớp giả khi thiếu thư viện
+
+2023-09-18: Cải thiện hiệu suất thuật toán AAA
+---------------------------------------------------
+
+## [2024-03-20] - Cải thiện đánh giá kế hoạch điều trị và tối ưu hóa tính toán liều
+
+### Thêm mới
+- Thêm module `ClinicalMetricsCalculator` để tính toán các chỉ số lâm sàng quan trọng:
+  - Homogeneity Index (HI): đánh giá tính đồng nhất của liều trong PTV
+  - Conformity Index (CI): đánh giá mức độ phù hợp của liều với thể tích mục tiêu
+  - Gradient Index (GI): đánh giá tốc độ giảm liều ở ranh giới PTV
+  - Coverage: đánh giá mức độ phủ liều lên PTV
+  - Selectivity: đánh giá tính chọn lọc của liều
+- Thêm module báo cáo đánh giá kế hoạch điều trị `ClinicalMetricsReport` với giao diện hiện đại:
+  - Báo cáo HTML tương tác với tab và biểu đồ
+  - Hiển thị trực quan các chỉ số lâm sàng và trạng thái đạt/không đạt
+  - Tự động tạo và nhúng hình ảnh DVH và phân bố liều
+  - Hỗ trợ in ấn với định dạng trang tối ưu
+
+### Cải thiện
+- Tối ưu hóa thuật toán AAA:
+  - Cải tiến tính toán TERMA với vector hóa NumPy, tăng hiệu suất 30-40%
+  - Tính PDD theo năng lượng với mô hình thực nghiệm chính xác hơn
+  - Cải thiện thuật toán tích chập song song sử dụng ThreadPoolExecutor
+  - Thêm xử lý lỗi và cơ chế fallback cho tính toán liều ổn định hơn
+- Sửa lỗi trong Acuros XB để đăng ký thuật toán đúng với DoseCalculationAlgorithm
+- Cải thiện giao diện báo cáo DVH với các chỉ tiêu lâm sàng
 
 ### Sửa lỗi
-- Sửa lỗi crash khi vẽ contour trên một số loại hình ảnh
-- Sửa lỗi hiển thị CT với window/level không chuẩn
-- Sửa lỗi không nhớ các cài đặt người dùng
+- Sửa lỗi CSS trong các template báo cáo
+- Sửa lỗi khi gọi hàm apply_heterogeneity_correction trong Acuros

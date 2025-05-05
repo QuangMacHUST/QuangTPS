@@ -1,164 +1,101 @@
-# QuangTPS Improvement Plan
+# Kế hoạch cải tiến QuangTPS
 
-## Current System Status
+Tài liệu này mô tả kế hoạch cải tiến cho dự án QuangTPS - hệ thống lập kế hoạch xạ trị mã nguồn mở.
 
-Based on code analysis and testing, QuangTPS is currently functional with the following key features implemented:
-- Patient management 
-- Basic imaging functionality
-- Treatment planning with CRT and rudimentary IMRT/VMAT capabilities
-- Plan evaluation with DVH visualization and metrics
-- Preliminary dose calculation
-- Basic optimization algorithms
+## Mục tiêu
 
-## High Priority Tasks
+Mục tiêu chính là xây dựng một hệ thống lập kế hoạch xạ trị mã nguồn mở có tính năng tương đương với các hệ thống thương mại như Eclipse của Varian.
 
-1. **Complete IMRT/VMAT Optimization Module**
-   - Fix and verify the inverse planning algorithms in `quangtps/optimization/`
-   - Integrate optimization with dose calculation engine
-   - Add robust convergence criteria and progress reporting
-   - Implement proper leaf sequencing algorithms
-   - Verify integration with MLC controller
+## Kế hoạch cải tiến ngắn hạn (3 tháng tới)
 
-2. **Fix WeasyPrint Dependency**
-   - System is failing to properly utilize WeasyPrint for reporting
-   - Install correct version with GTK dependencies on Windows
-   - Create fallback reporting mechanism if WeasyPrint is unavailable
+### 1. Cải thiện thuật toán Monte Carlo cho tính toán liều
+- [ ] Tích hợp GPUMonteCarlo để tăng tốc tính toán
+- [ ] Cải thiện mô phỏng vật lý tương tác tia với mô
+- [ ] Thêm cơ chế báo cáo lỗi thống kê và độ chính xác
 
-3. **Enhance Image Registration**
-   - Complete multi-modality fusion capabilities
-   - Add automated registration methods
-   - Implement validation tools for registration accuracy
-   - Integrate registration with treatment planning workflow
+### 2. Nâng cao kỹ thuật tối ưu hóa kế hoạch điều trị
+- [ ] Triển khai tối ưu hóa đa mục tiêu (MCO - Multicriteria Optimization)
+- [ ] Tích hợp VMAT (Volumetric Modulated Arc Therapy)
+- [ ] Cải thiện thuật toán xác định góc chùm tia tối ưu
 
-4. **Extend Robust Optimization**
-   - Complete implementation for respiratory motion
-   - Add margin generation based on uncertainty
-   - Implement probabilistic planning capabilities
-   - Add tools for robustness evaluation
+### 3. Phát triển mô-đun Auto Planning
+- [ ] Phát triển Knowledge-Based Planning (KBP)
+- [ ] Triển khai Auto-Contouring sử dụng các mô hình học sâu
+- [ ] Tích hợp quy trình làm việc tự động
 
-5. **Fix Circular Import Issues**
-   - Several modules still have circular imports causing initialization problems
-   - Apply consistent forward reference pattern across codebase
-   - Refactor service registry initialization
+### 4. Cải thiện đánh giá kế hoạch điều trị và báo cáo
+- [ ] Thêm tính toán TCP/NTCP (Tumor Control Probability/Normal Tissue Complication Probability)
+- [ ] Cải thiện so sánh kế hoạch điều trị đồ họa
+- [ ] Thêm báo cáo QA và kiểm tra độ chính xác
 
-## Medium Priority Tasks
+## Kế hoạch cải tiến trung hạn (6-12 tháng)
 
-1. **Implement Adaptive Planning Workflow**
-   - Create interface for reviewing anatomical changes
-   - Implement tools for dose accumulation
-   - Add decision support for adaptive replanning
-   - Integrate with existing planning tools
+### 1. Phát triển trí tuệ nhân tạo và học máy
+- [ ] Triển khai dự đoán chất lượng kế hoạch dựa trên AI
+- [ ] Tích hợp auto-segmentation nâng cao sử dụng các mô hình học sâu
+- [ ] Phát triển hệ khuyến nghị kế hoạch điều trị
 
-2. **Add Knowledge-Based Planning Features**
-   - Implement database of prior plans for reference
-   - Create model-based optimization assistance
-   - Add automated constraint suggestion
-   - Implement plan quality prediction
+### 2. Cải thiện độ chính xác tính toán liều
+- [ ] Triển khai thuật toán Acuros XB hoàn chỉnh
+- [ ] Tích hợp mô phỏng đầy đủ tán xạ Compton và tạo cặp
+- [ ] Phát triển bảng hiệu chỉnh nhân thực nghiệm
 
-3. **Create Machine Learning Module for Dose Prediction**
-   - Develop training pipeline for dose prediction models
-   - Implement fast dose approximation for interactive planning
-   - Add transfer learning capabilities for new treatment sites
-   - Integrate with optimization loop
+### 3. Tích hợp và hỗ trợ các kỹ thuật điều trị đặc biệt
+- [ ] Hỗ trợ điều trị khối u chuyển động (4D)
+- [ ] Tích hợp điều trị xạ trị định vị thân (SBRT)
+- [ ] Phát triển công cụ đánh giá và kiểm tra xạ phẫu
 
-4. **Improve 3D Visualization**
-   - Fix dependency issues with PyVista
-   - Enhance treatment machine visualization
-   - Add collision detection visualization
-   - Improve performance for large datasets
+### 4. Cải thiện giao diện người dùng và UX
+- [ ] Thiết kế lại giao diện chính để tiếp cận kiểu Eclipse
+- [ ] Phát triển các dashboard tương tác
+- [ ] Tích hợp các chế độ xem 3D nâng cao
 
-5. **Enhance QA Tools**
-   - Implement patient-specific QA workflow
-   - Add gamma analysis tools
-   - Create report templates for QA procedures
-   - Add tools for machine QA and commissioning
+## Kế hoạch cải tiến dài hạn (1-2 năm)
 
-## Lower Priority Tasks
+### 1. Phát triển hệ thống phân tán
+- [ ] Triển khai tính toán đám mây cho các thuật toán tính liều phức tạp
+- [ ] Tích hợp hỗ trợ tính toán GPU phân tán
+- [ ] Phát triển hệ thống lưu trữ và truy xuất dữ liệu phân tán
 
-1. **Add Support for Proton Therapy Planning**
-   - Implement pencil beam scanning optimization
-   - Add proton-specific RBE models
-   - Create proton-specific constraint templates
-   - Integrate with existing dose calculation framework
+### 2. Tích hợp các công nghệ mới
+- [ ] Hỗ trợ các kỹ thuật điều trị FLASH
+- [ ] Tích hợp hệ thống trên thiết bị di động và tablet
+- [ ] Phát triển giao diện thực tế tăng cường (AR)
 
-2. **Implement Monte Carlo Dose Calculation**
-   - Add electron Monte Carlo engine
-   - Implement variance reduction techniques
-   - Create material conversion tools
-   - Integrate with uncertainty analysis
+### 3. Phát triển hệ sinh thái mở rộng
+- [ ] Phát triển hệ thống plugin
+- [ ] Tạo cộng đồng phát triển mã nguồn mở
+- [ ] Thiết lập quy trình đóng góp và tiêu chuẩn mã
 
-3. **Add BED Calculation Tools**
-   - Implement biological models for different fractionation schemes
-   - Add tools for combined modality treatment
-   - Create visualization tools for biological effect
+## Các cải tiến đã hoàn thành
 
-4. **Create Integration API**
-   - Develop REST API for external system integration
-   - Add support for DICOM-RTPlan import/export
-   - Create scripting interfaces for automation
-   - Implement event system for external notifications
+### Phiên bản 0.8.0
+- [x] Thêm module io_utils trong thư mục utils
+- [x] Cải tiến thuật toán tính liều AAA với vector hóa tính toán TERMA
+- [x] Thêm phương pháp mới tính PDD theo năng lượng cho AAA
+- [x] Tối ưu hóa tích chập bằng FFT trong thuật toán AAA
 
-5. **Support Deformable Image Registration**
-   - Add deformable registration algorithms
-   - Implement tools for dose mapping
-   - Create visualization for deformation vector fields
-   - Add validation tools
+### Phiên bản 0.7.5
+- [x] Thêm module margin cho segmentation với OpenCV
+- [x] Thêm chức năng tạo margin không đồng đều và vòng
+- [x] Thêm chức năng tạo margin bề mặt
+- [x] Thêm ClinicalMetricsCalculator để tính các chỉ số lâm sàng (HI, CI, GI, Coverage)
+- [x] Thêm báo cáo đánh giá kế hoạch với hiển thị trực quan các chỉ số
+- [x] Sửa lỗi DVHWidget khi thiếu QDialog
 
-## Technical Debt Resolution
+## Ưu tiên hiện tại
 
-1. **Improve Test Coverage**
-   - Create comprehensive unit tests for all modules
-   - Implement integration tests for critical workflows
-   - Add regression tests for fixed bugs
-   - Create automated test pipeline
+1. **Cải thiện thuật toán Monte Carlo** - Mục tiêu là tăng hiệu suất và độ chính xác của tính toán liều
+2. **Tối ưu hóa kế hoạch VMAT** - Cho phép lập kế hoạch VMAT hoàn chỉnh
+3. **Phát triển Auto Planning** - Tăng hiệu quả trong quy trình làm việc
+4. **Tích hợp mô hình học máy** - Đặc biệt là cho auto-segmentation
 
-2. **Refactor Code Organization**
-   - Standardize module interfaces
-   - Improve documentation throughout the codebase
-   - Apply consistent naming conventions
-   - Reduce code duplication
+## Hướng dẫn đóng góp
 
-3. **Enhance Error Handling**
-   - Implement consistent error reporting mechanism
-   - Add detailed logging throughout the application
-   - Create user-friendly error messages
-   - Add automatic recovery options where possible
+Nếu bạn muốn đóng góp vào dự án QuangTPS, vui lòng làm theo các bước sau:
 
-4. **Optimize Performance**
-   - Profile application to identify bottlenecks
-   - Optimize dose calculation algorithms
-   - Improve memory usage for large datasets
-   - Add parallelization for computation-intensive tasks
-
-5. **Improve Build and Deployment**
-   - Create proper packaging scripts
-   - Add installation documentation
-   - Implement automatic dependency resolution
-   - Create platform-specific installers
-
-## Implementation Timeline
-
-### Phase 1 (1-2 months)
-- Complete IMRT/VMAT Optimization
-- Fix WeasyPrint dependency
-- Resolve circular import issues
-- Improve error handling
-
-### Phase 2 (2-4 months)
-- Enhance image registration
-- Extend robust optimization
-- Implement adaptive planning workflow
-- Improve 3D visualization
-
-### Phase 3 (4-6 months)
-- Add knowledge-based planning
-- Create machine learning module
-- Enhance QA tools
-- Implement Monte Carlo dose calculation
-
-### Phase 4 (6-12 months)
-- Add proton therapy support
-- Implement BED calculation
-- Create integration API
-- Support deformable registration
-- Complete all remaining technical debt items 
+1. Fork repository
+2. Tạo một nhánh (branch) mới cho tính năng hoặc cải tiến của bạn
+3. Commit mã của bạn
+4. Push lên nhánh của bạn
+5. Tạo Pull Request

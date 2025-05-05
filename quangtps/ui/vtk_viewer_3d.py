@@ -1,782 +1,1086 @@
-"""
-VTK-based 3D medical imaging viewer for QuangTPS.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-This module implements a VTK-based 3D viewer for visualizing medical imaging data
-and structures in 3D, similar to Eclipse treatment planning system.
+"""
+Module VTKViewer3D cho QuangTPS.
+
+Cung cấp giao diện trực quan 3D tổng hợp sử dụng thư viện VTK.
+Được thiết kế để tích hợp chặt chẽ với các module của QuangTPS như
+dose visualization, structure visualization, và beam visualization.
 """
 
 import os
 import sys
 import logging
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable
+import math
+import time
+from datetime import datetime
 
-import vtk
-from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
-import SimpleITK as sitk
+# Thử import các thư viện phụ thuộc
+try:
+    import vtk
+    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
-from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QSplitter,
-    QSlider,
-    QFrame,
-    QGridLayout,
-    QSpinBox,
-    QSizePolicy,
-    QToolBar,
-    QAction,
-    QComboBox,
-    QCheckBox,
-    QToolButton,
-    QMenu,
-)
-from PyQt5.QtGui import QColor, QIcon
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
+    VTK_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import VTK: {e}")
+    VTK_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+    # Tạo module vtk giả để tránh lỗi linter
+    class vtk:
+        # Tạo các lớp giả cho VTK
+        class vtkRenderer:
+            def SetBackground(self, *args):
+                pass
+
+            def SetGradientBackground(self, *args):
+                pass
+
+            def SetBackground2(self, *args):
+                pass
+
+            def AddActor(self, *args):
+                pass
+
+            def RemoveActor(self, *args):
+                pass
+
+            def ResetCamera(self, *args):
+                pass
+
+            def GetActiveCamera(self, *args):
+                return None
+
+            def SetUseFXAA(self, *args):
+                pass
+
+        class vtkRenderWindow:
+            def AddRenderer(self, *args):
+                pass
+
+            def SetSize(self, *args):
+                pass
+
+            def SetMultiSamples(self, *args):
+                pass
+
+            def Render(self, *args):
+                pass
+
+            def GetInteractor(self, *args):
+                return None
+
+        class vtkRenderWindowInteractor:
+            def SetInteractorStyle(self, *args):
+                pass
+
+            def RemoveObservers(self, *args):
+                pass
+
+        class vtkInteractorStyleTrackballCamera:
+            pass
+
+        class vtkInteractorStyleJoystickCamera:
+            pass
+
+        class vtkCamera:
+            def SetPosition(self, *args):
+                pass
+
+            def SetFocalPoint(self, *args):
+                pass
+
+            def SetViewUp(self, *args):
+                pass
+
+            def GetPosition(self, *args):
+                return (0, 0, 0)
+
+            def GetFocalPoint(self, *args):
+                return (0, 0, 0)
+
+            def GetViewUp(self, *args):
+                return (0, 0, 1)
+
+            def Azimuth(self, *args):
+                pass
+
+            def Elevation(self, *args):
+                pass
+
+            def Roll(self, *args):
+                pass
+
+            def Zoom(self, *args):
+                pass
+
+        class vtkActor:
+            def SetMapper(self, *args):
+                pass
+
+            def GetProperty(self, *args):
+                class Property:
+                    def SetColor(self, *args):
+                        pass
+
+                    def SetOpacity(self, *args):
+                        pass
+
+                return Property()
+
+        class vtkProperty:
+            def SetColor(self, *args):
+                pass
+
+            def SetOpacity(self, *args):
+                pass
+
+        class vtkOrientationMarkerWidget:
+            def SetOrientationMarker(self, *args):
+                pass
+
+            def SetInteractor(self, *args):
+                pass
+
+            def SetViewport(self, *args):
+                pass
+
+            def SetEnabled(self, *args):
+                pass
+
+            def InteractiveOff(self, *args):
+                pass
+
+        class vtkAxesActor:
+            pass
+
+        class vtkTextActor:
+            def SetInput(self, *args):
+                pass
+
+            def SetPosition(self, *args):
+                pass
+
+            def GetTextProperty(self, *args):
+                class TextProperty:
+                    def SetColor(self, *args):
+                        pass
+
+                    def SetFontSize(self, *args):
+                        pass
+
+                return TextProperty()
+
+        class vtkCaptionActor2D:
+            pass
+
+        class vtkTextProperty:
+            pass
+
+        class vtkWindowToImageFilter:
+            def SetInput(self, *args):
+                pass
+
+            def SetScale(self, *args):
+                pass
+
+            def SetInputBufferTypeToRGB(self, *args):
+                pass
+
+            def ReadFrontBufferOff(self, *args):
+                pass
+
+            def Update(self, *args):
+                pass
+
+            def GetOutput(self, *args):
+                class Output:
+                    def GetDimensions(self, *args):
+                        return (0, 0, 0)
+
+                    def GetPointData(self, *args):
+                        class PointData:
+                            def GetScalars(self, *args):
+                                class Scalars:
+                                    def GetNumberOfComponents(self, *args):
+                                        return 3
+
+                                    def GetTuple(self, *args):
+                                        return (0, 0, 0)
+
+                                return Scalars()
+
+                        return PointData()
+
+                return Output()
+
+        class vtkSphereSource:
+            def SetRadius(self, *args):
+                pass
+
+            def SetThetaResolution(self, *args):
+                pass
+
+            def SetPhiResolution(self, *args):
+                pass
+
+            def Update(self, *args):
+                pass
+
+            def GetOutput(self, *args):
+                return None
+
+        class vtkPolyDataMapper:
+            def SetInputData(self, *args):
+                pass
+
+        class vtkCubeSource:
+            def SetXLength(self, *args):
+                pass
+
+            def SetYLength(self, *args):
+                pass
+
+            def SetZLength(self, *args):
+                pass
+
+            def SetCenter(self, *args):
+                pass
+
+            def Update(self, *args):
+                pass
+
+            def GetOutput(self, *args):
+                return None
+
+
+# Khai báo các class VTK để tránh lỗi linter
+if VTK_AVAILABLE:
+    vtkRenderer = vtk.vtkRenderer
+    vtkRenderWindow = vtk.vtkRenderWindow
+    vtkRenderWindowInteractor = vtk.vtkRenderWindowInteractor
+    vtkInteractorStyleTrackballCamera = vtk.vtkInteractorStyleTrackballCamera
+    vtkCamera = vtk.vtkCamera
+    vtkActor = vtk.vtkActor
+    vtkProperty = vtk.vtkProperty
+    vtkOrientationMarkerWidget = vtk.vtkOrientationMarkerWidget
+    vtkAxesActor = vtk.vtkAxesActor
+    vtkTextActor = vtk.vtkTextActor
+    vtkCaptionActor2D = vtk.vtkCaptionActor2D
+    vtkTextProperty = vtk.vtkTextProperty
+else:
+    vtkRenderer = vtk.vtkRenderer
+    vtkRenderWindow = vtk.vtkRenderWindow
+    vtkRenderWindowInteractor = vtk.vtkRenderWindowInteractor
+    vtkInteractorStyleTrackballCamera = vtk.vtkInteractorStyleTrackballCamera
+    vtkCamera = vtk.vtkCamera
+    vtkActor = vtk.vtkActor
+    vtkProperty = vtk.vtkProperty
+    vtkOrientationMarkerWidget = vtk.vtkOrientationMarkerWidget
+    vtkAxesActor = vtk.vtkAxesActor
+    vtkTextActor = vtk.vtkTextActor
+    vtkCaptionActor2D = vtk.vtkCaptionActor2D
+    vtkTextProperty = vtk.vtkTextProperty
+
+try:
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QSlider,
+        QCheckBox,
+        QComboBox,
+        QGroupBox,
+        QFrame,
+        QSplitter,
+        QSpinBox,
+        QDoubleSpinBox,
+        QTabWidget,
+        QMessageBox,
+        QSizePolicy,
+        QStackedWidget,
+        QToolBar,
+        QAction,
+        QActionGroup,
+        QApplication,
+    )
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer
+    from PyQt5.QtGui import QColor, QFont, QIcon
+
+    PYQT5_AVAILABLE = True
+except ImportError as e:
+    logging.error(f"Không thể import PyQt5: {e}")
+    PYQT5_AVAILABLE = False
+
+    # Tạo các lớp giả cho type checking
+    class QWidget:
+        pass
+
+    class pyqtSignal:
+        def __init__(self, *args):
+            pass
+
+    class QApplication:
+        pass
+
+
+from quangtps.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class CameraController:
+    """
+    Điều khiển camera VTK với các chức năng nâng cao.
+
+    Quản lý các góc nhìn, các chế độ camera, và các hoạt ảnh chuyển đổi
+    giữa các góc nhìn khác nhau. Hỗ trợ các góc nhìn chuẩn như axial,
+    sagittal, coronal và các góc tùy chỉnh.
+    """
+
+    def __init__(self, renderer):
+        """
+        Khởi tạo camera controller.
+
+        Parameters:
+        -----------
+        renderer : vtkRenderer
+            VTK renderer to control
+        """
+        self.renderer = renderer
+        self.camera = renderer.GetActiveCamera() if renderer else None
+        self.last_update_time = time.time()
+        self.animation_duration = 0.5  # seconds
+        self.animating = False
+        self.start_position = None
+        self.start_focal_point = None
+        self.start_view_up = None
+        self.target_position = None
+        self.target_focal_point = None
+        self.target_view_up = None
+        self.animation_start_time = None
+
+        # Standard view presets
+        self.standard_views = {
+            "axial": {
+                "position": (0, 0, 1000),
+                "focal_point": (0, 0, 0),
+                "view_up": (0, 1, 0),
+            },
+            "sagittal": {
+                "position": (1000, 0, 0),
+                "focal_point": (0, 0, 0),
+                "view_up": (0, 0, 1),
+            },
+            "coronal": {
+                "position": (0, 1000, 0),
+                "focal_point": (0, 0, 0),
+                "view_up": (0, 0, 1),
+            },
+            "3d": {
+                "position": (500, 500, 500),
+                "focal_point": (0, 0, 0),
+                "view_up": (0, 0, 1),
+            },
+        }
+
+    def set_view(self, view_name, animate=True):
+        """
+        Thiết lập camera đến một góc nhìn tiêu chuẩn.
+
+        Parameters:
+        -----------
+        view_name : str
+            Name of the standard view ("axial", "sagittal", "coronal", "3d")
+        animate : bool
+            Whether to animate the transition
+        """
+        if not self.camera or view_name not in self.standard_views:
+            return False
+
+        view = self.standard_views[view_name]
+
+        if animate:
+            self._start_animation(
+                view["position"], view["focal_point"], view["view_up"]
+            )
+        else:
+            self.camera.SetPosition(*view["position"])
+            self.camera.SetFocalPoint(*view["focal_point"])
+            self.camera.SetViewUp(*view["view_up"])
+
+        return True
+
+    def set_azimuth(self, angle):
+        """
+        Xoay camera theo góc azimuth.
+
+        Parameters:
+        -----------
+        angle : float
+            Góc azimuth trong độ (0-360)
+        """
+        if not self.camera:
+            return
+
+        self.camera.Azimuth(angle)
+
+    def set_elevation(self, angle):
+        """
+        Xoay camera theo góc elevation.
+
+        Parameters:
+        -----------
+        angle : float
+            Góc elevation trong độ (-90 đến 90)
+        """
+        if not self.camera:
+            return
+
+        self.camera.Elevation(angle)
+
+    def set_roll(self, angle):
+        """
+        Xoay camera theo góc roll.
+
+        Parameters:
+        -----------
+        angle : float
+            Góc roll trong độ (0-360)
+        """
+        if not self.camera:
+            return
+
+        self.camera.Roll(angle)
+
+    def zoom(self, factor):
+        """
+        Phóng to hoặc thu nhỏ góc nhìn.
+
+        Parameters:
+        -----------
+        factor : float
+            Hệ số zoom. Giá trị > 1 là phóng to, < 1 là thu nhỏ.
+        """
+        if not self.camera:
+            return
+
+        self.camera.Zoom(factor)
+
+    def update(self):
+        """Cập nhật camera khi đang có hoạt ảnh."""
+        if not self.animating:
+            return False
+
+        current_time = time.time()
+        elapsed = current_time - self.animation_start_time
+
+        if elapsed >= self.animation_duration:
+            # Animation complete
+            self.camera.SetPosition(*self.target_position)
+            self.camera.SetFocalPoint(*self.target_focal_point)
+            self.camera.SetViewUp(*self.target_view_up)
+            self.animating = False
+            return True
+
+        # Calculate interpolation factor (0-1)
+        t = elapsed / self.animation_duration
+
+        # Apply easing function (ease in/out)
+        t = self._ease_in_out(t)
+
+        # Interpolate position
+        pos = self._interpolate(self.start_position, self.target_position, t)
+        fp = self._interpolate(self.start_focal_point, self.target_focal_point, t)
+        vu = self._interpolate(self.start_view_up, self.target_view_up, t)
+
+        # Set camera properties
+        self.camera.SetPosition(*pos)
+        self.camera.SetFocalPoint(*fp)
+        self.camera.SetViewUp(*vu)
+
+        return True
+
+    def _start_animation(self, target_position, target_focal_point, target_view_up):
+        """
+        Bắt đầu hoạt ảnh chuyển đổi camera.
+
+        Parameters:
+        -----------
+        target_position : tuple
+            Target position (x, y, z)
+        target_focal_point : tuple
+            Target focal point (x, y, z)
+        target_view_up : tuple
+            Target view up vector (x, y, z)
+        """
+        if not self.camera:
+            return
+
+        self.start_position = self.camera.GetPosition()
+        self.start_focal_point = self.camera.GetFocalPoint()
+        self.start_view_up = self.camera.GetViewUp()
+
+        self.target_position = target_position
+        self.target_focal_point = target_focal_point
+        self.target_view_up = target_view_up
+
+        self.animation_start_time = time.time()
+        self.animating = True
+
+    def _interpolate(self, start, end, t):
+        """
+        Nội suy tuyến tính giữa 2 điểm 3D.
+
+        Parameters:
+        -----------
+        start : tuple
+            Starting point (x, y, z)
+        end : tuple
+            Ending point (x, y, z)
+        t : float
+            Interpolation factor (0-1)
+
+        Returns:
+        --------
+        tuple
+            Interpolated point (x, y, z)
+        """
+        return (
+            start[0] + (end[0] - start[0]) * t,
+            start[1] + (end[1] - start[1]) * t,
+            start[2] + (end[2] - start[2]) * t,
+        )
+
+    def _ease_in_out(self, t):
+        """
+        Hàm easing để làm mịn chuyển động.
+
+        Parameters:
+        -----------
+        t : float
+            Input time factor (0-1)
+
+        Returns:
+        --------
+        float
+            Eased time factor (0-1)
+        """
+        # Cubic easing
+        if t < 0.5:
+            return 2 * t * t
+        else:
+            return -1 + (4 - 2 * t) * t
 
 
 class VTKViewer3D(QWidget):
     """
-    Viewer dùng VTK cho hiển thị dữ liệu 3D y tế.
+    Enhanced VTK-based 3D viewer for QuangTPS.
 
-    Cung cấp chức năng hiển thị dữ liệu 3D từ CT, MRI, cấu trúc bề mặt
-    và phân phối liều trong không gian 3D.
+    This widget provides a 3D visualization platform that can display
+    various types of medical data including patient anatomy, radiation dose,
+    beam arrangements, and more. It integrates with VTK for high-performance
+    3D rendering and provides an intuitive API for managing the displayed objects.
+
+    The component is designed to handle memory efficiently with large datasets
+    and provides hooks for responsive rendering during user interaction.
     """
 
-    view_changed = pyqtSignal()  # Emitted when the view changes
+    # Signals
+    view_changed = pyqtSignal(str)  # Emitted when view changes (3D, axial, etc.)
+    render_complete = pyqtSignal()  # Emitted when rendering is complete
+    object_selected = pyqtSignal(str, object)  # Emitted when object is selected
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, memory_threshold_mb=2000, quality_level="high"):
+        """
+        Initialize the 3D VTK viewer.
+
+        Parameters:
+        -----------
+        parent : QWidget, optional
+            Parent widget
+        memory_threshold_mb : int, optional
+            Memory threshold in MB for downsampling
+        quality_level : str, optional
+            Rendering quality level ("low", "medium", "high")
+        """
         super().__init__(parent)
-        self.setMinimumSize(300, 300)
 
-        # Tạo layout và widget VTK
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        # Initialize members
+        self.actors = {}  # Map of actor name to vtk actor object
+        self._memory_threshold_mb = memory_threshold_mb
+        self._quality_level = quality_level
+        self._last_render_time = time.time()
+        self._render_fps = 30
+        self._interaction_quality = "medium"  # Quality during interaction
+        self._current_view = "3d"  # Current view mode
+        self._enable_orientation_marker = True
+        self._enable_axes = True
+        self._enable_annotations = True
+        self._adaptive_rendering = True
+        self._renderer = None
+        self._camera_controller = None
 
-        # Thêm toolbar
-        self.toolbar = QToolBar()
-        self.toolbar.setIconSize(QSize(16, 16))
+        # Set up UI
+        self.setup_ui()
 
-        # Các hành động toolbar
-        self.action_reset_view = QAction(
-            QIcon("quangtps/ui/icons/new_icons/reset_view.png"),
-            "Đặt lại góc nhìn",
-            self,
-        )
-        self.action_reset_view.triggered.connect(self.reset_view)
-        self.toolbar.addAction(self.action_reset_view)
+    def setup_ui(self):
+        """Set up the user interface components."""
+        if not PYQT5_AVAILABLE or not VTK_AVAILABLE:
+            self._setup_fallback_ui()
+            return
 
-        self.view_mode = QComboBox()
-        self.view_mode.addItems(
-            ["Volume Rendering", "Surface Rendering", "MIP", "X-Ray"]
-        )
-        self.view_mode.currentIndexChanged.connect(self.set_rendering_mode)
-        self.toolbar.addWidget(QLabel("Mode:"))
-        self.toolbar.addWidget(self.view_mode)
+        # Create layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        self.toolbar.addSeparator()
-
-        self.show_structures = QCheckBox("Show Structures")
-        self.show_structures.setChecked(True)
-        self.show_structures.stateChanged.connect(self.toggle_structures)
-        self.toolbar.addWidget(self.show_structures)
-
-        self.show_dose = QCheckBox("Show Dose")
-        self.show_dose.setChecked(False)
-        self.show_dose.stateChanged.connect(self.toggle_dose)
-        self.toolbar.addWidget(self.show_dose)
-
-        self.main_layout.addWidget(self.toolbar)
-
-        # Tạo widget VTK
+        # Create VTK rendering widget
         self.vtk_widget = QVTKRenderWindowInteractor(self)
-        self.main_layout.addWidget(self.vtk_widget)
+        self.vtk_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # Tạo renderer và camera
-        self.renderer = vtk.vtkRenderer()
-        self.renderer.SetBackground(0.2, 0.2, 0.2)  # Nền tối
+        # Create renderer and render window
+        self._renderer = vtkRenderer()
+        self._renderer.SetBackground(0.2, 0.2, 0.2)  # Dark gray background
+        self._renderer.SetGradientBackground(True)
+        self._renderer.SetBackground2(0.0, 0.0, 0.0)  # Black at the top
 
-        self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
-        self.interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
+        # Configure render window
+        render_window = self.vtk_widget.GetRenderWindow()
+        render_window.AddRenderer(self._renderer)
+        render_window.SetSize(600, 600)
+        render_window.SetMultiSamples(4)  # Anti-aliasing for better quality
 
-        # Setup style
-        self.style = vtk.vtkInteractorStyleTrackballCamera()
-        self.interactor.SetInteractorStyle(self.style)
+        # Configure interactor
+        interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
+        interactor_style = vtkInteractorStyleTrackballCamera()
+        interactor.SetInteractorStyle(interactor_style)
 
-        # Setup camera
-        self.camera = self.renderer.GetActiveCamera()
-        self.camera.SetViewUp(0, 0, 1)
-        self.camera.SetPosition(0, -500, 0)
-        self.camera.SetFocalPoint(0, 0, 0)
+        # Create camera controller
+        self._camera_controller = CameraController(self._renderer)
+        self._camera_controller.set_view("3d", animate=False)
 
-        # Các biến thành viên
-        self.volume = None
-        self.volume_mapper = vtk.vtkSmartVolumeMapper()
-        self.volume_property = vtk.vtkVolumeProperty()
-        self.color_function = vtk.vtkColorTransferFunction()
-        self.opacity_function = vtk.vtkPiecewiseFunction()
-        self.structure_actors = {}
-        self.dose_actor = None
-        self.rendering_mode = 0  # 0: Volume, 1: Surface, 2: MIP, 3: X-Ray
+        # Add orientation marker
+        if self._enable_orientation_marker:
+            axes = vtkAxesActor()
+            self.marker_widget = vtkOrientationMarkerWidget()
+            self.marker_widget.SetOrientationMarker(axes)
+            self.marker_widget.SetInteractor(interactor)
+            self.marker_widget.SetViewport(0.0, 0.0, 0.2, 0.2)
+            self.marker_widget.SetEnabled(1)
+            self.marker_widget.InteractiveOff()
 
-        # Khởi tạo
-        self._setup_rendering_pipeline()
-        self.renderer.ResetCamera()
-        self.interactor.Initialize()
+        # Add VTK widget to layout
+        layout.addWidget(self.vtk_widget)
 
-    def _setup_rendering_pipeline(self):
-        """Thiết lập pipeline cho volume rendering."""
-        # Thiết lập thuộc tính volume
-        self.volume_property.SetInterpolationTypeToLinear()
-        self.volume_property.ShadeOn()
-        self.volume_property.SetAmbient(0.1)
-        self.volume_property.SetDiffuse(0.9)
-        self.volume_property.SetSpecular(0.2)
-        self.volume_property.SetSpecularPower(10.0)
+        # Create view control toolbar
+        toolbar = QToolBar()
+        toolbar.setIconSize(QSize(24, 24))
 
-        # Thiết lập các hàm chuyển đổi mặc định cho CT
-        self.setup_ct_transfer_functions()
+        # Create view buttons
+        self._create_view_buttons(toolbar)
 
-    def setup_ct_transfer_functions(self):
-        """Thiết lập hàm chuyển đổi màu và độ trong suốt cho dữ liệu CT."""
-        # Clear previous transfer functions
-        self.color_function.RemoveAllPoints()
-        self.opacity_function.RemoveAllPoints()
+        # Add toolbar to layout
+        layout.addWidget(toolbar)
 
-        # Color function for CT
-        self.color_function.AddRGBPoint(-1000, 0.0, 0.0, 0.0)  # Air
-        self.color_function.AddRGBPoint(-600, 0.0, 0.0, 0.0)  # Lung
-        self.color_function.AddRGBPoint(-400, 0.15, 0.15, 0.15)  # Lung tissue
-        self.color_function.AddRGBPoint(-100, 0.3, 0.3, 0.45)  # Soft tissue
-        self.color_function.AddRGBPoint(40, 0.7, 0.7, 0.7)  # Soft tissue
-        self.color_function.AddRGBPoint(400, 1.0, 1.0, 0.9)  # Bone
-        self.color_function.AddRGBPoint(3000, 1.0, 1.0, 1.0)  # Bone/metal
+        # Initialize the interactor
+        self.vtk_widget.Initialize()
+        self.vtk_widget.Start()
+        interactor.RemoveObservers("LeftButtonPressEvent")
 
-        # Opacity function for CT
-        self.opacity_function.AddPoint(-1000, 0.0)
-        self.opacity_function.AddPoint(-600, 0.0)
-        self.opacity_function.AddPoint(-400, 0.05)
-        self.opacity_function.AddPoint(-100, 0.1)
-        self.opacity_function.AddPoint(40, 0.2)
-        self.opacity_function.AddPoint(400, 0.3)
-        self.opacity_function.AddPoint(3000, 0.3)
+        # Set up render timer for smoother updates
+        self.render_timer = QTimer()
+        self.render_timer.timeout.connect(self._timed_render)
+        self.render_timer.start(1000 // self._render_fps)
 
-        # Set to volume property
-        self.volume_property.SetColor(self.color_function)
-        self.volume_property.SetScalarOpacity(self.opacity_function)
+    def _setup_fallback_ui(self):
+        """Set up fallback UI when required dependencies are not available."""
+        layout = QVBoxLayout(self)
 
-        # Update if volume exists
-        if self.volume:
-            self.vtk_widget.GetRenderWindow().Render()
+        error_label = QLabel(
+            "Cannot initialize VTKViewer3D due to missing dependencies."
+        )
+        error_label.setStyleSheet("color: red; font-weight: bold;")
 
-    def setup_mri_transfer_functions(self):
-        """Thiết lập hàm chuyển đổi màu và độ trong suốt cho dữ liệu MRI."""
-        # Clear previous transfer functions
-        self.color_function.RemoveAllPoints()
-        self.opacity_function.RemoveAllPoints()
+        dependencies_label = QLabel(
+            "Please ensure the following dependencies are installed:\n- VTK\n- PyQt5"
+        )
 
-        # Color function for MRI (T1/T2)
-        self.color_function.AddRGBPoint(0, 0.0, 0.0, 0.0)  # Background
-        self.color_function.AddRGBPoint(50, 0.1, 0.1, 0.1)  # Dark tissue
-        self.color_function.AddRGBPoint(100, 0.2, 0.2, 0.2)  # Gray matter
-        self.color_function.AddRGBPoint(200, 0.4, 0.4, 0.5)  # White matter
-        self.color_function.AddRGBPoint(300, 0.7, 0.7, 0.8)  # CSF
-        self.color_function.AddRGBPoint(500, 1.0, 1.0, 1.0)  # Bright tissue
+        layout.addWidget(error_label)
+        layout.addWidget(dependencies_label)
+        layout.addStretch()
 
-        # Opacity function for MRI
-        self.opacity_function.AddPoint(0, 0.0)
-        self.opacity_function.AddPoint(50, 0.05)
-        self.opacity_function.AddPoint(100, 0.1)
-        self.opacity_function.AddPoint(200, 0.2)
-        self.opacity_function.AddPoint(300, 0.3)
-        self.opacity_function.AddPoint(500, 0.4)
+    def _create_view_buttons(self, toolbar):
+        """Create buttons for different view orientations."""
+        # Create view actions
+        view_group = QActionGroup(self)
 
-        # Set to volume property
-        self.volume_property.SetColor(self.color_function)
-        self.volume_property.SetScalarOpacity(self.opacity_function)
+        # 3D view
+        view_3d = QAction("3D", view_group)
+        view_3d.setCheckable(True)
+        view_3d.setChecked(True)
+        view_3d.triggered.connect(lambda: self.set_view("3d"))
 
-        # Update if volume exists
-        if self.volume:
-            self.vtk_widget.GetRenderWindow().Render()
+        # Axial view
+        view_axial = QAction("Axial", view_group)
+        view_axial.setCheckable(True)
+        view_axial.triggered.connect(lambda: self.set_view("axial"))
 
-    def set_rendering_mode(self, mode_index):
-        """Thay đổi chế độ rendering."""
-        self.rendering_mode = mode_index
-        if not self.volume_mapper:
-            return
+        # Sagittal view
+        view_sagittal = QAction("Sagittal", view_group)
+        view_sagittal.setCheckable(True)
+        view_sagittal.triggered.connect(lambda: self.set_view("sagittal"))
 
-        if mode_index == 0:  # Volume Rendering
-            self.volume_mapper.SetBlendModeToComposite()
-            self.volume_property.ShadeOn()
-        elif mode_index == 1:  # Surface Rendering
-            self.volume_mapper.SetBlendModeToComposite()
-            self.volume_property.SetAmbient(0.3)
-            self.volume_property.SetDiffuse(0.9)
-            self.volume_property.SetSpecular(0.2)
-            self.volume_property.ShadeOn()
-        elif mode_index == 2:  # MIP
-            self.volume_mapper.SetBlendModeToMaximumIntensity()
-            self.volume_property.ShadeOff()
-        elif mode_index == 3:  # X-Ray
-            self.volume_mapper.SetBlendModeToAverageIntensity()
-            self.volume_property.ShadeOff()
+        # Coronal view
+        view_coronal = QAction("Coronal", view_group)
+        view_coronal.setCheckable(True)
+        view_coronal.triggered.connect(lambda: self.set_view("coronal"))
 
-        self.vtk_widget.GetRenderWindow().Render()
+        # Add actions to toolbar
+        toolbar.addAction(view_3d)
+        toolbar.addAction(view_axial)
+        toolbar.addAction(view_sagittal)
+        toolbar.addAction(view_coronal)
+        toolbar.addSeparator()
 
-    def set_image_data(self, image_data, spacing=None, origin=None):
-        """Thiết lập dữ liệu hình ảnh 3D."""
-        if image_data is None:
-            return
+        # Add quality control
+        quality_label = QLabel("Quality:")
+        toolbar.addWidget(quality_label)
 
-        self.clear_image()
+        quality_combo = QComboBox()
+        quality_combo.addItems(["Low", "Medium", "High"])
+        quality_combo.setCurrentText(self._quality_level.capitalize())
+        quality_combo.currentTextChanged.connect(
+            lambda text: self.set_quality(text.lower())
+        )
+        toolbar.addWidget(quality_combo)
 
-        # Create VTK image data
-        vtk_image = vtk.vtkImageData()
-
-        if isinstance(image_data, sitk.Image):
-            # Handle SimpleITK image
-            array = sitk.GetArrayFromImage(image_data)
-            size = image_data.GetSize()
-            vtk_image.SetDimensions(size[0], size[1], size[2])
-            vtk_image.SetSpacing(image_data.GetSpacing())
-            vtk_image.SetOrigin(image_data.GetOrigin())
-        else:
-            # Handle numpy array
-            array = image_data
-            if array.ndim != 3:
-                logger.error("Chỉ hỗ trợ dữ liệu 3D")
-                return
-
-            # Note: VTK uses different ordering than numpy
-            vtk_image.SetDimensions(array.shape[2], array.shape[1], array.shape[0])
-
-            if spacing:
-                vtk_image.SetSpacing(spacing)
-            else:
-                vtk_image.SetSpacing(1.0, 1.0, 1.0)
-
-            if origin:
-                vtk_image.SetOrigin(origin)
-            else:
-                vtk_image.SetOrigin(0.0, 0.0, 0.0)
-
-            # Swap axes for VTK ordering
-            array = np.swapaxes(array, 0, 2)
-
-        # Create scalar data
-        flat_array = array.ravel().astype(np.float32)
-        vtk_array = vtk.vtkFloatArray()
-        vtk_array.SetNumberOfValues(flat_array.size)
-        for i, val in enumerate(flat_array):
-            vtk_array.SetValue(i, val)
-
-        vtk_image.GetPointData().SetScalars(vtk_array)
-
-        # Set up volume rendering pipeline
-        self.volume_mapper.SetInputData(vtk_image)
-        self.volume_mapper.SetRequestedRenderModeToGPU()
-        self.volume_mapper.SetSampleDistance(1.0)
-
-        # Create volume if it doesn't exist
-        if not self.volume:
-            self.volume = vtk.vtkVolume()
-            self.volume.SetMapper(self.volume_mapper)
-            self.volume.SetProperty(self.volume_property)
-            self.renderer.AddVolume(self.volume)
-
-        # Apply the current rendering mode
-        self.set_rendering_mode(self.rendering_mode)
-
-        # Reset view
-        self.reset_view()
-
-    def add_structure(
-        self, structure_id, mask, color=(1.0, 0.0, 0.0), opacity=0.5, name=None
-    ):
+    def add_actor(self, name, actor):
         """
-        Thêm cấu trúc (contour) vào hiển thị 3D.
+        Add a VTK actor to the scene.
 
-        Parameters
-        ----------
-        structure_id : str
-            ID của cấu trúc
-        mask : ndarray
-            Mảng boolean 3D đại diện cho cấu trúc
+        Parameters:
+        -----------
+        name : str
+            Name to identify the actor
+        actor : vtkActor
+            VTK actor to add
+        """
+        if not VTK_AVAILABLE or self._renderer is None:
+            logger.warning("VTK is not available or renderer is not initialized.")
+            return
+
+        if name in self.actors:
+            self.remove_actor(name)
+
+        self.actors[name] = actor
+        self._renderer.AddActor(actor)
+        self.render()
+
+    def remove_actor(self, name):
+        """
+        Remove a VTK actor from the scene.
+
+        Parameters:
+        -----------
+        name : str
+            Name of the actor to remove
+        """
+        if not VTK_AVAILABLE or self._renderer is None:
+            return
+
+        if name in self.actors:
+            self._renderer.RemoveActor(self.actors[name])
+            del self.actors[name]
+            self.render()
+
+    def clear_scene(self):
+        """Remove all actors from the scene."""
+        if not VTK_AVAILABLE or self._renderer is None:
+            return
+
+        for actor in self.actors.values():
+            self._renderer.RemoveActor(actor)
+
+        self.actors.clear()
+        self.render()
+
+    def reset_camera(self):
+        """Reset the camera to fit all actors in view."""
+        if not VTK_AVAILABLE or self._renderer is None:
+            return
+
+        self._renderer.ResetCamera()
+        self.render()
+
+    def render(self):
+        """Render the scene."""
+        if not VTK_AVAILABLE or not hasattr(self, "vtk_widget"):
+            return
+
+        # Update the camera if needed
+        if self._camera_controller and self._camera_controller.update():
+            # Camera was updated by animation
+            pass
+
+        # Only render at most 30 FPS
+        current_time = time.time()
+        time_since_last_render = current_time - self._last_render_time
+
+        if time_since_last_render >= 1.0 / self._render_fps:
+            self.vtk_widget.GetRenderWindow().Render()
+            self._last_render_time = current_time
+            self.render_complete.emit()
+
+    def set_view(self, view_name):
+        """
+        Set the camera to a standard view.
+
+        Parameters:
+        -----------
+        view_name : str
+            View name ("3d", "axial", "sagittal", "coronal")
+        """
+        if not VTK_AVAILABLE or self._camera_controller is None:
+            return
+
+        if self._camera_controller.set_view(view_name):
+            self._current_view = view_name
+            self.view_changed.emit(view_name)
+            self.render()
+
+    def set_quality(self, quality_level):
+        """
+        Set rendering quality level.
+
+        Parameters:
+        -----------
+        quality_level : str
+            Quality level ("low", "medium", "high")
+        """
+        if quality_level not in ["low", "medium", "high"]:
+            logger.warning(f"Invalid quality level: {quality_level}")
+            return
+
+        self._quality_level = quality_level
+
+        # Apply quality settings to renderer
+        if VTK_AVAILABLE and self._renderer is not None:
+            if quality_level == "low":
+                self.vtk_widget.GetRenderWindow().SetMultiSamples(0)
+                self._renderer.SetUseFXAA(False)
+            elif quality_level == "medium":
+                self.vtk_widget.GetRenderWindow().SetMultiSamples(2)
+                self._renderer.SetUseFXAA(True)
+            else:  # high
+                self.vtk_widget.GetRenderWindow().SetMultiSamples(8)
+                self._renderer.SetUseFXAA(True)
+
+            self.render()
+
+    def _timed_render(self):
+        """Handle timed rendering."""
+        if not VTK_AVAILABLE or not hasattr(self, "vtk_widget"):
+            return
+
+        # Check if camera animation is in progress
+        if self._camera_controller and self._camera_controller.animating:
+            self.render()
+
+    def set_background_color(self, color):
+        """
+        Set background color of the renderer.
+
+        Parameters:
+        -----------
         color : tuple
-            Tuple RGB màu sắc (giá trị từ 0 đến 1)
-        opacity : float
-            Độ trong suốt (từ 0 đến 1)
-        name : str, optional
-            Tên hiển thị của cấu trúc
+            RGB color tuple (r, g, b) with values 0-1
         """
-        try:
-            # Xóa cấu trúc cũ nếu đã tồn tại
-            if structure_id in self.structure_actors:
-                if "actor" in self.structure_actors[structure_id] and self.renderer:
-                    self.renderer.RemoveActor(
-                        self.structure_actors[structure_id]["actor"]
-                    )
-                del self.structure_actors[structure_id]
+        if not VTK_AVAILABLE or self._renderer is None:
+            return
 
-            # Kiểm tra xem mask có hợp lệ không
-            if (
-                mask is None
-                or not hasattr(mask, "shape")
-                or len(mask.shape) != 3
-                or not mask.any()
-            ):
-                import logging
+        self._renderer.SetBackground(*color)
+        self.render()
 
-                logging.warning(
-                    f"Không thể hiển thị cấu trúc {structure_id}: mask không hợp lệ"
-                )
-                return
+    def add_text_annotation(self, text, position=(10, 10), color=(1, 1, 1)):
+        """
+        Add text annotation to the viewer.
 
-            import numpy as np
+        Parameters:
+        -----------
+        text : str
+            Text to display
+        position : tuple, optional
+            Screen position (x, y) in pixels
+        color : tuple, optional
+            RGB color tuple (r, g, b) with values 0-1
+        """
+        if not VTK_AVAILABLE or self._renderer is None:
+            return
 
-            # Tạo VTK image data cho mask cấu trúc
-            vtk_mask = vtk.vtkImageData()
-            vtk_mask.SetDimensions(mask.shape[2], mask.shape[1], mask.shape[0])
-            vtk_mask.SetSpacing(1.0, 1.0, 1.0)  # Sử dụng khoảng cách thích hợp
-            vtk_mask.SetOrigin(0.0, 0.0, 0.0)  # Sử dụng gốc thích hợp
+        text_actor = vtkTextActor()
+        text_actor.SetInput(text)
+        text_actor.SetPosition(position)
+        text_actor.GetTextProperty().SetColor(color)
+        text_actor.GetTextProperty().SetFontSize(14)
 
-            # Chuyển đổi mask boolean thành uint8
-            mask_array = (mask * 255).astype(np.uint8)
-            mask_array = np.swapaxes(mask_array, 0, 2)  # Hoán đổi trục cho VTK
-            vtk_array = vtk.vtkUnsignedCharArray()
-            vtk_array.SetNumberOfValues(mask_array.size)
-            vtk_array.SetNumberOfComponents(1)
+        self.add_actor(f"annotation_{text}", text_actor)
 
-            # Sao chép dữ liệu mảng vào vtk_array
-            flat_array = mask_array.flatten()
-            for i in range(len(flat_array)):
-                vtk_array.SetValue(i, flat_array[i])
+    def set_interaction_mode(self, mode):
+        """
+        Set interaction mode.
 
-            vtk_mask.GetPointData().SetScalars(vtk_array)
+        Parameters:
+        -----------
+        mode : str
+            Interaction mode (e.g., "trackball", "joystick")
+        """
+        if not VTK_AVAILABLE or not hasattr(self, "vtk_widget"):
+            return
 
-            # Tạo bề mặt iso sử dụng marching cubes
-            contour = vtk.vtkMarchingCubes()
-            contour.SetInputData(vtk_mask)
-            contour.SetValue(0, 127.5)  # Ngưỡng cho mask nhị phân
+        interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
 
-            # Làm mịn bề mặt
-            smoother = vtk.vtkSmoothPolyDataFilter()
-            smoother.SetInputConnection(contour.GetOutputPort())
-            smoother.SetNumberOfIterations(15)
-            smoother.SetRelaxationFactor(0.1)
-            smoother.FeatureEdgeSmoothingOff()
-            smoother.BoundarySmoothingOn()
-            smoother.Update()
+        if mode == "trackball":
+            interactor_style = vtkInteractorStyleTrackballCamera()
+        elif mode == "joystick":
+            interactor_style = vtk.vtkInteractorStyleJoystickCamera()
+        else:
+            logger.warning(f"Unsupported interaction mode: {mode}")
+            return
 
-            # Tạo mapper
-            mapper = vtk.vtkPolyDataMapper()
-            mapper.SetInputConnection(smoother.GetOutputPort())
-            mapper.ScalarVisibilityOff()
+        interactor.SetInteractorStyle(interactor_style)
 
-            # Tạo actor
-            actor = vtk.vtkActor()
-            actor.SetMapper(mapper)
-            actor.GetProperty().SetColor(color)
-            actor.GetProperty().SetOpacity(opacity)
-            actor.GetProperty().SetSpecular(0.3)
-            actor.GetProperty().SetSpecularPower(20)
+    def get_screenshot(self, width=None, height=None):
+        """
+        Capture a screenshot of the current view.
 
-            # Lưu trữ thông tin actor
-            self.structure_actors[structure_id] = {
-                "actor": actor,
-                "color": color,
-                "opacity": opacity,
-                "name": name or structure_id,
-            }
+        Parameters:
+        -----------
+        width : int, optional
+            Screenshot width in pixels
+        height : int, optional
+            Screenshot height in pixels
 
-            # Thêm actor vào renderer
-            self.renderer.AddActor(actor)
-
-            # Cập nhật hiển thị
-            self.vtk_widget.GetRenderWindow().Render()
-
-            return actor
-
-        except Exception as e:
-            import logging
-
-            logging.error(f"Lỗi khi thêm cấu trúc {structure_id}: {str(e)}")
+        Returns:
+        --------
+        numpy.ndarray
+            RGB image as a numpy array
+        """
+        if not VTK_AVAILABLE or not hasattr(self, "vtk_widget"):
             return None
 
-    def set_structure_visibility(self, structure_id, visible):
-        """Thay đổi khả năng hiển thị của cấu trúc."""
-        if structure_id in self.structure_actors:
-            self.structure_actors[structure_id]["actor"].SetVisibility(visible)
-            self.structure_actors[structure_id]["visible"] = visible
-            self.vtk_widget.GetRenderWindow().Render()
+        window = self.vtk_widget.GetRenderWindow()
 
-    def set_structure_opacity(self, structure_id, opacity):
-        """Thay đổi độ trong suốt của cấu trúc."""
-        if structure_id in self.structure_actors:
-            self.structure_actors[structure_id]["actor"].GetProperty().SetOpacity(
-                opacity
-            )
-            self.structure_actors[structure_id]["opacity"] = opacity
-            self.vtk_widget.GetRenderWindow().Render()
+        # Use current size if not specified
+        if width is None or height is None:
+            width, height = window.GetSize()
 
-    def set_structure_color(self, structure_id, color):
-        """Thay đổi màu sắc của cấu trúc."""
-        if structure_id in self.structure_actors:
-            self.structure_actors[structure_id]["actor"].GetProperty().SetColor(
-                color[0], color[1], color[2]
-            )
-            self.structure_actors[structure_id]["color"] = color
-            self.vtk_widget.GetRenderWindow().Render()
+        # Create VTK window to image filter
+        window_to_image = vtk.vtkWindowToImageFilter()
+        window_to_image.SetInput(window)
+        window_to_image.SetScale(1)
+        window_to_image.SetInputBufferTypeToRGB()
+        window_to_image.ReadFrontBufferOff()
+        window_to_image.Update()
 
-    def remove_structure(self, structure_id):
-        """Xóa cấu trúc khỏi hiển thị 3D."""
-        if structure_id in self.structure_actors:
-            self.renderer.RemoveActor(self.structure_actors[structure_id]["actor"])
-            del self.structure_actors[structure_id]
-            self.vtk_widget.GetRenderWindow().Render()
+        # Convert to numpy array
+        vtk_image = window_to_image.GetOutput()
+        width, height, _ = vtk_image.GetDimensions()
+        vtk_array = vtk_image.GetPointData().GetScalars()
+        components = vtk_array.GetNumberOfComponents()
 
-    def add_dose(self, dose_grid, isodose_levels=None):
-        """
-        Thêm hiển thị phân phối liều với các mức isodose.
+        # Create numpy array
+        image = np.zeros((height, width, components), dtype=np.uint8)
+        for i in range(height):
+            for j in range(width):
+                pixel = vtk_array.GetTuple(i * width + j)
+                image[height - i - 1, j, :] = pixel
 
-        Parameters
-        ----------
-        dose_grid : object
-            Đối tượng lưới liều chứa dữ liệu liều
-        isodose_levels : list, optional
-            Danh sách các tuple (level, color) đại diện cho các mức isodose
-            và màu sắc tương ứng. Nếu không được cung cấp, sẽ sử dụng các
-            giá trị mặc định.
+        return image
 
-        Returns
-        -------
-        list
-            Danh sách các actor VTK đại diện cho các bề mặt isodose
-        """
-        try:
-            # Làm sạch trình hiển thị liều hiện tại
-            self.clear_dose()
-
-            # Xác định các mức isodose mặc định nếu không được cung cấp
-            if not isodose_levels:
-                isodose_levels = [
-                    (95.0, (1.0, 0.0, 0.0)),  # 95% - Đỏ
-                    (80.0, (1.0, 0.5, 0.0)),  # 80% - Cam
-                    (50.0, (1.0, 1.0, 0.0)),  # 50% - Vàng
-                    (30.0, (0.0, 1.0, 0.0)),  # 30% - Lục
-                    (10.0, (0.0, 0.5, 1.0)),  # 10% - Lam
-                ]
-
-            # Lấy mảng dữ liệu liều
-            if hasattr(dose_grid, "dose_array") and dose_grid.dose_array is not None:
-                dose_array = dose_grid.dose_array
-            elif hasattr(dose_grid, "get_array"):
-                dose_array = dose_grid.get_array()
-            elif hasattr(dose_grid, "data"):
-                dose_array = dose_grid.data
-            else:
-                import logging
-
-                logging.error("Không thể lấy dữ liệu liều từ dose_grid")
-                return []
-
-            # Lấy spacing và origin từ dose_grid nếu có
-            spacing = getattr(dose_grid, "spacing", (1.0, 1.0, 1.0))
-            origin = getattr(dose_grid, "origin", (0.0, 0.0, 0.0))
-
-            import numpy as np
-
-            # Tìm liều lớn nhất để chuẩn hóa
-            max_dose = np.max(dose_array)
-            if max_dose <= 0:
-                import logging
-
-                logging.warning("Liều tối đa <= 0, không thể hiển thị isodose")
-                return []
-
-            # Tạo danh sách các actor cho mỗi mức isodose
-            dose_actors = []
-
-            # Chuyển đổi mảng liều thành định dạng VTK
-            vtk_dose = vtk.vtkImageData()
-            vtk_dose.SetDimensions(
-                dose_array.shape[2], dose_array.shape[1], dose_array.shape[0]
-            )
-            vtk_dose.SetSpacing(spacing)
-            vtk_dose.SetOrigin(origin)
-
-            # Chuyển đổi mảng numpy thành định dạng phù hợp cho VTK
-            dose_array_vtk = np.swapaxes(dose_array, 0, 2).copy()
-            vtk_array = vtk.vtkDoubleArray()
-            vtk_array.SetNumberOfValues(dose_array_vtk.size)
-
-            # Sao chép dữ liệu
-            flat_array = dose_array_vtk.flatten()
-            for i in range(len(flat_array)):
-                vtk_array.SetValue(i, float(flat_array[i]))
-
-            vtk_dose.GetPointData().SetScalars(vtk_array)
-
-            # Tạo bề mặt isodose cho mỗi mức
-            for level, color in isodose_levels:
-                # Chuyển đổi phần trăm thành giá trị tuyệt đối nếu cần
-                if level <= 1.0:  # Nếu level ≤ 1.0, xem như phần trăm
-                    abs_level = level * max_dose
-                else:
-                    abs_level = level
-
-                # Tạo đường viền
-                contour = vtk.vtkMarchingContourFilter()
-                contour.SetInputData(vtk_dose)
-                contour.SetValue(0, abs_level)
-
-                # Làm mịn bề mặt
-                smoother = vtk.vtkSmoothPolyDataFilter()
-                smoother.SetInputConnection(contour.GetOutputPort())
-                smoother.SetNumberOfIterations(10)
-                smoother.SetRelaxationFactor(0.2)
-                smoother.FeatureEdgeSmoothingOff()
-                smoother.BoundarySmoothingOn()
-                smoother.Update()
-
-                # Tạo mapper
-                mapper = vtk.vtkPolyDataMapper()
-                mapper.SetInputConnection(smoother.GetOutputPort())
-                mapper.ScalarVisibilityOff()
-
-                # Tạo actor
-                actor = vtk.vtkActor()
-                actor.SetMapper(mapper)
-                actor.GetProperty().SetColor(color)
-                actor.GetProperty().SetOpacity(0.7)  # Mặc định không quá trong suốt
-                actor.GetProperty().SetSpecular(0.2)
-                actor.GetProperty().SetSpecularPower(10)
-
-                # Thêm actor vào renderer
-                self.renderer.AddActor(actor)
-                dose_actors.append(actor)
-
-            # Lưu trữ danh sách các actor cho việc xóa bỏ sau này
-            self.dose_actors = dose_actors
-
-            # Cập nhật hiển thị
-            self.vtk_widget.GetRenderWindow().Render()
-
-            return dose_actors
-
-        except Exception as e:
-            import logging
-
-            logging.error(f"Lỗi khi thêm hiển thị liều: {str(e)}")
-            import traceback
-
-            logging.debug(traceback.format_exc())
-            return []
-
-    def toggle_structures(self, state):
-        """Bật/tắt hiển thị cấu trúc."""
-        for structure_id, structure_info in self.structure_actors.items():
-            structure_info["actor"].SetVisibility(state)
-        self.vtk_widget.GetRenderWindow().Render()
-
-    def toggle_dose(self, state):
-        """Bật/tắt hiển thị liều."""
-        visible = state == Qt.Checked
-
-        if hasattr(self, "dose_actors") and self.dose_actors:
-            for actor in self.dose_actors:
-                actor.SetVisibility(visible)
-        elif hasattr(self, "dose_actor") and self.dose_actor:
-            self.dose_actor.SetVisibility(visible)
-
-        # Cập nhật hiển thị
-        self.vtk_widget.GetRenderWindow().Render()
-
-    def clear_structures(self):
-        """Xóa tất cả cấu trúc được hiển thị."""
-        try:
-            if self.structure_actors:
-                for structure_id, structure_data in list(self.structure_actors.items()):
-                    if (
-                        "actor" in structure_data
-                        and structure_data["actor"]
-                        and self.renderer
-                    ):
-                        self.renderer.RemoveActor(structure_data["actor"])
-                self.structure_actors.clear()
-
-            # Cập nhật hiển thị
-            self.vtk_widget.GetRenderWindow().Render()
-        except Exception as e:
-            import logging
-
-            logging.error(f"Lỗi khi xóa cấu trúc: {str(e)}")
-
-    def clear_image(self):
-        """Xóa dữ liệu hình ảnh hiện tại."""
-        try:
-            if self.volume and self.renderer:
-                self.renderer.RemoveVolume(self.volume)
-                self.volume = None
-
-            # Cập nhật hiển thị
-            self.vtk_widget.GetRenderWindow().Render()
-        except Exception as e:
-            import logging
-
-            logging.error(f"Lỗi khi xóa dữ liệu hình ảnh: {str(e)}")
-
-    def clear_all(self):
-        """Xóa tất cả hiển thị."""
-        try:
-            # Xóa volume
-            self.clear_image()
-
-            # Xóa dose
-            self.clear_dose()
-
-            # Xóa structures
-            self.clear_structures()
-
-            # Đặt lại màu nền
-            if self.renderer:
-                self.renderer.SetBackground(0.2, 0.2, 0.2)
-
-            # Đặt lại camera
-            self.reset_view()
-
-            # Cập nhật hiển thị
-            self.vtk_widget.GetRenderWindow().Render()
-        except Exception as e:
-            import logging
-
-            logging.error(f"Lỗi khi xóa tất cả hiển thị: {str(e)}")
-            return False
-
-        return True
-
-    def reset_view(self):
-        """Đặt lại góc nhìn về chế độ mặc định."""
-        if not self.renderer:
+    def adapt_quality_to_memory(self):
+        """Adapt rendering quality based on available memory."""
+        if not VTK_AVAILABLE:
             return
 
         try:
-            # Lấy biên của tất cả các đối tượng trong cảnh
-            bounds = [0, 0, 0, 0, 0, 0]
-            has_actors = False
+            # Try to get available memory (platform dependent)
+            import psutil
 
-            # Kiểm tra các actor volume
-            if self.volume and self.volume.GetMapper():
-                self.volume.GetMapper().Update()
-                volume_bounds = self.volume.GetBounds()
-                if volume_bounds and all(b != 0 for b in volume_bounds):
-                    bounds = volume_bounds
-                    has_actors = True
+            available_memory_mb = psutil.virtual_memory().available / (1024 * 1024)
 
-            # Kiểm tra các actor cấu trúc
-            if not has_actors and self.structure_actors:
-                for struct_id, struct_data in self.structure_actors.items():
-                    if "actor" in struct_data and struct_data["actor"]:
-                        struct_bounds = struct_data["actor"].GetBounds()
-                        if struct_bounds and all(b != 0 for b in struct_bounds):
-                            bounds = struct_bounds
-                            has_actors = True
-                            break
-
-            # Đặt lại camera
-            if has_actors:
-                self.renderer.ResetCamera(bounds)
+            # Adjust quality based on available memory
+            if available_memory_mb < self._memory_threshold_mb * 0.3:
+                self.set_quality("low")
+            elif available_memory_mb < self._memory_threshold_mb * 0.7:
+                self.set_quality("medium")
             else:
-                self.renderer.ResetCamera()
+                self.set_quality("high")
 
-            # Điều chỉnh vị trí camera để có góc nhìn tốt hơn
-            self.camera.SetViewUp(0, 0, 1)
-
-            # Xoay camera để có góc nhìn xéo tốt hơn
-            self.camera.Azimuth(30)
-            self.camera.Elevation(30)
-
-            # Điều chỉnh khoảng cách để thấy đầy đủ
-            self.camera.Dolly(0.8)
-
-            # Cập nhật hiển thị
-            self.vtk_widget.GetRenderWindow().Render()
-
-        except Exception as e:
-            import logging
-
-            logging.error(f"Lỗi khi đặt lại góc nhìn: {str(e)}")
-
-    def take_screenshot(self, filename=None):
-        """Chụp ảnh màn hình hiển thị 3D."""
-        if filename is None:
-            import tempfile
-
-            filename = os.path.join(tempfile.gettempdir(), "quangtps_screenshot.png")
-
-        window_to_image = vtk.vtkWindowToImageFilter()
-        window_to_image.SetInput(self.vtk_widget.GetRenderWindow())
-        window_to_image.Update()
-
-        writer = vtk.vtkPNGWriter()
-        writer.SetFileName(filename)
-        writer.SetInputConnection(window_to_image.GetOutputPort())
-        writer.Write()
-
-        return filename
+        except ImportError:
+            # psutil not available, use default quality
+            pass
 
 
-# Test function
-def test():
-    """Test VTKViewer3D widget with sample data."""
+# Test function for standalone testing
+if __name__ == "__main__":
     import sys
     from PyQt5.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
 
-    # Create sample image data
-    image_size = [100, 100, 100]
-    image_data = np.zeros(image_size)
-
-    # Add a sphere
-    center = np.array(image_size) / 2
-    radius = min(image_size) / 4
-
-    for x in range(image_size[0]):
-        for y in range(image_size[1]):
-            for z in range(image_size[2]):
-                dist = np.sqrt(((np.array([x, y, z]) - center) ** 2).sum())
-                if dist < radius:
-                    image_data[x, y, z] = 1000  # Bone-like value
-                else:
-                    image_data[x, y, z] = -1000  # Air-like value
-
-    # Create sample structure
-    structure_mask = np.zeros_like(image_data, dtype=bool)
-    structure_radius = radius * 0.8
-
-    for x in range(image_size[0]):
-        for y in range(image_size[1]):
-            for z in range(image_size[2]):
-                dist = np.sqrt(((np.array([x, y, z]) - center) ** 2).sum())
-                if dist < structure_radius:
-                    structure_mask[x, y, z] = True
-
-    # Create and show viewer
+    # Create test window
     viewer = VTKViewer3D()
-    viewer.set_image_data(image_data)
-    viewer.add_structure(
-        "Test Structure", structure_mask, color=(1.0, 0.0, 0.0), opacity=0.5
-    )
+    viewer.resize(800, 600)
     viewer.show()
+    viewer.set_view("3d")
 
-    return app.exec_()
+    # Create some test actors for visualization
+    if VTK_AVAILABLE:
+        # Create a sphere
+        sphere_source = vtk.vtkSphereSource()
+        sphere_source.SetRadius(50.0)
+        sphere_source.SetThetaResolution(30)
+        sphere_source.SetPhiResolution(30)
+        sphere_source.Update()
 
+        sphere_mapper = vtk.vtkPolyDataMapper()
+        sphere_mapper.SetInputData(sphere_source.GetOutput())
 
-if __name__ == "__main__":
-    sys.exit(test())
+        sphere_actor = vtkActor()
+        sphere_actor.SetMapper(sphere_mapper)
+        sphere_actor.GetProperty().SetColor(1.0, 0.0, 0.0)  # Red
+
+        # Add to viewer
+        viewer.add_actor("sphere", sphere_actor)
+
+        # Create a cube
+        cube_source = vtk.vtkCubeSource()
+        cube_source.SetXLength(80.0)
+        cube_source.SetYLength(80.0)
+        cube_source.SetZLength(80.0)
+        cube_source.SetCenter(100, 0, 0)
+        cube_source.Update()
+
+        cube_mapper = vtk.vtkPolyDataMapper()
+        cube_mapper.SetInputData(cube_source.GetOutput())
+
+        cube_actor = vtkActor()
+        cube_actor.SetMapper(cube_mapper)
+        cube_actor.GetProperty().SetColor(0.0, 0.0, 1.0)  # Blue
+
+        # Add to viewer
+        viewer.add_actor("cube", cube_actor)
+
+        # Add text annotation
+        viewer.add_text_annotation("QuangTPS 3D Viewer", (10, 10), (1, 1, 1))
+
+        # Reset camera to show all objects
+        viewer.reset_camera()
+
+    # Run the application
+    sys.exit(app.exec_())

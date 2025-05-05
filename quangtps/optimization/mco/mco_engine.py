@@ -24,7 +24,12 @@ from dataclasses import dataclass, field
 
 from quangtps.core.types import Plan, DoseGrid, Treatment, Structure
 from quangtps.planning.optimization import PlanOptimizer
-from quangtps.optimization.objectives import Objective, ObjectiveResult, ObjectiveFunction, ObjectiveType
+from quangtps.optimization.objectives import (
+    Objective,
+    ObjectiveResult,
+    ObjectiveFunction,
+    ObjectiveType,
+)
 from quangtps.optimization.constraints import Constraint
 from quangtps.optimization.optimizer_factory import create_optimizer
 from quangtps.treatment.techniques.imrt import IMRTTreatment
@@ -40,6 +45,7 @@ from quangtps.optimization.objectives.objective_factory import ObjectiveFactory
 
 logger = get_logger(__name__)
 
+
 @dataclass
 class MCOTradeoffObjective:
     """
@@ -48,10 +54,13 @@ class MCOTradeoffObjective:
     This represents a single objective function that can be used in multi-criteria
     optimization to generate and navigate the Pareto front.
     """
+
     objective_id: str
     structure_id: str
     structure_name: str
-    objective_type: str  # e.g., "MinDose", "MaxDose", "MeanDose", "DoseAtVolume", "VolumeAtDose"
+    objective_type: (
+        str  # e.g., "MinDose", "MaxDose", "MeanDose", "DoseAtVolume", "VolumeAtDose"
+    )
     parameters: Dict[str, Any] = field(default_factory=dict)
     priority: int = 1  # Priority (1-3, with 1 being highest)
     weight: float = 1.0  # Current weight for weighted-sum optimization
@@ -67,7 +76,7 @@ class MCOTradeoffObjective:
             objective_type=self.objective_type,
             structure_id=self.structure_id,
             parameters=self.parameters,
-            weight=self.weight
+            weight=self.weight,
         )
 
     def calculate_value(self, plan: Plan) -> float:
@@ -87,7 +96,9 @@ class MCOTradeoffObjective:
                 break
 
         if not structure:
-            logger.warning(f"Structure {self.structure_id} not found for objective {self.objective_id}")
+            logger.warning(
+                f"Structure {self.structure_id} not found for objective {self.objective_id}"
+            )
             return 0.0
 
         metrics = calculate_dvh_metrics(structure, plan.dose)
@@ -105,7 +116,9 @@ class MCOTradeoffObjective:
             dose = self.parameters.get("dose", 50)
             return metrics.get(f"V{dose}", 0.0)
         else:
-            logger.warning(f"Unknown objective type {self.objective_type} for {self.objective_id}")
+            logger.warning(
+                f"Unknown objective type {self.objective_type} for {self.objective_id}"
+            )
             return 0.0
 
     def update_value(self, plan: Plan):
@@ -120,6 +133,7 @@ class MCOSolution:
 
     This includes the plan, objective values, and weights used to generate this solution.
     """
+
     plan: Plan
     objective_values: Dict[str, float]  # objective_id -> value
     weights: Dict[str, float]  # objective_id -> weight
@@ -183,7 +197,7 @@ class MCOEngine:
         structure_name: str,
         objective_type: str,
         parameters: Dict[str, Any] = None,
-        priority: int = 1
+        priority: int = 1,
     ) -> str:
         """
         Add an objective to the MCO problem from parameters.
@@ -206,7 +220,7 @@ class MCOEngine:
             structure_name=structure_name,
             objective_type=objective_type,
             parameters=parameters or {},
-            priority=priority
+            priority=priority,
         )
 
         self.add_objective(objective)
@@ -264,7 +278,9 @@ class MCOEngine:
             progress = i / len(self.objectives)
             self.generation_progress = progress
             if self.progress_callback:
-                self.progress_callback(progress, f"Generating anchor plan for {objective.structure_name}")
+                self.progress_callback(
+                    progress, f"Generating anchor plan for {objective.structure_name}"
+                )
 
             # Create optimization parameters with only this objective
             opt_params = OptimizationParameters()
@@ -292,7 +308,9 @@ class MCOEngine:
 
                 # Update min/max values
                 if obj_id == objective_id:
-                    obj.min_value = value  # This is the best possible value for this objective
+                    obj.min_value = (
+                        value  # This is the best possible value for this objective
+                    )
 
             # Create solution
             weights = {obj_id: obj.weight for obj_id, obj in self.objectives.items()}
@@ -300,7 +318,7 @@ class MCOEngine:
                 plan=anchor_plan,
                 objective_values=objective_values,
                 weights=weights,
-                solution_id=f"anchor_{objective_id}"
+                solution_id=f"anchor_{objective_id}",
             )
 
             # Store as anchor solution
@@ -309,13 +327,13 @@ class MCOEngine:
 
         # Find max values for each objective
         for objective_id, objective in self.objectives.items():
-            max_value = float('-inf')
+            max_value = float("-inf")
             for anchor_id, anchor in self.anchor_solutions.items():
                 if anchor_id != objective_id:  # Look at other anchor solutions
                     value = anchor.objective_values.get(objective_id, 0.0)
                     max_value = max(max_value, value)
 
-            if max_value != float('-inf'):
+            if max_value != float("-inf"):
                 objective.max_value = max_value
 
         # Generate balanced solution
@@ -365,7 +383,7 @@ class MCOEngine:
             plan=balanced_plan,
             objective_values=objective_values,
             weights=weights,
-            solution_id="balanced"
+            solution_id="balanced",
         )
 
         # Store as solution
@@ -408,7 +426,7 @@ class MCOEngine:
             plan=navigated_plan,
             objective_values=objective_values,
             weights=weights.copy(),
-            solution_id=f"nav_{int(time.time())}"
+            solution_id=f"nav_{int(time.time())}",
         )
 
         # Store as solution
@@ -428,7 +446,10 @@ class MCOEngine:
         Returns:
             Dict mapping objective_id to (min_value, max_value)
         """
-        return {obj_id: (obj.min_value, obj.max_value) for obj_id, obj in self.objectives.items()}
+        return {
+            obj_id: (obj.min_value, obj.max_value)
+            for obj_id, obj in self.objectives.items()
+        }
 
     def save_current_solution(self) -> bool:
         """
@@ -448,7 +469,7 @@ class MCOEngine:
             plan=self.current_solution.plan,
             objective_values=self.current_solution.objective_values.copy(),
             weights=self.current_solution.weights.copy(),
-            solution_id=solution_id
+            solution_id=solution_id,
         )
 
         # Store as solution
@@ -482,9 +503,425 @@ class MCOEngine:
 
             return True
 
+    def interpolate_between_solutions(
+        self, solutions: List[MCOSolution], weights: List[float]
+    ) -> Optional[MCOSolution]:
+        """
+        Nội suy giữa nhiều giải pháp bằng cách kết hợp các phân bố liều (dose distributions).
+
+        Parameters
+        ----------
+        solutions : List[MCOSolution]
+            Danh sách các giải pháp để nội suy
+        weights : List[float]
+            Trọng số cho mỗi giải pháp (phải tổng bằng 1.0)
+
+        Returns
+        -------
+        Optional[MCOSolution]
+            Giải pháp nội suy nếu thành công, None nếu thất bại
+        """
+        if not solutions or len(solutions) != len(weights):
+            logger.error("Số lượng giải pháp và trọng số không khớp")
+            return None
+
+        if abs(sum(weights) - 1.0) > 1e-6:
+            logger.error(f"Tổng các trọng số phải bằng 1.0, nhưng là {sum(weights)}")
+            return None
+
+        # Kiểm tra xem tất cả các giải pháp có cùng cấu trúc không
+        base_plan = solutions[0].plan
+        dose_shape = (
+            base_plan.dose.data.shape if hasattr(base_plan.dose, "data") else None
+        )
+
+        if dose_shape is None:
+            logger.error("Không thể truy cập dữ liệu liều trong kế hoạch cơ sở")
+            return None
+
+        # Tạo phân bố liều nội suy
+        interpolated_dose = np.zeros_like(base_plan.dose.data)
+
+        for solution, weight in zip(solutions, weights):
+            if (
+                hasattr(solution.plan.dose, "data")
+                and solution.plan.dose.data.shape == dose_shape
+            ):
+                interpolated_dose += weight * solution.plan.dose.data
+            else:
+                logger.error("Kích thước dữ liệu liều không khớp với kế hoạch cơ sở")
+                return None
+
+        # Tạo kế hoạch mới với liều nội suy
+        interpolated_plan = copy.deepcopy(base_plan)
+        interpolated_plan.dose.data = interpolated_dose
+
+        # Cập nhật số liệu và liều chiếu xạ
+        interpolated_plan.recalculate_metrics()
+
+        # Tính toán giá trị mục tiêu cho giải pháp nội suy
+        objective_values = {}
+        for obj_id, objective in self.objectives.items():
+            objective_values[obj_id] = objective.calculate_value(interpolated_plan)
+
+        # Tính toán trọng số mục tiêu nội suy
+        interpolated_weights = {}
+        for obj_id in self.objectives.keys():
+            interpolated_weights[obj_id] = sum(
+                w * sol.weights.get(obj_id, 0) for w, sol in zip(weights, solutions)
+            )
+
+        # Tạo và trả về giải pháp nội suy
+        return MCOSolution(
+            plan=interpolated_plan,
+            objective_values=objective_values,
+            weights=interpolated_weights,
+            solution_id=f"interpolated_{uuid.uuid4().hex[:8]}",
+        )
+
+    def generate_pareto_surface_plans(
+        self, num_plans: int = 10, callback: Callable[[float, str], None] = None
+    ) -> Dict[str, MCOSolution]:
+        """
+        Tạo bộ kế hoạch phân bố đều trên mặt Pareto.
+
+        Parameters
+        ----------
+        num_plans : int, optional
+            Số lượng kế hoạch cần tạo (mặc định: 10)
+        callback : Callable[[float, str], None], optional
+            Hàm callback để cập nhật tiến trình
+
+        Returns
+        -------
+        Dict[str, MCOSolution]
+            Từ điển các giải pháp được tạo, key là solution_id
+        """
+        # Đặt callback
+        self.progress_callback = callback
+
+        # Đảm bảo chúng ta có kế hoạch cơ sở
+        if not self.base_plan:
+            logger.error("Không có kế hoạch cơ sở để tối ưu hóa")
+            return {}
+
+        # Đảm bảo có ít nhất 2 mục tiêu
+        active_objectives = [obj for obj in self.objectives.values() if obj.is_active]
+        if len(active_objectives) < 2:
+            logger.error("Cần ít nhất 2 mục tiêu hoạt động để tạo mặt Pareto")
+            return {}
+
+        # Tạo kế hoạch trụ (anchor) cho mỗi mục tiêu nếu chưa có
+        if not self.anchor_solutions:
+            self.generate_anchor_plans(callback)
+
+        # Tạo ra các trọng số khác nhau để bao phủ mặt Pareto
+        weight_sets = self._generate_diverse_weights(active_objectives, num_plans)
+
+        # Tạo ra các kế hoạch cho mỗi bộ trọng số
+        solutions = {}
+        total_plans = len(weight_sets)
+
+        for i, weights in enumerate(weight_sets):
+            if callback:
+                callback(i / total_plans, f"Tạo kế hoạch Pareto {i + 1}/{total_plans}")
+
+            # Áp dụng trọng số cho các mục tiêu
+            for obj_id, weight in weights.items():
+                self.set_objective_weight(obj_id, weight)
+
+            # Tạo kế hoạch với trọng số hiện tại
+            solution = self.generate_navigated_plan(weights)
+
+            if solution:
+                solutions[solution.solution_id] = solution
+
+        # Cập nhật bộ giải pháp
+        self.solutions.update(solutions)
+
+        # Thông báo hoàn thành
+        if callback:
+            callback(1.0, f"Đã tạo xong {len(solutions)} kế hoạch trên mặt Pareto")
+
+        return solutions
+
+    def _generate_diverse_weights(
+        self, objectives: List[MCOTradeoffObjective], num_points: int
+    ) -> List[Dict[str, float]]:
+        """
+        Tạo các bộ trọng số đa dạng để bao phủ mặt Pareto.
+
+        Parameters
+        ----------
+        objectives : List[MCOTradeoffObjective]
+            Danh sách các mục tiêu đang hoạt động
+        num_points : int
+            Số lượng điểm cần tạo
+
+        Returns
+        -------
+        List[Dict[str, float]]
+            Danh sách các bộ trọng số, mỗi bộ là một từ điển {objective_id: weight}
+        """
+        n_objectives = len(objectives)
+
+        if n_objectives == 2:
+            # Đối với 2 mục tiêu, chỉ cần chia đều trên một đường
+            alphas = np.linspace(0, 1, num_points)
+
+            result = []
+            for alpha in alphas:
+                weights = {
+                    objectives[0].objective_id: alpha,
+                    objectives[1].objective_id: 1.0 - alpha,
+                }
+                result.append(weights)
+
+            return result
+        else:
+            # Đối với nhiều mục tiêu hơn, sử dụng phương pháp lấy mẫu ngẫu nhiên
+            result = []
+
+            # Thêm các điểm trụ
+            for obj in objectives:
+                weights = {o.objective_id: 0.0 for o in objectives}
+                weights[obj.objective_id] = 1.0
+                result.append(weights)
+
+            # Thêm điểm cân bằng
+            balanced_weights = {
+                obj.objective_id: 1.0 / n_objectives for obj in objectives
+            }
+            result.append(balanced_weights)
+
+            # Tạo thêm các điểm ngẫu nhiên cho đến khi đủ số lượng
+            while len(result) < num_points:
+                # Tạo các trọng số ngẫu nhiên
+                random_weights = np.random.random(n_objectives)
+                # Chuẩn hóa để tổng bằng 1
+                random_weights = random_weights / random_weights.sum()
+
+                weights = {
+                    obj.objective_id: float(random_weights[i])
+                    for i, obj in enumerate(objectives)
+                }
+
+                result.append(weights)
+
+            # Nếu có quá nhiều điểm, lấy mẫu
+            if len(result) > num_points:
+                indices = np.linspace(0, len(result) - 1, num_points, dtype=int)
+                result = [result[i] for i in indices]
+
+            return result
+
+    def generate_quality_report(
+        self, solution: Optional[MCOSolution] = None
+    ) -> Dict[str, Any]:
+        """
+        Tạo báo cáo chất lượng cho một giải pháp.
+
+        Parameters
+        ----------
+        solution : Optional[MCOSolution], optional
+            Giải pháp cần đánh giá, nếu None sẽ dùng giải pháp hiện tại
+
+        Returns
+        -------
+        Dict[str, Any]
+            Báo cáo chất lượng với các thông số chính
+        """
+        if solution is None:
+            solution = self.current_solution
+
+        if solution is None:
+            logger.error("Không có giải pháp để đánh giá")
+            return {}
+
+        plan = solution.plan
+
+        # Tạo báo cáo cơ bản
+        report = {
+            "solution_id": solution.solution_id,
+            "objectives": {},
+            "metrics": {},
+            "structures": {},
+        }
+
+        # Thêm thông tin mục tiêu
+        for obj_id, objective in self.objectives.items():
+            if obj_id in solution.objective_values:
+                value = solution.objective_values[obj_id]
+                weight = solution.weights.get(obj_id, 0.0)
+
+                report["objectives"][obj_id] = {
+                    "name": f"{objective.structure_name}: {objective.objective_type}",
+                    "value": value,
+                    "weight": weight,
+                    "type": objective.objective_type,
+                    "structure_id": objective.structure_id,
+                    "structure_name": objective.structure_name,
+                    "is_active": objective.is_active,
+                }
+
+        # Thêm thông tin DVH cho mỗi cấu trúc
+        structures = (
+            plan.structure_set.structures if hasattr(plan, "structure_set") else []
+        )
+
+        for structure in structures:
+            # Tính toán các thông số DVH
+            try:
+                metrics = calculate_dvh_metrics(structure, plan.dose)
+
+                report["structures"][structure.id] = {
+                    "name": structure.name,
+                    "id": structure.id,
+                    "volume": metrics.get("volume", 0.0),
+                    "min_dose": metrics.get("min_dose", 0.0),
+                    "max_dose": metrics.get("max_dose", 0.0),
+                    "mean_dose": metrics.get("mean_dose", 0.0),
+                    "median_dose": metrics.get("median_dose", 0.0),
+                    "d95": metrics.get("D95", 0.0),
+                    "d90": metrics.get("D90", 0.0),
+                    "d50": metrics.get("D50", 0.0),
+                    "v95": metrics.get("V95", 0.0),
+                    "v90": metrics.get("V90", 0.0),
+                    "v50": metrics.get("V50", 0.0),
+                }
+            except Exception as e:
+                logger.warning(f"Lỗi khi tính toán DVH cho {structure.name}: {e}")
+
+        # Thêm các thông số tổng thể của kế hoạch
+        try:
+            report["metrics"] = {
+                "plan_name": plan.name if hasattr(plan, "name") else "Unknown",
+                "monitor_units": plan.total_mu if hasattr(plan, "total_mu") else 0.0,
+                "prescription_dose": plan.prescription.dose
+                if hasattr(plan, "prescription")
+                else 0.0,
+                "conformity_index": self._calculate_conformity_index(plan),
+                "homogeneity_index": self._calculate_homogeneity_index(plan),
+                "gradient_index": self._calculate_gradient_index(plan),
+            }
+        except Exception as e:
+            logger.warning(f"Lỗi khi tính toán thông số kế hoạch: {e}")
+
+        return report
+
+    def _calculate_conformity_index(self, plan: Plan) -> float:
+        """Tính chỉ số phù hợp cho kế hoạch."""
+        try:
+            # Lấy cấu trúc PTV chính và liều kê toa
+            ptv = None
+            for structure in plan.structure_set.structures:
+                if "PTV" in structure.name.upper():
+                    ptv = structure
+                    break
+
+            if ptv is None:
+                return 0.0
+
+            rx_dose = plan.prescription.dose if hasattr(plan, "prescription") else 0.0
+            if rx_dose <= 0:
+                return 0.0
+
+            # Tính thể tích của PTV
+            ptv_volume = ptv.get_volume()
+
+            # Tính thể tích của thân thể nhận rx_dose
+            body = None
+            for structure in plan.structure_set.structures:
+                if structure.name.upper() in ("BODY", "EXTERNAL", "PATIENT"):
+                    body = structure
+                    break
+
+            if body is None:
+                return 0.0
+
+            # Tính V100% cho body và PTV
+            metrics_ptv = calculate_dvh_metrics(ptv, plan.dose)
+            metrics_body = calculate_dvh_metrics(body, plan.dose)
+
+            v100_ptv = metrics_ptv.get("V100", 0.0) * ptv_volume / 100.0
+            v100_body = metrics_body.get("V100", 0.0) * body.get_volume() / 100.0
+
+            # Công thức CI = (V100_PTV)^2 / (V100_Body * PTV_Volume)
+            if v100_body <= 0 or v100_ptv <= 0:
+                return 0.0
+
+            ci = (v100_ptv**2) / (v100_body * ptv_volume)
+            return ci
+
+        except Exception as e:
+            logger.warning(f"Lỗi khi tính Conformity Index: {e}")
+            return 0.0
+
+    def _calculate_homogeneity_index(self, plan: Plan) -> float:
+        """Tính chỉ số đồng nhất cho kế hoạch."""
+        try:
+            # Lấy cấu trúc PTV chính
+            ptv = None
+            for structure in plan.structure_set.structures:
+                if "PTV" in structure.name.upper():
+                    ptv = structure
+                    break
+
+            if ptv is None:
+                return 0.0
+
+            # Tính D98, D50, D2 cho PTV
+            metrics = calculate_dvh_metrics(ptv, plan.dose)
+            d98 = metrics.get("D98", 0.0)
+            d2 = metrics.get("D2", 0.0)
+
+            # Công thức HI = D2/D98
+            if d98 <= 0:
+                return 0.0
+
+            hi = d2 / d98
+            return hi
+
+        except Exception as e:
+            logger.warning(f"Lỗi khi tính Homogeneity Index: {e}")
+            return 0.0
+
+    def _calculate_gradient_index(self, plan: Plan) -> float:
+        """Tính chỉ số gradient cho kế hoạch."""
+        try:
+            # Lấy cấu trúc PTV chính và liều kê toa
+            ptv = None
+            for structure in plan.structure_set.structures:
+                if "PTV" in structure.name.upper():
+                    ptv = structure
+                    break
+
+            if ptv is None:
+                return 0.0
+
+            rx_dose = plan.prescription.dose if hasattr(plan, "prescription") else 0.0
+            if rx_dose <= 0:
+                return 0.0
+
+            # Tính R50% và R100%
+            metrics = calculate_dvh_metrics(ptv, plan.dose)
+            v100 = metrics.get("V100", 0.0)
+            v50 = metrics.get("V50", 0.0)
+
+            # Công thức GI = V50% / V100%
+            if v100 <= 0:
+                return 0.0
+
+            gi = v50 / v100
+            return gi
+
+        except Exception as e:
+            logger.warning(f"Lỗi khi tính Gradient Index: {e}")
+            return 0.0
+
 
 def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
-        """
+    """
     Create and initialize an MCO engine for a given plan.
 
         Args:
@@ -505,8 +942,20 @@ def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
         for structure in base_plan.structure_set.structures:
             if structure.structure_type == "PTV" or "PTV" in structure.name:
                 targets.append(structure)
-            elif structure.structure_type == "OAR" or any(oar in structure.name.upper() for oar in
-                             ["SPINAL", "CORD", "HEART", "LUNG", "LIVER", "KIDNEY", "BOWEL", "BLADDER", "RECTUM"]):
+            elif structure.structure_type == "OAR" or any(
+                oar in structure.name.upper()
+                for oar in [
+                    "SPINAL",
+                    "CORD",
+                    "HEART",
+                    "LUNG",
+                    "LIVER",
+                    "KIDNEY",
+                    "BOWEL",
+                    "BLADDER",
+                    "RECTUM",
+                ]
+            ):
                 oars.append(structure)
 
         # Add objectives for targets
@@ -516,7 +965,7 @@ def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
                 structure_id=target.id,
                 structure_name=target.name,
                 objective_type="MinDose",
-                priority=1
+                priority=1,
             )
 
             # Maximum dose to target
@@ -524,7 +973,7 @@ def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
                 structure_id=target.id,
                 structure_name=target.name,
                 objective_type="MaxDose",
-                priority=1
+                priority=1,
             )
 
             # Dose homogeneity
@@ -533,7 +982,7 @@ def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
                 structure_name=target.name,
                 objective_type="DoseAtVolume",
                 parameters={"volume": 95},
-                priority=1
+                priority=1,
             )
 
         # Add objectives for OARs
@@ -543,7 +992,7 @@ def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
                 structure_id=oar.id,
                 structure_name=oar.name,
                 objective_type="MaxDose",
-                priority=2
+                priority=2,
             )
 
             # Mean dose to OAR
@@ -551,7 +1000,7 @@ def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
                 structure_id=oar.id,
                 structure_name=oar.name,
                 objective_type="MeanDose",
-                priority=2
+                priority=2,
             )
 
     return engine
@@ -582,16 +1031,26 @@ if __name__ == "__main__":
     # Create a test engine
     plan = DummyPlan()
     objectives = {
-        'ptv_coverage': DummyObjective('ptv_coverage'),
-        'oar_sparing': DummyObjective('oar_sparing')
+        "ptv_coverage": DummyObjective("ptv_coverage"),
+        "oar_sparing": DummyObjective("oar_sparing"),
     }
 
     engine = MCOEngine()
 
     # Test saving and loading
     engine.solutions = {
-        "Solution_1": MCOSolution(id="Solution_1", objective_values={'ptv_coverage': 1.0, 'oar_sparing': 0.0}, plan=plan, weight_vector={'ptv_coverage': 1.0, 'oar_sparing': 0.0}),
-        "Solution_2": MCOSolution(id="Solution_2", objective_values={'ptv_coverage': 0.0, 'oar_sparing': 1.0}, plan=plan, weight_vector={'ptv_coverage': 0.0, 'oar_sparing': 1.0})
+        "Solution_1": MCOSolution(
+            id="Solution_1",
+            objective_values={"ptv_coverage": 1.0, "oar_sparing": 0.0},
+            plan=plan,
+            weight_vector={"ptv_coverage": 1.0, "oar_sparing": 0.0},
+        ),
+        "Solution_2": MCOSolution(
+            id="Solution_2",
+            objective_values={"ptv_coverage": 0.0, "oar_sparing": 1.0},
+            plan=plan,
+            weight_vector={"ptv_coverage": 0.0, "oar_sparing": 1.0},
+        ),
     }
 
     engine.save_current_solution("Test Solution 1")

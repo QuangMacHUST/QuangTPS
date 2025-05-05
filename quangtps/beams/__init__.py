@@ -2,10 +2,24 @@
 # -*- coding: utf-8 -*-
 
 """
-Beams module for QuangTPS.
+Module quangtps.beams
+====================
 
-This is a redirection module that forwards imports to the actual implementation
-in quangtps.treatment.beams to maintain backward compatibility and resolve import issues.
+Module này chứa các lớp và hàm liên quan đến cấu hình chùm tia và các thuộc tính
+trong hệ thống lập kế hoạch xạ trị.
+
+Classes
+-------
+Beam
+    Chứa thông tin về một chùm tia xạ trị
+BeamSet
+    Tập hợp các chùm tia trong một kế hoạch xạ trị
+ControlPoint
+    Điểm điều khiển của chùm tia MLC
+Isocenter
+    Tâm iso của chùm tia
+MLCPosition
+    Vị trí của lá MLC
 """
 
 import logging
@@ -120,3 +134,11 @@ except ImportError as e:
 
 # Version info
 __version__ = "0.2.0"
+
+from .beam import Beam
+from .beam_set import BeamSet
+from .control_point import ControlPoint
+from .isocenter import Isocenter
+from .mlc_position import MLCPosition
+
+__all__ = ["Beam", "BeamSet", "ControlPoint", "Isocenter", "MLCPosition"]

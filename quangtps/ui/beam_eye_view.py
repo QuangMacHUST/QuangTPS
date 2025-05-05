@@ -175,6 +175,10 @@ class BEVCanvas(FigureCanvas):
                         "bank": "A",
                         "original_pos": leaf.get("bankA", 0),
                     }
+                    # Highlight the selected leaf
+                    self.update_view()
+                    # Display detailed information about the leaf
+                    self._show_leaf_info(leaf, "A")
                     break
 
                 # Check if we're near the bank B edge
@@ -184,6 +188,10 @@ class BEVCanvas(FigureCanvas):
                         "bank": "B",
                         "original_pos": leaf.get("bankB", 0),
                     }
+                    # Highlight the selected leaf
+                    self.update_view()
+                    # Display detailed information about the leaf
+                    self._show_leaf_info(leaf, "B")
                     break
 
     def on_release(self, event):
@@ -192,11 +200,17 @@ class BEVCanvas(FigureCanvas):
 
     def on_motion(self, event):
         """Handle mouse motion event"""
-        if (
-            not self.mlc_edit_mode
-            or self.drag_leaf is None
-            or event.inaxes != self.axes
-        ):
+        if not self.mlc_edit_mode or event.inaxes != self.axes:
+            if self.drag_leaf is None:
+                # Show cursor highlighting when hovering over MLC leaves
+                if self.mlc_positions is not None:
+                    self._highlight_leaf_on_hover(event)
+            else:
+                # If we're dragging a leaf but mouse goes outside axes, keep drag active
+                # but just don't update the position
+                return
+
+        if self.drag_leaf is None or event.inaxes != self.axes:
             return
 
         x, y = event.xdata, event.ydata
@@ -226,6 +240,9 @@ class BEVCanvas(FigureCanvas):
 
                 # Update the view
                 self.update_view()
+
+                # Show updated leaf information
+                self._show_leaf_info(leaf, bank)
                 break
 
     def set_beam(self, beam):
@@ -552,13 +569,34 @@ class BEVCanvas(FigureCanvas):
 
                 # Bank A (left side)
                 if bank_a_pos < bank_b_pos:
+                    # Determine if this is the currently dragged leaf
+                    is_selected = (
+                        self.drag_leaf is not None
+                        and self.drag_leaf["index"] == leaf_index
+                    )
+                    is_bank_a_selected = is_selected and self.drag_leaf["bank"] == "A"
+                    is_bank_b_selected = is_selected and self.drag_leaf["bank"] == "B"
+
+                    # Use highlight color for selected leaf
+                    color_a = "lightblue"
+                    color_b = "lightblue"
+                    alpha_a = 0.5
+                    alpha_b = 0.5
+
+                    if is_bank_a_selected:
+                        color_a = "cyan"
+                        alpha_a = 0.8
+                    if is_bank_b_selected:
+                        color_b = "cyan"
+                        alpha_b = 0.8
+
                     rect_a = Rectangle(
                         (-self.field_size[0] / 2, y_pos),
                         bank_a_pos + self.field_size[0] / 2,
                         width,
                         edgecolor="cyan",
-                        facecolor="cyan",
-                        alpha=0.5,
+                        facecolor=color_a,
+                        alpha=alpha_a,
                         linewidth=1,
                     )
                     self.axes.add_patch(rect_a)
@@ -569,8 +607,8 @@ class BEVCanvas(FigureCanvas):
                         self.field_size[0] / 2 - bank_b_pos,
                         width,
                         edgecolor="cyan",
-                        facecolor="cyan",
-                        alpha=0.5,
+                        facecolor=color_b,
+                        alpha=alpha_b,
                         linewidth=1,
                     )
                     self.axes.add_patch(rect_b)
@@ -587,6 +625,33 @@ class BEVCanvas(FigureCanvas):
                     )
                     self.axes.add_patch(rect_aperture)
 
+                    # Add small handles at the leaf edges for clearer interaction
+                    handle_a = Rectangle(
+                        (bank_a_pos - 1, y_pos),
+                        2,  # 2mm width
+                        width,
+                        edgecolor="white",
+                        facecolor="cyan",
+                        alpha=0.8 if is_bank_a_selected else 0.5,
+                        linewidth=1,
+                    )
+                    self.axes.add_patch(handle_a)
+
+                    handle_b = Rectangle(
+                        (bank_b_pos - 1, y_pos),
+                        2,  # 2mm width
+                        width,
+                        edgecolor="white",
+                        facecolor="cyan",
+                        alpha=0.8 if is_bank_b_selected else 0.5,
+                        linewidth=1,
+                    )
+                    self.axes.add_patch(handle_b)
+
+            # Add visual guides for MLC edit mode
+            if self.mlc_edit_mode:
+                self._draw_mlc_edit_guides()
+
         except Exception as e:
             logger.error(f"Error drawing MLC: {str(e)}")
             # Fall back to default rectangle
@@ -599,6 +664,32 @@ class BEVCanvas(FigureCanvas):
                 linewidth=2,
             )
             self.axes.add_patch(rect)
+
+    def _draw_mlc_edit_guides(self):
+        """Draw visual guides for MLC editing mode"""
+        # Add a subtle grid pattern to aid in positioning
+        xlim = self.axes.get_xlim()
+        ylim = self.axes.get_ylim()
+
+        # Draw 5mm grid lines
+        grid_interval = 5
+        for x in range(int(xlim[0]), int(xlim[1]) + 1, grid_interval):
+            self.axes.axvline(x, color="gray", linestyle=":", alpha=0.3, linewidth=0.5)
+
+        for y in range(int(ylim[0]), int(ylim[1]) + 1, grid_interval):
+            self.axes.axhline(y, color="gray", linestyle=":", alpha=0.3, linewidth=0.5)
+
+        # Add edit mode indicator text
+        self.axes.text(
+            xlim[0] + 10,
+            ylim[1] - 10,
+            "MLC Edit Mode",
+            color="white",
+            fontsize=10,
+            ha="left",
+            va="top",
+            bbox=dict(facecolor="green", alpha=0.7),
+        )
 
     def _draw_jaws(self):
         """Draw the collimator jaws."""
@@ -892,6 +983,131 @@ class BEVCanvas(FigureCanvas):
             Resolution in dots per inch
         """
         self.fig.savefig(filename, dpi=dpi, bbox_inches="tight")
+
+    def _highlight_leaf_on_hover(self, event):
+        """Highlight leaf when mouse hovers over it"""
+        if event.inaxes != self.axes or self.mlc_positions is None:
+            return
+
+        x, y = event.xdata, event.ydata
+        hover_leaf = None
+        hover_bank = None
+
+        # Find if we're hovering over any leaf edges
+        for leaf in self.mlc_positions:
+            leaf_y = leaf.get("y_position", 0)
+            leaf_height = leaf.get("width", 5)
+
+            if leaf_y <= y <= leaf_y + leaf_height:
+                # Check bank A edge
+                if abs(x - leaf.get("bankA", 0)) < 5:
+                    hover_leaf = leaf
+                    hover_bank = "A"
+                    break
+
+                # Check bank B edge
+                if abs(x - leaf.get("bankB", 0)) < 5:
+                    hover_leaf = leaf
+                    hover_bank = "B"
+                    break
+
+        # If hovering over a leaf edge, draw a highlight
+        if hover_leaf is not None:
+            # Clear previous highlights without full redraw
+            self.axes.patches = [
+                p for p in self.axes.patches if not hasattr(p, "is_hover_highlight")
+            ]
+
+            # Add highlight
+            if hover_bank == "A":
+                x_pos = hover_leaf.get("bankA", 0)
+            else:
+                x_pos = hover_leaf.get("bankB", 0)
+
+            y_pos = hover_leaf.get("y_position", 0)
+            height = hover_leaf.get("width", 5)
+
+            highlight = Rectangle(
+                (x_pos - 1, y_pos),
+                2,  # Width of highlight
+                height,
+                facecolor="yellow",
+                alpha=0.7,
+                edgecolor="white",
+                linewidth=1.5,
+                zorder=10,
+            )
+            highlight.is_hover_highlight = True
+            self.axes.add_patch(highlight)
+
+            # Draw the cursor position information
+            self.axes.texts = [
+                t for t in self.axes.texts if not hasattr(t, "is_hover_info")
+            ]
+            info_text = self.axes.text(
+                x_pos,
+                y_pos + height + 5,
+                f"Leaf {hover_leaf.get('index', 0)}, Bank {hover_bank}\nPos: {x_pos:.1f} mm",
+                color="white",
+                fontsize=9,
+                ha="center",
+                va="bottom",
+                bbox=dict(
+                    facecolor="black",
+                    alpha=0.7,
+                    edgecolor="white",
+                    boxstyle="round,pad=0.5",
+                ),
+            )
+            info_text.is_hover_info = True
+
+            self.fig.canvas.draw_idle()
+
+    def _show_leaf_info(self, leaf, bank):
+        """Display detailed information about the selected leaf"""
+        # First remove any existing leaf info
+        self.axes.texts = [t for t in self.axes.texts if not hasattr(t, "is_leaf_info")]
+
+        leaf_index = leaf.get("index", 0)
+        if bank == "A":
+            position = leaf.get("bankA", 0)
+        else:
+            position = leaf.get("bankB", 0)
+
+        y_position = leaf.get("y_position", 0)
+        leaf_width = leaf.get("width", 5)
+
+        # Paired leaf position (opposite bank)
+        paired_position = leaf.get("bankB" if bank == "A" else "bankA", 0)
+        aperture_width = abs(leaf.get("bankB", 0) - leaf.get("bankA", 0))
+
+        # Create info text
+        info_text = (
+            f"Leaf {leaf_index} (Bank {bank})\n"
+            f"Position: {position:.1f} mm\n"
+            f"Aperture: {aperture_width:.1f} mm"
+        )
+
+        # Position text near the leaf but avoid going out of axes
+        text = self.axes.text(
+            position,
+            y_position + leaf_width / 2,
+            info_text,
+            color="white",
+            fontsize=9,
+            ha="left" if bank == "A" else "right",
+            va="center",
+            bbox=dict(
+                facecolor="black",
+                alpha=0.8,
+                edgecolor="white",
+                boxstyle="round,pad=0.5",
+            ),
+            zorder=100,
+        )
+        text.is_leaf_info = True
+
+        self.fig.canvas.draw_idle()
 
 
 class BeamEyeView(QWidget):
