@@ -524,8 +524,8 @@
                             {% for structure, metrics in dvh_metrics.items() %}
                             <tr>
                                 <td>
-                                    <div class="structure-color"
-                                        style="background-color: {% if structure.upper() in structure_colors %}{{ structure_colors[structure.upper()] }}{% else %}#333{% endif %}">
+                                    <div class="structure-color" data-structure="{{ structure }}"
+                                        data-colors="{{ structure_colors|tojson }}">
                                     </div>
                                     <span class="structure-name">{{ structure }}</span>
                                 </td>
@@ -557,8 +557,8 @@
                     {% for structure, metrics in dvh_metrics.items() %}
                     <div class="metrics-card">
                         <div class="metrics-header">
-                            <div class="structure-color"
-                                style="background-color: {% if structure.upper() in structure_colors %}{{ structure_colors[structure.upper()] }}{% else %}#333{% endif %}">
+                            <div class="structure-color" data-structure="{{ structure }}"
+                                data-colors="{{ structure_colors|tojson }}">
                             </div>
                             <div class="metrics-title">{{ structure }}</div>
                         </div>
@@ -679,8 +679,8 @@
                 {% for structure in structures %}
                 <tr>
                     <td>
-                        <div class="structure-color"
-                            style="background-color: {% if structure.name.upper() in structure_colors %}{{ structure_colors[structure.name.upper()] }}{% else %}#333{% endif %}">
+                        <div class="structure-color" data-structure-name="{{ structure.name }}"
+                            data-colors="{{ structure_colors|tojson }}">
                         </div>
                         <span class="structure-name">{{ structure.name }}</span>
                     </td>
@@ -718,6 +718,44 @@
                     const tabId = this.getAttribute('data-tab');
                     document.getElementById(tabId).classList.add('active');
                 });
+            });
+        });
+
+        // Xử lý màu cấu trúc
+        document.addEventListener('DOMContentLoaded', function () {
+            // Xử lý màu cho các phần tử có data-structure
+            const structureElements = document.querySelectorAll('[data-structure]');
+            structureElements.forEach(elem => {
+                const structureName = elem.getAttribute('data-structure');
+                const colorsData = JSON.parse(elem.getAttribute('data-colors'));
+                const structureColor = colorsData[structureName.toUpperCase()] || '#333';
+                elem.style.backgroundColor = structureColor;
+            });
+
+            // Xử lý màu cho các phần tử có data-structure-name
+            const structureNameElements = document.querySelectorAll('[data-structure-name]');
+            structureNameElements.forEach(elem => {
+                const structureName = elem.getAttribute('data-structure-name');
+                const colorsData = JSON.parse(elem.getAttribute('data-colors'));
+                const structureColor = colorsData[structureName.toUpperCase()] || '#333';
+                elem.style.backgroundColor = structureColor;
+            });
+
+            // Các phần tử metric-chart
+            const chartElements = document.querySelectorAll('.metric-chart .chart-fill');
+            chartElements.forEach(elem => {
+                if (elem.hasAttribute('data-percent')) {
+                    const percent = parseFloat(elem.getAttribute('data-percent'));
+                    elem.style.width = Math.min(percent, 100) + '%';
+                }
+            });
+
+            const markerElements = document.querySelectorAll('.metric-chart .chart-marker');
+            markerElements.forEach(elem => {
+                if (elem.hasAttribute('data-position')) {
+                    const position = parseFloat(elem.getAttribute('data-position'));
+                    elem.style.left = Math.min(position, 100) + '%';
+                }
             });
         });
     </script>

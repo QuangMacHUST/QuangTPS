@@ -79,9 +79,9 @@ from quangtps.optimization.mco.mco_interface import (
     MCOEngine,
     MCOSolution,
     MCOObjectiveSpace,
-    MCONavigator,
     calculate_mco_metrics,
 )
+from quangtps.optimization.mco.navigator import NavigatorInterface
 from quangtps.evaluation.dvh.dvh_calculation import DVHCalculator
 from quangtps.evaluation.dvh.dvh_visualization import plot_dvh
 
@@ -910,10 +910,8 @@ class MCONavigatorDialog(QDialog):
     def _initialize_mco(self):
         """Khởi tạo MCO Navigator"""
         try:
-            # Tạo MCO Navigator
-            from quangtps.optimization.mco.mco_interface import create_mco_navigator
-
-            self.mco_navigator = create_mco_navigator(self.plan)
+            # Tạo MCO Navigator sử dụng giao diện NavigatorInterface mới
+            self.mco_navigator = NavigatorInterface(self.plan)
 
             if self.mco_navigator:
                 logger.info("MCO Navigator initialized successfully")
@@ -929,24 +927,32 @@ class MCONavigatorDialog(QDialog):
             )
 
     def _initialize_solutions(self):
-        """Khởi tạo các lời giải có sẵn"""
+        """Lấy các lời giải hiện có từ Navigator"""
         if not self.mco_navigator:
             return
 
-        # Get initial solutions
-        solutions = self.mco_navigator.get_solutions()
+        try:
+            solutions = self.mco_navigator.get_solutions()
 
-        # Populate solution list
-        for i, (solution_id, solution) in enumerate(solutions.items()):
-            self.solution_list.addItem(f"Solution {i + 1}: {solution_id}")
+            if not solutions:
+                # Không có lời giải, hiển thị nút Generate
+                self.generate_action.setEnabled(True)
+                return
 
-        # Select first solution if available
-        if self.solution_list.count() > 0:
-            self.solution_list.setCurrentRow(0)
+            # Cập nhật danh sách lời giải
+            self.solution_list.clear()
+            for i, solution in enumerate(solutions):
+                self.solution_list.addItem(f"Solution {i + 1}: {solution['name']}")
 
-        # Update Pareto front visualization
-        objective_space = self.mco_navigator.get_objective_space()
-        self.pareto_front_widget.set_objective_space(objective_space)
+            # Chọn lời giải đầu tiên
+            if solutions:
+                self.solution_list.setCurrentRow(0)
+                self.current_solution = solutions[0]
+                self.current_solution_index = 0
+                self._update_ui_for_current_solution()
+
+        except Exception as e:
+            logger.error(f"Error initializing solutions: {str(e)}")
 
     def _setup_objectives(self):
         """Thiết lập các hàm mục tiêu"""
@@ -1115,73 +1121,94 @@ class MCONavigatorDialog(QDialog):
         self.redo_action.setEnabled(self.history_index < len(self.history) - 1)
 
     def _generate_solutions(self):
-        """Sinh các lời giải trên mặt Pareto"""
+        """Generate Pareto-optimal solutions"""
         if not self.mco_navigator:
             return
 
+        # Thông số
+        num_solutions = self.num_solutions_spin.value()
+
+        # Disable buttons
+        self.generate_action.setEnabled(False)
+
+        # Tạo dialog tiến độ
+        progress_dialog = QProgressDialog(
+            "Generating solutions...", "Cancel", 0, 100, self
+        )
+        progress_dialog.setWindowTitle("Generating Solutions")
+        progress_dialog.setWindowModality(Qt.WindowModal)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setValue(0)
+
+        # Callback update tiến độ
+        def update_progress(value, message):
+            progress_dialog.setValue(int(value * 100))
+            progress_dialog.setLabelText(
+                message if message else "Generating solutions..."
+            )
+            QApplication.processEvents()
+
+            return not progress_dialog.wasCanceled()
+
         try:
-            # Show progress dialog
-            progress = QProgressDialog(
-                "Generating Pareto solutions...", "Cancel", 0, 100, self
-            )
-            progress.setWindowModality(Qt.WindowModal)
-            progress.setMinimumDuration(0)
-            progress.setValue(0)
-            progress.show()
-
-            def update_progress(value, message):
-                progress.setValue(int(value * 100))
-                progress.setLabelText(message)
-                QApplication.processEvents()
-                return not progress.wasCanceled()
-
-            # Generate solutions
-            self.mco_navigator.generate_pareto_solutions(10, update_progress)
-
-            # Update UI
-            self._initialize_solutions()
-
-            # Update sliders
-            self._setup_objectives()
-
-            # Close progress dialog
-            progress.close()
-
-            QMessageBox.information(
-                self, "Success", "Pareto solutions generated successfully"
+            # Chạy quá trình tạo lời giải
+            result = self.mco_navigator.generate_pareto_solutions(
+                num_solutions=num_solutions, progress_callback=update_progress
             )
 
+            if not result:
+                QMessageBox.warning(self, "Warning", "Failed to generate solutions")
+            else:
+                # Cập nhật danh sách lời giải
+                self._initialize_solutions()
+
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Generated {num_solutions} Pareto-optimal solutions",
+                )
         except Exception as e:
             logger.error(f"Error generating solutions: {str(e)}")
             QMessageBox.critical(
                 self, "Error", f"Failed to generate solutions: {str(e)}"
             )
+        finally:
+            # Đóng dialog tiến độ và enable nút
+            progress_dialog.close()
+            self.generate_action.setEnabled(True)
 
     def _on_solution_selected(self, index):
         """Handle selection of a solution"""
         if index < 0:
             return
 
-        solutions = list(self.mco_navigator.get_solutions().values())
+        solutions = self.mco_navigator.get_solutions()
         if index >= len(solutions):
             return
 
-        self.current_solution = solutions[index]
+        # Sử dụng API mới để chọn lời giải
+        result = self.mco_navigator.select_solution(index)
+
+        if not result:
+            logger.error(f"Failed to select solution at index {index}")
+            return
+
+        self.current_solution = result
         self.current_solution_index = index
 
-        # Add to history
+        # Thêm vào lịch sử
         if (self.history_index < 0) or (
             self.history_index < len(self.history)
             and self.history[self.history_index] != self.current_solution
         ):
-            # Truncate history if we're not at the end
+            # Cắt lịch sử nếu chúng ta không ở cuối
             if self.history_index < len(self.history) - 1:
                 self.history = self.history[: self.history_index + 1]
 
             self.history.append(self.current_solution)
             self.history_index = len(self.history) - 1
 
-        # Update UI
+        # Cập nhật UI
         self._update_ui_for_current_solution()
 
     def _on_slider_value_changed(self, objective_name, target_value):
@@ -1245,46 +1272,57 @@ class MCONavigatorDialog(QDialog):
         if not self.mco_navigator:
             return
 
-        # Get weights from sliders
+        # Chuẩn bị trọng số từ thanh trượt
         weights = {}
 
-        for obj_id, slider in self.objective_sliders.items():
-            weights[obj_id] = slider.get_value()
+        # Lấy tất cả các lời giải
+        solutions = self.mco_navigator.get_solutions()
 
-        # Navigate to solution
+        if not solutions:
+            logger.error("No solutions available for navigation")
+            return
+
+        # Lấy chỉ số của các lời giải
+        for i, solution in enumerate(solutions):
+            weight = (
+                self.objective_sliders[i].get_value()
+                if i in self.objective_sliders
+                else 0.0
+            )
+            if weight > 0.001:  # Bỏ qua các trọng số gần 0
+                weights[i] = weight
+
+        # Nếu không có trọng số, dừng lại
+        if not weights:
+            logger.warning("No weights specified for navigation")
+            return
+
         try:
-            solution = self.mco_navigator.navigate_to_values(weights)
+            # Gọi hàm nội suy với trọng số mới
+            result = self.mco_navigator.set_navigation_weights(weights)
 
-            if solution:
-                # Add it to the solution list if not there yet
-                solutions = list(self.mco_navigator.get_solutions().values())
-                if solution not in solutions:
-                    solutions.append(solution)
-                    self.solution_list.addItem(
-                        f"Solution {len(solutions)}: {solution.solution_id}"
-                    )
+            if not result:
+                logger.error("Failed to navigate to weights")
+                return
 
-                # Update current solution
-                self.current_solution = solution
-                self.current_solution_index = solutions.index(solution)
+            # Cập nhật lời giải hiện tại
+            self.current_solution = result
+            self.current_solution_index = -1  # Lời giải nội suy không có chỉ số cụ thể
 
-                # Select in the list
-                self.solution_list.setCurrentRow(self.current_solution_index)
+            # Thêm vào lịch sử
+            if (self.history_index < 0) or (
+                self.history_index < len(self.history)
+                and self.history[self.history_index] != self.current_solution
+            ):
+                # Cắt lịch sử nếu chúng ta không ở cuối
+                if self.history_index < len(self.history) - 1:
+                    self.history = self.history[: self.history_index + 1]
 
-                # Add to history
-                if (self.history_index < 0) or (
-                    self.history_index < len(self.history)
-                    and self.history[self.history_index] != self.current_solution
-                ):
-                    # Truncate history if we're not at the end
-                    if self.history_index < len(self.history) - 1:
-                        self.history = self.history[: self.history_index + 1]
+                self.history.append(self.current_solution)
+                self.history_index = len(self.history) - 1
 
-                    self.history.append(self.current_solution)
-                    self.history_index = len(self.history) - 1
-
-                # Update UI
-                self._update_ui_for_current_solution()
+            # Cập nhật UI
+            self._update_ui_for_current_solution()
         except Exception as e:
             logger.error(f"Error navigating to weights: {str(e)}")
             QMessageBox.critical(
@@ -1346,10 +1384,24 @@ class MCONavigatorDialog(QDialog):
             QMessageBox.warning(self, "No Solution", "Please select a solution first")
             return
 
-        # Emit signal
-        self.solutionAccepted.emit(self.current_solution)
+        # Chấp nhận lời giải hiện tại
+        final_plan = self.mco_navigator.accept_solution()
 
-        # Close dialog
+        if not final_plan:
+            QMessageBox.critical(self, "Error", "Failed to apply the selected solution")
+            return
+
+        # Phát tín hiệu với lời giải được chấp nhận
+        if hasattr(self, "solutionAccepted"):
+            self.solutionAccepted.emit(
+                MCOSolution(
+                    solution_id=self.current_solution.get("name", "Unknown"),
+                    plan=final_plan,
+                    objective_values=self.current_solution.get("objective_values", {}),
+                )
+            )
+
+        # Đóng dialog
         self.accept()
 
 

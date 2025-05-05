@@ -495,10 +495,10 @@
                             {{ metrics['HI'].get_status() }}
                         </div>
                         <div class="metric-chart">
-                            <div class="chart-fill" style="width: {{ (metrics['HI'].value / 0.2 * 100)|min(100) }}%">
+                            <div class="chart-fill" data-percent="{{ (metrics['HI'].value / 0.2 * 100)|min(100) }}">
                             </div>
                             <div class="chart-marker"
-                                style="left: {{ (metrics['HI'].ideal_value / 0.2 * 100)|min(100) }}%"></div>
+                                data-position="{{ (metrics['HI'].ideal_value / 0.2 * 100)|min(100) }}"></div>
                         </div>
                         <div class="chart-label">
                             <span>0</span>
@@ -525,10 +525,10 @@
                             {{ metrics['CI'].get_status() }}
                         </div>
                         <div class="metric-chart">
-                            <div class="chart-fill" style="width: {{ (metrics['CI'].value / 1 * 100)|min(100) }}%">
+                            <div class="chart-fill" data-percent="{{ (metrics['CI'].value / 1 * 100)|min(100) }}">
                             </div>
                             <div class="chart-marker"
-                                style="left: {{ (metrics['CI'].ideal_value / 1 * 100)|min(100) }}%"></div>
+                                data-position="{{ (metrics['CI'].ideal_value / 1 * 100)|min(100) }}"></div>
                         </div>
                         <div class="chart-label">
                             <span>0</span>
@@ -555,10 +555,10 @@
                             {{ metrics['GI'].get_status() }}
                         </div>
                         <div class="metric-chart">
-                            <div class="chart-fill" style="width: {{ (metrics['GI'].value / 5 * 100)|min(100) }}%">
+                            <div class="chart-fill" data-percent="{{ (metrics['GI'].value / 5 * 100)|min(100) }}">
                             </div>
                             <div class="chart-marker"
-                                style="left: {{ (metrics['GI'].ideal_value / 5 * 100)|min(100) }}%"></div>
+                                data-position="{{ (metrics['GI'].ideal_value / 5 * 100)|min(100) }}"></div>
                         </div>
                         <div class="chart-label">
                             <span>1.0</span>
@@ -585,9 +585,9 @@
                         </div>
                         <div class="metric-chart">
                             <div class="chart-fill"
-                                style="width: {{ (metrics['Coverage'].value / 100 * 100)|min(100) }}%"></div>
+                                data-percent="{{ (metrics['Coverage'].value / 100 * 100)|min(100) }}"></div>
                             <div class="chart-marker"
-                                style="left: {{ (metrics['Coverage'].ideal_value / 100 * 100)|min(100) }}%"></div>
+                                data-position="{{ (metrics['Coverage'].ideal_value / 100 * 100)|min(100) }}"></div>
                         </div>
                         <div class="chart-label">
                             <span>0%</span>
@@ -779,23 +779,17 @@
 
             // Animate metric charts on load
             setTimeout(function () {
-                const chartFills = document.querySelectorAll('.chart-fill');
-                const chartMarkers = document.querySelectorAll('.chart-marker');
+                const chartFills = document.querySelectorAll('.chart-fill[data-percent]');
+                const chartMarkers = document.querySelectorAll('.chart-marker[data-position]');
 
                 chartFills.forEach(fill => {
-                    const width = fill.style.width;
-                    fill.style.width = '0';
-                    setTimeout(() => {
-                        fill.style.width = width;
-                    }, 100);
+                    const percent = parseFloat(fill.getAttribute('data-percent'));
+                    fill.style.width = percent + '%';
                 });
 
                 chartMarkers.forEach(marker => {
-                    const left = marker.style.left;
-                    marker.style.left = '0';
-                    setTimeout(() => {
-                        marker.style.left = left;
-                    }, 100);
+                    const position = parseFloat(marker.getAttribute('data-position'));
+                    marker.style.left = position + '%';
                 });
             }, 500);
         });

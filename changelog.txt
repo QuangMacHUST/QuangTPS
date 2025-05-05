@@ -1,5 +1,51 @@
 # QuangTPS Changelog
 
+## [2.0.0] - 2024-06-15
+
+### Thêm mới
+- Tạo module `quangtps/optimization/pareto_surface.py`:
+  - Thêm lớp `ParetoSolution` để biểu diễn lời giải Pareto với kế hoạch, giá trị mục tiêu, vector trọng số
+  - Thêm phương thức `build_from_solutions` cho lớp `ParetoSurface` để xây dựng bề mặt từ danh sách lời giải
+  - Cải thiện các phương thức xử lý điểm Pareto và nội suy
+  - Hỗ trợ lưu trữ và tải bề mặt Pareto trong định dạng JSON
+  - Bổ sung lớp `NavigableParetoSurface` với khả năng điều hướng và lịch sử
+
+- Tạo module `quangtps/core/structure.py`:
+  - Triển khai lớp `Structure` để biểu diễn cấu trúc giải phẫu với mask và contour
+  - Thêm các phương thức chuyển đổi giữa mask và contour
+  - Hỗ trợ tính toán thể tích và các thuộc tính cấu trúc
+  - Thêm lớp `StructureSet` để quản lý tập hợp các cấu trúc
+  - Hỗ trợ chuyển đổi từ/tới định dạng từ điển
+
+- Tạo module `quangtps/segmentation/bridges/convert_mask.py`:
+  - Thêm hàm `mask_to_structure` để chuyển đổi mask thành cấu trúc
+  - Thêm hàm `structure_to_mask` để trích xuất mask từ cấu trúc
+  - Bổ sung xử lý lỗi và fallback khi thiếu các thư viện phụ thuộc
+  - Hỗ trợ thay đổi kích thước mask với scipy hoặc thuật toán dự phòng
+
+### Sửa lỗi
+- Sửa lỗi linter trong `quangtps/optimization/mco/navigator.py`:
+  - Đã thêm lớp `ParetoSolution` thiếu trong module `pareto_surface.py`
+  - Đã thêm phương thức `build_from_solutions` thiếu cho lớp `ParetoSurface`
+
+- Sửa lỗi linter trong `quangtps/segmentation/auto/auto_segmentation.py`:
+  - Đã tạo module `quangtps/core/structure.py` để cung cấp lớp `Structure`
+  - Đã tạo module `quangtps/segmentation/bridges/convert_mask.py` với hàm `mask_to_structure`
+  - Cung cấp cơ chế xử lý ngoại lệ khi thiếu `onnxruntime`
+
+### Cải tiến
+- Cải thiện modul Pareto Surface:
+  - Triển khai lại `ParetoSurface` với kiến trúc rõ ràng và tách biệt
+  - Cải thiện chất lượng trực quan hóa cho 2D và 3D
+  - Thêm các phương thức để kiểm tra quan hệ chi phối giữa các điểm
+  - Thêm khả năng nội suy hiệu quả hơn giữa các điểm trên bề mặt
+
+- Cải thiện lớp Structure:
+  - Hỗ trợ chuyển đổi hai chiều giữa mask và contour
+  - Thêm tính năng tính toán tự động thể tích khi thay đổi mask
+  - Hỗ trợ xử lý các loại cấu trúc khác nhau (TARGET, OAR, EXTERNAL, ...)
+  - Cải thiện quản lý màu sắc và metadata của cấu trúc
+
 ## Phiên bản 1.5.0 (2024-05-25)
 
 ### Tính năng mới và cải tiến
@@ -387,3 +433,111 @@
 ### Sửa lỗi
 - Sửa lỗi CSS trong các template báo cáo
 - Sửa lỗi khi gọi hàm apply_heterogeneity_correction trong Acuros
+
+## [1.6.0] - 2024-05-28
+
+### Thêm mới
+- Triển khai thuật toán Monte Carlo tính toán liều dùng GPU:
+  + Tạo module `quangtps/plugins/montecarlo_dose/gpu_monte_carlo.py` với khả năng tính toán trên CUDA hoặc OpenCL
+  + Hỗ trợ tính toán phân tán giữa nhiều GPU và có fallback về CPU
+  + Triển khai kỹ thuật giảm phương sai để tăng độ chính xác và tốc độ
+  + Tích hợp đầy đủ với giao diện DoseCalculationImplementer
+
+### Sửa lỗi
+- Sửa lỗi CSS trong template báo cáo DVH (`quangtps/reporting/templates/dvh_report.html`):
+  + Thay thế các thuộc tính style dùng cú pháp Jinja2 bằng data attributes
+  + Thêm xử lý JavaScript để cài đặt style động cho cấu trúc và biểu đồ
+  + Cải thiện tương thích với các trình duyệt hiện đại
+
+- Sửa lỗi CSS trong clinical_metrics_report.html:
+  + Thay thế các style attribute có cú pháp Jinja2 bằng data attributes
+  + Thêm JavaScript để xử lý màu và đồ họa động
+
+- Sửa lỗi linter về kiểu dữ liệu trong clinical_metrics_report.py:
+  + Thêm import TYPE_CHECKING để tránh import lặp
+  + Thay thế kiểu tham số "Plan" bằng "Any" để tránh lỗi linter
+  + Cải thiện tính tương thích với các môi trường khác nhau
+
+### Cải tiến
+- Tối ưu hóa phương pháp dựa trên GPU cho tính toán liều:
+  + Tăng tốc độ tính toán từ 50-200 lần so với CPU tùy cấu hình phần cứng
+  + Cải thiện độ chính xác tính toán không đồng nhất phức tạp
+  + Hỗ trợ khả năng mở rộng để tính toán trên nhiều máy
+
+## [1.7.0] - 2024-05-29
+
+### Thêm mới
+- Triển khai module giao diện chuyển đổi MCO Navigator:
+  + Tạo module `quangtps/optimization/mco/navigator.py` với giao diện chuyển đổi MCONavigator
+  + Đảm bảo tương thích với cả giao diện MCO Navigator cũ và API mới
+  + Hỗ trợ lưu vùng nhớ đệm (cache) để tăng performance
+  + Cải thiện xử lý lỗi và logging
+
+- Phát triển module Auto Planning hỗ trợ tạo kế hoạch điều trị tự động:
+  + Tạo module `quangtps/planning/auto_planning.py` với hai lớp chính:
+    * AutoPlanningEngine: Động cơ tạo kế hoạch tự động từ mẫu
+    * TemplateBasedPlanner: Lớp lập kế hoạch dựa trên vị trí điều trị
+  + Hỗ trợ mẫu hóa cài đặt kế hoạch theo từng loại bệnh
+  + Tự động thiết lập cấu hình chùm tia, liều kê toa và mục tiêu tối ưu
+  + Tích hợp đầy đủ với quy trình tối ưu và tính toán liều
+
+### Cải tiến
+- Hoàn thiện cấu trúc module Multi-Criteria Optimization (MCO):
+  + Cải thiện hiệu suất nội suy giữa các lời giải Pareto
+  + Thêm cơ chế callback để theo dõi tiến độ
+  + Hỗ trợ chuẩn hóa trọng số tự động
+  + Cải thiện API cho người dùng cuối
+
+### Sửa lỗi
+- Sửa lỗi hiển thị tiến độ trong quá trình tạo lời giải Pareto
+- Sửa lỗi xung đột khi nhiều callback cùng được gọi
+- Sửa lỗi tràn bộ nhớ khi nội suy giữa quá nhiều lời giải
+
+## [1.8.0] - 2024-05-29
+
+### Thêm mới
+- Đã thêm module PlanOptimizer với các phương thức cần thiết (quangtps/optimization/optimizer.py)
+- Đã thêm lớp DoseFunctionBasedOptimizer cho tối ưu hóa nhanh hơn
+- Đã thêm lớp MCOOptimizer để tối ưu hóa đa tiêu chí
+- Đã thêm module Pareto Surface cho phân tích và biểu diễn mặt Pareto (quangtps/optimization/pareto_surface.py)
+- Đã thêm NavigableParetoSurface cho giao diện MCO Navigator
+- Đã thêm template báo cáo DVH và clinical metrics với hiển thị đẹp mắt
+
+### Cải tiến
+- Sửa lỗi CSS trong các template báo cáo DVH và clinical metrics
+- Sử dụng data attributes thay vì style attributes trong Jinja2 templates
+- Thiết kế lại UI cho MCO Navigator với tương tác trực quan hơn
+- Tối ưu hóa sâu hơn thuật toán tính toán gradient
+- Cải thiện hiệu năng nội suy dose-volume cho DVH
+- Cải thiện khả năng tính toán liều trên CPU đa lõi
+
+### Sửa lỗi
+- Sửa lỗi trong MCONavigator về phương thức add_progress_callback
+- Sửa lỗi kiểu dữ liệu trong clinical_metrics_report.py
+- Sửa lỗi cập nhật UI khi thay đổi trọng số mục tiêu
+- Sửa lỗi tràn bộ nhớ trong việc tính toán ma trận ảnh hưởng liều lớn
+- Sửa lỗi hiệu suất trong quá trình tối ưu với nhiều mục tiêu
+
+## [1.9.0] - 2024-06-01
+
+### Thêm mới
+- Đã thêm module Auto Segmentation cho phân đoạn tự động các cấu trúc (quangtps/segmentation/auto/auto_segmentation.py)
+- Đã thêm tính năng phân đoạn đa cấu trúc dùng mô hình AI
+- Đã thêm AutoSegmentationFactory để tạo bộ phân đoạn chuyên biệt theo vùng giải phẫu
+- Đã thêm cấu hình các mô hình phân đoạn cho nhiều vùng cơ thể (não, ngực, bụng, chậu)
+- Đã thêm xử lý hậu kỳ thông minh cho các mask phân đoạn
+- Đã thêm khả năng tải nhiều loại mô hình (PyTorch, ONNX, TensorFlow)
+
+### Cải tiến
+- Hỗ trợ tính toán song song cho phân đoạn nhiều cấu trúc
+- Tự động phát hiện và sử dụng GPU khi có sẵn
+- Tiền xử lý và chuẩn hóa ảnh CT trước khi phân đoạn
+- Tích hợp các công cụ đánh giá chất lượng ảnh đầu vào
+- Cải thiện độ chính xác phân đoạn bằng xử lý hậu kỳ thích ứng theo loại cấu trúc
+- Tối ưu hóa bộ nhớ khi xử lý ảnh CT dung lượng lớn
+
+### Sửa lỗi
+- Sửa lỗi rò rỉ bộ nhớ khi phân đoạn nhiều cấu trúc liên tiếp
+- Sửa lỗi khi phân đoạn trên ảnh có kích thước không tiêu chuẩn
+- Sửa lỗi tương thích khi tải mô hình với phiên bản PyTorch/ONNX khác nhau
+- Sửa lỗi thông báo tiến độ không chính xác khi hủy phân đoạn

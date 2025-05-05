@@ -9,11 +9,15 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any, Optional, Union, Tuple, TYPE_CHECKING
 from datetime import datetime
 import io
 import base64
 from pathlib import Path
+
+# Sử dụng TYPE_CHECKING để tránh import lặp
+if TYPE_CHECKING:
+    from quangtps.core.plan import Plan
 
 from quangtps.evaluation.metrics.clinical_metrics import (
     ClinicalMetricsCalculator,
@@ -64,7 +68,7 @@ class ClinicalMetricsReport:
 
     def generate_report(
         self,
-        plan: "Plan",
+        plan: "Any",  # Sửa 'Plan' thành 'Any'
         target_name: str,
         output_dir: str = None,
         filename: str = None,
@@ -274,7 +278,9 @@ class ClinicalMetricsReport:
             logger.error(f"Lỗi khi tạo báo cáo đánh giá kế hoạch: {str(e)}")
             return None
 
-    def _get_dvh_image(self, dvh_widget: Optional[DVHWidget], plan: "Plan") -> str:
+    def _get_dvh_image(
+        self, dvh_widget: Optional[DVHWidget], plan: "Any"
+    ) -> str:  # Sửa 'Plan' thành 'Any'
         """
         Lấy hình ảnh biểu đồ DVH từ DVHWidget.
 

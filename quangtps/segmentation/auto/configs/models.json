@@ -1,0 +1,111 @@
+{
+    "general_segmentation": {
+        "path": "data/models/segmentation/general/model.pt",
+        "type": "UNET",
+        "backend": "PYTORCH",
+        "description": "Mô hình phân đoạn tổng quát cho nhiều loại cấu trúc",
+        "structures": {
+            "Body": 1,
+            "Lung_R": 2,
+            "Lung_L": 3,
+            "Heart": 4,
+            "Liver": 5,
+            "Kidney_R": 6,
+            "Kidney_L": 7,
+            "Spinal_Cord": 8,
+            "Brain": 9
+        }
+    },
+    "thorax_segmentation": {
+        "path": "data/models/segmentation/thorax/model.pt",
+        "type": "UNET_3D",
+        "backend": "PYTORCH",
+        "description": "Mô hình phân đoạn chuyên biệt cho vùng ngực",
+        "structures": {
+            "Body": 1,
+            "Lung_R": 2,
+            "Lung_L": 3,
+            "Heart": 4,
+            "Esophagus": 5,
+            "Spinal_Cord": 6,
+            "Trachea": 7,
+            "Great_Vessels": 8,
+            "Brachial_Plexus_R": 9,
+            "Brachial_Plexus_L": 10
+        }
+    },
+    "brain_segmentation": {
+        "path": "data/models/segmentation/brain/model.pt",
+        "type": "SEGRESNET",
+        "backend": "PYTORCH",
+        "description": "Mô hình phân đoạn chuyên biệt cho vùng não",
+        "structures": {
+            "Brain": 1,
+            "Brainstem": 2,
+            "Eye_R": 3,
+            "Eye_L": 4,
+            "Lens_R": 5,
+            "Lens_L": 6,
+            "Optic_Nerve_R": 7,
+            "Optic_Nerve_L": 8,
+            "Optic_Chiasm": 9,
+            "Pituitary": 10,
+            "Cochlea_R": 11,
+            "Cochlea_L": 12,
+            "Hippocampus_R": 13,
+            "Hippocampus_L": 14
+        }
+    },
+    "abdomen_segmentation": {
+        "path": "data/models/segmentation/abdomen/model.pt",
+        "type": "UNET_3D",
+        "backend": "PYTORCH",
+        "description": "Mô hình phân đoạn chuyên biệt cho vùng bụng",
+        "structures": {
+            "Liver": 1,
+            "Kidney_R": 2,
+            "Kidney_L": 3,
+            "Spleen": 4,
+            "Stomach": 5,
+            "Pancreas": 6,
+            "Small_Bowel": 7,
+            "Large_Bowel": 8,
+            "Duodenum": 9,
+            "Adrenal_R": 10,
+            "Adrenal_L": 11
+        }
+    },
+    "pelvis_segmentation": {
+        "path": "data/models/segmentation/pelvis/model.onnx",
+        "type": "UNET",
+        "backend": "ONNX",
+        "description": "Mô hình phân đoạn chuyên biệt cho vùng chậu",
+        "structures": {
+            "Bladder": 1,
+            "Rectum": 2,
+            "Femoral_Head_R": 3,
+            "Femoral_Head_L": 4,
+            "Prostate": 5,
+            "Penile_Bulb": 6,
+            "Seminal_Vesicles": 7,
+            "Urethra": 8,
+            "Vagina": 9,
+            "Uterus": 10,
+            "Ovary_R": 11,
+            "Ovary_L": 12
+        }
+    },
+    "lung_segmentation": {
+        "path": "data/models/lung_segmentation/lung_model.pt",
+        "type": "UNET",
+        "backend": "PYTORCH",
+        "description": "Mô hình phân đoạn chuyên biệt cho phổi và các nốt phổi",
+        "structures": {
+            "Lung_R": 1,
+            "Lung_L": 2,
+            "Lung_Tumor": 3,
+            "Lung_Nodule": 4,
+            "Airways": 5
+        }
+    }
+}
