@@ -21,6 +21,8 @@ import numpy as np
 from scipy import interpolate
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
+import pandas as pd
+from datetime import datetime
 
 from quangtps.core.types import Plan, DoseGrid, Treatment, Structure
 from quangtps.planning.optimization import PlanOptimizer
@@ -42,6 +44,11 @@ from quangtps.optimization.optimizers.optimizer_factory import OptimizerFactory
 from quangtps.dose.dose_calculation import DoseEngine
 from quangtps.optimization.optimizer import Optimizer, OptimizationParameters
 from quangtps.optimization.objectives.objective_factory import ObjectiveFactory
+from quangtps.core.utils import get_timestamp, create_directory_if_not_exists
+from quangtps.core.exceptions import OptimizationError
+from quangtps.optimization.mco.pareto_surface import ParetoSurface, ParetoSolution
+from quangtps.optimization.constraints import ConstraintCollection, ConstraintBase
+from quangtps.optimization.mco.pareto_navigator import ParetoNavigator
 
 logger = get_logger(__name__)
 
@@ -152,858 +159,479 @@ class MCOEngine:
     treatment plans using multi-criteria optimization, similar to Eclipse's MCO.
     """
 
-    def __init__(self, base_plan: Plan, optimizer: Optimizer):
+    def __init__(
+        self,
+        patient: Optional[Patient] = None,
+        plan: Optional[Plan] = None,
+        name: str = "MCO Session",
+    ):
         """
         Initialize the MCO engine.
 
         Args:
-            base_plan: The base plan to start optimization from
-            optimizer: The optimizer to use for generating plans
+            patient: The patient, default is None
+            plan: The base plan to start optimization from, default is None
+            name: The name of the MCO session, default is "MCO Session"
         """
-        self.base_plan = base_plan
-        self.optimizer = optimizer
+        self.patient = patient
+        self.base_plan = plan
+        self.name = name
+        self.objectives = {}  # Dictionary of objective functions and weights
+        self.constraints = ConstraintCollection()  # Constraints
+        self.pareto_surface = ParetoSurface(name=name)  # Pareto surface
+        self.pareto_navigator = None  # Pareto navigator
+        self.optimization_parameters = {}  # Optimization parameters
+        self.current_solution = None  # Current Pareto solution
+        self.optimization_history = []  # Optimization history
+        self.session_id = str(uuid.uuid4())
+        self.timestamp = get_timestamp()
+        self.metadata = {}
 
-        # Define objectives
-        self.objectives: Dict[str, MCOTradeoffObjective] = {}
-
-        # Pareto front
-        self.solutions: Dict[str, MCOSolution] = {}
-        self.anchor_solutions: Dict[str, MCOSolution] = {}  # objective_id -> solution
-
-        # Current solution
-        self.current_solution: Optional[MCOSolution] = None
-
-        # Status
-        self.generation_status = "Not Started"
-        self.is_generating = False
-        self.generation_progress = 0.0
-
-        # Callbacks
-        self.progress_callback: Optional[Callable[[float, str], None]] = None
-        self.solution_callback: Optional[Callable[[MCOSolution], None]] = None
-
-    def add_objective(self, objective: MCOTradeoffObjective):
+    def add_objective(
+        self,
+        name: str,
+        objective_function: Callable,
+        weight: float = 1.0,
+        is_target: bool = False,
+    ):
         """
         Add an objective to the MCO problem.
 
         Args:
-            objective: The objective to add
+            name: The name of the objective
+            objective_function: The objective function
+            weight: The weight of the objective, default is 1.0
+            is_target: True if this is a target objective (PTV), False if it's a protection objective (OAR), default is False
         """
-        self.objectives[objective.objective_id] = objective
+        self.objectives[name] = {
+            "function": objective_function,
+            "weight": weight,
+            "is_target": is_target,
+        }
 
-    def add_objective_from_params(
+    def add_constraint(self, constraint: ConstraintBase):
+        """
+        Add a constraint to the MCO problem.
+
+        Args:
+            constraint: The constraint to add
+        """
+        self.constraints.add_constraint(constraint)
+
+    def set_optimization_parameters(self, params: Dict[str, Any]):
+        """
+        Set the optimization parameters.
+
+        Args:
+            params: Dictionary of optimization parameters
+        """
+        self.optimization_parameters = params
+
+    def generate_pareto_surface(
         self,
-        structure_id: str,
-        structure_name: str,
-        objective_type: str,
-        parameters: Dict[str, Any] = None,
-        priority: int = 1,
-    ) -> str:
+        parameter_ranges: Dict[str, Tuple[float, float]],
+        num_samples: int = 100,
+        max_iterations: int = 10,
+    ) -> ParetoSurface:
         """
-        Add an objective to the MCO problem from parameters.
+        Generate the Pareto surface by sampling the parameter space.
 
-        Args:
-            structure_id: ID of the structure
-            structure_name: Name of the structure
-            objective_type: Type of objective
-            parameters: Parameters for the objective
-            priority: Priority level
+        Parameters
+        ----------
+        parameter_ranges : Dict[str, Tuple[float, float]]
+            The range of each parameter (min, max)
+        num_samples : int, optional
+            Initial number of samples, default is 100
+        max_iterations : int, optional
+            Maximum number of iterations, default is 10
 
-        Returns:
-            ID of the added objective
+        Returns
+        -------
+        ParetoSurface
+            The generated Pareto surface
         """
-        objective_id = f"{objective_type}_{structure_id}_{id(self)}"
+        try:
+            # Combined objective function to evaluate parameters
+            def optimization_function(params):
+                # Calculate the value of each objective
+                objective_values = {}
+                for name, obj_info in self.objectives.items():
+                    objective_values[name] = obj_info["function"](params)
+                return objective_values
 
-        objective = MCOTradeoffObjective(
-            objective_id=objective_id,
-            structure_id=structure_id,
-            structure_name=structure_name,
-            objective_type=objective_type,
-            parameters=parameters or {},
-            priority=priority,
-        )
-
-        self.add_objective(objective)
-        return objective_id
-
-    def remove_objective(self, objective_id: str) -> bool:
-        """
-        Remove an objective from the MCO problem.
-
-        Args:
-            objective_id: ID of the objective to remove
-
-        Returns:
-            True if the objective was removed, False otherwise
-        """
-        if objective_id in self.objectives:
-            del self.objectives[objective_id]
-            return True
-        return False
-
-    def set_objective_weight(self, objective_id: str, weight: float):
-        """
-        Set the weight of an objective.
-
-        Args:
-            objective_id: ID of the objective
-            weight: New weight
-        """
-        if objective_id in self.objectives:
-            self.objectives[objective_id].weight = weight
-
-    def generate_anchor_plans(self, callback: Callable[[float, str], None] = None):
-        """
-        Generate anchor plans for each objective.
-
-        An anchor plan is a plan that optimizes a single objective to its extreme,
-        representing a corner of the Pareto front.
-
-        Args:
-            callback: Callback function for progress updates
-        """
-        self.is_generating = True
-        self.generation_status = "Generating anchor plans"
-        self.generation_progress = 0.0
-
-        if callback:
-            self.progress_callback = callback
-
-        # For each objective, generate an anchor plan
-        for i, (objective_id, objective) in enumerate(self.objectives.items()):
-            if not objective.is_active:
-                continue
-
-            # Update progress
-            progress = i / len(self.objectives)
-            self.generation_progress = progress
-            if self.progress_callback:
-                self.progress_callback(
-                    progress, f"Generating anchor plan for {objective.structure_name}"
-                )
-
-            # Create optimization parameters with only this objective
-            opt_params = OptimizationParameters()
-
-            for other_id, other_obj in self.objectives.items():
-                if other_id == objective_id:
-                    # Set very high weight for this objective
-                    other_obj.weight = 1000.0
-                else:
-                    # Set very low weight for other objectives
-                    other_obj.weight = 0.001
-
-                # Add to optimizer
-                opt_params.add_objective(other_obj.to_optimizer_objective())
-
-            # Run optimization
-            anchor_plan = self.optimizer.optimize(self.base_plan, opt_params)
-
-            # Update objective values
-            objective_values = {}
-            for obj_id, obj in self.objectives.items():
-                value = obj.calculate_value(anchor_plan)
-                objective_values[obj_id] = value
-                obj.update_value(anchor_plan)
-
-                # Update min/max values
-                if obj_id == objective_id:
-                    obj.min_value = (
-                        value  # This is the best possible value for this objective
-                    )
-
-            # Create solution
-            weights = {obj_id: obj.weight for obj_id, obj in self.objectives.items()}
-            solution = MCOSolution(
-                plan=anchor_plan,
-                objective_values=objective_values,
-                weights=weights,
-                solution_id=f"anchor_{objective_id}",
+            # Generate Pareto surface
+            self.pareto_surface.generate_pareto_set(
+                optimization_function=optimization_function,
+                parameter_ranges=parameter_ranges,
+                objective_names=list(self.objectives.keys()),
+                num_samples=num_samples,
+                max_iterations=max_iterations,
             )
 
-            # Store as anchor solution
-            self.anchor_solutions[objective_id] = solution
-            self.solutions[solution.solution_id] = solution
+            # Create Pareto navigator
+            self.pareto_navigator = ParetoNavigator(self.pareto_surface)
+            self.pareto_navigator.set_plan_generator(self.generate_plan_from_solution)
 
-        # Find max values for each objective
-        for objective_id, objective in self.objectives.items():
-            max_value = float("-inf")
-            for anchor_id, anchor in self.anchor_solutions.items():
-                if anchor_id != objective_id:  # Look at other anchor solutions
-                    value = anchor.objective_values.get(objective_id, 0.0)
-                    max_value = max(max_value, value)
+            return self.pareto_surface
 
-            if max_value != float("-inf"):
-                objective.max_value = max_value
+        except Exception as e:
+            logger.error(f"Error generating Pareto surface: {str(e)}")
+            raise OptimizationError(f"Cannot generate Pareto surface: {str(e)}")
 
-        # Generate balanced solution
-        self.generation_progress = 0.95
-        if self.progress_callback:
-            self.progress_callback(0.95, "Generating balanced solution")
-
-        balanced_plan = self.generate_balanced_plan()
-
-        self.generation_status = "Generation complete"
-        self.generation_progress = 1.0
-        if self.progress_callback:
-            self.progress_callback(1.0, "Generation complete")
-
-        self.is_generating = False
-        self.current_solution = self.solutions.get("balanced", None)
-
-    def generate_balanced_plan(self) -> Plan:
+    def generate_plan_from_solution(self, solution: ParetoSolution) -> Optional[Plan]:
         """
-        Generate a balanced plan that represents a compromise between all objectives.
+        Generate a treatment plan from a Pareto solution.
 
-        Returns:
-            The balanced plan
+        Parameters
+        ----------
+        solution : ParetoSolution
+            The Pareto solution
+
+        Returns
+        -------
+        Optional[Plan]
+            The generated plan or None if unable to generate
         """
-        # Reset weights to balanced values
-        for objective in self.objectives.values():
-            objective.weight = 1.0
+        if not self.base_plan:
+            logger.warning("No base plan to generate new plan")
+            return None
 
-        # Create optimization parameters
-        opt_params = OptimizationParameters()
-        for objective in self.objectives.values():
-            if objective.is_active:
-                opt_params.add_objective(objective.to_optimizer_objective())
+        try:
+            # Clone the base plan
+            new_plan = self.base_plan.clone()
 
-        # Run optimization
-        balanced_plan = self.optimizer.optimize(self.base_plan, opt_params)
+            # Set optimization parameters from the solution
+            for param_name, param_value in solution.parameters.items():
+                # Apply only parameters defined in the base plan
+                if hasattr(new_plan, param_name):
+                    setattr(new_plan, param_name, param_value)
+                elif param_name in new_plan.parameters:
+                    new_plan.parameters[param_name] = param_value
 
-        # Calculate objective values
-        objective_values = {}
-        for obj_id, obj in self.objectives.items():
-            value = obj.calculate_value(balanced_plan)
-            objective_values[obj_id] = value
+            # Update plan metadata
+            new_plan.metadata["mco_solution_id"] = str(uuid.uuid4())
+            new_plan.metadata["mco_session_id"] = self.session_id
+            new_plan.metadata["mco_timestamp"] = get_timestamp()
+            new_plan.metadata["mco_objective_values"] = solution.objective_values
 
-        # Create solution
-        weights = {obj_id: obj.weight for obj_id, obj in self.objectives.items()}
-        solution = MCOSolution(
-            plan=balanced_plan,
-            objective_values=objective_values,
-            weights=weights,
-            solution_id="balanced",
-        )
+            # Set name for the plan
+            objective_str = "_".join(
+                [
+                    f"{name}={value:.2f}"
+                    for name, value in list(solution.objective_values.items())[
+                        :2
+                    ]  # Take only the first two objectives
+                ]
+            )
+            new_plan.name = f"{self.base_plan.name}_MCO_{objective_str}"
 
-        # Store as solution
-        self.solutions["balanced"] = solution
+            return new_plan
 
-        return balanced_plan
+        except Exception as e:
+            logger.error(f"Error generating plan from Pareto solution: {str(e)}")
+            return None
 
-    def generate_navigated_plan(self, weights: Dict[str, float]) -> MCOSolution:
+    def navigate_pareto_surface(
+        self, objective_weights: Optional[Dict[str, float]] = None
+    ) -> Optional[ParetoSolution]:
         """
-        Generate a navigated plan based on the given weights.
+        Navigate through the Pareto surface to find the optimal solution.
 
-        Args:
-            weights: Dict mapping objective_id to weight
+        Parameters
+        ----------
+        objective_weights : Optional[Dict[str, float]], optional
+            Objective weights, default is None (use current weights)
 
-        Returns:
-            The generated solution
+        Returns
+        -------
+        Optional[ParetoSolution]
+            The found Pareto solution
         """
-        # Update weights
-        for objective_id, weight in weights.items():
-            if objective_id in self.objectives:
-                self.objectives[objective_id].weight = weight
+        if not self.pareto_navigator:
+            logger.warning("Pareto navigator not created")
+            return None
 
-        # Create optimization parameters
-        opt_params = OptimizationParameters()
-        for objective in self.objectives.values():
-            if objective.is_active:
-                opt_params.add_objective(objective.to_optimizer_objective())
+        # Set weights if provided
+        if objective_weights:
+            self.pareto_navigator.set_objective_weights(objective_weights)
+        else:
+            # Use weights from objectives
+            weights = {
+                name: obj_info["weight"] for name, obj_info in self.objectives.items()
+            }
+            self.pareto_navigator.set_objective_weights(weights)
 
-        # Run optimization
-        navigated_plan = self.optimizer.optimize(self.base_plan, opt_params)
-
-        # Calculate objective values
-        objective_values = {}
-        for obj_id, obj in self.objectives.items():
-            value = obj.calculate_value(navigated_plan)
-            objective_values[obj_id] = value
-
-        # Create solution
-        solution = MCOSolution(
-            plan=navigated_plan,
-            objective_values=objective_values,
-            weights=weights.copy(),
-            solution_id=f"nav_{int(time.time())}",
-        )
-
-        # Store as solution
-        self.solutions[solution.solution_id] = solution
-        self.current_solution = solution
-
-        # Call solution callback if provided
-        if self.solution_callback:
-            self.solution_callback(solution)
+        # Find the optimal solution based on weights
+        solution = self.pareto_navigator.select_solution_by_weights()
+        if solution:
+            self.current_solution = solution
 
         return solution
 
-    def get_trade_off_ranges(self) -> Dict[str, Tuple[float, float]]:
+    def select_solution_by_objectives(
+        self, target_objectives: Dict[str, float]
+    ) -> Optional[ParetoSolution]:
         """
-        Get the range of possible values for each objective.
+        Select a solution based on the desired objective values.
 
-        Returns:
-            Dict mapping objective_id to (min_value, max_value)
+        Parameters
+        ----------
+        target_objectives : Dict[str, float]
+            Desired objective values
+
+        Returns
+        -------
+        Optional[ParetoSolution]
+            The found Pareto solution
         """
-        return {
-            obj_id: (obj.min_value, obj.max_value)
-            for obj_id, obj in self.objectives.items()
-        }
+        if not self.pareto_navigator:
+            logger.warning("Pareto navigator not created")
+            return None
 
-    def save_current_solution(self) -> bool:
+        solution = self.pareto_navigator.select_solution_by_objectives(
+            target_objectives
+        )
+        if solution:
+            self.current_solution = solution
+
+        return solution
+
+    def get_current_plan(self) -> Optional[Plan]:
         """
-        Save the current solution in the navigation history.
+        Get the current treatment plan based on the current Pareto solution.
 
-        Returns:
-            True if saved successfully, False otherwise
+        Returns
+        -------
+        Optional[Plan]
+            The current treatment plan
         """
         if not self.current_solution:
-            return False
+            logger.warning("No current Pareto solution")
+            return None
 
-        # Generate a new solution ID
-        solution_id = f"saved_{int(time.time())}"
+        return self.generate_plan_from_solution(self.current_solution)
 
-        # Create a copy of the current solution with the new ID
-        solution = MCOSolution(
-            plan=self.current_solution.plan,
-            objective_values=self.current_solution.objective_values.copy(),
-            weights=self.current_solution.weights.copy(),
-            solution_id=solution_id,
-        )
-
-        # Store as solution
-        self.solutions[solution_id] = solution
-
-        return True
-
-    def load_solution(self, solution_id: str) -> bool:
+    def visualize_pareto_front(
+        self,
+        obj_x: str,
+        obj_y: str,
+        obj_z: Optional[str] = None,
+        save_path: Optional[str] = None,
+    ):
         """
-        Load a solution from the navigation history.
-
-        Args:
-            solution_id: ID of the solution to load
-
-        Returns:
-            True if loaded successfully, False otherwise
-        """
-        if solution_id not in self.solutions:
-            return False
-
-        self.current_solution = self.solutions[solution_id]
-
-        # Update weights
-        for objective_id, weight in self.current_solution.weights.items():
-            if objective_id in self.objectives:
-                self.objectives[objective_id].weight = weight
-
-        # Call solution callback if provided
-        if self.solution_callback and self.current_solution:
-            self.solution_callback(self.current_solution)
-
-            return True
-
-    def interpolate_between_solutions(
-        self, solutions: List[MCOSolution], weights: List[float]
-    ) -> Optional[MCOSolution]:
-        """
-        Nội suy giữa nhiều giải pháp bằng cách kết hợp các phân bố liều (dose distributions).
+        Visualize the Pareto front with 2 or 3 objectives.
 
         Parameters
         ----------
-        solutions : List[MCOSolution]
-            Danh sách các giải pháp để nội suy
-        weights : List[float]
-            Trọng số cho mỗi giải pháp (phải tổng bằng 1.0)
-
-        Returns
-        -------
-        Optional[MCOSolution]
-            Giải pháp nội suy nếu thành công, None nếu thất bại
+        obj_x : str
+            Name of the objective for the X axis
+        obj_y : str
+            Name of the objective for the Y axis
+        obj_z : Optional[str], optional
+            Name of the objective for the Z axis (3D plot), default is None
+        save_path : Optional[str], optional
+            Path to save the image, default is None
         """
-        if not solutions or len(solutions) != len(weights):
-            logger.error("Số lượng giải pháp và trọng số không khớp")
-            return None
+        if not self.pareto_surface:
+            logger.warning("No Pareto surface to visualize")
+            return
 
-        if abs(sum(weights) - 1.0) > 1e-6:
-            logger.error(f"Tổng các trọng số phải bằng 1.0, nhưng là {sum(weights)}")
-            return None
-
-        # Kiểm tra xem tất cả các giải pháp có cùng cấu trúc không
-        base_plan = solutions[0].plan
-        dose_shape = (
-            base_plan.dose.data.shape if hasattr(base_plan.dose, "data") else None
+        self.pareto_surface.visualize(
+            obj_x, obj_y, obj_z, self.current_solution, save_path
         )
 
-        if dose_shape is None:
-            logger.error("Không thể truy cập dữ liệu liều trong kế hoạch cơ sở")
-            return None
-
-        # Tạo phân bố liều nội suy
-        interpolated_dose = np.zeros_like(base_plan.dose.data)
-
-        for solution, weight in zip(solutions, weights):
-            if (
-                hasattr(solution.plan.dose, "data")
-                and solution.plan.dose.data.shape == dose_shape
-            ):
-                interpolated_dose += weight * solution.plan.dose.data
-            else:
-                logger.error("Kích thước dữ liệu liều không khớp với kế hoạch cơ sở")
-                return None
-
-        # Tạo kế hoạch mới với liều nội suy
-        interpolated_plan = copy.deepcopy(base_plan)
-        interpolated_plan.dose.data = interpolated_dose
-
-        # Cập nhật số liệu và liều chiếu xạ
-        interpolated_plan.recalculate_metrics()
-
-        # Tính toán giá trị mục tiêu cho giải pháp nội suy
-        objective_values = {}
-        for obj_id, objective in self.objectives.items():
-            objective_values[obj_id] = objective.calculate_value(interpolated_plan)
-
-        # Tính toán trọng số mục tiêu nội suy
-        interpolated_weights = {}
-        for obj_id in self.objectives.keys():
-            interpolated_weights[obj_id] = sum(
-                w * sol.weights.get(obj_id, 0) for w, sol in zip(weights, solutions)
-            )
-
-        # Tạo và trả về giải pháp nội suy
-        return MCOSolution(
-            plan=interpolated_plan,
-            objective_values=objective_values,
-            weights=interpolated_weights,
-            solution_id=f"interpolated_{uuid.uuid4().hex[:8]}",
-        )
-
-    def generate_pareto_surface_plans(
-        self, num_plans: int = 10, callback: Callable[[float, str], None] = None
-    ) -> Dict[str, MCOSolution]:
+    def visualize_navigation(
+        self,
+        obj_x: str,
+        obj_y: str,
+        obj_z: Optional[str] = None,
+        show_history: bool = True,
+        save_path: Optional[str] = None,
+    ):
         """
-        Tạo bộ kế hoạch phân bố đều trên mặt Pareto.
+        Visualize the Pareto navigation process.
 
         Parameters
         ----------
-        num_plans : int, optional
-            Số lượng kế hoạch cần tạo (mặc định: 10)
-        callback : Callable[[float, str], None], optional
-            Hàm callback để cập nhật tiến trình
+        obj_x : str
+            Name of the objective for the X axis
+        obj_y : str
+            Name of the objective for the Y axis
+        obj_z : Optional[str], optional
+            Name of the objective for the Z axis (3D plot), default is None
+        show_history : bool, optional
+            Show navigation history, default is True
+        save_path : Optional[str], optional
+            Path to save the image, default is None
+        """
+        if not self.pareto_navigator:
+            logger.warning("Pareto navigator not created")
+            return
+
+        self.pareto_navigator.visualize_navigation(
+            obj_x, obj_y, obj_z, show_history, save_path
+        )
+
+    def analyze_tradeoffs(self) -> Dict[str, Dict[str, float]]:
+        """
+        Analyze trade-offs between objectives.
 
         Returns
         -------
-        Dict[str, MCOSolution]
-            Từ điển các giải pháp được tạo, key là solution_id
+        Dict[str, Dict[str, float]]
+            Trade-off matrix between objectives
         """
-        # Đặt callback
-        self.progress_callback = callback
-
-        # Đảm bảo chúng ta có kế hoạch cơ sở
-        if not self.base_plan:
-            logger.error("Không có kế hoạch cơ sở để tối ưu hóa")
+        if not self.pareto_navigator:
+            logger.warning("Pareto navigator not created")
             return {}
 
-        # Đảm bảo có ít nhất 2 mục tiêu
-        active_objectives = [obj for obj in self.objectives.values() if obj.is_active]
-        if len(active_objectives) < 2:
-            logger.error("Cần ít nhất 2 mục tiêu hoạt động để tạo mặt Pareto")
-            return {}
+        obj_names = list(self.objectives.keys())
+        tradeoffs = {}
 
-        # Tạo kế hoạch trụ (anchor) cho mỗi mục tiêu nếu chưa có
-        if not self.anchor_solutions:
-            self.generate_anchor_plans(callback)
+        # Calculate trade-offs between each pair of objectives
+        for i, obj1 in enumerate(obj_names):
+            tradeoffs[obj1] = {}
+            for j, obj2 in enumerate(obj_names):
+                if i != j:
+                    coeff, _ = self.pareto_navigator.get_tradeoff_analysis(obj1, obj2)
+                    tradeoffs[obj1][obj2] = coeff
 
-        # Tạo ra các trọng số khác nhau để bao phủ mặt Pareto
-        weight_sets = self._generate_diverse_weights(active_objectives, num_plans)
+        return tradeoffs
 
-        # Tạo ra các kế hoạch cho mỗi bộ trọng số
-        solutions = {}
-        total_plans = len(weight_sets)
-
-        for i, weights in enumerate(weight_sets):
-            if callback:
-                callback(i / total_plans, f"Tạo kế hoạch Pareto {i + 1}/{total_plans}")
-
-            # Áp dụng trọng số cho các mục tiêu
-            for obj_id, weight in weights.items():
-                self.set_objective_weight(obj_id, weight)
-
-            # Tạo kế hoạch với trọng số hiện tại
-            solution = self.generate_navigated_plan(weights)
-
-            if solution:
-                solutions[solution.solution_id] = solution
-
-        # Cập nhật bộ giải pháp
-        self.solutions.update(solutions)
-
-        # Thông báo hoàn thành
-        if callback:
-            callback(1.0, f"Đã tạo xong {len(solutions)} kế hoạch trên mặt Pareto")
-
-        return solutions
-
-    def _generate_diverse_weights(
-        self, objectives: List[MCOTradeoffObjective], num_points: int
-    ) -> List[Dict[str, float]]:
+    def save_session(self, filepath: Optional[str] = None) -> str:
         """
-        Tạo các bộ trọng số đa dạng để bao phủ mặt Pareto.
+        Save the MCO session to file.
 
         Parameters
         ----------
-        objectives : List[MCOTradeoffObjective]
-            Danh sách các mục tiêu đang hoạt động
-        num_points : int
-            Số lượng điểm cần tạo
+        filepath : Optional[str], optional
+            File path to save, default is None (auto-generate)
 
         Returns
         -------
-        List[Dict[str, float]]
-            Danh sách các bộ trọng số, mỗi bộ là một từ điển {objective_id: weight}
+        str
+            Saved file path
         """
-        n_objectives = len(objectives)
+        if filepath is None:
+            # Create default directory
+            mco_dir = os.path.join(os.getcwd(), "data", "mco_sessions")
+            os.makedirs(mco_dir, exist_ok=True)
 
-        if n_objectives == 2:
-            # Đối với 2 mục tiêu, chỉ cần chia đều trên một đường
-            alphas = np.linspace(0, 1, num_points)
+            # Create file name based on time
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"mco_session_{self.name.replace(' ', '_')}_{timestamp}.json"
+            filepath = os.path.join(mco_dir, filename)
 
-            result = []
-            for alpha in alphas:
-                weights = {
-                    objectives[0].objective_id: alpha,
-                    objectives[1].objective_id: 1.0 - alpha,
-                }
-                result.append(weights)
-
-            return result
-        else:
-            # Đối với nhiều mục tiêu hơn, sử dụng phương pháp lấy mẫu ngẫu nhiên
-            result = []
-
-            # Thêm các điểm trụ
-            for obj in objectives:
-                weights = {o.objective_id: 0.0 for o in objectives}
-                weights[obj.objective_id] = 1.0
-                result.append(weights)
-
-            # Thêm điểm cân bằng
-            balanced_weights = {
-                obj.objective_id: 1.0 / n_objectives for obj in objectives
+        try:
+            # Save session data
+            session_data = {
+                "name": self.name,
+                "session_id": self.session_id,
+                "timestamp": self.timestamp,
+                "metadata": self.metadata,
+                "optimization_parameters": self.optimization_parameters,
             }
-            result.append(balanced_weights)
 
-            # Tạo thêm các điểm ngẫu nhiên cho đến khi đủ số lượng
-            while len(result) < num_points:
-                # Tạo các trọng số ngẫu nhiên
-                random_weights = np.random.random(n_objectives)
-                # Chuẩn hóa để tổng bằng 1
-                random_weights = random_weights / random_weights.sum()
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(session_data, f, indent=2)
 
-                weights = {
-                    obj.objective_id: float(random_weights[i])
-                    for i, obj in enumerate(objectives)
-                }
+            # Save Pareto surface
+            if self.pareto_surface:
+                pareto_path = os.path.splitext(filepath)[0] + "_pareto.pkl"
+                self.pareto_surface.save(pareto_path)
 
-                result.append(weights)
+            # Save navigation session
+            if self.pareto_navigator:
+                nav_path = os.path.splitext(filepath)[0] + "_navigation.csv"
+                self.pareto_navigator.save_navigation_session(
+                    nav_path, include_pareto=False
+                )
 
-            # Nếu có quá nhiều điểm, lấy mẫu
-            if len(result) > num_points:
-                indices = np.linspace(0, len(result) - 1, num_points, dtype=int)
-                result = [result[i] for i in indices]
+            logger.info(f"Saved MCO session to {filepath}")
+            return filepath
 
-            return result
+        except Exception as e:
+            logger.error(f"Error saving MCO session: {str(e)}")
+            raise OptimizationError(f"Cannot save MCO session: {str(e)}")
 
-    def generate_quality_report(
-        self, solution: Optional[MCOSolution] = None
-    ) -> Dict[str, Any]:
+    @classmethod
+    def load_session(cls, filepath: str) -> "MCOEngine":
         """
-        Tạo báo cáo chất lượng cho một giải pháp.
+        Load the MCO session from file.
 
         Parameters
         ----------
-        solution : Optional[MCOSolution], optional
-            Giải pháp cần đánh giá, nếu None sẽ dùng giải pháp hiện tại
+        filepath : str
+            File path to load
 
         Returns
         -------
-        Dict[str, Any]
-            Báo cáo chất lượng với các thông số chính
+        MCOEngine
+            Loaded MCOEngine object
         """
-        if solution is None:
-            solution = self.current_solution
-
-        if solution is None:
-            logger.error("Không có giải pháp để đánh giá")
-            return {}
-
-        plan = solution.plan
-
-        # Tạo báo cáo cơ bản
-        report = {
-            "solution_id": solution.solution_id,
-            "objectives": {},
-            "metrics": {},
-            "structures": {},
-        }
-
-        # Thêm thông tin mục tiêu
-        for obj_id, objective in self.objectives.items():
-            if obj_id in solution.objective_values:
-                value = solution.objective_values[obj_id]
-                weight = solution.weights.get(obj_id, 0.0)
-
-                report["objectives"][obj_id] = {
-                    "name": f"{objective.structure_name}: {objective.objective_type}",
-                    "value": value,
-                    "weight": weight,
-                    "type": objective.objective_type,
-                    "structure_id": objective.structure_id,
-                    "structure_name": objective.structure_name,
-                    "is_active": objective.is_active,
-                }
-
-        # Thêm thông tin DVH cho mỗi cấu trúc
-        structures = (
-            plan.structure_set.structures if hasattr(plan, "structure_set") else []
-        )
-
-        for structure in structures:
-            # Tính toán các thông số DVH
-            try:
-                metrics = calculate_dvh_metrics(structure, plan.dose)
-
-                report["structures"][structure.id] = {
-                    "name": structure.name,
-                    "id": structure.id,
-                    "volume": metrics.get("volume", 0.0),
-                    "min_dose": metrics.get("min_dose", 0.0),
-                    "max_dose": metrics.get("max_dose", 0.0),
-                    "mean_dose": metrics.get("mean_dose", 0.0),
-                    "median_dose": metrics.get("median_dose", 0.0),
-                    "d95": metrics.get("D95", 0.0),
-                    "d90": metrics.get("D90", 0.0),
-                    "d50": metrics.get("D50", 0.0),
-                    "v95": metrics.get("V95", 0.0),
-                    "v90": metrics.get("V90", 0.0),
-                    "v50": metrics.get("V50", 0.0),
-                }
-            except Exception as e:
-                logger.warning(f"Lỗi khi tính toán DVH cho {structure.name}: {e}")
-
-        # Thêm các thông số tổng thể của kế hoạch
         try:
-            report["metrics"] = {
-                "plan_name": plan.name if hasattr(plan, "name") else "Unknown",
-                "monitor_units": plan.total_mu if hasattr(plan, "total_mu") else 0.0,
-                "prescription_dose": plan.prescription.dose
-                if hasattr(plan, "prescription")
-                else 0.0,
-                "conformity_index": self._calculate_conformity_index(plan),
-                "homogeneity_index": self._calculate_homogeneity_index(plan),
-                "gradient_index": self._calculate_gradient_index(plan),
-            }
-        except Exception as e:
-            logger.warning(f"Lỗi khi tính toán thông số kế hoạch: {e}")
+            # Load session data
+            with open(filepath, "r", encoding="utf-8") as f:
+                session_data = json.load(f)
 
-        return report
+            # Create new MCOEngine object
+            engine = cls(name=session_data.get("name", "Loaded MCO Session"))
 
-    def _calculate_conformity_index(self, plan: Plan) -> float:
-        """Tính chỉ số phù hợp cho kế hoạch."""
-        try:
-            # Lấy cấu trúc PTV chính và liều kê toa
-            ptv = None
-            for structure in plan.structure_set.structures:
-                if "PTV" in structure.name.upper():
-                    ptv = structure
-                    break
+            # Update properties
+            engine.session_id = session_data.get("session_id", str(uuid.uuid4()))
+            engine.timestamp = session_data.get("timestamp", get_timestamp())
+            engine.metadata = session_data.get("metadata", {})
+            engine.optimization_parameters = session_data.get(
+                "optimization_parameters", {}
+            )
 
-            if ptv is None:
-                return 0.0
+            # Load Pareto surface
+            pareto_path = os.path.splitext(filepath)[0] + "_pareto.pkl"
+            if os.path.exists(pareto_path):
+                engine.pareto_surface = ParetoSurface.load(pareto_path)
 
-            rx_dose = plan.prescription.dose if hasattr(plan, "prescription") else 0.0
-            if rx_dose <= 0:
-                return 0.0
+                # Create Pareto navigator
+                engine.pareto_navigator = ParetoNavigator(engine.pareto_surface)
+                engine.pareto_navigator.set_plan_generator(
+                    engine.generate_plan_from_solution
+                )
 
-            # Tính thể tích của PTV
-            ptv_volume = ptv.get_volume()
+                # Load navigation session
+                nav_path = os.path.splitext(filepath)[0] + "_navigation.csv"
+                if os.path.exists(nav_path):
+                    pass  # TODO: Load navigation history
 
-            # Tính thể tích của thân thể nhận rx_dose
-            body = None
-            for structure in plan.structure_set.structures:
-                if structure.name.upper() in ("BODY", "EXTERNAL", "PATIENT"):
-                    body = structure
-                    break
-
-            if body is None:
-                return 0.0
-
-            # Tính V100% cho body và PTV
-            metrics_ptv = calculate_dvh_metrics(ptv, plan.dose)
-            metrics_body = calculate_dvh_metrics(body, plan.dose)
-
-            v100_ptv = metrics_ptv.get("V100", 0.0) * ptv_volume / 100.0
-            v100_body = metrics_body.get("V100", 0.0) * body.get_volume() / 100.0
-
-            # Công thức CI = (V100_PTV)^2 / (V100_Body * PTV_Volume)
-            if v100_body <= 0 or v100_ptv <= 0:
-                return 0.0
-
-            ci = (v100_ptv**2) / (v100_body * ptv_volume)
-            return ci
+            logger.info(f"Loaded MCO session from {filepath}")
+            return engine
 
         except Exception as e:
-            logger.warning(f"Lỗi khi tính Conformity Index: {e}")
-            return 0.0
-
-    def _calculate_homogeneity_index(self, plan: Plan) -> float:
-        """Tính chỉ số đồng nhất cho kế hoạch."""
-        try:
-            # Lấy cấu trúc PTV chính
-            ptv = None
-            for structure in plan.structure_set.structures:
-                if "PTV" in structure.name.upper():
-                    ptv = structure
-                    break
-
-            if ptv is None:
-                return 0.0
-
-            # Tính D98, D50, D2 cho PTV
-            metrics = calculate_dvh_metrics(ptv, plan.dose)
-            d98 = metrics.get("D98", 0.0)
-            d2 = metrics.get("D2", 0.0)
-
-            # Công thức HI = D2/D98
-            if d98 <= 0:
-                return 0.0
-
-            hi = d2 / d98
-            return hi
-
-        except Exception as e:
-            logger.warning(f"Lỗi khi tính Homogeneity Index: {e}")
-            return 0.0
-
-    def _calculate_gradient_index(self, plan: Plan) -> float:
-        """Tính chỉ số gradient cho kế hoạch."""
-        try:
-            # Lấy cấu trúc PTV chính và liều kê toa
-            ptv = None
-            for structure in plan.structure_set.structures:
-                if "PTV" in structure.name.upper():
-                    ptv = structure
-                    break
-
-            if ptv is None:
-                return 0.0
-
-            rx_dose = plan.prescription.dose if hasattr(plan, "prescription") else 0.0
-            if rx_dose <= 0:
-                return 0.0
-
-            # Tính R50% và R100%
-            metrics = calculate_dvh_metrics(ptv, plan.dose)
-            v100 = metrics.get("V100", 0.0)
-            v50 = metrics.get("V50", 0.0)
-
-            # Công thức GI = V50% / V100%
-            if v100 <= 0:
-                return 0.0
-
-            gi = v50 / v100
-            return gi
-
-        except Exception as e:
-            logger.warning(f"Lỗi khi tính Gradient Index: {e}")
-            return 0.0
+            logger.error(f"Error loading MCO session: {str(e)}")
+            raise OptimizationError(f"Cannot load MCO session: {str(e)}")
 
 
-def create_mco_engine(base_plan: Plan, optimizer: Optimizer) -> MCOEngine:
+def create_mco_engine(
+    patient: Optional[Patient] = None,
+    plan: Optional[Plan] = None,
+    name: str = "MCO Session",
+) -> MCOEngine:
     """
-    Create and initialize an MCO engine for a given plan.
+    Create and configure a new MCOEngine object.
 
-        Args:
-        base_plan: Base plan to start from
-        optimizer: Optimizer to use
+    Parameters
+    ----------
+    patient : Optional[Patient], optional
+        The patient, default is None
+    plan : Optional[Plan], optional
+        The base plan to start from, default is None
+    name : str, optional
+        The name of the MCO session, default is "MCO Session"
 
-        Returns:
-        Initialized MCO engine
+    Returns
+    -------
+    MCOEngine
+        The configured MCOEngine object
     """
-    engine = MCOEngine(base_plan, optimizer)
-
-    # Add common clinical objectives
-    if base_plan.structure_set:
-        # Find targets
-        targets = []
-        oars = []
-
-        for structure in base_plan.structure_set.structures:
-            if structure.structure_type == "PTV" or "PTV" in structure.name:
-                targets.append(structure)
-            elif structure.structure_type == "OAR" or any(
-                oar in structure.name.upper()
-                for oar in [
-                    "SPINAL",
-                    "CORD",
-                    "HEART",
-                    "LUNG",
-                    "LIVER",
-                    "KIDNEY",
-                    "BOWEL",
-                    "BLADDER",
-                    "RECTUM",
-                ]
-            ):
-                oars.append(structure)
-
-        # Add objectives for targets
-        for target in targets:
-            # Minimum dose to target
-            engine.add_objective_from_params(
-                structure_id=target.id,
-                structure_name=target.name,
-                objective_type="MinDose",
-                priority=1,
-            )
-
-            # Maximum dose to target
-            engine.add_objective_from_params(
-                structure_id=target.id,
-                structure_name=target.name,
-                objective_type="MaxDose",
-                priority=1,
-            )
-
-            # Dose homogeneity
-            engine.add_objective_from_params(
-                structure_id=target.id,
-                structure_name=target.name,
-                objective_type="DoseAtVolume",
-                parameters={"volume": 95},
-                priority=1,
-            )
-
-        # Add objectives for OARs
-        for oar in oars:
-            # Maximum dose to OAR
-            engine.add_objective_from_params(
-                structure_id=oar.id,
-                structure_name=oar.name,
-                objective_type="MaxDose",
-                priority=2,
-            )
-
-            # Mean dose to OAR
-            engine.add_objective_from_params(
-                structure_id=oar.id,
-                structure_name=oar.name,
-                objective_type="MeanDose",
-                priority=2,
-            )
-
-    return engine
+    return MCOEngine(patient=patient, plan=plan, name=name)
 
 
 if __name__ == "__main__":

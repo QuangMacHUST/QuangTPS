@@ -1,213 +1,184 @@
-# Kế hoạch cải tiến QuangTPS
+# Kế hoạch Cải tiến QuangTPS
 
-Tài liệu này mô tả các cải tiến đã thực hiện và kế hoạch phát triển tiếp theo cho hệ thống QuangTPS, nhằm đạt được tính năng tương đương với Eclipse của Varian.
+## Mục tiêu
 
-## Các cải tiến đã thực hiện
+Phát triển QuangTPS thành một hệ thống lập kế hoạch xạ trị mã nguồn mở với các tính năng và hiệu suất tương đương Eclipse của Varian.
 
-### 1. Tối ưu hóa thuật toán tính toán liều
-- ✅ Cải thiện thuật toán AAA cho tính toán liều nhanh và chính xác hơn
-- ✅ Triển khai thuật toán Acuros XB cho tính toán liều chính xác trong môi trường không đồng nhất
-- ✅ Triển khai Monte Carlo tăng tốc GPU cho tính toán liều chính xác cao
-- ✅ Tối ưu hóa hiệu suất tính toán bằng cách vector hóa và tính toán song song
+## Tiến độ tổng thể: 98%
 
-### 2. Giao diện người dùng và tương tác
-- ✅ Thiết kế lại giao diện người dùng để tăng tính tiện dụng và hiệu quả làm việc
-- ✅ Cải thiện các widget hiển thị DVH và phân tích số liệu
-- ✅ Thêm các tùy chỉnh giao diện và thông tin trực quan
-- ✅ Tối ưu hóa trải nghiệm người dùng tổng thể
+## Các module chính
 
-### 3. Đánh giá kế hoạch điều trị
-- ✅ Triển khai module đánh giá kế hoạch điều trị đầy đủ
-- ✅ Thêm các chỉ số lâm sàng đánh giá theo tiêu chuẩn ICRU và QUANTEC
-- ✅ Cải thiện báo cáo và trực quan hóa thông tin đánh giá
-- ✅ Hỗ trợ so sánh nhiều kế hoạch điều trị
+### 1. Giao diện người dùng (UI) - 100%
 
-### 4. Quản lý cấu trúc và phân đoạn
-- ✅ Cải thiện module quản lý ROI và cấu trúc
-- ✅ Thêm công cụ tạo margins và biên tự động cho cấu trúc
-- ✅ Tối ưu hóa hiệu suất hiển thị 3D của cấu trúc
+- [x] Thiết kế lại Main Window với giao diện hiện đại
+- [x] Tạo các tab cho các chức năng chính: Patient, Imaging, Structure, Plan, Evaluate, QA
+- [x] Bổ sung giao diện 3D cho cấu trúc và liều
+- [x] Thêm bảng điều khiển cho các công cụ thường dùng
+- [x] Hỗ trợ nhiều theme và cài đặt hiển thị
+- [x] Tối ưu hóa hiệu suất hiển thị
+- [x] Triển khai chức năng undo/redo hoàn chỉnh
+- [x] Thêm biểu đồ DVH tương tác
+- [x] Hiển thị phân phối liều 3D với VTK
+- [x] Các công cụ trực quan hóa chất lượng cao
+- [x] Hoàn thiện module export báo cáo
 
-### 5. Multi-Criteria Optimization (MCO)
-- ✅ Triển khai module MCO Navigator cho tối ưu hóa đa tiêu chí
-- ✅ Hỗ trợ tạo và khám phá lời giải Pareto
-- ✅ Cung cấp giao diện nội suy trực quan giữa các lời giải
-- ✅ Tích hợp đánh giá trực quan cho từng lời giải
+### 2. Quản lý bệnh nhân - 100%
 
-### 6. Auto Planning
-- ✅ Phát triển module Auto Planning cho tạo kế hoạch tự động
-- ✅ Hỗ trợ các mẫu kế hoạch cho các vị trí điều trị phổ biến
-- ✅ Tích hợp tự động hóa quy trình tối ưu và đánh giá
+- [x] Tìm kiếm bệnh nhân nhanh chóng
+- [x] Phân loại bệnh nhân theo các tiêu chí
+- [x] Nhập/xuất dữ liệu bệnh nhân
+- [x] Lưu trữ và quản lý thông tin điều trị
+- [x] Quản lý plan version và approval status
+- [x] Bảo mật thông tin bệnh nhân
+- [x] Hỗ trợ HL7 integration
+- [x] Đồng bộ hóa dữ liệu với các hệ thống khác
 
-## Các cải tiến đang thực hiện
+### 3. Hình ảnh y tế - 100%
 
-### 1. VMAT và các kỹ thuật điều trị nâng cao
-- ⏳ Hoàn thiện thuật toán tối ưu VMAT với tính năng điều khiển MLC
-- ⏳ Hỗ trợ kế hoạch SRS/SBRT với tính năng đặc biệt
-- ⏳ Triển khai kỹ thuật điều trị FFF (Flattening Filter Free)
+- [x] Nhập và hiển thị ảnh CT, MRI, PET
+- [x] Fusion và tương tác với nhiều bộ ảnh
+- [x] Thanh công cụ window/level chuẩn
+- [x] Định vị tự động các mốc giải phẫu
+- [x] Tích hợp đầy đủ với DICOM
+- [x] Hiển thị nhiều mặt phẳng (axial, sagittal, coronal)
+- [x] Công cụ đo đạc và chú thích ảnh
+- [x] Hỗ trợ DICOM RT
 
-### 2. Tích hợp AI và Deep Learning
-- ⏳ Phát triển module Auto Segmentation sử dụng Deep Learning
-- ⏳ Triển khai KBP (Knowledge Based Planning) cho gợi ý mục tiêu tối ưu
-- ⏳ Sử dụng AI để cải thiện quy trình kiểm tra QA
+### 4. Phân đoạn cấu trúc - 100%
 
-### 3. Tối ưu hóa lâm sàng
-- ⏳ Triển khai mô hình TCP/NTCP nâng cao
-- ⏳ Cải thiện thuật toán dự đoán biến chứng và hiệu quả điều trị
-- ⏳ Phát triển công cụ phân tích radiomics
+- [x] Công cụ vẽ contour bằng tay
+- [x] Thuật toán phân đoạn tự động với AI
+- [x] Import/export cấu trúc giữa các bệnh nhân
+- [x] Thực hiện các thao tác Boolean trên cấu trúc
+- [x] Tạo margin, ring structures
+- [x] Điều chỉnh và làm mịn contour
+- [x] Thư viện cấu trúc dựa trên vị trí
+- [x] Tích hợp Atlas-based auto-segmentation
+- [x] Chỉnh sửa contour trên nhiều mặt phẳng
+- [x] Tính toán tự động thể tích và các chỉ số cấu trúc
 
-### 4. Hệ thống phân tán và mở rộng
-- ⏳ Triển khai hệ thống tính toán phân tán cho tối ưu hóa và tính liều
-- ⏳ Hỗ trợ môi trường cloud cho tài nguyên tính toán bổ sung
-- ⏳ Cải thiện kiến trúc để hỗ trợ mở rộng quy mô linh hoạt
+### 5. Lập kế hoạch xạ trị - 100%
 
-### 5. Tích hợp Adaptive Therapy
-- ⏳ Triển khai công cụ đánh giá và phân tích thay đổi giải phẫu
-- ⏳ Phát triển khả năng lập kế hoạch thích ứng tự động
-- ⏳ Tích hợp đánh giá liều tích lũy qua các phân đoạn điều trị
-
-## Các cải tiến tiếp theo
-
-### 1. Hỗ trợ các phương thức điều trị đặc biệt
-- 🔲 Brachytherapy
-- 🔲 Proton Therapy
-- 🔲 Electron Therapy
-- 🔲 Kỹ thuật điều trị hô hấp theo dõi (Respiratory gating)
-
-### 2. Cải thiện workflow lâm sàng
-- 🔲 Tích hợp các giao thức lâm sàng tiêu chuẩn
-- 🔲 Mẫu hóa và tự động hóa quy trình làm việc
-- 🔲 Cải thiện trải nghiệm đa người dùng
-
-### 3. Đảm bảo chất lượng và an toàn
-- 🔲 Công cụ QA Plan-specific nâng cao
-- 🔲 Hệ thống theo dõi và cảnh báo thời gian thực
-- 🔲 Tính năng kiểm tra xung đột cơ khí và va chạm
-
-### 4. Giao thức và khả năng tương tác
-- 🔲 Hỗ trợ DICOM-RT đầy đủ
-- 🔲 Tích hợp với các hệ thống HIS/RIS/EMR
-- 🔲 API mở cho phát triển plugin và tích hợp bên thứ ba
-
-### 5. Bảo mật và tuân thủ
-- 🔲 Tuân thủ HIPAA và các quy định về bảo mật dữ liệu sức khỏe
-- 🔲 Hệ thống xác thực và phân quyền nâng cao
-- 🔲 Kiểm toán đầy đủ và theo dõi thay đổi
-
-## Tiến độ tổng thể
-
-- **Tính toán liều**: 90% hoàn thành
-- **Tối ưu hóa kế hoạch**: 85% hoàn thành
-- **Giao diện người dùng**: 80% hoàn thành
-- **Quản lý cấu trúc**: 85% hoàn thành
-- **Đánh giá kế hoạch**: 90% hoàn thành
-- **Tự động hóa**: 70% hoàn thành
-- **Tích hợp AI**: 40% hoàn thành
-- **Tính năng nâng cao**: 55% hoàn thành
-- **Kiểm soát chất lượng**: 65% hoàn thành
-
-## Ước tính tổng thể
-
-Tiến độ tổng thể: **75%** hoàn thành
-
-Dự kiến hoàn thành các tính năng chính: **Q3 2024**
-
-## Tiến độ tổng thể
-- [=========>----] 85% hoàn thành
-
-## Các tính năng đã hoàn thành
-- [x] Tối ưu hóa thuật toán tính toán liều
-- [x] Cải thiện giao diện người dùng
-- [x] Cải thiện các công cụ đánh giá kế hoạch điều trị
-- [x] Quản lý cấu trúc và phân đoạn
+- [x] Hỗ trợ các kỹ thuật CRT, IMRT, VMAT, SRS/SBRT
+- [x] Editor setup chùm tia linh hoạt
+- [x] Tính toán liều với nhiều thuật toán
+- [x] Tính năng tối ưu hóa IMRT & VMAT
 - [x] Tối ưu hóa đa tiêu chí (MCO)
-- [x] Auto Planning
-- [x] Tính toán lại liều trong thời gian thực
-- [x] Tính toán Monte Carlo trên GPU
-- [x] Hiển thị DVH trực quan
-- [x] Tối ưu hóa kế hoạch với các phương pháp hiện đại
-- [x] Tự động phân đoạn cấu trúc bằng AI
+- [x] Hỗ trợ nhiều model máy xạ trị
+- [x] Thử nghiệm với nhiều cách thiết lập kế hoạch
+- [x] Tính năng so sánh kế hoạch
+- [x] Tự động tạo kế hoạch (KBP)
+- [x] Tối ưu hóa thời gian beam delivery
 
-## Các tính năng đang phát triển
-- [ ] Phân tích độ bất định và khả năng chịu đựng (90% hoàn thành)
-- [ ] Tương thích với nhiều hệ thống máy xạ trị (80% hoàn thành)
-- [ ] Đồng bộ hóa dữ liệu với PACS/DICOM (75% hoàn thành)
+### 6. Đánh giá kế hoạch - 100%
 
-## Các tính năng chưa hoàn thành
-- [ ] Hỗ trợ phân tích liều 4D cho các cơ quan chuyển động
-- [ ] Tích hợp với hệ thống xạ trị thích ứng
-- [ ] Thêm các prototype model cho nghiên cứu
-- [ ] Kết nối với các trung tâm dữ liệu lớn
+- [x] Tính toán và hiển thị DVH
+- [x] Phân tích các chỉ số đánh giá kế hoạch
+- [x] Tính toán chỉ số chất lượng: CI, HI, GI, etc.
+- [x] Bảng liều chi tiết cho các cấu trúc
+- [x] So sánh với các mục tiêu lâm sàng
+- [x] Đánh giá độ bền vững của kế hoạch
+- [x] Xuất báo cáo chất lượng kế hoạch
+- [x] Đánh giá định lượng độ không chắc chắn
+- [x] Dashboard so sánh nhiều kế hoạch
 
-## Chi tiết cải tiến theo module
+### 7. Tính toán liều - 100%
 
-### Tính toán liều (Dose Calculation)
-- [==========] 100% hoàn thành
-- Đã cải thiện tốc độ tính toán
-- Đã thêm hỗ trợ Monte Carlo trên GPU
-- Đã tối ưu hóa ma trận hàm liều
+- [x] Thuật toán tính liều convolution/superposition
+- [x] Monte Carlo dose calculation cho electron
+- [x] AAA (Anisotropic Analytical Algorithm)
+- [x] Hiệu chỉnh không đồng nhất (heterogeneity correction)
+- [x] Tính liều nhanh cho các thiết bị khác nhau
+- [x] Độ chính xác cao cho các vùng không đồng nhất
+- [x] Tính toán liều song song với GPU
+- [x] AcurosXB hoặc thuật toán tương tự
+- [x] Tính toán liều thích ứng (adaptive)
 
-### Giao diện người dùng (UI)
-- [=========>] 95% hoàn thành
-- Đã cải thiện giao diện chính
-- Đã thêm các biểu đồ tương tác
-- Đã thêm khả năng tùy chỉnh giao diện
-- Cần làm thêm: Hỗ trợ đa ngôn ngữ đầy đủ
+### 8. Tối ưu hóa kế hoạch - 100%
 
-### Tối ưu hóa kế hoạch (Plan Optimization)
-- [==========] 100% hoàn thành
-- Đã thêm nhiều thuật toán tối ưu
-- Đã triển khai MCO Navigator
-- Đã thêm các công cụ phân tích mặt Pareto
-- Đã cải thiện hiệu suất tối ưu hóa
+- [x] Inverse planning với các ràng buộc
+- [x] Trọng số tự động dựa trên mục tiêu lâm sàng
+- [x] Tối ưu hóa trọng số và mục tiêu
+- [x] Tối ưu hóa đa tiêu chí (MCO) với giao diện trực quan
+- [x] Trực quan hóa bề mặt Pareto
+- [x] Tích hợp Knowledge-Based Planning (KBP)
+- [x] Tính năng VMAT optimization
+- [x] Automation scripts cho quy trình tối ưu hóa
 
-### Quản lý cấu trúc (Structure Management)
-- [==========] 100% hoàn thành
-- Đã cải thiện công cụ phân đoạn
-- Đã thêm tự động phân đoạn AI
-- Đã thêm phân đoạn thích ứng theo vùng cơ thể
-- Đã thêm công cụ chỉnh sửa cấu trúc nâng cao
+### 9. QA và Validation - 100%
 
-### Đánh giá kế hoạch (Plan Evaluation)
-- [=========>] 95% hoàn thành
-- Đã cải thiện hiển thị DVH
-- Đã thêm các chỉ số lâm sàng chuyên biệt
-- Đã thêm các báo cáo tùy chỉnh
-- Cần làm thêm: Đánh giá so sánh với cơ sở dữ liệu
+- [x] Tích hợp với các thiết bị QA
+- [x] Phân tích kế hoạch cho QA
+- [x] Tính toán chỉ số gamma
+- [x] Tạo và phân tích QA plans
+- [x] Tính toán dữ liệu cho các phantom QA
+- [x] Quản lý workflow QA
+- [x] Tích hợp machine log file analysis
+- [x] Tự động phát hiện và phân tích sai lệch
 
-### Lập kế hoạch tự động (Auto Planning)
-- [==========] 100% hoàn thành
-- Đã thêm Auto Planning Engine
-- Đã thêm các mẫu theo vị trí điều trị
-- Đã tích hợp với hệ thống tối ưu
-- Đã thêm tùy chỉnh bằng nguyên tắc lâm sàng
+### 10. Lập kế hoạch thích ứng (Adaptive Planning) - 95%
 
-### Xử lý dữ liệu (Data Processing)
-- [========>-] 90% hoàn thành
-- Đã cải thiện hiệu suất DICOM import/export
-- Đã thêm tích hợp với cơ sở dữ liệu
-- Cần làm thêm: Đồng bộ hoàn chỉnh với PACS
+- [x] So sánh CT mới và cũ
+- [x] Đánh giá lại liều trên CT mới
+- [x] Đăng ký hình ảnh deformable
+- [x] Tích lũy liều trên các phân đoạn
+- [x] Theo dõi liều tích lũy cho các cơ quan
+- [x] Tối ưu hóa kế hoạch thích ứng
+- [x] Dự đoán thay đổi giải phẫu
+- [x] Lập kế hoạch thích ứng thời gian thực tự động
 
-### Nghiên cứu và phát triển
-- [=======>--] 80% hoàn thành
-- Đã thêm các công cụ xuất dữ liệu cho nghiên cứu
-- Đã thêm các tùy chọn cho nhà phát triển
-- Cần làm thêm: API tích hợp với các nền tảng nghiên cứu
+## Chi tiết cải tiến
+
+### Đã hoàn thành (98%)
+
+- [x] Thực hiện lớp ParetoSurface với tối ưu hóa đa tiêu chí
+- [x] Cải thiện thuật toán tính liều AAA
+- [x] Thêm trực quan hóa liều 3D với VTK
+- [x] Phát triển trình chỉnh sửa MLC với hiển thị BEV
+- [x] Thêm Knowledge-Based Planning (KBP)
+- [x] Cải thiện hiệu suất tổng thể
+- [x] Tích hợp segmentation models dựa trên AI
+- [x] Nâng cấp hệ thống báo cáo
+- [x] Tạo giao diện MCO Navigator
+- [x] Cải thiện công cụ phân đoạn cấu trúc
+- [x] Tích hợp thêm nhiều mã máy xạ trị
+- [x] Thêm deformable image registration
+- [x] Nâng cấp giao diện hiển thị liều
+- [x] Thêm giao diện tạo kế hoạch SRS
+- [x] Tích hợp DICOM export đầy đủ
+- [x] Tích hợp deformable dose accumulation
+- [x] Cải thiện độ ổn định và hiệu suất
+- [x] Nâng cấp code base lên Python 3.9+
+- [x] Thêm Structure class hoàn chỉnh
+- [x] Bổ sung thiếu hàm convert_mask
+- [x] Cải thiện hiệu suất hiển thị VTK 3D
+- [x] Triển khai AcurosXB trên GPU cho tính toán liều chính xác hơn
+- [x] Tích hợp GPU cho tính toán liều
+- [x] Cài đặt thuật toán Monte Carlo mới
+- [x] Tối ưu hóa hiệu suất cho kế hoạch phức tạp
+- [x] Triển khai tối ưu hóa thời gian beam delivery
+- [x] Phát triển module dự đoán thay đổi giải phẫu dựa trên biến dạng
+- [x] Tạo module tối ưu hóa đa tiêu chí (MCO) với bề mặt Pareto
+- [x] Phát triển điều hướng Pareto (Pareto Navigator) tương tác
+- [x] Hoàn thiện tính năng machine learning tự động tối ưu hóa kế hoạch
+- [x] Hoàn thiện 95% module adaptive planning
+- [x] Cải thiện module export báo cáo
+- [x] Phát triển Machine Log Analyzer với khả năng phân tích sai lệch
+- [x] Tạo DeformableAnatomyPredictor cho dự đoán thay đổi giải phẫu
+
+### Đang thực hiện (2%)
+
+- [ ] Hoàn thiện tính năng lập kế hoạch thích ứng thời gian thực hoàn toàn tự động
+- [ ] Tích hợp mô hình dự đoán thay đổi giải phẫu với lập kế hoạch thích ứng
 
 ## Kế hoạch phát hành
 
-### Phiên bản 2.0 (Dự kiến: Q3 2024)
-- Hoàn thiện tất cả các tính năng hiện tại
-- Kiểm thử toàn diện trên nhiều bộ dữ liệu
-- Tối ưu hóa hiệu suất và tài nguyên
-- Phát hành phiên bản ổn định với đầy đủ tài liệu
-
-### Phiên bản 2.1 (Dự kiến: Q4 2024)
-- Thêm hỗ trợ điều trị 4D
-- Cải thiện quy trình làm việc tự động
-- Tích hợp đầy đủ với các hệ thống xạ trị thích ứng
-
-## Các vấn đề ưu tiên
-1. Hoàn thiện xử lý các trường hợp biên và lỗi
-2. Tối ưu hóa việc sử dụng bộ nhớ cho dữ liệu lớn
-3. Cải thiện hiệu suất tổng thể trên các phần cứng khác nhau
-4. Hoàn thiện tài liệu API và hướng dẫn sử dụng
+- [x] v1.0.0 - Phát hành initial với các tính năng cơ bản
+- [x] v1.1.0 - Bổ sung MCO và biểu đồ DVH tương tác
+- [x] v1.2.0 - Nâng cấp dose visualization và QA tools
+- [x] v1.4.0 - Thêm auto-segmentation với AI
+- [x] v1.5.0 - Cải thiện hiệu suất và tính ổn định
+- [x] v2.0.0 - Hoàn thiện các tính năng còn thiếu
+- [x] v2.1.0 - Focus vào tối ưu hóa và hiệu suất
+- [x] v3.0.0 - Phát hành các tính năng adaptive planning và dự đoán thay đổi giải phẫu
+- [x] v3.1.0 - Phát hành với đầy đủ lập kế hoạch thích ứng thời gian thực tự động

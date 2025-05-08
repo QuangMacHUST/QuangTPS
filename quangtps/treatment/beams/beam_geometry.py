@@ -438,6 +438,9 @@ class BEVTransform:
         # Tính toán ma trận chuyển đổi
         self._calculate_transformation_matrix()
 
+        # Tính toán vị trí nguồn (để phục vụ ray tracing)
+        self._calculate_source_position()
+
     def _calculate_transformation_matrix(self):
         """
         Tính toán ma trận chuyển đổi từ tọa độ bệnh nhân sang tọa độ BEV.
@@ -488,31 +491,28 @@ class BEVTransform:
         self.R_gantry = R_gantry
         self.R_collimator = R_collimator
 
-    def _calculate_source_position(self) -> np.ndarray:
+    def _calculate_source_position(self):
         """
-        Tính vị trí nguồn phát xạ trong hệ tọa độ bệnh nhân.
-
-        Returns
-        -------
-        np.ndarray
-            Tọa độ nguồn phát xạ (cm)
+        Tính toán vị trí nguồn chùm tia dựa trên các thông số góc và SAD.
         """
-        # Vị trí nguồn trong hệ tọa độ sau khi quay gantry và couch
-        # là (0, 0, -SAD) -> nguồn nằm trên trục Z âm, cách isocenter một khoảng SAD
-        source_in_beam_coords = np.array([0, 0, -self.sad])
+        # Chuyển góc sang radian
+        gantry_rad = np.radians(self.gantry_angle)
+        couch_rad = np.radians(self.couch_angle)
 
-        # Áp dụng phép quay nghịch đảo để chuyển về hệ tọa độ bệnh nhân
-        # Lưu ý: chúng ta chỉ cần áp dụng R_gantry và R_couch, không cần R_collimator
-        # vì nguồn không thay đổi khi quay collimator
-        source_relative = np.matmul(
-            np.matmul(np.linalg.inv(self.R_gantry), np.linalg.inv(self.R_couch)),
-            source_in_beam_coords,
-        )
+        # Tính tọa độ nguồn (ngược với hướng chùm tia)
+        x = -self.sad * np.sin(gantry_rad) * np.cos(couch_rad)
+        y = -self.sad * np.sin(gantry_rad) * np.sin(couch_rad)
+        z = -self.sad * np.cos(gantry_rad)
 
-        # Vị trí nguồn trong hệ tọa độ bệnh nhân
-        source_position = self.isocenter + source_relative
+        # Vị trí nguồn (tương đối với isocenter)
+        source_rel = np.array([x, y, z])
 
-        return source_position
+        # Vị trí nguồn tuyệt đối
+        self.source_position = self.isocenter + source_rel
+
+        # Đơn vị vector hướng chùm tia (từ nguồn đến isocenter)
+        beam_direction = self.isocenter - self.source_position
+        self.beam_direction = beam_direction / np.linalg.norm(beam_direction)
 
     def transform_point(
         self, point: Union[Tuple[float, float, float], np.ndarray]
@@ -847,6 +847,172 @@ class BEVTransform:
                 )
 
         return intersections
+
+    def ray_trace_to_depth(
+        self,
+        bev_point: Union[Tuple[float, float], np.ndarray],
+        structure: Any,
+        max_depth: float = 30.0,
+        step_size: float = 0.2,
+    ) -> Dict[str, Any]:
+        """
+        Thực hiện ray tracing từ nguồn chùm tia qua một điểm trong không gian BEV
+        để xác định độ sâu của cấu trúc.
+
+        Parameters
+        ----------
+        bev_point : Union[Tuple[float, float], np.ndarray]
+            Điểm trong hệ tọa độ BEV (cm)
+        structure : Any
+            Cấu trúc để kiểm tra giao điểm
+        max_depth : float, optional
+            Độ sâu tối đa để tìm kiếm (cm), mặc định là 30.0 cm
+        step_size : float, optional
+            Bước di chuyển cho thuật toán ray tracing (cm), mặc định là 0.2 cm
+
+        Returns
+        -------
+        Dict[str, Any]
+            Kết quả ray tracing với các thông tin:
+            - entry_depth: Độ sâu khi tia bắt đầu đi vào cấu trúc (cm)
+            - exit_depth: Độ sâu khi tia đi ra khỏi cấu trúc (cm)
+            - mid_depth: Độ sâu trung bình giữa entry và exit (cm)
+            - thickness: Độ dày của cấu trúc theo hướng chùm tia (cm)
+            - has_intersection: True nếu tia giao với cấu trúc, False nếu không
+        """
+        # Mặc định kết quả nếu không tìm thấy giao điểm
+        result = {
+            "entry_depth": None,
+            "exit_depth": None,
+            "mid_depth": None,
+            "thickness": 0.0,
+            "has_intersection": False,
+        }
+
+        if not hasattr(structure, "contains_point"):
+            return result
+
+        # Chuyển điểm BEV thành đường thẳng ray (từ nguồn qua điểm BEV)
+        entry_point = self.inverse_transform_point(bev_point, depth=0.0)
+
+        # Hướng ray là hướng từ nguồn đến điểm entry_point
+        ray_direction = entry_point - self.source_position
+        ray_direction = ray_direction / np.linalg.norm(ray_direction)
+
+        # Số bước tính toán
+        num_steps = int(max_depth / step_size)
+
+        # Thực hiện ray tracing
+        inside_structure = False
+        entry_depth = None
+        exit_depth = None
+
+        for i in range(num_steps):
+            current_depth = i * step_size
+
+            # Tính vị trí điểm trong không gian bệnh nhân
+            current_point = entry_point + ray_direction * current_depth
+
+            # Kiểm tra điểm có nằm trong cấu trúc không
+            is_inside = structure.contains_point(current_point)
+
+            # Phát hiện điểm vào cấu trúc
+            if is_inside and not inside_structure:
+                inside_structure = True
+                entry_depth = current_depth
+
+            # Phát hiện điểm ra khỏi cấu trúc
+            elif not is_inside and inside_structure:
+                inside_structure = False
+                exit_depth = current_depth
+                break
+
+        # Nếu vẫn đang ở trong cấu trúc khi kết thúc
+        if inside_structure:
+            exit_depth = max_depth
+
+        # Cập nhật kết quả nếu có giao điểm
+        if entry_depth is not None:
+            result["entry_depth"] = entry_depth
+            result["exit_depth"] = exit_depth
+            result["thickness"] = exit_depth - entry_depth
+            result["mid_depth"] = (entry_depth + exit_depth) / 2
+            result["has_intersection"] = True
+
+        return result
+
+    def structure_to_bev_map(
+        self,
+        structure: Any,
+        resolution: Tuple[int, int] = (256, 256),
+        field_size: Tuple[float, float] = (20.0, 20.0),
+    ) -> np.ndarray:
+        """
+        Chuyển đổi cấu trúc thành bản đồ BEV 2D.
+
+        Parameters
+        ----------
+        structure : Any
+            Cấu trúc cần chuyển đổi
+        resolution : Tuple[int, int], optional
+            Độ phân giải của bản đồ BEV (pixels), mặc định là (256, 256)
+        field_size : Tuple[float, float], optional
+            Kích thước trường chiếu (cm), mặc định là (20.0, 20.0)
+
+        Returns
+        -------
+        np.ndarray
+            Bản đồ BEV của cấu trúc (0-1)
+        """
+        width, height = resolution
+        x_field, y_field = field_size
+
+        # Tạo bản đồ rỗng
+        bev_map = np.zeros(resolution, dtype=float)
+
+        # Tính kích thước một pixel
+        x_step = x_field / width
+        y_step = y_field / height
+
+        # Tính tọa độ BEV cho mỗi pixel
+        for i in range(width):
+            for j in range(height):
+                # Tọa độ BEV của trung tâm pixel
+                x_bev = (i - width / 2) * x_step + x_step / 2
+                y_bev = (j - height / 2) * y_step + y_step / 2
+
+                # Ray trace qua cấu trúc
+                ray_result = self.ray_trace_to_depth((x_bev, y_bev), structure)
+
+                # Nếu tia đi qua cấu trúc, đánh dấu pixel
+                if ray_result["has_intersection"]:
+                    # Có thể sử dụng thông tin độ dày để tính toán alpha
+                    # Cài đặt đơn giản: đánh dấu 1 cho mọi điểm giao
+                    bev_map[j, i] = 1.0
+
+        return bev_map
+
+    def get_source_position(self) -> np.ndarray:
+        """
+        Trả về vị trí nguồn chùm tia trong hệ tọa độ bệnh nhân.
+
+        Returns
+        -------
+        np.ndarray
+            Vị trí nguồn (cm)
+        """
+        return self.source_position
+
+    def get_beam_direction(self) -> np.ndarray:
+        """
+        Trả về vector đơn vị chỉ hướng chùm tia.
+
+        Returns
+        -------
+        np.ndarray
+            Vector đơn vị chỉ hướng chùm tia
+        """
+        return self.beam_direction
 
 
 def get_bev_transform(beam) -> BEVTransform:

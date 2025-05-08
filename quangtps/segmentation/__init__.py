@@ -10,8 +10,11 @@ including contour operations, margin generation, and auto-segmentation capabilit
 
 import logging
 
-from quangtps.segmentation.contour.boolean_operations import BooleanOperations, BooleanOperation
-from quangtps.segmentation.contour.margin import MarginGenerator, MarginType
+from quangtps.segmentation.contour.boolean_operations import (
+    BooleanOperations,
+    BooleanOperation,
+)
+from quangtps.segmentation.contour.margin import MarginTool, MarginType
 from quangtps.segmentation.contour.contour_tools import ContourTool
 from quangtps.segmentation.contour.contour_editor import ContourEditor
 
@@ -34,12 +37,12 @@ from quangtps.segmentation.auto_segmentation.semi_automatic import (
     WatershedSegmenter,
     create_threshold_segmenter,
     create_region_growing_segmenter,
-    create_watershed_segmenter
+    create_watershed_segmenter,
 )
 from quangtps.segmentation.auto_segmentation.active_contour import (
     ActiveContourSegmenter,
     GVFSnake,
-    create_active_contour_segmenter
+    create_active_contour_segmenter,
 )
 from quangtps.segmentation.auto_segmentation.level_set import (
     LevelSetSegmenter,
@@ -50,89 +53,98 @@ from quangtps.segmentation.auto_segmentation.level_set import (
     create_morphological_level_set,
     create_geodesic_level_set,
     create_chan_vese_level_set,
-    create_simple_level_set
+    create_simple_level_set,
 )
 
 # Import manual segmentation components
 from quangtps.segmentation.manual_segmentation.drawing_tools import DrawingTool
-from quangtps.segmentation.manual_segmentation.manual_editor import ManualSegmentationEditor
+from quangtps.segmentation.manual_segmentation.manual_editor import (
+    ManualSegmentationEditor,
+)
 
 # Import validation components
-from quangtps.segmentation.validation.metrics import SegmentationMetrics, calculate_comprehensive_metrics
+from quangtps.segmentation.validation.metrics import (
+    SegmentationMetrics,
+    calculate_comprehensive_metrics,
+)
 from quangtps.segmentation.validation.validator import SegmentationValidator
 from quangtps.segmentation.validation.refinement import SegmentationRefinement
 
 # Import deep learning segmentation and model management components
-from quangtps.segmentation.deep_learning_segmentation import SegmentationModel, segment_patient
-from quangtps.segmentation.model_downloader import ensure_default_models, download_model, get_available_remote_models
+from quangtps.segmentation.deep_learning_segmentation import (
+    SegmentationModel,
+    segment_patient,
+)
+from quangtps.segmentation.model_downloader import (
+    ensure_default_models,
+    download_model,
+    get_available_remote_models,
+)
 from quangtps.segmentation.auto.engine import AutoSegmentationEngine
 from quangtps.segmentation.auto.model_repository import ModelRepository
+
+from quangtps.segmentation.auto import AutoSegmentationAPI
+from quangtps.segmentation.manual_segmentation import ManualSegmentationTools
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     # Contour operations
-    'BooleanOperations',
-    'BooleanOperation',
-    'MarginGenerator',
-    'MarginType',
-    'ContourTool',
-    'ContourEditor',
-    
+    "BooleanOperations",
+    "BooleanOperation",
+    "MarginTool",
+    "MarginType",
+    "ContourTool",
+    "ContourEditor",
     # Structure components
-    'StructureSet',
-    'StructureLibrary',
-    'StructureTemplate',
-    'StructureAnalyzer',
-    
+    "StructureSet",
+    "StructureLibrary",
+    "StructureTemplate",
+    "StructureAnalyzer",
     # Auto-segmentation components
-    'AtlasSegmentor',
-    'UNetSegmentor',
-    'TumorSegmentor',
-    'OARSegmentor',
-    'ModelLoader',
-    'CycleGAN',
-    
+    "AtlasSegmentor",
+    "UNetSegmentor",
+    "TumorSegmentor",
+    "OARSegmentor",
+    "ModelLoader",
+    "CycleGAN",
     # Semi-automatic segmentation components
-    'ThresholdSegmenter',
-    'RegionGrowingSegmenter',
-    'WatershedSegmenter',
-    'create_threshold_segmenter',
-    'create_region_growing_segmenter',
-    'create_watershed_segmenter',
-    
+    "ThresholdSegmenter",
+    "RegionGrowingSegmenter",
+    "WatershedSegmenter",
+    "create_threshold_segmenter",
+    "create_region_growing_segmenter",
+    "create_watershed_segmenter",
     # Active contour components
-    'ActiveContourSegmenter',
-    'GVFSnake',
-    'create_active_contour_segmenter',
-    
+    "ActiveContourSegmenter",
+    "GVFSnake",
+    "create_active_contour_segmenter",
     # Level set components
-    'LevelSetSegmenter',
-    'MorphologicalLevelSet',
-    'GeodesicLevelSet',
-    'ChanVeseLevelSet',
-    'SimpleLevelSet',
-    'create_morphological_level_set',
-    'create_geodesic_level_set', 
-    'create_chan_vese_level_set',
-    'create_simple_level_set',
-    
+    "LevelSetSegmenter",
+    "MorphologicalLevelSet",
+    "GeodesicLevelSet",
+    "ChanVeseLevelSet",
+    "SimpleLevelSet",
+    "create_morphological_level_set",
+    "create_geodesic_level_set",
+    "create_chan_vese_level_set",
+    "create_simple_level_set",
     # Manual segmentation components
-    'DrawingTool',
-    'ManualSegmentationEditor',
-    
+    "DrawingTool",
+    "ManualSegmentationEditor",
     # Validation components
-    'SegmentationMetrics',
-    'calculate_comprehensive_metrics',
-    'SegmentationValidator',
-    'SegmentationRefinement',
-    
+    "SegmentationMetrics",
+    "calculate_comprehensive_metrics",
+    "SegmentationValidator",
+    "SegmentationRefinement",
     # Deep learning segmentation components
-    'SegmentationModel',
-    'segment_patient',
-    'ensure_default_models',
-    'download_model',
-    'get_available_remote_models',
-    'AutoSegmentationEngine',
-    'ModelRepository'
+    "SegmentationModel",
+    "segment_patient",
+    "ensure_default_models",
+    "download_model",
+    "get_available_remote_models",
+    "AutoSegmentationEngine",
+    "ModelRepository",
+    "AutoSegmentationAPI",
+    "ManualSegmentationTools",
 ]

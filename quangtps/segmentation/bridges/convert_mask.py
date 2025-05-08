@@ -153,7 +153,6 @@ def _resize_mask(mask: np.ndarray, target_shape: Tuple[int, int, int]) -> np.nda
         logger.warning("Không thể import scipy.ndimage để thực hiện resize")
 
         # Fallback nếu không có scipy
-        import numpy as np
 
         result = np.zeros(target_shape, dtype=np.uint8)
 

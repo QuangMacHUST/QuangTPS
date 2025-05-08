@@ -20,8 +20,8 @@ from datetime import datetime
 
 # Thử import các thư viện phụ thuộc
 try:
-    import vtk
-    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+import vtk
+from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
     VTK_AVAILABLE = True
 except ImportError as e:
@@ -285,7 +285,7 @@ else:
     vtkTextProperty = vtk.vtkTextProperty
 
 try:
-    from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import (
         QWidget,
         QVBoxLayout,
         QHBoxLayout,
@@ -632,7 +632,7 @@ class VTKViewer3D(QWidget):
         """Set up the user interface components."""
         if not PYQT5_AVAILABLE or not VTK_AVAILABLE:
             self._setup_fallback_ui()
-            return
+                return
 
         # Create layout
         layout = QVBoxLayout(self)

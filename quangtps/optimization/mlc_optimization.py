@@ -15,6 +15,7 @@ from typing import List, Dict, Tuple, Optional, Any, Union
 import time
 import multiprocessing as mp
 from functools import partial
+import matplotlib.pyplot as plt
 
 from quangtps.planning.mlc import MLC, MLCLeaf
 from quangtps.treatment.beams.beam_geometry import BEVTransform
@@ -22,9 +23,9 @@ from quangtps.treatment.beams.beam_geometry import BEVTransform
 logger = logging.getLogger(__name__)
 
 
-class MLCOptimizer:
+class MLCOptimizerBase:
     """
-    Lớp cơ sở cho các thuật toán tối ưu hóa MLC.
+    Lớp cơ sở trừu tượng cho tất cả các thuật toán tối ưu hóa MLC.
     """
 
     def __init__(
@@ -40,7 +41,7 @@ class MLCOptimizer:
         verbose: bool = False,
     ):
         """
-        Khởi tạo lớp tối ưu hóa MLC.
+        Khởi tạo lớp tối ưu hóa MLC cơ sở.
 
         Parameters
         ----------
@@ -72,22 +73,62 @@ class MLCOptimizer:
         self.max_iterations = max_iterations
         self.convergence_threshold = convergence_threshold
         self.verbose = verbose
+        self.history = {
+            "fitness": [],
+            "target_coverage": [],
+            "oar_exposure": [],
+            "complexity": [],
+        }
 
         # Thiết lập trọng số cho các cơ quan nguy cấp
         if oar_weights is None and self.oars:
             self.oar_weights = [1.0] * len(self.oars)
         else:
-            self.oar_weights = oar_weights
+            self.oar_weights = oar_weights or []
 
-        # Khởi tạo các tham số riêng của thuật toán
-        self._initialize()
+        # Chuẩn bị dữ liệu BEV của cấu trúc mục tiêu và cơ quan nguy cấp để tái sử dụng
+        self._prepare_structure_bev_maps()
 
-    def _initialize(self):
+    def _prepare_structure_bev_maps(self):
         """
-        Khởi tạo các tham số của thuật toán.
-        Phương thức này cần được ghi đè trong các lớp con.
+        Chuẩn bị các bản đồ BEV cho cấu trúc mục tiêu và cơ quan nguy cấp để tối ưu hóa hiệu suất.
         """
-        pass
+        self.target_bev_map = None
+        self.oar_bev_maps = []
+
+        # Kích thước và độ phân giải mặc định của bản đồ BEV
+        resolution = (256, 256)
+        field_size = (self.field_size, self.field_size)
+
+        # Tạo bản đồ BEV cho cấu trúc mục tiêu
+        if self.beam_transform and hasattr(self.target, "get_contours"):
+            try:
+                self.target_bev_map = self.beam_transform.structure_to_bev_map(
+                    self.target, resolution, field_size
+                )
+                logger.info(
+                    f"Đã tạo bản đồ BEV cho cấu trúc mục tiêu {self.target.name}"
+                )
+            except Exception as e:
+                logger.error(f"Lỗi khi tạo bản đồ BEV cho cấu trúc mục tiêu: {str(e)}")
+
+        # Tạo bản đồ BEV cho các cơ quan nguy cấp
+        if self.beam_transform:
+            for oar in self.oars:
+                if hasattr(oar, "get_contours"):
+                    try:
+                        oar_bev_map = self.beam_transform.structure_to_bev_map(
+                            oar, resolution, field_size
+                        )
+                        self.oar_bev_maps.append(oar_bev_map)
+                        logger.info(
+                            f"Đã tạo bản đồ BEV cho cơ quan nguy cấp {oar.name}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Lỗi khi tạo bản đồ BEV cho cơ quan {oar.name}: {str(e)}"
+                        )
+                        self.oar_bev_maps.append(None)
 
     def _clone_mlc(self, mlc: MLC) -> MLC:
         """
@@ -107,11 +148,11 @@ class MLCOptimizer:
 
         # Sao chép các lá
         for leaf in mlc.leaves:
-            new_mlc.set_leaf_position(leaf.index, leaf.position)
+            new_mlc.set_leaf_position(leaf.index, leaf.position, leaf.bank)
 
         return new_mlc
 
-    def _calculate_fitness(self, mlc: MLC = None) -> float:
+    def _calculate_fitness(self, mlc: MLC = None) -> Dict[str, float]:
         """
         Tính điểm thích nghi (fitness) của MLC.
         Điểm càng cao, MLC càng tốt.
@@ -123,14 +164,18 @@ class MLCOptimizer:
 
         Returns
         -------
-        float
-            Điểm thích nghi
+        Dict[str, float]
+            Từ điển chứa các thành phần của điểm thích nghi:
+            - "total": Điểm tổng hợp
+            - "target_coverage": Độ bao phủ mục tiêu
+            - "oar_exposure": Độ chiếu xạ lên cơ quan nguy cấp
+            - "complexity": Độ phức tạp của MLC
         """
         if mlc is None:
             mlc = self.mlc
 
         # Lấy bản đồ truyền qua của MLC
-        transmission_map = mlc.get_transmission_map(resolution=100)
+        transmission_map = mlc.get_transmission_map(resolution=(256, 256))
 
         # Tính độ bao phủ mục tiêu
         target_coverage = self._calculate_target_coverage(transmission_map)
@@ -141,15 +186,27 @@ class MLCOptimizer:
         # Tính độ phức tạp của MLC
         complexity = self._calculate_mlc_complexity(mlc)
 
-        # Tính điểm tổng hợp
+        # Tính điểm tổng hợp với các trọng số
         fitness = target_coverage - oar_exposure - 0.1 * complexity
+
+        # Lưu vào lịch sử
+        if mlc is self.mlc:
+            self.history["fitness"].append(fitness)
+            self.history["target_coverage"].append(target_coverage)
+            self.history["oar_exposure"].append(oar_exposure)
+            self.history["complexity"].append(complexity)
 
         if self.verbose:
             logger.info(
                 f"Fitness: {fitness:.4f} (Target: {target_coverage:.4f}, OARs: {oar_exposure:.4f}, Complexity: {complexity:.4f})"
             )
 
-        return fitness
+        return {
+            "total": fitness,
+            "target_coverage": target_coverage,
+            "oar_exposure": oar_exposure,
+            "complexity": complexity,
+        }
 
     def _calculate_target_coverage(self, transmission_map: np.ndarray) -> float:
         """
@@ -165,10 +222,9 @@ class MLCOptimizer:
         float
             Độ bao phủ mục tiêu (0-1)
         """
-        # Triển khai chi tiết cho từng loại cấu trúc
-        # Đây là phiên bản đơn giản, giả định target đã được chiếu lên mặt phẳng BEV
-        if hasattr(self.target, "get_bev_mask"):
-            target_mask = self.target.get_bev_mask(self.beam_transform)
+        # Sử dụng bản đồ BEV được tính toán trước nếu có
+        if self.target_bev_map is not None:
+            target_mask = self.target_bev_map
 
             if target_mask.shape != transmission_map.shape:
                 # Thay đổi kích thước mask để phù hợp với transmission_map
@@ -185,9 +241,35 @@ class MLCOptimizer:
             total_area = np.sum(target_mask)
 
             return covered_area / total_area if total_area > 0 else 0.0
+
+        # Phương pháp dự phòng: Sử dụng get_bev_mask nếu có
+        elif hasattr(self.target, "get_bev_mask") and self.beam_transform:
+            try:
+                target_mask = self.target.get_bev_mask(self.beam_transform)
+
+                if target_mask.shape != transmission_map.shape:
+                    # Thay đổi kích thước mask để phù hợp với transmission_map
+                    from scipy.ndimage import zoom
+
+                    zoom_factors = (
+                        transmission_map.shape[0] / target_mask.shape[0],
+                        transmission_map.shape[1] / target_mask.shape[1],
+                    )
+                    target_mask = zoom(target_mask, zoom_factors, order=0)
+
+                # Tính tỷ lệ vùng target được bao phủ
+                covered_area = np.sum(target_mask * (transmission_map > 0.5))
+                total_area = np.sum(target_mask)
+
+                return covered_area / total_area if total_area > 0 else 0.0
+            except Exception as e:
+                logger.error(f"Lỗi khi tính độ bao phủ mục tiêu: {str(e)}")
+                return 0.5  # Giá trị mặc định khi gặp lỗi
+
+        # Nếu không có cách nào để lấy hình chiếu BEV, sử dụng giá trị mặc định
         else:
-            # Phương pháp dự phòng nếu không có mask BEV
-            return 0.8  # Giá trị mặc định
+            logger.warning("Không thể tính độ bao phủ mục tiêu do thiếu thông tin BEV")
+            return 0.5  # Giá trị mặc định
 
     def _calculate_oar_exposure(self, transmission_map: np.ndarray) -> float:
         """
@@ -207,13 +289,19 @@ class MLCOptimizer:
             return 0.0
 
         total_exposure = 0.0
-        total_weight = sum(self.oar_weights)
+        total_weight = sum(self.oar_weights) if self.oar_weights else len(self.oars)
 
-        for i, oar in enumerate(self.oars):
-            weight = self.oar_weights[i] / total_weight if total_weight > 0 else 1.0
+        # Sử dụng bản đồ BEV đã tính toán trước
+        if self.oar_bev_maps:
+            for i, oar_mask in enumerate(self.oar_bev_maps):
+                if oar_mask is None:
+                    continue
 
-            if hasattr(oar, "get_bev_mask"):
-                oar_mask = oar.get_bev_mask(self.beam_transform)
+                weight = (
+                    self.oar_weights[i] / total_weight
+                    if self.oar_weights
+                    else 1.0 / len(self.oars)
+                )
 
                 if oar_mask.shape != transmission_map.shape:
                     # Thay đổi kích thước mask để phù hợp với transmission_map
@@ -231,6 +319,39 @@ class MLCOptimizer:
 
                 exposure = exposed_area / total_area if total_area > 0 else 0.0
                 total_exposure += weight * exposure
+
+            return total_exposure
+
+        # Phương pháp dự phòng
+        for i, oar in enumerate(self.oars):
+            weight = (
+                self.oar_weights[i] / total_weight
+                if self.oar_weights
+                else 1.0 / len(self.oars)
+            )
+
+            if hasattr(oar, "get_bev_mask") and self.beam_transform:
+                try:
+                    oar_mask = oar.get_bev_mask(self.beam_transform)
+
+                    if oar_mask.shape != transmission_map.shape:
+                        # Thay đổi kích thước mask để phù hợp với transmission_map
+                        from scipy.ndimage import zoom
+
+                        zoom_factors = (
+                            transmission_map.shape[0] / oar_mask.shape[0],
+                            transmission_map.shape[1] / oar_mask.shape[1],
+                        )
+                        oar_mask = zoom(oar_mask, zoom_factors, order=0)
+
+                    # Tính tỷ lệ vùng OAR bị chiếu xạ
+                    exposed_area = np.sum(oar_mask * (transmission_map > 0.5))
+                    total_area = np.sum(oar_mask)
+
+                    exposure = exposed_area / total_area if total_area > 0 else 0.0
+                    total_exposure += weight * exposure
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính độ chiếu xạ cho {oar.name}: {str(e)}")
 
         return total_exposure
 
@@ -273,7 +394,60 @@ class MLCOptimizer:
             total_diff / (num_leaves * self.field_size) if num_leaves > 0 else 0.0
         )
 
-        return complexity
+        # Thêm thành phần khác về độ phức tạp: tổng số phân đoạn (apertures)
+        aperture_complexity = (
+            self._calculate_aperture_complexity(mlc) / 10.0
+        )  # Chuẩn hóa
+
+        # Kết hợp hai loại độ phức tạp
+        combined_complexity = 0.7 * complexity + 0.3 * aperture_complexity
+
+        return combined_complexity
+
+    def _calculate_aperture_complexity(self, mlc: MLC) -> float:
+        """
+        Tính độ phức tạp của MLC dựa trên số lượng và kích thước của các khe hở (apertures).
+
+        Parameters
+        ----------
+        mlc : MLC
+            MLC cần tính độ phức tạp
+
+        Returns
+        -------
+        float
+            Độ phức tạp dựa trên các khe hở
+        """
+        # Tổ chức MLC theo cặp (cùng index, khác bank)
+        leaf_pairs = {}
+        for leaf in mlc.leaves:
+            if leaf.index not in leaf_pairs:
+                leaf_pairs[leaf.index] = {}
+            leaf_pairs[leaf.index][leaf.bank] = leaf.position
+
+        # Đếm số lượng khe hở và tính tổng diện tích khe hở
+        total_aperture_area = 0.0
+        num_apertures = 0
+        leaf_width = 1.0  # cm, giả định
+
+        for idx, pair in leaf_pairs.items():
+            if "A" in pair and "B" in pair:
+                # Nếu lá B > lá A thì có khe hở
+                if pair["B"] > pair["A"]:
+                    aperture_width = pair["B"] - pair["A"]
+                    aperture_area = aperture_width * leaf_width
+                    total_aperture_area += aperture_area
+                    num_apertures += 1
+
+        # Độ phức tạp tỷ lệ nghịch với diện tích khe hở trung bình
+        if num_apertures > 0:
+            avg_aperture_area = total_aperture_area / num_apertures
+            # Độ phức tạp cao khi nhiều khe hở nhỏ, thấp khi ít khe hở lớn
+            aperture_complexity = num_apertures / avg_aperture_area
+        else:
+            aperture_complexity = 0.0
+
+        return aperture_complexity
 
     def _perturb_mlc(self, mlc: MLC, magnitude: float = 1.0) -> MLC:
         """
@@ -316,7 +490,7 @@ class MLCOptimizer:
                 )
 
                 # Đảm bảo không vượt quá lá đối diện
-                paired_leaf = new_mlc.get_leaf(leaf.index)
+                paired_leaf = new_mlc.get_paired_leaf(leaf.index)
                 if paired_leaf and new_position >= paired_leaf.position - 0.1:
                     new_position = paired_leaf.position - 0.1
             else:  # Bank B
@@ -325,14 +499,85 @@ class MLCOptimizer:
                 )
 
                 # Đảm bảo không vượt quá lá đối diện
-                paired_leaf = new_mlc.get_leaf(leaf.index)
+                paired_leaf = new_mlc.get_paired_leaf(leaf.index)
                 if paired_leaf and new_position <= paired_leaf.position + 0.1:
                     new_position = paired_leaf.position + 0.1
 
             # Cập nhật vị trí lá
-            new_mlc.set_leaf_position(leaf.index, new_position)
+            new_mlc.set_leaf_position(leaf.index, new_position, leaf.bank)
 
         return new_mlc
+
+    def _get_total_fitness(self, fitness_dict: Dict[str, float]) -> float:
+        """
+        Lấy giá trị fitness tổng hợp từ từ điển fitness.
+
+        Parameters
+        ----------
+        fitness_dict : Dict[str, float]
+            Từ điển chứa các thành phần của fitness
+
+        Returns
+        -------
+        float
+            Giá trị fitness tổng hợp
+        """
+        return fitness_dict["total"]
+
+    def plot_optimization_progress(self, save_path: str = None):
+        """
+        Vẽ biểu đồ tiến trình tối ưu hóa.
+
+        Parameters
+        ----------
+        save_path : str, optional
+            Đường dẫn để lưu biểu đồ. Nếu None, biểu đồ sẽ được hiển thị.
+        """
+        if not self.history["fitness"]:
+            logger.warning("Không có dữ liệu lịch sử để vẽ biểu đồ")
+            return
+
+        plt.figure(figsize=(12, 8))
+
+        # Biểu đồ fitness tổng hợp
+        plt.subplot(2, 2, 1)
+        plt.plot(self.history["fitness"], "b-", label="Tổng hợp")
+        plt.title("Điểm fitness tổng hợp")
+        plt.xlabel("Vòng lặp")
+        plt.ylabel("Giá trị")
+        plt.grid(True)
+
+        # Biểu đồ độ bao phủ mục tiêu
+        plt.subplot(2, 2, 2)
+        plt.plot(self.history["target_coverage"], "g-", label="Bao phủ mục tiêu")
+        plt.title("Độ bao phủ mục tiêu")
+        plt.xlabel("Vòng lặp")
+        plt.ylabel("Giá trị")
+        plt.grid(True)
+
+        # Biểu đồ độ chiếu xạ OAR
+        plt.subplot(2, 2, 3)
+        plt.plot(self.history["oar_exposure"], "r-", label="Chiếu xạ OAR")
+        plt.title("Độ chiếu xạ cơ quan nguy cấp")
+        plt.xlabel("Vòng lặp")
+        plt.ylabel("Giá trị")
+        plt.grid(True)
+
+        # Biểu đồ độ phức tạp
+        plt.subplot(2, 2, 4)
+        plt.plot(self.history["complexity"], "y-", label="Độ phức tạp")
+        plt.title("Độ phức tạp MLC")
+        plt.xlabel("Vòng lặp")
+        plt.ylabel("Giá trị")
+        plt.grid(True)
+
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path)
+            logger.info(f"Đã lưu biểu đồ tiến trình tại {save_path}")
+        else:
+            plt.show()
 
     def optimize(self) -> MLC:
         """
@@ -347,6 +592,17 @@ class MLCOptimizer:
         raise NotImplementedError(
             "Phương thức optimize() cần được triển khai trong lớp con"
         )
+
+
+class MLCOptimizer(MLCOptimizerBase):
+    """
+    Lớp cơ sở cho các thuật toán tối ưu hóa MLC.
+
+    Class này được giữ lại để tương thích ngược với mã nguồn hiện tại.
+    Các thuật toán mới nên kế thừa trực tiếp từ MLCOptimizerBase.
+    """
+
+    pass
 
 
 class GradientDescentOptimizer(MLCOptimizer):

@@ -16,6 +16,34 @@ from typing import Dict, List, Tuple, Optional, Any, Union
 
 logger = logging.getLogger(__name__)
 
+# Cố gắng import OpenCV
+try:
+    import cv2
+
+    HAS_CV2 = True
+except ImportError:
+    # Tạo một module giả lập cho cv2 để tránh lỗi linter
+    HAS_CV2 = False
+
+    class cv2:
+        # Các hằng số
+        RETR_EXTERNAL = 0
+        CHAIN_APPROX_SIMPLE = 1
+
+        @staticmethod
+        def findContours(image, mode, method):
+            """Mô phỏng tìm contour khi không có OpenCV"""
+            logger.warning("OpenCV không khả dụng, sử dụng phương thức dự phòng")
+            # Trả về danh sách rỗng
+            return [], None
+
+        @staticmethod
+        def drawContours(image, contours, contour_idx, color, thickness):
+            """Mô phỏng vẽ contour khi không có OpenCV"""
+            logger.warning("OpenCV không khả dụng, sử dụng phương thức dự phòng")
+            # Không làm gì
+            return image
+
 
 class StructureType(Enum):
     """Các loại cấu trúc giải phẫu."""
@@ -164,7 +192,12 @@ class Structure:
             return
 
         try:
-            import cv2
+            if not HAS_CV2:
+                logger.warning(
+                    "OpenCV không khả dụng để tạo contours từ mask. Sử dụng phương thức dự phòng."
+                )
+                self._generate_contours_fallback()
+                return
 
             # Tạo contours cho từng slice
             contours = []
@@ -185,10 +218,42 @@ class Structure:
 
             self.contours = contours
 
-        except ImportError:
-            logger.warning("Không thể import OpenCV để tạo contours từ mask")
         except Exception as e:
             logger.error(f"Lỗi khi tạo contours từ mask: {e}")
+            self._generate_contours_fallback()
+
+    def _generate_contours_fallback(self) -> None:
+        """Phương thức dự phòng để tạo contours khi không có OpenCV."""
+        if self.mask is None:
+            return
+
+        try:
+            # Cố gắng sử dụng scikit-image nếu có
+            from skimage import measure
+
+            contours = []
+            for z in range(self.mask.shape[0]):
+                slice_mask = self.mask[z]
+                # Tìm contours với skimage
+                slice_contours = measure.find_contours(slice_mask, 0.5)
+                # Chuyển định dạng để tương thích với kết quả OpenCV
+                formatted_contours = []
+                for c in slice_contours:
+                    # Chuyển từ [y, x] sang [x, y] và thêm chiều mới
+                    c = np.fliplr(c).astype(np.int32)
+                    c = c.reshape(-1, 1, 2)
+                    formatted_contours.append(c)
+
+                contours.append(formatted_contours)
+
+            self.contours = contours
+
+        except ImportError:
+            logger.warning(
+                "Cả OpenCV và scikit-image đều không khả dụng. Không thể tạo contours từ mask."
+            )
+            # Tạo contours rỗng
+            self.contours = [[]] * (self.mask.shape[0] if self.mask is not None else 0)
 
     def _generate_mask_from_contours(self) -> None:
         """Tạo mask từ contours."""
@@ -196,7 +261,12 @@ class Structure:
             return
 
         try:
-            import cv2
+            if not HAS_CV2:
+                logger.warning(
+                    "OpenCV không khả dụng để tạo mask từ contours. Sử dụng phương thức dự phòng."
+                )
+                self._generate_mask_fallback()
+                return
 
             # Lấy kích thước ảnh từ metadata hoặc ước lượng
             image_shape = self.metadata.get("image_shape", None)
@@ -231,10 +301,103 @@ class Structure:
 
             self.mask = mask
 
-        except ImportError:
-            logger.warning("Không thể import OpenCV để tạo mask từ contours")
         except Exception as e:
             logger.error(f"Lỗi khi tạo mask từ contours: {e}")
+            self._generate_mask_fallback()
+
+    def _generate_mask_fallback(self) -> None:
+        """Phương thức dự phòng để tạo mask từ contours khi không có OpenCV."""
+        if not self.contours:
+            return
+
+        try:
+            # Ước lượng kích thước
+            max_x, max_y, max_z = 0, 0, 0
+            for z, slice_contours in enumerate(self.contours):
+                for contour in slice_contours:
+                    if len(contour) > 0:
+                        if hasattr(contour, "shape") and len(contour.shape) >= 3:
+                            max_x = max(
+                                max_x,
+                                np.max(contour[:, 0, 0]) if contour.size > 0 else 0,
+                            )
+                            max_y = max(
+                                max_y,
+                                np.max(contour[:, 0, 1]) if contour.size > 0 else 0,
+                            )
+                        max_z = max(max_z, z)
+
+            image_shape = (max_z + 1, max_y + 1, max_x + 1)
+
+            # Tạo mask mới
+            mask = np.zeros(image_shape, dtype=bool)
+
+            # Điền contours vào mask bằng thuật toán đơn giản
+            for z, slice_contours in enumerate(self.contours):
+                if z < mask.shape[0]:
+                    # Tạo raster mask từ các polygon
+                    try:
+                        from skimage import draw
+
+                        for contour in slice_contours:
+                            if len(contour) > 0:
+                                # Chuyển định dạng
+                                if (
+                                    hasattr(contour, "shape")
+                                    and len(contour.shape) >= 3
+                                ):
+                                    points = contour[:, 0, :]
+                                else:
+                                    points = contour
+
+                                # Tạo polygon
+                                if (
+                                    len(points) >= 3
+                                ):  # Cần ít nhất 3 điểm để tạo polygon
+                                    rr, cc = draw.polygon(
+                                        points[:, 1],
+                                        points[:, 0],
+                                        (mask.shape[1], mask.shape[2]),
+                                    )
+                                    if len(rr) > 0 and len(cc) > 0:
+                                        mask[z, rr, cc] = True
+
+                    except ImportError:
+                        logger.warning(
+                            "Không thể import skimage.draw để tạo mask từ contours."
+                        )
+                        # Phương thức đơn giản hơn: vẽ đường thẳng giữa các điểm
+                        for contour in slice_contours:
+                            if len(contour) > 0:
+                                if (
+                                    hasattr(contour, "shape")
+                                    and len(contour.shape) >= 3
+                                ):
+                                    points = contour[:, 0, :]
+                                else:
+                                    points = contour
+
+                                if len(points) >= 3:
+                                    for i in range(len(points)):
+                                        pt1 = points[i]
+                                        pt2 = points[(i + 1) % len(points)]
+
+                                        # Bresenham's line algorithm (đơn giản hóa)
+                                        x0, y0 = int(pt1[0]), int(pt1[1])
+                                        x1, y1 = int(pt2[0]), int(pt2[1])
+
+                                        if (
+                                            0 <= x0 < mask.shape[2]
+                                            and 0 <= y0 < mask.shape[1]
+                                        ):
+                                            mask[z, y0, x0] = True
+
+            self.mask = mask
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo mask từ contours với phương thức dự phòng: {e}")
+            # Tạo mask rỗng
+            self.mask = np.zeros((1, 1, 1), dtype=bool)
 
     def to_dict(self) -> Dict[str, Any]:
         """

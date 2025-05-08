@@ -251,14 +251,59 @@ class ClinicalMetricsReport:
             # Thay thế các biến trong template
             for key, value in template_data.items():
                 if isinstance(value, dict):
+                    # Xử lý các trường con
                     for sub_key, sub_value in value.items():
-                        template_content = template_content.replace(
-                            f"{{{{ {key}.{sub_key} }}}}", str(sub_value)
-                        )
+                        placeholder = f"{{{{ {key}.{sub_key} }}}}"
+                        if placeholder in template_content:
+                            template_content = template_content.replace(
+                                placeholder, str(sub_value)
+                            )
                 else:
-                    template_content = template_content.replace(
-                        f"{{{{ {key} }}}}", str(value)
-                    )
+                    # Xử lý trường thông thường
+                    placeholder = f"{{{{ {key} }}}}"
+                    if placeholder in template_content:
+                        template_content = template_content.replace(
+                            placeholder, str(value)
+                        )
+
+            # Thêm script xử lý các data-attributes vào cuối file HTML
+            javascript_handler = """
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Xử lý các chart-fill
+    document.querySelectorAll('.chart-fill[data-percent]').forEach(function(el) {
+        var percent = parseFloat(el.getAttribute('data-percent'));
+        el.style.width = percent + '%';
+    });
+
+    // Xử lý các chart-marker
+    document.querySelectorAll('.chart-marker[data-position]').forEach(function(el) {
+        var position = parseFloat(el.getAttribute('data-position'));
+        el.style.left = position + '%';
+    });
+
+    // Xử lý các metric-status
+    document.querySelectorAll('.metric-status').forEach(function(el) {
+        var text = el.textContent.trim().toLowerCase();
+        if (text.includes('good') || text.includes('tốt')) {
+            el.classList.add('status-good');
+        } else if (text.includes('medium') || text.includes('trung bình')) {
+            el.classList.add('status-medium');
+        } else if (text.includes('poor') || text.includes('kém')) {
+            el.classList.add('status-poor');
+        }
+    });
+});
+</script>
+            """
+
+            # Thêm script vào template
+            if "</body>" in template_content:
+                template_content = template_content.replace(
+                    "</body>", javascript_handler + "</body>"
+                )
+            else:
+                template_content += javascript_handler
 
             # Ghi file HTML
             with open(output_path, "w", encoding="utf-8") as f:

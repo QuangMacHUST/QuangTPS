@@ -17,13 +17,14 @@ from datetime import datetime
 
 # Sử dụng try/except cho các import không đảm bảo
 try:
-    import vtk
-    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+import vtk
+from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+    from vtk.util.numpy_support import numpy_to_vtk, vtk_to_numpy
 
-    VTK_AVAILABLE = True
+    HAS_VTK = True
 except ImportError as e:
     logging.error(f"Không thể import VTK: {e}")
-    VTK_AVAILABLE = False
+    HAS_VTK = False
 
     # Tạo lớp giả cho VTK
     class vtk:
@@ -96,8 +97,27 @@ except ImportError as e:
             def SetScalarComponentFromFloat(self, *args):
                 pass
 
+        class vtkFloatArray:
+            def SetNumberOfComponents(self, *args):
+                pass
+
+            def SetNumberOfTuples(self, *args):
+                pass
+
+            def SetName(self, *args):
+                pass
+
+            def SetValue(self, *args):
+                pass
+
+            def GetPointer(self, *args):
+                return None
+
         class vtkSmartVolumeMapper:
             def SetInputData(self, *args):
+                pass
+
+            def Update(self, *args):
                 pass
 
         class vtkVolumeProperty:
@@ -117,8 +137,14 @@ except ImportError as e:
             def AddRGBPoint(self, *args):
                 pass
 
+            def RemoveAllPoints(self, *args):
+                pass
+
         class vtkPiecewiseFunction:
             def AddPoint(self, *args):
+                pass
+
+            def RemoveAllPoints(self, *args):
                 pass
 
         class vtkVolume:
@@ -132,7 +158,7 @@ except ImportError as e:
 
 
 # Khai báo các class VTK để tránh lỗi linter nếu VTK có sẵn
-if VTK_AVAILABLE:
+if HAS_VTK:
     vtkMarchingCubes = vtk.vtkMarchingCubes
     vtkSmoothPolyDataFilter = vtk.vtkSmoothPolyDataFilter
     vtkPolyDataMapper = vtk.vtkPolyDataMapper
@@ -151,7 +177,7 @@ else:
     vtkPolyDataMapper = vtk.vtkPolyDataMapper
     vtkActor = vtk.vtkActor
     vtkImageData = vtk.vtkImageData
-    vtkFloatArray = type("vtkFloatArray", (), {})
+    vtkFloatArray = vtk.vtkFloatArray
     vtkSmartVolumeMapper = vtk.vtkSmartVolumeMapper
     vtkVolumeProperty = vtk.vtkVolumeProperty
     vtkColorTransferFunction = vtk.vtkColorTransferFunction
@@ -160,34 +186,34 @@ else:
     VTK_FLOAT = vtk.VTK_FLOAT
 
 try:
-    from PyQt5.QtWidgets import (
-        QWidget,
-        QVBoxLayout,
-        QHBoxLayout,
-        QPushButton,
-        QLabel,
-        QSlider,
+from PyQt5.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QSlider,
         QCheckBox,
         QComboBox,
         QGroupBox,
-        QFrame,
+    QFrame,
         QSplitter,
-        QSpinBox,
+    QSpinBox,
         QDoubleSpinBox,
         QTabWidget,
         QMessageBox,
-        QSizePolicy,
+    QSizePolicy,
         QStackedWidget,
         QApplication,  # Thêm QApplication cho test standalone
         QDialog,
         QFileDialog,
-        QToolBar,
-        QAction,
+    QToolBar,
+    QAction,
         QActionGroup,
         QDialogButtonBox,
         QInputDialog,
-        QTableWidget,
-        QTableWidgetItem,
+    QTableWidget,
+    QTableWidgetItem,
         QProgressBar,
     )
     from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer, QThread, pyqtSlot, QPoint
@@ -209,7 +235,7 @@ except ImportError as e:
 
 # Import các module nội bộ của QuangTPS
 try:
-    from quangtps.ui.vtk_viewer_3d import VTKViewer3D
+from quangtps.ui.vtk_viewer_3d import VTKViewer3D
     from quangtps.ui.isodose_selector import IsodoseSelector
     from quangtps.ui.structure_visibility_panel import StructureVisibilityPanel
     from quangtps.ui.colormap_selector import ColorMapSelector
@@ -301,7 +327,7 @@ class DoseVisualization3D(QWidget):
     def setup_ui(self):
         """Set up the user interface components."""
         # Kiểm tra các dependency
-        if not PYQT5_AVAILABLE or not VTK_AVAILABLE or not QUANGTPS_MODULES_AVAILABLE:
+        if not PYQT5_AVAILABLE or not HAS_VTK or not QUANGTPS_MODULES_AVAILABLE:
             self._setup_fallback_ui()
             return
 
@@ -445,7 +471,7 @@ class DoseVisualization3D(QWidget):
         prescription_dose : float, optional
             The prescription dose in Gy
         """
-        if not VTK_AVAILABLE:
+        if not HAS_VTK:
             logger.warning("VTK is not available, cannot set dose grid.")
             return
 
@@ -497,7 +523,7 @@ class DoseVisualization3D(QWidget):
         structures : list
             List of structure objects to visualize
         """
-        if not VTK_AVAILABLE:
+        if not HAS_VTK:
             logger.warning("VTK is not available, cannot set structures.")
             return
 
@@ -512,7 +538,7 @@ class DoseVisualization3D(QWidget):
 
     def update_visualization(self):
         """Update the 3D visualization with current settings."""
-        if not VTK_AVAILABLE or not hasattr(self, "vtk_viewer"):
+        if not HAS_VTK or not hasattr(self, "vtk_viewer"):
             logger.warning("VTK is not available or VTK viewer is not initialized.")
             return
 
@@ -620,7 +646,7 @@ class DoseVisualization3D(QWidget):
 
     def _convert_dose_grid_to_vtk(self):
         """Convert dose grid to VTK image data."""
-        if not VTK_AVAILABLE or self.dose_grid is None:
+        if not HAS_VTK or self.dose_grid is None:
             return None
 
         try:
@@ -652,7 +678,7 @@ class DoseVisualization3D(QWidget):
 
     def _create_isodose_volume(self):
         """Create volume rendering of dose distribution."""
-        if not VTK_AVAILABLE or self.dose_grid is None:
+        if not HAS_VTK or self.dose_grid is None:
             return
 
         try:

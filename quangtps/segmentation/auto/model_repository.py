@@ -4,7 +4,7 @@
 """
 Module quản lý kho mô hình phân đoạn tự động.
 
-Module này cung cấp các lớp và hàm để tải, quản lý và 
+Module này cung cấp các lớp và hàm để tải, quản lý và
 triển khai các mô hình học sâu cho việc phân đoạn tự động các cấu trúc giải phẫu.
 """
 
@@ -20,6 +20,8 @@ from pathlib import Path
 import threading
 import time
 from datetime import datetime
+import hashlib
+import urllib.request
 
 from quangtps.core.config import Config
 
@@ -31,607 +33,564 @@ MODEL_REGISTRY_URL = "https://quangtps-models.example.com/registry.json"
 class ModelRepository:
     """
     Lớp quản lý kho lưu trữ các mô hình phân đoạn tự động.
-    
+
     Cung cấp các phương thức để tải, cập nhật, liệt kê và quản lý các mô hình
     học sâu được sử dụng cho phân đoạn tự động trong QuangTPS.
     """
-    
-    def __init__(self):
-        """Khởi tạo kho mô hình."""
-        self.config = Config.get_instance()
-        self.models_dir = os.path.join(self.config.data_dir, 'models')
-        self._ensure_model_directory()
-        self.registry = {}
-        self.installed_models = {}
-        self.load_local_models()
-        
+
+    def __init__(self, models_dir: Optional[str] = None):
+        """
+        Khởi tạo kho lưu trữ mô hình.
+
+        Parameters
+        ----------
+        models_dir : Optional[str], optional
+            Thư mục chứa mô hình, mặc định là None (sử dụng thư mục mặc định)
+        """
+        if models_dir is None:
+            # Sử dụng thư mục mặc định: data/models/auto_segmentation
+            self.models_dir = os.path.join("data", "models", "auto_segmentation")
+        else:
+            self.models_dir = models_dir
+
+        # Tạo thư mục nếu chưa tồn tại
+        os.makedirs(self.models_dir, exist_ok=True)
+
+        # Tệp cơ sở dữ liệu mô hình
+        self.db_file = os.path.join(self.models_dir, "models_db.json")
+
+        # URL các kho lưu trữ từ xa
+        self.remote_repositories = [
+            "https://github.com/quangtps/models/releases/download/",
+            "https://huggingface.co/models/quangtps/",
+        ]
+
+        # Tải cơ sở dữ liệu mô hình
+        self.models_db = self._load_models_db()
+
         # Theo dõi quá trình tải xuống
         self.download_progress = {}
         self.download_threads = {}
-    
-    def _ensure_model_directory(self):
-        """Đảm bảo thư mục mô hình tồn tại."""
-        if not os.path.exists(self.models_dir):
-            os.makedirs(self.models_dir)
-            logger.info(f"Đã tạo thư mục mô hình: {self.models_dir}")
-    
-    def load_local_models(self) -> Dict[str, Any]:
+
+    def _load_models_db(self) -> Dict[str, Any]:
         """
-        Tải thông tin về các mô hình đã cài đặt cục bộ.
-        
-        Returns:
-            Dict[str, Any]: Thông tin về các mô hình đã cài đặt.
+        Tải cơ sở dữ liệu mô hình từ tệp JSON.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Cơ sở dữ liệu mô hình
         """
-        self.installed_models = {}
-        
+        if os.path.exists(self.db_file):
+            try:
+                with open(self.db_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Lỗi khi tải cơ sở dữ liệu mô hình: {str(e)}")
+
+        # Trả về cơ sở dữ liệu trống nếu không tải được
+        return {"models": [], "last_updated": time.time()}
+
+    def _save_models_db(self):
+        """Lưu cơ sở dữ liệu mô hình vào tệp JSON."""
         try:
-            # Kiểm tra các thư mục con trong thư mục models
-            for model_dir in os.listdir(self.models_dir):
-                model_path = os.path.join(self.models_dir, model_dir)
-                
-                # Chỉ xử lý các thư mục
-                if not os.path.isdir(model_path):
-                    continue
-                
-                # Kiểm tra file metadata.json
-                metadata_file = os.path.join(model_path, 'metadata.json')
+            with open(self.db_file, "w", encoding="utf-8") as f:
+                json.dump(self.models_db, f, indent=2)
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu cơ sở dữ liệu mô hình: {str(e)}")
+
+    def list_available_models(self) -> List[Dict[str, Any]]:
+        """
+        Lấy danh sách các mô hình có sẵn.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            Danh sách các mô hình kèm thông tin chi tiết
+        """
+        # Danh sách mô hình cục bộ
+        local_models = self._get_local_models()
+
+        # Cập nhật cơ sở dữ liệu từ xa nếu cần
+        self._update_model_database_if_needed()
+
+        # Kết hợp thông tin từ cơ sở dữ liệu với mô hình cục bộ
+        models_info = []
+
+        # Danh sách mô hình từ cơ sở dữ liệu
+        for model in self.models_db.get("models", []):
+            model_id = model.get("id")
+
+            # Kiểm tra xem mô hình có sẵn cục bộ không
+            is_local = model_id in local_models
+
+            # Thêm thông tin
+            model_info = model.copy()
+            model_info["is_local"] = is_local
+            model_info["local_path"] = local_models.get(model_id) if is_local else None
+
+            models_info.append(model_info)
+
+        return models_info
+
+    def _get_local_models(self) -> Dict[str, str]:
+        """
+        Lấy danh sách các mô hình có sẵn cục bộ.
+
+        Returns
+        -------
+        Dict[str, str]
+            Từ điển {model_id: local_path}
+        """
+        local_models = {}
+
+        # Kiểm tra các thư mục mô hình
+        if not os.path.exists(self.models_dir):
+            return local_models
+
+        # Duyệt qua các thư mục con
+        for item in os.listdir(self.models_dir):
+            item_path = os.path.join(self.models_dir, item)
+
+            # Kiểm tra thư mục mô hình
+            if os.path.isdir(item_path):
+                # Kiểm tra tệp metadata.json
+                metadata_file = os.path.join(item_path, "metadata.json")
                 if os.path.exists(metadata_file):
                     try:
-                        with open(metadata_file, 'r', encoding='utf-8') as f:
+                        with open(metadata_file, "r", encoding="utf-8") as f:
                             metadata = json.load(f)
-                            
-                        # Thêm đường dẫn đến mô hình
-                        metadata['path'] = model_path
-                        
-                        # Thêm vào từ điển mô hình đã cài đặt
-                        model_id = metadata.get('id', model_dir)
-                        self.installed_models[model_id] = metadata
-                        logger.debug(f"Đã tải thông tin mô hình cục bộ: {model_id}")
-                    except json.JSONDecodeError:
-                        logger.warning(f"File metadata.json không hợp lệ trong thư mục: {model_path}")
-                else:
-                    logger.warning(f"Không tìm thấy metadata.json trong thư mục: {model_path}")
-            
-            logger.info(f"Đã tải thông tin về {len(self.installed_models)} mô hình cục bộ")
-            return self.installed_models
+                            model_id = metadata.get("id")
+
+                            if model_id:
+                                # Kiểm tra tệp mô hình tương ứng
+                                model_file = metadata.get("model_file")
+                                if model_file and os.path.exists(
+                                    os.path.join(item_path, model_file)
+                                ):
+                                    local_models[model_id] = item_path
+                    except Exception as e:
+                        logger.error(
+                            f"Lỗi khi đọc metadata.json từ {metadata_file}: {str(e)}"
+                        )
+
+        return local_models
+
+    def _update_model_database_if_needed(self, force: bool = False):
+        """
+        Cập nhật cơ sở dữ liệu mô hình từ kho lưu trữ từ xa nếu cần.
+
+        Parameters
+        ----------
+        force : bool, optional
+            Cập nhật ngay cả khi chưa đến hạn, mặc định là False
+        """
+        # Kiểm tra xem có cần cập nhật không
+        last_updated = self.models_db.get("last_updated", 0)
+        current_time = time.time()
+
+        # Cập nhật mỗi 24 giờ
+        if force or (current_time - last_updated > 24 * 3600):
+            try:
+                # URL của cơ sở dữ liệu từ xa
+                db_url = f"{self.remote_repositories[0]}models_db.json"
+
+                # Tạo thư mục tạm
+                temp_file = os.path.join(self.models_dir, "temp_models_db.json")
+
+                # Tải tệp
+                urllib.request.urlretrieve(db_url, temp_file)
+
+                # Đọc cơ sở dữ liệu từ xa
+                with open(temp_file, "r", encoding="utf-8") as f:
+                    remote_db = json.load(f)
+
+                # Cập nhật cơ sở dữ liệu cục bộ
+                self.models_db = remote_db
+                self.models_db["last_updated"] = current_time
+
+                # Lưu cơ sở dữ liệu
+                self._save_models_db()
+
+                # Xóa tệp tạm
+                os.remove(temp_file)
+
+                logger.info("Đã cập nhật cơ sở dữ liệu mô hình từ kho lưu trữ từ xa")
         except Exception as e:
-            logger.error(f"Lỗi khi tải thông tin mô hình cục bộ: {str(e)}", exc_info=True)
-            return {}
-    
-    def fetch_registry(self, force_update: bool = False) -> bool:
+                logger.error(f"Lỗi khi cập nhật cơ sở dữ liệu mô hình: {str(e)}")
+
+    def get_model(
+        self, model_id: Optional[str] = None, structures: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """
-        Lấy registry mới nhất từ máy chủ hoặc từ bộ nhớ cache.
-        
-        Parameters:
-            force_update (bool): Bắt buộc cập nhật từ máy chủ, bỏ qua cache.
-            
-        Returns:
-            bool: True nếu thành công, False nếu không.
+        Lấy mô hình phân đoạn phù hợp.
+
+        Parameters
+        ----------
+        model_id : Optional[str], optional
+            ID của mô hình cụ thể, mặc định là None (tự động chọn)
+        structures : Optional[List[str]], optional
+            Danh sách cấu trúc cần phân đoạn, mặc định là None
+
+        Returns
+        -------
+        Dict[str, Any]
+            Thông tin mô hình bao gồm đường dẫn và metadata
         """
-        # Nếu đã có registry và không bắt buộc cập nhật, trả về True
-        if self.registry and not force_update:
-            return True
-            
-        # Use local mock registry for testing purposes
-        mock_registry_path = os.path.join(self.config.data_dir, 'mock_registry.json')
-        
-        # Create mock registry if it doesn't exist
-        if not os.path.exists(mock_registry_path):
-            mock_registry = {
-                "lung_segmentation": {
-                    "name": "Lung Segmentation",
-                    "description": "Segments both lungs from CT images",
-                    "version": "1.0.0",
-                    "size": 10485760,  # 10MB
-                    "date_added": "2023-01-15",
-                    "category": "thorax",
-                    "structures": ["left_lung", "right_lung", "lungs"],
-                    "license": "MIT",
-                    "url": "https://quangtps-models.example.com/models/lung_segmentation.zip"
-                },
-                "brain_segmentation": {
-                    "name": "Brain Segmentation",
-                    "description": "Segments brain structures from MRI images",
-                    "version": "1.0.0",
-                    "size": 15728640,  # 15MB
-                    "date_added": "2023-02-10",
-                    "category": "neuro",
-                    "structures": ["brain", "brainstem", "cerebellum"],
-                    "license": "MIT",
-                    "url": "https://quangtps-models.example.com/models/brain_segmentation.zip"
-                }
-            }
-            
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(mock_registry_path), exist_ok=True)
-            
-            # Save mock registry
-            with open(mock_registry_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_registry, f, indent=4)
-                
-            logger.info(f"Created mock registry at {mock_registry_path}")
-        
+        # Cập nhật cơ sở dữ liệu từ xa nếu cần
+        self._update_model_database_if_needed()
+
+        # Lấy danh sách mô hình cục bộ
+        local_models = self._get_local_models()
+
+        # Nếu chỉ định model_id, ưu tiên tìm mô hình đó
+        if model_id:
+            # Kiểm tra xem mô hình có sẵn cục bộ không
+            if model_id in local_models:
+                return self._load_model_info(model_id, local_models[model_id])
+
+            # Nếu không có sẵn, tải xuống
+            for model in self.models_db.get("models", []):
+                if model.get("id") == model_id:
+                    # Tải xuống mô hình
+                    success = self.download_model(model_id)
+                    if success and model_id in self._get_local_models():
+                        return self._load_model_info(
+                            model_id, self._get_local_models()[model_id]
+                        )
+                    else:
+                        logger.error(f"Không thể tải xuống mô hình {model_id}")
+
+        # Nếu không chỉ định model_id, chọn mô hình phù hợp nhất dựa vào cấu trúc
+        if structures:
+            # Tìm mô hình phù hợp nhất
+            best_model = self._find_best_model(structures, local_models)
+
+            if best_model:
+                model_id = best_model.get("id")
+
+                # Kiểm tra xem mô hình có sẵn cục bộ không
+                if model_id in local_models:
+                    return self._load_model_info(model_id, local_models[model_id])
+
+                # Nếu không có sẵn, tải xuống
+                success = self.download_model(model_id)
+                if success and model_id in self._get_local_models():
+                    return self._load_model_info(
+                        model_id, self._get_local_models()[model_id]
+                    )
+
+        # Nếu không tìm thấy mô hình phù hợp, trả về thông tin lỗi
+        logger.error("Không tìm thấy mô hình phù hợp")
+        return {
+            "id": None,
+            "path": None,
+            "error": "Không tìm thấy mô hình phù hợp",
+            "supported_structures": [],
+        }
+
+    def _find_best_model(
+        self, structures: List[str], local_models: Dict[str, str]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Tìm mô hình phù hợp nhất cho các cấu trúc cần phân đoạn.
+
+        Parameters
+        ----------
+        structures : List[str]
+            Danh sách cấu trúc cần phân đoạn
+        local_models : Dict[str, str]
+            Từ điển {model_id: local_path}
+
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            Thông tin mô hình phù hợp nhất, hoặc None nếu không tìm thấy
+        """
+        best_model = None
+        max_structure_match = 0
+
+        # Ưu tiên mô hình cục bộ trước
+        for model in self.models_db.get("models", []):
+            model_id = model.get("id")
+            model_structures = model.get("supported_structures", [])
+
+            # Đếm số cấu trúc khớp
+            structure_match = sum(1 for s in structures if s in model_structures)
+
+            # Ưu tiên mô hình cục bộ
+            local_bonus = 2 if model_id in local_models else 0
+
+            # Tổng điểm = số cấu trúc khớp + ưu tiên cục bộ
+            total_score = structure_match + local_bonus
+
+            # Cập nhật mô hình tốt nhất
+            if (
+                structure_match > 0  # Phải hỗ trợ ít nhất một cấu trúc
+                and (best_model is None or total_score > max_structure_match)
+            ):
+                best_model = model
+                max_structure_match = total_score
+
+        return best_model
+
+    def _load_model_info(self, model_id: str, model_path: str) -> Dict[str, Any]:
+        """
+        Tải thông tin mô hình từ thư mục cục bộ.
+
+        Parameters
+        ----------
+        model_id : str
+            ID của mô hình
+        model_path : str
+            Đường dẫn đến thư mục mô hình
+
+        Returns
+        -------
+        Dict[str, Any]
+            Thông tin mô hình
+        """
         try:
-            # Read from mock registry
-            with open(mock_registry_path, 'r', encoding='utf-8') as f:
-                self.registry = json.load(f)
-            
-            logger.info(f"Loaded mock registry with {len(self.registry)} models")
-            return True
-            
+            # Đọc metadata
+            metadata_file = os.path.join(model_path, "metadata.json")
+            with open(metadata_file, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+
+            # Lấy đường dẫn đến tệp mô hình
+            model_file = metadata.get("model_file")
+            model_file_path = (
+                os.path.join(model_path, model_file) if model_file else None
+            )
+
+            # Kiểm tra tệp mô hình
+            if not model_file or not os.path.exists(model_file_path):
+                logger.error(
+                    f"Không tìm thấy tệp mô hình {model_file} trong {model_path}"
+                )
+                return {
+                    "id": model_id,
+                    "path": None,
+                    "error": "Không tìm thấy tệp mô hình",
+                    "metadata": metadata,
+                }
+
+            # Trả về thông tin mô hình
+            return {
+                "id": model_id,
+                "path": model_file_path,
+                "metadata": metadata,
+                "supported_structures": metadata.get("supported_structures", []),
+            }
+
         except Exception as e:
-            logger.error(f"Không thể đọc mock registry: {str(e)}")
+            logger.error(f"Lỗi khi tải thông tin mô hình {model_id}: {str(e)}")
+            return {
+                "id": model_id,
+                "path": None,
+                "error": str(e),
+                "supported_structures": [],
+            }
+
+    def download_model(self, model_id: str) -> bool:
+        """
+        Tải xuống mô hình từ kho lưu trữ từ xa.
+
+        Parameters
+        ----------
+        model_id : str
+            ID của mô hình cần tải xuống
+
+        Returns
+        -------
+        bool
+            True nếu tải xuống thành công, False nếu thất bại
+        """
+        # Cập nhật cơ sở dữ liệu từ xa
+        self._update_model_database_if_needed()
+
+        # Tìm thông tin mô hình trong cơ sở dữ liệu
+        model_info = None
+        for model in self.models_db.get("models", []):
+            if model.get("id") == model_id:
+                model_info = model
+                break
+
+        if not model_info:
+            logger.error(
+                f"Không tìm thấy thông tin mô hình {model_id} trong cơ sở dữ liệu"
+            )
             return False
 
-        # Commented out original remote fetching code
-        """
-        try:
-            # Gửi yêu cầu GET đến máy chủ
-            response = requests.get(self.registry_url, timeout=10)
-            
-            # Kiểm tra trạng thái phản hồi
-            if response.status_code == 200:
-                # Phân tích JSON từ phản hồi
-                self.registry = response.json()
-                
-                # Lưu vào bộ nhớ cache
-                cache_path = os.path.join(self.cache_dir, 'registry.json')
-                os.makedirs(self.cache_dir, exist_ok=True)
-                
-                with open(cache_path, 'w', encoding='utf-8') as f:
-                    json.dump(self.registry, f, indent=4)
-                
-                return True
-            else:
-                logger.error(f"Lỗi khi tải registry: {response.status_code} - {response.text}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Không thể kết nối đến registry: {str(e)}")
-            
-            # Thử tải từ bộ nhớ cache nếu có
-            cache_path = os.path.join(self.cache_dir, 'registry.json')
-            if os.path.exists(cache_path):
-                try:
-                    with open(cache_path, 'r', encoding='utf-8') as f:
-                        self.registry = json.load(f)
-                    logger.warning("Đang sử dụng registry từ bộ nhớ cache")
-                    return True
-                except Exception as e2:
-                    logger.error(f"Không thể đọc registry từ bộ nhớ cache: {str(e2)}")
-            
-            return False
-        """
-    
-    def download_model(self, model_id: str, callback=None) -> bool:
-        """
-        Tải xuống mô hình từ registry từ xa.
-        
-        Parameters:
-            model_id (str): ID của mô hình cần tải.
-            callback (callable, optional): Hàm callback để cập nhật tiến trình.
-            
-        Returns:
-            bool: True nếu tải thành công, False nếu không.
-        """
-        # Kiểm tra mô hình có trong registry không
-        if model_id not in self.registry:
-            logger.error(f"Không tìm thấy mô hình {model_id} trong registry")
-            return False
-        
-        model_info = self.registry[model_id]
-        
-        # Create mock model directory and files for testing
+        # Tạo thư mục cho mô hình
         model_dir = os.path.join(self.models_dir, model_id)
         os.makedirs(model_dir, exist_ok=True)
-        
-        # Create a mock config file
-        config = {
-            "name": model_info.get("name", "Unknown Model"),
-            "version": model_info.get("version", "1.0.0"),
-            "model_type": "unet",
-            "input_shape": [256, 256, 1],
-            "output_shape": [256, 256, 1],
-            "weights_file": "model.h5",
-            "preprocessing": {
-                "window_width": 1500,
-                "window_level": -600,
-                "normalize": True
-            },
-            "structures": model_info.get("structures", ["unknown"]),
-            "description": model_info.get("description", "")
-        }
-        
-        with open(os.path.join(model_dir, "config.json"), "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
-        
-        # Create a mock model file
-        import numpy as np
-        mock_model = np.zeros((1000,), dtype=np.float32)  # Small mock model file
-        np.save(os.path.join(model_dir, "model.npy"), mock_model)
-        
-        # Create an empty h5 file to simulate the model
-        with open(os.path.join(model_dir, "model.h5"), "wb") as f:
-            f.write(b'\x89HDF\r\n\x1a\n\x00\x00\x00\x00\x00\x08\x08\x00')
-        
-        # Update installed models
-        self.installed_models[model_id] = {
-            "name": model_info.get("name", "Unknown"),
-            "version": model_info.get("version", "1.0.0"),
-            "path": model_dir,
-            "date_installed": datetime.now().isoformat(),
-            "structures": model_info.get("structures", [])
-        }
-        
-        # Save installed models to disk
-        self._save_installed_models()
-        
-        logger.info(f"Created mock model: {model_id}")
-        return True
-        
-        """
-        # Original implementation
+
         try:
-            # Tạo thư mục tạm để tải xuống
-            temp_dir = os.path.join(self.cache_dir, 'downloads')
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            # Tạo đường dẫn đến file tạm
-            temp_file = os.path.join(temp_dir, f"{model_id}.zip")
-            
-            # Tải file từ URL
-            download_url = model_info.get('url')
-            if not download_url:
-                logger.error(f"Không tìm thấy URL tải xuống cho mô hình {model_id}")
+            # Tải xuống tệp metadata
+            metadata_url = f"{self.remote_repositories[0]}/{model_id}/metadata.json"
+            metadata_file = os.path.join(model_dir, "metadata.json")
+            urllib.request.urlretrieve(metadata_url, metadata_file)
+
+            # Đọc metadata
+            with open(metadata_file, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+
+            # Lấy thông tin tệp mô hình
+            model_file = metadata.get("model_file")
+            if not model_file:
+                logger.error(
+                    f"Không tìm thấy thông tin tệp mô hình trong metadata của {model_id}"
+                )
                 return False
-            
-            # Tải xuống với hiển thị tiến trình
-            response = requests.get(download_url, stream=True, timeout=60)
-            
-            if response.status_code != 200:
-                logger.error(f"Lỗi khi tải mô hình {model_id}: {response.status_code} - {response.text}")
+
+            # Tải xuống tệp mô hình
+            model_url = f"{self.remote_repositories[0]}/{model_id}/{model_file}"
+            model_file_path = os.path.join(model_dir, model_file)
+
+            logger.info(f"Đang tải xuống mô hình {model_id} từ {model_url}")
+            urllib.request.urlretrieve(model_url, model_file_path)
+
+            # Kiểm tra tính toàn vẹn của tệp
+            if "md5" in metadata:
+                expected_md5 = metadata["md5"]
+                actual_md5 = self._compute_md5(model_file_path)
+
+                if expected_md5 != actual_md5:
+                    logger.error(f"Kiểm tra MD5 thất bại cho {model_id}")
                 return False
-            
-            # Lấy tổng kích thước file
-            total_size = int(response.headers.get('content-length', 0))
-            block_size = 1024  # 1 Kibibyte
-            
-            # Tải xuống từng phần
-            with open(temp_file, 'wb') as f:
-                downloaded = 0
-                for data in response.iter_content(block_size):
-                    f.write(data)
-                    downloaded += len(data)
-                    
-                    # Cập nhật tiến trình nếu có callback
-                    if callback and total_size > 0:
-                        progress = downloaded / total_size
-                        callback(progress)
-            
-            # Giải nén file
-            model_dir = os.path.join(self.models_dir, model_id)
-            
-            # Xóa thư mục cũ nếu tồn tại
+
+            logger.info(f"Đã tải xuống mô hình {model_id} thành công")
+            return True
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tải xuống mô hình {model_id}: {str(e)}")
+            # Xóa thư mục mô hình nếu tải xuống thất bại
             if os.path.exists(model_dir):
                 shutil.rmtree(model_dir)
-                
-            # Tạo thư mục mới
-            os.makedirs(model_dir, exist_ok=True)
-            
-            # Giải nén
-            with zipfile.ZipFile(temp_file, 'r') as zip_ref:
-                zip_ref.extractall(model_dir)
-                
-            # Cập nhật thông tin mô hình đã cài đặt
-            self.installed_models[model_id] = {
-                "name": model_info.get("name", "Unknown"),
-                "version": model_info.get("version", "1.0.0"),
-                "path": model_dir,
-                "date_installed": datetime.now().isoformat(),
-                "structures": model_info.get("structures", [])
-            }
-            
-            # Lưu thông tin cài đặt
-            self._save_installed_models()
-            
-            # Xóa file tạm
-            os.remove(temp_file)
-            
-            logger.info(f"Đã tải xuống và cài đặt mô hình {model_id} thành công")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Lỗi khi tải xuống mô hình {model_id}: {str(e)}", exc_info=True)
             return False
-        """
-    
-    def get_download_progress(self, model_id: str) -> Dict[str, Any]:
-        """
-        Lấy thông tin về tiến trình tải xuống mô hình.
-        
-        Parameters:
-            model_id (str): ID của mô hình.
-            
-        Returns:
-            Dict[str, Any]: Thông tin về tiến trình tải xuống.
-        """
-        return self.download_progress.get(model_id, {
-            'status': 'not_started',
-            'progress': 0,
-            'error': None
-        })
-    
-    def cancel_download(self, model_id: str) -> bool:
-        """
-        Hủy bỏ quá trình tải xuống mô hình.
-        
-        Parameters:
-            model_id (str): ID của mô hình.
-            
-        Returns:
-            bool: True nếu hủy thành công, False nếu không.
-        """
-        if (model_id in self.download_threads and 
-            model_id in self.download_progress and 
-            self.download_progress[model_id]['status'] == 'downloading'):
-            
-            # Không thể thực sự hủy thread, chỉ đánh dấu là đã hủy
-            self.download_progress[model_id]['status'] = 'cancelled'
-            logger.info(f"Đã hủy tải xuống mô hình {model_id}")
-            return True
-        
-        return False
-    
-    def remove_model(self, model_id: str) -> bool:
-        """
-        Xóa mô hình đã cài đặt.
-        
-        Parameters:
-            model_id (str): ID của mô hình cần xóa.
-            
-        Returns:
-            bool: True nếu xóa thành công, False nếu không.
-        """
-        if model_id not in self.installed_models:
-            logger.warning(f"Không thể xóa mô hình không tồn tại: {model_id}")
-            return False
-        
-        try:
-            model_dir = self.installed_models[model_id].get('path')
-            if model_dir and os.path.exists(model_dir):
-                shutil.rmtree(model_dir)
-                logger.info(f"Đã xóa mô hình {model_id}")
-                
-                # Cập nhật danh sách mô hình đã cài đặt
-                self.load_local_models()
-                
-                # Cập nhật registry nếu đã tải
-                if self.registry and model_id in self.registry:
-                    self.registry[model_id]['installed'] = False
-                
-                return True
-            else:
-                logger.error(f"Không tìm thấy thư mục của mô hình {model_id}")
-                return False
-        except Exception as e:
-            logger.error(f"Lỗi khi xóa mô hình {model_id}: {str(e)}", exc_info=True)
-            return False
-    
-    def get_model_info(self, model_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Lấy thông tin chi tiết về mô hình.
-        
-        Parameters:
-            model_id (str): ID của mô hình.
-            
-        Returns:
-            Optional[Dict[str, Any]]: Thông tin của mô hình, None nếu không tìm thấy.
-        """
-        # Kiểm tra local models trước
-        if model_id in self.installed_models:
-            return self.installed_models[model_id]
-        
-        # Kiểm tra trong registry
-        if not self.registry:
-            self.fetch_registry()
-        
-        if model_id in self.registry:
-            return self.registry[model_id]
-        
-        return None
-    
-    def get_available_models(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Lấy danh sách các mô hình có sẵn, có thể lọc theo danh mục.
-        
-        Parameters:
-            category (Optional[str]): Lọc theo danh mục mô hình (nếu có)
-            
-        Returns:
-            List[Dict[str, Any]]: Danh sách thông tin về các mô hình
-        """
-        result = []
-        
-        # Ensure we have the registry
-        if not self.registry:
-            self.fetch_registry()
-            
-        # If fetch_registry returned a boolean instead of the registry, or registry is still not available
-        if not self.registry or isinstance(self.registry, bool):
-            logger.warning("Registry unavailable")
-            return result
-            
-        # Process models and filter by category
-        for model_id, model_info in self.registry.items():
-            if category is None or model_info.get('category') == category:
-                # Thêm ID vào thông tin mô hình
-                model_data = model_info.copy()
-                model_data['id'] = model_id
-                result.append(model_data)
-        
-        return result
-    
-    def get_available_remote_models(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Lấy danh sách các mô hình có sẵn từ registry từ xa.
-        
-        Parameters:
-            category (Optional[str]): Lọc theo danh mục mô hình (nếu có).
-            
-        Returns:
-            List[Dict[str, Any]]: Danh sách thông tin về các mô hình từ xa.
-        """
-        # Đảm bảo đã tải registry mới nhất
-        self.fetch_registry(force_update=True)
-        
-        return self.get_available_models(category)
-    
-    def get_installed_models(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Lấy danh sách các mô hình đã cài đặt, có thể lọc theo danh mục.
-        
-        Parameters:
-            category (Optional[str]): Danh mục để lọc.
-            
-        Returns:
-            List[Dict[str, Any]]: Danh sách thông tin các mô hình đã cài đặt.
-        """
-        models = []
-        
-        for model_id, model_info in self.installed_models.items():
-            if category is None or model_info.get('category') == category:
-                models.append({
-                    'id': model_id,
-                    **model_info
-                })
-        
-        return models
-    
-    def load_model(self, model_id: str) -> Any:
-        """
-        Tải mô hình vào bộ nhớ để sử dụng.
-        
-        Parameters:
-            model_id (str): ID của mô hình cần tải.
-            
-        Returns:
-            Any: Đối tượng mô hình đã tải, None nếu không tải được.
-        """
-        if model_id not in self.installed_models:
-            logger.error(f"Không thể tải mô hình chưa cài đặt: {model_id}")
-            return None
-        
-        model_info = self.installed_models[model_id]
-        model_path = model_info.get('path')
-        
-        if not model_path or not os.path.exists(model_path):
-            logger.error(f"Không tìm thấy thư mục của mô hình {model_id}")
-            return None
-        
-        # Đọc cấu hình mô hình
-        config_file = os.path.join(model_path, 'config.json')
-        if not os.path.exists(config_file):
-            logger.error(f"Không tìm thấy file cấu hình của mô hình {model_id}")
-            return None
-        
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            # Đọc thông tin về loại mô hình và file weights
-            model_type = config.get('model_type', 'unknown')
-            weights_file = config.get('weights_file', 'model.h5')
-            weights_path = os.path.join(model_path, weights_file)
-            
-            if not os.path.exists(weights_path):
-                logger.error(f"Không tìm thấy file weights {weights_file} của mô hình {model_id}")
-                return None
-            
-            # TODO: Implement model loading based on model_type
-            # For now, just return the config and path information
-            return {
-                'id': model_id,
-                'config': config,
-                'weights_path': weights_path,
-                'model_path': model_path,
-                'model_type': model_type
-            }
-            
-        except Exception as e:
-            logger.error(f"Lỗi khi tải mô hình {model_id}: {str(e)}", exc_info=True)
-            return None
-            
-    def update_model(self, model_id: str, callback=None) -> bool:
-        """
-        Cập nhật mô hình lên phiên bản mới nhất.
-        
-        Parameters:
-            model_id (str): ID của mô hình cần cập nhật.
-            callback (callable, optional): Hàm callback để cập nhật tiến trình.
-            
-        Returns:
-            bool: True nếu cập nhật thành công, False nếu không.
-        """
-        # Kiểm tra mô hình đã cài đặt chưa
-        if model_id not in self.installed_models:
-            logger.error(f"Không thể cập nhật mô hình chưa cài đặt: {model_id}")
-            return False
-        
-        # Đảm bảo đã tải registry mới nhất
-        self.fetch_registry(force_update=True)
-        
-        # Kiểm tra mô hình có trong registry không
-        if model_id not in self.registry:
-            logger.error(f"Không tìm thấy mô hình {model_id} trong registry")
-            return False
-        
-        # Kiểm tra có phiên bản mới không
-        local_version = self.installed_models[model_id].get('version', '0.0.0')
-        remote_version = self.registry[model_id].get('version', '0.0.0')
-        
-        if local_version == remote_version:
-            logger.info(f"Mô hình {model_id} đã ở phiên bản mới nhất ({local_version})")
-            return True
-        
-        # Tải xuống phiên bản mới
-        logger.info(f"Cập nhật mô hình {model_id} từ phiên bản {local_version} lên {remote_version}")
-        return self.download_model(model_id, callback)
-    
-    def check_for_updates(self) -> Dict[str, Any]:
-        """
-        Kiểm tra các cập nhật có sẵn cho mô hình đã cài đặt.
-        
-        Returns:
-            Dict[str, Any]: Thông tin về các mô hình có cập nhật.
-        """
-        self.fetch_registry(force_update=True)
-        updates = {}
-        
-        for model_id, model_info in self.registry.items():
-            if model_id in self.installed_models:
-                local_version = self.installed_models[model_id].get('version', '0.0.0')
-                remote_version = model_info.get('version', '0.0.0')
-                
-                if local_version != remote_version:
-                    updates[model_id] = {
-                        'id': model_id,
-                        'name': model_info.get('name', model_id),
-                        'description': model_info.get('description', ''),
-                        'local_version': local_version,
-                        'remote_version': remote_version
-                    }
-        
-        return updates
 
-    def _save_installed_models(self):
+    def _compute_md5(self, file_path: str) -> str:
         """
-        Lưu thông tin các mô hình đã cài đặt vào file.
+        Tính toán MD5 hash của tệp.
+
+        Parameters
+        ----------
+        file_path : str
+            Đường dẫn đến tệp
+
+        Returns
+        -------
+        str
+            MD5 hash dưới dạng chuỗi hex
         """
-        installed_models_path = os.path.join(self.models_dir, 'installed_models.json')
-        with open(installed_models_path, 'w', encoding='utf-8') as f:
-            json.dump(self.installed_models, f, indent=4)
-        logger.info(f"Đã lưu thông tin {len(self.installed_models)} mô hình đã cài đặt vào file")
+        hash_md5 = hashlib.md5()
+
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+
+        return hash_md5.hexdigest()
+
+    def update_model(self, model_id: str) -> bool:
+        """
+        Cập nhật mô hình đã tải xuống.
+
+        Parameters
+        ----------
+        model_id : str
+            ID của mô hình cần cập nhật
+
+        Returns
+        -------
+        bool
+            True nếu cập nhật thành công, False nếu thất bại
+        """
+        # Kiểm tra xem mô hình có tồn tại cục bộ không
+        local_models = self._get_local_models()
+        if model_id not in local_models:
+            logger.error(f"Không tìm thấy mô hình {model_id} cục bộ để cập nhật")
+        return False
+
+        # Cập nhật cơ sở dữ liệu từ xa
+        self._update_model_database_if_needed(force=True)
+
+        # Tìm thông tin mô hình trong cơ sở dữ liệu
+        model_info = None
+        for model in self.models_db.get("models", []):
+            if model.get("id") == model_id:
+                model_info = model
+                break
+
+        if not model_info:
+            logger.error(
+                f"Không tìm thấy thông tin mô hình {model_id} trong cơ sở dữ liệu"
+            )
+            return False
+
+        # Kiểm tra phiên bản
+        local_metadata_file = os.path.join(local_models[model_id], "metadata.json")
+        try:
+            with open(local_metadata_file, "r", encoding="utf-8") as f:
+                local_metadata = json.load(f)
+
+            local_version = local_metadata.get("version", "0.0.0")
+            remote_version = model_info.get("version", "0.0.0")
+
+            # So sánh phiên bản
+            if self._version_compare(local_version, remote_version) >= 0:
+                logger.info(
+                    f"Mô hình {model_id} đã ở phiên bản mới nhất ({local_version})"
+                )
+                return True
+
+            # Có phiên bản mới, cập nhật
+            logger.info(
+                f"Cập nhật mô hình {model_id} từ phiên bản {local_version} lên {remote_version}"
+            )
+
+            # Xóa thư mục mô hình cũ
+            shutil.rmtree(local_models[model_id])
+
+            # Tải xuống mô hình mới
+            return self.download_model(model_id)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật mô hình {model_id}: {str(e)}")
+            return False
+
+    def _version_compare(self, version1: str, version2: str) -> int:
+        """
+        So sánh hai chuỗi phiên bản.
+
+        Parameters
+        ----------
+        version1 : str
+            Chuỗi phiên bản thứ nhất
+        version2 : str
+            Chuỗi phiên bản thứ hai
+
+        Returns
+        -------
+        int
+            -1 nếu version1 < version2, 0 nếu version1 = version2, 1 nếu version1 > version2
+        """
+        v1_parts = [int(x) for x in version1.split(".")]
+        v2_parts = [int(x) for x in version2.split(".")]
+
+        # Đảm bảo cả hai mảng có cùng độ dài
+        length = max(len(v1_parts), len(v2_parts))
+        v1_parts.extend([0] * (length - len(v1_parts)))
+        v2_parts.extend([0] * (length - len(v2_parts)))
+
+        # So sánh từng phần
+        for i in range(length):
+            if v1_parts[i] < v2_parts[i]:
+                return -1
+            elif v1_parts[i] > v2_parts[i]:
+                return 1
+
+        return 0  # Hai phiên bản bằng nhau
 
 
 # Tạo một instance singleton của ModelRepository để sử dụng toàn cục
-model_repository = ModelRepository() 
+model_repository = ModelRepository()

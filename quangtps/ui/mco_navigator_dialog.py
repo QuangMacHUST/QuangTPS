@@ -63,8 +63,8 @@ try:
     import matplotlib
 
     matplotlib.use("Qt5Agg")
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-    from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
     import matplotlib.pyplot as plt
 
     MATPLOTLIB_AVAILABLE = True
@@ -1057,7 +1057,7 @@ class MCONavigatorDialog(QDialog):
                     max_val,
                     current_val,
                 )
-                slider.valueChanged.connect(self._on_slider_value_changed)
+            slider.valueChanged.connect(self._on_slider_value_changed)
 
                 oar_layout.addWidget(slider)
                 self.objective_sliders[objective.objective_id] = slider
@@ -1263,7 +1263,7 @@ class MCONavigatorDialog(QDialog):
                     self.history_index = len(self.history) - 1
 
                 # Update UI
-                self._update_ui_for_current_solution()
+            self._update_ui_for_current_solution()
         except Exception as e:
             logger.error(f"Error navigating to weights: {str(e)}")
 
@@ -1322,7 +1322,7 @@ class MCONavigatorDialog(QDialog):
                 self.history_index = len(self.history) - 1
 
             # Cập nhật UI
-            self._update_ui_for_current_solution()
+                self._update_ui_for_current_solution()
         except Exception as e:
             logger.error(f"Error navigating to weights: {str(e)}")
             QMessageBox.critical(
@@ -1359,7 +1359,7 @@ class MCONavigatorDialog(QDialog):
             self.solution_list.setCurrentRow(self.current_solution_index)
 
         # Update UI
-        self._update_ui_for_current_solution()
+            self._update_ui_for_current_solution()
 
     def _redo(self):
         """Redo last undone navigation"""
@@ -1376,7 +1376,7 @@ class MCONavigatorDialog(QDialog):
             self.solution_list.setCurrentRow(self.current_solution_index)
 
         # Update UI
-        self._update_ui_for_current_solution()
+            self._update_ui_for_current_solution()
 
     def _on_accept(self):
         """Accept the current solution"""
@@ -1402,7 +1402,7 @@ class MCONavigatorDialog(QDialog):
             )
 
         # Đóng dialog
-        self.accept()
+            self.accept()
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ import numpy as np
 
 # Thêm xử lý ngoại lệ khi import PyQt5
 try:
-    from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import (
         QDialog,
         QPushButton,
         QVBoxLayout,
@@ -308,6 +308,31 @@ class DoseCalculationDialog(QDialog):
         self.output_correction_check.setChecked(True)
         params_layout.addRow("Hiệu chỉnh hệ số đầu ra:", self.output_correction_check)
 
+        # Thêm tùy chọn GPU
+        self.use_gpu_check = QCheckBox("Kích hoạt")
+        self.use_gpu_check.setChecked(True)
+        self.use_gpu_check.setToolTip(
+            "Sử dụng GPU để tăng tốc tính toán liều nếu thuật toán hỗ trợ và phần cứng khả dụng"
+        )
+        params_layout.addRow("Tính toán với GPU:", self.use_gpu_check)
+
+        # Thêm thông tin về GPU
+        self.gpu_info_label = QLabel("Đang kiểm tra thông tin GPU...")
+        self.gpu_info_label.setStyleSheet("font-style: italic; color: #888;")
+        params_layout.addRow(self.gpu_info_label)
+
+        # Thêm combobox chọn GPU nếu có nhiều GPU
+        self.gpu_device_combo = QComboBox()
+        self.gpu_device_combo.setEnabled(False)
+        params_layout.addRow("Thiết bị GPU:", self.gpu_device_combo)
+
+        # Tùy chọn độ chính xác
+        self.gpu_precision_combo = QComboBox()
+        self.gpu_precision_combo.addItem("Đơn (nhanh hơn)", "single")
+        self.gpu_precision_combo.addItem("Kép (chính xác hơn)", "double")
+        self.gpu_precision_combo.setEnabled(False)
+        params_layout.addRow("Độ chính xác:", self.gpu_precision_combo)
+
         self.custom_params_tree = QTreeWidget()
         self.custom_params_tree.setHeaderLabels(["Tham số", "Giá trị"])
         self.custom_params_tree.setRootIsDecorated(False)
@@ -440,6 +465,12 @@ class DoseCalculationDialog(QDialog):
         # Kích hoạt/vô hiệu hóa các điều khiển ROI
         self.roi_type_combo.currentIndexChanged.connect(self.update_roi_controls)
 
+        # Kích hoạt/vô hiệu hóa các tùy chọn GPU dựa trên checkbox
+        self.use_gpu_check.toggled.connect(self.update_gpu_controls)
+
+        # Kiểm tra thông tin GPU khi khởi động
+        QTimer.singleShot(500, self.check_gpu_availability)
+
         # Xử lý nút tính toán
         self.calculate_button.clicked.connect(self.start_calculation)
 
@@ -448,6 +479,63 @@ class DoseCalculationDialog(QDialog):
 
         # Xử lý nút đóng
         self.close_button.clicked.connect(self.close)
+
+    def check_gpu_availability(self):
+        """Kiểm tra và hiển thị thông tin về GPU có sẵn"""
+        try:
+            # Thử import CuPy để kiểm tra GPU
+            import cupy as cp
+
+            # Lấy thông tin GPU
+            gpu_count = cp.cuda.runtime.getDeviceCount()
+
+            if gpu_count > 0:
+                # Có GPU khả dụng, hiển thị thông tin
+                current_device = cp.cuda.runtime.getDevice()
+                gpu_props = cp.cuda.runtime.getDeviceProperties(current_device)
+
+                # Hiển thị tên GPU và bộ nhớ
+                mem_total = gpu_props["totalGlobalMem"] / (1024**3)  # Convert to GB
+                gpu_info = f"Đã tìm thấy: {gpu_props['name']} ({mem_total:.1f} GB)"
+                self.gpu_info_label.setText(gpu_info)
+
+                # Thêm các GPU vào combobox
+                self.gpu_device_combo.clear()
+                for i in range(gpu_count):
+                    props = cp.cuda.runtime.getDeviceProperties(i)
+                    self.gpu_device_combo.addItem(f"{props['name']}", i)
+
+                # Kích hoạt các điều khiển GPU
+                self.gpu_device_combo.setEnabled(True)
+                self.gpu_precision_combo.setEnabled(True)
+                self.use_gpu_check.setEnabled(True)
+            else:
+                # Không có GPU khả dụng
+                self.gpu_info_label.setText("Không tìm thấy GPU hỗ trợ CUDA")
+                self.use_gpu_check.setChecked(False)
+                self.use_gpu_check.setEnabled(False)
+                self.gpu_device_combo.setEnabled(False)
+                self.gpu_precision_combo.setEnabled(False)
+
+        except ImportError:
+            # CuPy không được cài đặt hoặc không tìm thấy GPU
+            self.gpu_info_label.setText("Không tìm thấy thư viện CuPy hoặc GPU CUDA")
+            self.use_gpu_check.setChecked(False)
+            self.use_gpu_check.setEnabled(False)
+            self.gpu_device_combo.setEnabled(False)
+            self.gpu_precision_combo.setEnabled(False)
+        except Exception as e:
+            # Lỗi khác
+            self.gpu_info_label.setText(f"Lỗi kiểm tra GPU: {str(e)}")
+            self.use_gpu_check.setChecked(False)
+            self.use_gpu_check.setEnabled(False)
+            self.gpu_device_combo.setEnabled(False)
+            self.gpu_precision_combo.setEnabled(False)
+
+    def update_gpu_controls(self, enabled):
+        """Cập nhật trạng thái các điều khiển GPU dựa trên checkbox"""
+        self.gpu_device_combo.setEnabled(enabled)
+        self.gpu_precision_combo.setEnabled(enabled)
 
     def update_algorithm_description(self):
         """Cập nhật mô tả thuật toán."""
@@ -472,12 +560,29 @@ class DoseCalculationDialog(QDialog):
                 "kết hợp mô hình phân tán anisotropic với mô hình tương tác electron-photon. "
                 "Nó cung cấp độ chính xác cao, đặc biệt là trong các vùng không đồng nhất."
             )
-        elif algorithm_name == DoseCalculationAlgorithm.ACUROS.name:
+        elif (
+            algorithm_name == DoseCalculationAlgorithm.ACUROS.name
+            or algorithm_name == "ACUROS_XB"
+        ):
             description = (
                 "Acuros XB giải phương trình vận chuyển bức xạ tuyến tính Boltzmann, "
                 "mang lại độ chính xác tương đương Monte Carlo với tốc độ nhanh hơn đáng kể. "
-                "Đặc biệt chính xác trong các môi trường có mật độ electron không đồng nhất cao."
+                "Đặc biệt chính xác trong các môi trường có mật độ electron không đồng nhất cao. "
+                "Thuật toán này hỗ trợ tính toán GPU để tăng tốc đáng kể."
             )
+
+            # Kiểm tra xem thuật toán này có hỗ trợ GPU không
+            try:
+                from quangtps.dose.dose_engine import is_gpu_supported
+
+                if hasattr(DoseCalculationAlgorithm, "ACUROS_XB") and is_gpu_supported(
+                    DoseCalculationAlgorithm.ACUROS_XB
+                ):
+                    # Hiển thị thông tin GPU trong mô tả
+                    description += "\n\nThuật toán này hỗ trợ tính toán trên GPU để tăng tốc đáng kể."
+            except ImportError:
+                pass
+
         elif algorithm_name == DoseCalculationAlgorithm.CONV_SUPERPOSITION.name:
             description = (
                 "Convolution Superposition tích hợp convolution của năng lượng được giải phóng "
@@ -490,10 +595,36 @@ class DoseCalculationDialog(QDialog):
                 "vật lý của bức xạ ion hóa. Rất chính xác cho tất cả các loại vùng không đồng nhất "
                 "nhưng đòi hỏi thời gian tính toán lâu hơn."
             )
+
+            # Kiểm tra xem thuật toán này có hỗ trợ GPU không
+            try:
+                from quangtps.dose.dose_engine import is_gpu_supported
+
+                if is_gpu_supported(DoseCalculationAlgorithm.MONTE_CARLO):
+                    # Hiển thị thông tin GPU trong mô tả
+                    description += "\n\nThuật toán này hỗ trợ tính toán trên GPU để tăng tốc đáng kể."
+            except ImportError:
+                pass
         else:
             description = ""
 
         self.algorithm_description.setText(description)
+
+        # Cập nhật trạng thái điều khiển GPU
+        try:
+            from quangtps.dose.dose_engine import is_gpu_supported
+
+            if hasattr(DoseCalculationAlgorithm, algorithm_name):
+                algo_enum = getattr(DoseCalculationAlgorithm, algorithm_name)
+                gpu_supported = is_gpu_supported(algo_enum)
+                self.use_gpu_check.setEnabled(gpu_supported)
+                if not gpu_supported:
+                    self.use_gpu_check.setChecked(False)
+                    self.gpu_device_combo.setEnabled(False)
+                    self.gpu_precision_combo.setEnabled(False)
+        except (ImportError, AttributeError):
+            # Nếu không thể kiểm tra, mặc định vô hiệu hóa điều khiển
+            pass
 
         # Cập nhật danh sách tham số
         self.update_custom_parameters()
@@ -708,6 +839,14 @@ class DoseCalculationDialog(QDialog):
         params["heterogeneity_correction"] = self.heterogeneity_check.isChecked()
         params["threads"] = self.threads_spin.value()
         params["output_correction"] = self.output_correction_check.isChecked()
+
+        # Thêm tham số GPU
+        params["use_gpu"] = (
+            self.use_gpu_check.isChecked() and self.use_gpu_check.isEnabled()
+        )
+        if params["use_gpu"]:
+            params["gpu_device"] = self.gpu_device_combo.currentData()
+            params["gpu_precision"] = self.gpu_precision_combo.currentData()
 
         # Thêm tham số từ tree tùy chỉnh
         for i in range(self.custom_params_tree.topLevelItemCount()):

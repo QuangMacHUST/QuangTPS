@@ -100,7 +100,7 @@ class Objective:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Objective':
+    def from_dict(cls, data: Dict[str, Any]) -> "Objective":
         """Tạo mục tiêu từ từ điển."""
         obj_type = None
         if data.get("type"):
@@ -315,6 +315,7 @@ class ObjectiveFunction:
 # Lưu trữ tất cả các mục tiêu đã tạo
 _objectives_registry: Dict[str, Objective] = {}
 
+
 def register_objective(objective: Union[Objective, ObjectiveFunction]) -> str:
     """
     Đăng ký một mục tiêu mới vào registry.
@@ -333,6 +334,7 @@ def register_objective(objective: Union[Objective, ObjectiveFunction]) -> str:
     _objectives_registry[obj.objective_id] = obj
     return obj.objective_id
 
+
 def get_objective_by_id(objective_id: str) -> Optional[Objective]:
     """
     Lấy mục tiêu theo ID.
@@ -345,6 +347,7 @@ def get_objective_by_id(objective_id: str) -> Optional[Objective]:
     """
     return _objectives_registry.get(objective_id)
 
+
 def get_all_objectives() -> Dict[str, Objective]:
     """
     Lấy tất cả các mục tiêu đã đăng ký.
@@ -353,3 +356,120 @@ def get_all_objectives() -> Dict[str, Objective]:
         Từ điển mapping ID tới đối tượng mục tiêu
     """
     return _objectives_registry.copy()
+
+
+class DoseObjective:
+    """
+    Lớp định nghĩa các mục tiêu tối ưu hóa liều lượng.
+
+    Lớp này đại diện cho các mục tiêu liều lượng cụ thể được sử dụng trong quá trình
+    tối ưu hóa VMAT và IMRT, tương tự như trong Eclipse.
+    """
+
+    def __init__(
+        self,
+        structure_name: str,
+        objective_type: ObjectiveType,
+        dose_value: float,
+        volume_value: Optional[float] = None,
+        weight: float = 1.0,
+        priority: int = 1,
+        is_active: bool = True,
+        description: str = None,
+    ):
+        """
+        Khởi tạo một mục tiêu liều lượng.
+
+        Args:
+            structure_name: Tên của cấu trúc
+            objective_type: Loại mục tiêu (từ enum ObjectiveType)
+            dose_value: Giá trị liều (Gy hoặc cGy tùy thuộc vào cấu hình hệ thống)
+            volume_value: Giá trị thể tích (% hoặc cc) cho các mục tiêu DVH
+            weight: Trọng số của mục tiêu này trong quá trình tối ưu hóa
+            priority: Mức độ ưu tiên (1 = cao nhất)
+            is_active: Có áp dụng mục tiêu này không
+            description: Mô tả mục tiêu
+        """
+        self.structure_name = structure_name
+        self.objective_type = objective_type
+        self.dose_value = dose_value
+        self.volume_value = volume_value
+        self.weight = weight
+        self.priority = priority
+        self.is_active = is_active
+        self.description = description or self._generate_description()
+        self.objective_id = str(uuid.uuid4())[:8]
+
+    def _generate_description(self) -> str:
+        """Tạo mô tả tự động dựa trên thông tin mục tiêu."""
+        if self.objective_type == ObjectiveType.UPPER:
+            return f"Max dose to {self.structure_name}: {self.dose_value} Gy"
+        elif self.objective_type == ObjectiveType.LOWER:
+            return f"Min dose to {self.structure_name}: {self.dose_value} Gy"
+        elif self.objective_type == ObjectiveType.MEAN:
+            return f"Mean dose to {self.structure_name}: {self.dose_value} Gy"
+        elif self.objective_type == ObjectiveType.UNIFORM:
+            return f"Uniform dose to {self.structure_name}: {self.dose_value} Gy"
+        elif (
+            self.objective_type == ObjectiveType.DVHMAX
+            and self.volume_value is not None
+        ):
+            return f"Max {self.dose_value} Gy to {self.volume_value}% of {self.structure_name}"
+        elif (
+            self.objective_type == ObjectiveType.DVHMIN
+            and self.volume_value is not None
+        ):
+            return f"Min {self.dose_value} Gy to {self.volume_value}% of {self.structure_name}"
+        elif (
+            self.objective_type == ObjectiveType.VDMAX and self.volume_value is not None
+        ):
+            return f"Max {self.volume_value}% of {self.structure_name} receiving {self.dose_value} Gy"
+        elif (
+            self.objective_type == ObjectiveType.VDMIN and self.volume_value is not None
+        ):
+            return f"Min {self.volume_value}% of {self.structure_name} receiving {self.dose_value} Gy"
+        else:
+            return f"{self.objective_type.name} objective for {self.structure_name}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Chuyển đổi mục tiêu thành từ điển để lưu trữ."""
+        return {
+            "objective_id": self.objective_id,
+            "structure_name": self.structure_name,
+            "objective_type": self.objective_type.name,
+            "dose_value": self.dose_value,
+            "volume_value": self.volume_value,
+            "weight": self.weight,
+            "priority": self.priority,
+            "is_active": self.is_active,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DoseObjective":
+        """Tạo mục tiêu từ từ điển."""
+        try:
+            obj_type = ObjectiveType[data["objective_type"]]
+        except (KeyError, ValueError):
+            logger.warning(f"Loại mục tiêu không hợp lệ: {data.get('objective_type')}")
+            obj_type = ObjectiveType.UPPER  # Default
+
+        obj = cls(
+            structure_name=data.get("structure_name", "Unknown"),
+            objective_type=obj_type,
+            dose_value=data.get("dose_value", 0.0),
+            volume_value=data.get("volume_value"),
+            weight=data.get("weight", 1.0),
+            priority=data.get("priority", 1),
+            is_active=data.get("is_active", True),
+            description=data.get("description"),
+        )
+
+        if "objective_id" in data:
+            obj.objective_id = data["objective_id"]
+
+        return obj
+
+    def __str__(self) -> str:
+        """Biểu diễn chuỗi của mục tiêu."""
+        return self.description

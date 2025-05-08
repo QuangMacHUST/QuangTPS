@@ -256,7 +256,7 @@ class MLCCanvas(FigureCanvas):
                     if paired_leaf and new_position <= paired_leaf.position + 0.1:
                         new_position = paired_leaf.position + 0.1
 
-                # Cập nhật vị trí lá
+        # Cập nhật vị trí lá
                 leaf.position = new_position
                 self.leaf_position_changed.emit(leaf.index, new_position)
                 self.update_display()

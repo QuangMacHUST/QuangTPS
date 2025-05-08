@@ -13,7 +13,7 @@ import logging
 from typing import Dict, List, Optional, Any
 
 try:
-    from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import (
         QDialog,
         QVBoxLayout,
         QHBoxLayout,
@@ -534,7 +534,7 @@ class ClinicalProtocolDialog(QDialog):
         )
 
         if not filename:
-            return
+                return
 
         try:
             # Lấy template từ protocol đã chọn
@@ -588,7 +588,7 @@ if __name__ == "__main__":
 
     # Sử dụng try/except để xử lý lỗi import và thực thi
     try:
-        from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtWidgets import QApplication
 
         app = QApplication(sys.argv)
 
@@ -647,8 +647,8 @@ if __name__ == "__main__":
         selected_protocol = dialog.getSelectedProtocol()
         if selected_protocol:
             print(f"Selected protocol: {selected_protocol.name}")
-        else:
-            print("No protocol selected")
+    else:
+        print("No protocol selected")
 
     except ImportError as e:
         logger.error(f"Không thể khởi chạy test ClinicalProtocolDialog: {e}")

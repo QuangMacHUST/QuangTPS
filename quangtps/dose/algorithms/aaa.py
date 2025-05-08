@@ -480,7 +480,7 @@ class AAADoseCalculation(DoseCalculationImplementer):
                         t = (energy - e1) / (e2 - e1)
                         mu_rho_value = (1 - t) * v1 + t * v2
                         break
-        else:
+                    else:
             mu_rho_value = mu_rho_water[energy]
 
         # Hiệu chỉnh theo vật liệu: (μ/ρ) ≈ (μ/ρ)water * (ρ/ρwater)
@@ -557,7 +557,7 @@ class AAADoseCalculation(DoseCalculationImplementer):
                 # TODO: Triển khai phương pháp mở rộng nhân
                 pass
 
-        else:
+                    else:
             # Tích chập đồng nhất
             result = self._fft_convolution(terma, padded_kernel)
 

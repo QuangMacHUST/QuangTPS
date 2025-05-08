@@ -1,167 +1,294 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Module định nghĩa biểu đồ Radar (Spider) cho tối ưu hóa đa tiêu chí.
+
+Biểu đồ Radar cho phép hiển thị đồng thời nhiều tham số của một giải pháp
+Pareto, giúp người dùng đánh giá toàn diện các ưu nhược điểm của một giải pháp.
+"""
+
 import logging
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Any, Tuple
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+try:
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QLabel,
+        QComboBox,
+        QCheckBox,
+        QSizePolicy,
+        QPushButton,
+    )
+except ImportError:
+    from PyQt6.QtCore import Qt, pyqtSignal, QSize
+    from PyQt6.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QLabel,
+        QComboBox,
+        QCheckBox,
+        QSizePolicy,
+        QPushButton,
+    )
 
-# Import matplotlib for plotting
 import matplotlib
-matplotlib.use('Qt5Agg')
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+
+from quangtps.optimization.mco.pareto_navigator import ParetoSolution
 
 logger = logging.getLogger(__name__)
 
+
 class RadarChart(QWidget):
     """
-    Radar chart for visualizing objective values of different solutions.
-    
-    This chart displays objective values on radial axes, making it easy
-    to compare multiple solutions across different objectives.
+    Biểu đồ radar để trực quan hóa các thuộc tính của một giải pháp Pareto.
+
+    Biểu đồ này hiển thị các giá trị của nhiều mục tiêu khác nhau
+    trên một biểu đồ radar (spider chart), giúp trực quan hóa
+    sự cân bằng và đánh đổi giữa các mục tiêu.
     """
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        # Data
-        self.solutions: List[Dict] = []  # List of dictionaries with objective values
-        self.labels: List[str] = []      # List of solution labels
-        self.colors: List[QColor] = []   # List of solution colors
-        
-        # Setup UI
+        self.current_solution: Optional[ParetoSolution] = None
+        self.reference_solution: Optional[ParetoSolution] = None
+        self.normalize_data = True
+        self.show_reference = False
+        self.objective_names: List[str] = []
+        self.objective_values: List[float] = []
+        self.reference_values: List[float] = []
+        self.min_max_values: Dict[str, Tuple[float, float]] = {}
+
         self._setup_ui()
-    
+
     def _setup_ui(self):
+        """Thiết lập giao diện người dùng."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Create matplotlib figure
-        self.figure = Figure(figsize=(5, 5), dpi=100)
+
+        # Tạo thanh công cụ
+        toolbar_layout = QHBoxLayout()
+
+        # Checkbox chuẩn hóa dữ liệu
+        self.normalize_cb = QCheckBox("Chuẩn hóa dữ liệu")
+        self.normalize_cb.setChecked(True)
+        self.normalize_cb.stateChanged.connect(self._on_normalize_changed)
+        toolbar_layout.addWidget(self.normalize_cb)
+
+        # Checkbox hiển thị giải pháp tham chiếu
+        self.reference_cb = QCheckBox("Hiển thị tham chiếu")
+        self.reference_cb.setChecked(False)
+        self.reference_cb.setEnabled(False)
+        self.reference_cb.stateChanged.connect(self._on_reference_changed)
+        toolbar_layout.addWidget(self.reference_cb)
+
+        # Nút lưu ảnh
+        self.save_btn = QPushButton("Lưu ảnh")
+        self.save_btn.clicked.connect(self._on_save_clicked)
+        toolbar_layout.addWidget(self.save_btn)
+
+        toolbar_layout.addStretch()
+        layout.addLayout(toolbar_layout)
+
+        # Tạo figure và canvas cho matplotlib
+        self.figure = Figure(figsize=(6, 5), dpi=100)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Thanh công cụ matplotlib
+        self.mpl_toolbar = NavigationToolbar(self.canvas, self)
+
         layout.addWidget(self.canvas)
-        
-        # Create subplot with polar projection
-        self.axes = self.figure.add_subplot(111, polar=True)
-        
-        # Initial empty plot
-        self.canvas.draw()
-    
-    def add_solution(self, objective_values: Dict[str, float], label: str, color: QColor):
-        """
-        Add a solution to the radar chart.
-        
-        Args:
-            objective_values: Dictionary mapping objective names to values
-            label: Label for the solution in the legend
-            color: Color for the solution
-        """
-        self.solutions.append(objective_values)
-        self.labels.append(label)
-        self.colors.append(color)
-    
-    def clear(self):
-        """Clear the chart."""
-        self.solutions = []
-        self.labels = []
-        self.colors = []
-        
-        # Clear the plot
-        if hasattr(self, 'axes'):
-            self.axes.clear()
-            self.canvas.draw()
-    
-    def update_chart(self):
-        """Update the chart with the current data."""
-        if not self.solutions:
-            return
-        
-        # Clear the plot
-        self.axes.clear()
-        
-        # Get all objective names from solutions
-        all_objectives = set()
-        for solution in self.solutions:
-            all_objectives.update(solution.keys())
-        
-        # Sort objectives for consistent display
-        objectives = sorted(list(all_objectives))
-        n_objectives = len(objectives)
-        
-        if n_objectives < 3:
-            # Need at least 3 objectives for a radar chart
-            self.axes.text(0, 0, "Need at least 3 objectives for radar chart",
-                         ha='center', va='center', fontsize=12)
-            self.canvas.draw()
-            return
-        
-        # Angle of each axis
-        angles = np.linspace(0, 2*np.pi, n_objectives, endpoint=False).tolist()
-        
-        # Close the polygon by repeating the first angle
-        angles.append(angles[0])
-        
-        # Set the labels for each axis
-        self.axes.set_xticks(angles[:-1])
-        self.axes.set_xticklabels(objectives, fontsize=9)
-        
-        # Get the range of each objective
-        ranges = {}
-        for obj in objectives:
-            values = [sol.get(obj, 0) for sol in self.solutions if obj in sol]
-            if values:
-                ranges[obj] = (min(values), max(values))
-            else:
-                ranges[obj] = (0, 1)
-        
-        # Plot each solution
-        for i, (solution, label, color) in enumerate(zip(self.solutions, self.labels, self.colors)):
-            # Normalize the values to [0, 1]
-            normalized_values = []
-            for obj in objectives:
-                value = solution.get(obj, 0)
-                obj_min, obj_max = ranges[obj]
-                
-                # Avoid division by zero
-                if obj_max == obj_min:
-                    normalized = 0.5
+        layout.addWidget(self.mpl_toolbar)
+
+    def set_solution(self, solution: ParetoSolution):
+        """Thiết lập giải pháp để hiển thị."""
+        self.current_solution = solution
+
+        if solution:
+            # Lấy các mục tiêu và giá trị
+            self.objective_names = list(solution.objective_values.keys())
+            self.objective_values = [solution.objective_values[obj] for obj in self.objective_names]
+
+            # Cập nhật min/max values
+            for obj, val in solution.objective_values.items():
+                if obj not in self.min_max_values:
+                    self.min_max_values[obj] = (val, val)
                 else:
-                    normalized = (value - obj_min) / (obj_max - obj_min)
-                
-                normalized_values.append(normalized)
-            
-            # Close the polygon by repeating the first value
-            normalized_values.append(normalized_values[0])
-            
-            # Plot the values
-            rgba = [color.red()/255, color.green()/255, color.blue()/255, color.alpha()/255]
-            self.axes.plot(angles, normalized_values, linewidth=2, linestyle='solid', 
-                          color=rgba, label=label)
-            self.axes.fill(angles, normalized_values, color=rgba, alpha=0.1)
-        
-        # Set y-ticks (optional)
-        self.axes.set_yticks([0.2, 0.4, 0.6, 0.8])
-        self.axes.set_yticklabels(['0.2', '0.4', '0.6', '0.8'], fontsize=8)
-        self.axes.set_rlabel_position(0)
-        
-        # Add legend
-        self.axes.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
-        
-        # Adjust the starting angle
-        self.axes.set_theta_offset(np.pi / 2)
-        self.axes.set_theta_direction(-1)
-        
-        # Add grid lines
-        self.axes.grid(True, linestyle='--', alpha=0.7)
-        
-        # Set title
-        self.axes.set_title("Objective Values Comparison", size=12, y=1.1)
-        
-        # Tight layout
-        self.figure.tight_layout()
-        
-        # Draw the chart
-        self.canvas.draw() 
+                    min_val, max_val = self.min_max_values[obj]
+                    self.min_max_values[obj] = (min(min_val, val), max(max_val, val))
+
+            # Cập nhật biểu đồ
+            self._update_chart()
+        else:
+            self.clear()
+
+    def set_reference_solution(self, reference: ParetoSolution):
+        """Thiết lập giải pháp tham chiếu để so sánh."""
+        self.reference_solution = reference
+
+        if reference:
+            # Cập nhật các giá trị tham chiếu
+            self.reference_values = []
+            for obj in self.objective_names:
+                val = reference.objective_values.get(obj, 0.0)
+                self.reference_values.append(val)
+
+                # Cập nhật min/max values
+                if obj not in self.min_max_values:
+                    self.min_max_values[obj] = (val, val)
+                else:
+                    min_val, max_val = self.min_max_values[obj]
+                    self.min_max_values[obj] = (min(min_val, val), max(max_val, val))
+
+            # Kích hoạt checkbox tham chiếu
+            self.reference_cb.setEnabled(True)
+        else:
+            self.reference_values = []
+            self.reference_cb.setEnabled(False)
+
+        # Cập nhật biểu đồ
+        self._update_chart()
+
+    def update_solution(self, solution: ParetoSolution):
+        """Cập nhật và hiển thị một giải pháp mới."""
+        self.set_solution(solution)
+
+    def _on_normalize_changed(self, state):
+        """Xử lý khi thay đổi trạng thái chuẩn hóa dữ liệu."""
+        self.normalize_data = bool(state)
+        self._update_chart()
+
+    def _on_reference_changed(self, state):
+        """Xử lý khi thay đổi trạng thái hiển thị tham chiếu."""
+        self.show_reference = bool(state)
+        self._update_chart()
+
+    def _on_save_clicked(self):
+        """Xử lý khi nhấn nút lưu ảnh."""
+        # Trong ứng dụng thực tế, sẽ hiển thị hộp thoại lưu file
+        # Ở đây chỉ lưu với tên mặc định
+        try:
+            filename = "radar_chart.png"
+            self.figure.savefig(filename, dpi=300, bbox_inches='tight')
+            logger.info(f"Đã lưu biểu đồ radar vào {filename}")
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu biểu đồ: {str(e)}")
+
+    def _update_chart(self):
+        """Cập nhật biểu đồ radar."""
+        if not self.current_solution or not self.objective_names:
+            return
+
+        # Xóa figure hiện tại
+        self.figure.clear()
+
+        # Tạo axes cho biểu đồ radar
+        ax = self.figure.add_subplot(111, polar=True)
+
+        # Chuẩn bị dữ liệu
+        categories = self.objective_names
+        N = len(categories)
+
+        # Tạo góc cho các điểm (chia đều 360 độ)
+        angles = [n / float(N) * 2 * np.pi for n in range(N)]
+        angles += angles[:1]  # Đóng vòng tròn
+
+        # Chuẩn bị dữ liệu hiện tại và tham chiếu
+        values = self.objective_values.copy()
+        reference_values = self.reference_values.copy() if self.reference_values else []
+
+        # Chuẩn hóa dữ liệu nếu cần
+        if self.normalize_data:
+            normalized_values = []
+            normalized_reference = []
+
+            for i, obj in enumerate(self.objective_names):
+                min_val, max_val = self.min_max_values.get(obj, (0, 1))
+
+                # Tránh chia cho 0
+                range_width = max(max_val - min_val, 1e-6)
+
+                # Chuẩn hóa giá trị hiện tại
+                if i < len(values):
+                    norm_val = (values[i] - min_val) / range_width
+                    normalized_values.append(norm_val)
+
+                # Chuẩn hóa giá trị tham chiếu nếu có
+                if self.reference_values and i < len(reference_values):
+                    norm_ref = (reference_values[i] - min_val) / range_width
+                    normalized_reference.append(norm_ref)
+
+            # Đóng vòng tròn
+            if normalized_values:
+                normalized_values += normalized_values[:1]
+            if normalized_reference:
+                normalized_reference += normalized_reference[:1]
+
+            display_values = normalized_values
+            display_reference = normalized_reference
+        else:
+            # Đóng vòng tròn
+            if values:
+                values += values[:1]
+            if reference_values:
+                reference_values += reference_values[:1]
+
+            display_values = values
+            display_reference = reference_values
+
+        # Thêm tên các mục tiêu vào biểu đồ
+        extended_categories = categories + [categories[0]]  # Đóng vòng tròn
+
+        # Vẽ biểu đồ chính
+        if display_values:
+            ax.plot(angles, display_values, linewidth=2, linestyle='solid', color='red')
+            ax.fill(angles, display_values, alpha=0.25, color='red')
+
+        # Vẽ biểu đồ tham chiếu nếu được yêu cầu
+        if self.show_reference and display_reference:
+            ax.plot(angles, display_reference, linewidth=2, linestyle='dashed', color='blue')
+            ax.fill(angles, display_reference, alpha=0.1, color='blue')
+
+        # Thiết lập các tham số biểu đồ
+        ax.set_xticks(angles[:-1])  # Bỏ điểm lặp cuối cùng
+        ax.set_xticklabels(extended_categories[:-1])  # Hiển thị tên mục tiêu
+
+        # Tiêu đề
+        solution_id = getattr(self.current_solution, 'id', '')[:8]
+        solution_name = getattr(self.current_solution, 'name', f'Giải pháp {solution_id}')
+        self.figure.suptitle(solution_name, fontsize=12)
+
+        # Tạo grid
+        ax.set_rlabel_position(0)
+        if self.normalize_data:
+            ax.set_yticks([0.25, 0.5, 0.75])
+            ax.set_yticklabels(["0.25", "0.5", "0.75"])
+
+        # Vẽ lại canvas
+        self.canvas.draw()
+
+    def clear(self):
+        """Xóa tất cả dữ liệu và làm mới biểu đồ."""
+        self.current_solution = None
+        self.reference_solution = None
+        self.objective_names = []
+        self.objective_values = []
+        self.reference_values = []
+
+        # Xóa figure
+        self.figure.clear()
+        self.canvas.draw()
+
+        # Reset controls
+        self.reference_cb.setEnabled(False)
+        self.reference_cb.setChecked(False)

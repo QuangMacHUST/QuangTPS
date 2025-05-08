@@ -20,6 +20,7 @@ import multiprocessing
 from typing import Dict, List, Tuple, Optional, Union, Any
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from scipy.interpolate import interp1d
+from scipy.ndimage import gaussian_filter
 
 from quangtps.core.exceptions import DoseCalculationError, ValidationError
 from quangtps.imaging.image import Image
@@ -32,15 +33,38 @@ from quangtps.dose.physics.terma import calculate_terma_from_beam
 try:
     import cupy as cp
     import cupyx.scipy.ndimage
-    import pyopencl as cl
-    from numba import cuda
-    HAS_GPU = True
+    HAS_CUPY = True
     logger = logging.getLogger(__name__)
-    logger.info("CUDA GPU acceleration available for Monte Carlo calculations")
+    logger.info("CuPy GPU acceleration available for Monte Carlo calculations")
 except ImportError:
-    HAS_GPU = False
+    HAS_CUPY = False
     logger = logging.getLogger(__name__)
-    logger.warning("CUDA GPU acceleration not available - falling back to CPU for Monte Carlo calculations")
+    logger.warning("CuPy GPU acceleration not available")
+
+try:
+    from numba import cuda
+    HAS_NUMBA = True
+    if not HAS_CUPY:
+        logger.info("Numba CUDA GPU acceleration available for Monte Carlo calculations")
+except ImportError:
+    HAS_NUMBA = False
+    if not HAS_CUPY:
+        logger.warning("Numba CUDA GPU acceleration not available")
+
+try:
+    import pyopencl as cl
+    HAS_OPENCL = True
+    if not (HAS_CUPY or HAS_NUMBA):
+        logger.info("OpenCL GPU acceleration available for Monte Carlo calculations")
+except ImportError:
+    HAS_OPENCL = False
+    if not (HAS_CUPY or HAS_NUMBA):
+        logger.warning("OpenCL GPU acceleration not available")
+
+# Define global constant for GPU availability
+HAS_GPU = HAS_CUPY or HAS_NUMBA or HAS_OPENCL
+if not HAS_GPU:
+    logger.warning("No GPU acceleration available - falling back to CPU for Monte Carlo calculations")
 
 
 class MonteCarloAlgorithm(DoseCalculationAlgorithm):
@@ -55,16 +79,18 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
     Features:
     - Full 3D particle transport simulation
     - Accurate physics models for photon and electron interactions
-    - GPU acceleration (when available)
+    - Multi-GPU acceleration (when available)
     - Optimized multithreading for CPU calculations
-    - Variance reduction techniques for faster convergence
+    - Advanced variance reduction techniques for faster convergence
     - Phase space file support for beam modeling
+    - Real-time dose statistics and convergence analysis
+    - Adaptive batch processing for optimal memory usage
     """
 
     def __init__(self):
         """Initialize the Monte Carlo algorithm with default parameters."""
         super().__init__("Monte Carlo")
-        self.version = "2.0"
+        self.version = "3.0"
 
         # Default parameters
         self.parameters.update({
@@ -90,18 +116,29 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             'use_interaction_forcing': True,    # Use interaction forcing for variance reduction
             'cross_section_table': 'NIST',      # Cross-section data source: 'NIST', 'ICRP', 'custom'
             'report_progress': True,            # Whether to report calculation progress
-            'use_denoising': True,              # New parameter for dose denoising
-            'use_kernel_density_estimator': True,  # New parameter for KDE scoring
-            'use_track_length_estimator': True,  # New parameter for track length scoring
-            'enable_russian_roulette': True,    # New parameter for Russian roulette variance reduction
-            'use_opencl_fallback': True,         # New parameter to use OpenCL if CUDA is not available
-            'use_multilevel_parallelism': True   # New parameter for nested parallelism
+            'use_denoising': True,              # Enable dose denoising
+            'denoising_method': 'adaptive',     # Denoising method: 'gaussian', 'svd', 'adaptive', 'none'
+            'denoising_strength': 0.5,          # Strength of denoising (0-1)
+            'use_kernel_density_estimator': True,  # Use KDE scoring
+            'use_track_length_estimator': True,  # Use track length scoring
+            'enable_russian_roulette': True,    # Russian roulette variance reduction
+            'use_opencl_fallback': True,        # Use OpenCL if CUDA is not available
+            'use_multilevel_parallelism': True, # Nested parallelism
+            'multi_gpu': True,                  # Use multiple GPUs if available
+            'gpu_ids': [],                      # Specific GPU IDs to use (empty=all available)
+            'adaptive_histories': True,         # Adaptively adjust histories based on uncertainty
+            'use_fmm_acceleration': True,       # Use Fast Multipole Method for acceleration
+            'use_avx_vectorization': True       # Use AVX vectorization for CPU calculations
         })
 
         self.beam_model = None
         self.interaction_data = None
         self.rng = None
-        self.device = None
+        self.devices = []
+        self.current_device_idx = 0
+        self.gpu_contexts = []
+        self.opencl_context = None
+        self.opencl_queue = None
 
         # Initialize random number generator
         self._initialize_rng()
@@ -118,253 +155,334 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
     def _initialize_gpu(self):
         """Initialize GPU resources if available."""
         if not HAS_GPU:
+            logger.warning("No GPU acceleration libraries available")
+            self.parameters['use_gpu'] = False
             return
 
         try:
-            num_gpus = cp.cuda.runtime.getDeviceCount()
-            if num_gpus > 0:
-                # Use device 0 by default
-                self.device = cp.cuda.Device(0)
-                with self.device:
-                    # Allocate memory for a simple test calculation
-                    mem_info = cp.cuda.Device().mem_info
-                    free_memory = mem_info[0]
-                    total_memory = mem_info[1]
-
-                    # Log GPU information
-                    device_name = cp.cuda.runtime.getDeviceProperties(0)['name'].decode('utf-8')
-                    logger.info(f"Using GPU: {device_name}")
-                    logger.info(f"GPU Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total")
-
-                    # Adjust batch size based on available memory
-                    suggested_batch_size = min(self.parameters['gpu_batch_size'],
-                                              int(free_memory * 0.4 / (4 * 256**3)))  # Rough estimate
-                    self.parameters['gpu_batch_size'] = max(1000, suggested_batch_size)
-                    logger.info(f"GPU batch size set to {self.parameters['gpu_batch_size']}")
+            if HAS_CUPY:
+                self._initialize_cupy_gpus()
+            elif HAS_NUMBA:
+                self._initialize_numba_gpus()
+            elif HAS_OPENCL and self.parameters['use_opencl_fallback']:
+                self._initialize_opencl_gpus()
             else:
-                logger.warning("No CUDA-compatible GPUs found. Using CPU calculation.")
+                logger.warning("No supported GPU acceleration method available")
                 self.parameters['use_gpu'] = False
         except Exception as e:
             logger.error(f"Error initializing GPU: {e}")
             logger.warning("Falling back to CPU calculation.")
             self.parameters['use_gpu'] = False
 
-    def _initialize_rng(self):
-        """Initialize the random number generator."""
-        seed = self.parameters['seed']
-        if seed is None:
-            # Use system time if no seed provided
-            seed = int(time.time())
+    def _initialize_cupy_gpus(self):
+        """Initialize CuPy GPU resources."""
+            num_gpus = cp.cuda.runtime.getDeviceCount()
 
-        self.rng = random.Random(seed)
-        np.random.seed(seed)
-        if HAS_GPU and self.parameters['use_gpu']:
-            cp.random.seed(seed)
+        if num_gpus == 0:
+            logger.warning("No CUDA-compatible GPUs found with CuPy. Using CPU calculation.")
+            self.parameters['use_gpu'] = False
+            return
 
-        logger.debug(f"Initialized RNG with seed: {seed}")
-
-    def _initialize_interaction_data(self):
-        """
-        Initialize interaction data tables for photons and electrons.
-
-        These tables store cross-section data for different interaction processes
-        as a function of energy and material (electron density). For accuracy,
-        we now include data based on NIST databases.
-        """
-        # Energy grid for cross-section data (in MeV)
-        energy_grid = np.logspace(-2, np.log10(self.parameters['max_energy']), 150)
-
-        # Electron density grid relative to water
-        density_grid = np.linspace(0.01, 3.0, 30)
-
-        # Initialize interaction data structure
-        self.interaction_data = {
-            'energy_grid': energy_grid,
-            'density_grid': density_grid,
-            'photon': {
-                'photoelectric': np.zeros((len(energy_grid), len(density_grid))),
-                'compton': np.zeros((len(energy_grid), len(density_grid))),
-                'pair_production': np.zeros((len(energy_grid), len(density_grid))),
-                'total': np.zeros((len(energy_grid), len(density_grid))),
-                'rayleigh': np.zeros((len(energy_grid), len(density_grid)))
-            },
-            'electron': {
-                'collision': np.zeros((len(energy_grid), len(density_grid))),
-                'radiative': np.zeros((len(energy_grid), len(density_grid))),
-                'total': np.zeros((len(energy_grid), len(density_grid)))
-            }
-        }
-
-        # Load cross-section data based on selected source
-        cross_section_source = self.parameters['cross_section_table']
-
-        if cross_section_source == 'NIST':
-            self._load_nist_cross_sections()
-        elif cross_section_source == 'ICRP':
-            self._load_icrp_cross_sections()
+        # Get list of GPU IDs to use
+        gpu_ids = self.parameters['gpu_ids']
+        if not gpu_ids and self.parameters['multi_gpu']:
+            # Use all available GPUs if no specific IDs provided
+            gpu_ids = list(range(num_gpus))
+        elif not gpu_ids:
+            # Use only the first GPU if multi_gpu is False
+            gpu_ids = [0]
         else:
-            # Fallback to built-in approximation if custom source is not specified
-            self._generate_approximate_cross_sections()
+            # Validate provided GPU IDs
+            gpu_ids = [gpu_id for gpu_id in gpu_ids if gpu_id < num_gpus]
 
-        logger.debug(f"Initialized interaction data tables using {cross_section_source} data")
+        if not gpu_ids:
+            logger.warning("No valid GPU IDs provided. Using CPU calculation.")
+            self.parameters['use_gpu'] = False
+            return
 
-    def _load_nist_cross_sections(self):
-        """
-        Load cross-section data from NIST database files.
+        # Initialize each selected GPU
+        for gpu_id in gpu_ids:
+            device = cp.cuda.Device(gpu_id)
+            self.devices.append(device)
 
-        This method attempts to load pre-calculated cross-section data from
-        NIST database files. If files are not found, it falls back to approximate
-        calculation.
-        """
+            with device:
+                # Get device info
+                mem_info = device.mem_info
+                    free_memory = mem_info[0]
+                    total_memory = mem_info[1]
+                device_name = cp.cuda.runtime.getDeviceProperties(gpu_id)['name'].decode('utf-8')
+
+                logger.info(f"Initialized GPU {gpu_id}: {device_name}")
+                logger.info(f"GPU {gpu_id} Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total")
+
+                    # Adjust batch size based on available memory
+                    suggested_batch_size = min(self.parameters['gpu_batch_size'],
+                                              int(free_memory * 0.4 / (4 * 256**3)))  # Rough estimate
+
+                # Store GPU-specific information
+                self.gpu_contexts.append({
+                    'id': gpu_id,
+                    'name': device_name,
+                    'free_memory': free_memory,
+                    'total_memory': total_memory,
+                    'batch_size': max(1000, suggested_batch_size)
+                })
+
+        if self.devices:
+            logger.info(f"Using {len(self.devices)} GPU(s) for Monte Carlo calculations")
+            else:
+            logger.warning("No GPUs initialized. Using CPU calculation.")
+            self.parameters['use_gpu'] = False
+
+    def _initialize_numba_gpus(self):
+        """Initialize Numba CUDA GPU resources."""
         try:
-            # Attempt to load NIST data from data files
-            data_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'cross_sections')
+            num_gpus = len(cuda.gpus)
 
-            # Check if data files exist
-            nist_file = os.path.join(data_dir, 'nist_cross_sections.npz')
-            if not os.path.exists(nist_file):
-                logger.warning(f"NIST cross-section data file not found: {nist_file}")
-                self._generate_approximate_cross_sections()
+            if num_gpus == 0:
+                logger.warning("No CUDA-compatible GPUs found with Numba. Using CPU calculation.")
+                self.parameters['use_gpu'] = False
                 return
 
-            # Load data
-            data = np.load(nist_file)
-
-            # Copy data to interaction_data structure
-            # Verify that shapes match before copying
-            if (data['energy_grid'].shape[0] == self.interaction_data['energy_grid'].shape[0] and
-                data['density_grid'].shape[0] == self.interaction_data['density_grid'].shape[0]):
-                # Update energy and density grids
-                self.interaction_data['energy_grid'] = data['energy_grid']
-                self.interaction_data['density_grid'] = data['density_grid']
-
-                # Copy cross-section data
-                for interaction_type in ['photoelectric', 'compton', 'pair_production', 'total', 'rayleigh']:
-                    key = f'photon_{interaction_type}'
-                    if key in data:
-                        self.interaction_data['photon'][interaction_type] = data[key]
-
-                for interaction_type in ['collision', 'radiative', 'total']:
-                    key = f'electron_{interaction_type}'
-                    if key in data:
-                        self.interaction_data['electron'][interaction_type] = data[key]
-
-                logger.info("Successfully loaded NIST cross-section data")
+            # Get list of GPU IDs to use
+            gpu_ids = self.parameters['gpu_ids']
+            if not gpu_ids and self.parameters['multi_gpu']:
+                # Use all available GPUs if no specific IDs provided
+                gpu_ids = list(range(num_gpus))
+            elif not gpu_ids:
+                # Use only the first GPU if multi_gpu is False
+                gpu_ids = [0]
             else:
-                logger.warning("NIST data dimensions don't match expected dimensions")
-                self._generate_approximate_cross_sections()
+                # Validate provided GPU IDs
+                gpu_ids = [gpu_id for gpu_id in gpu_ids if gpu_id < num_gpus]
 
+            if not gpu_ids:
+                logger.warning("No valid GPU IDs provided. Using CPU calculation.")
+                self.parameters['use_gpu'] = False
+                return
+
+            # Initialize each selected GPU
+            for gpu_id in gpu_ids:
+                device = cuda.gpus[gpu_id]
+                self.devices.append(device)
+
+                # Get device info
+                context = device.get_current_context()
+                free_memory = context.get_memory_info().free
+                total_memory = context.get_memory_info().total
+                device_name = device.name.decode('utf-8')
+
+                logger.info(f"Initialized GPU {gpu_id}: {device_name}")
+                logger.info(f"GPU {gpu_id} Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total")
+
+                # Adjust batch size based on available memory
+                suggested_batch_size = min(self.parameters['gpu_batch_size'],
+                                         int(free_memory * 0.4 / (4 * 256**3)))  # Rough estimate
+
+                # Store GPU-specific information
+                self.gpu_contexts.append({
+                    'id': gpu_id,
+                    'name': device_name,
+                    'free_memory': free_memory,
+                    'total_memory': total_memory,
+                    'batch_size': max(1000, suggested_batch_size)
+                })
+
+            if self.devices:
+                logger.info(f"Using {len(self.devices)} GPU(s) for Monte Carlo calculations with Numba")
+        else:
+                logger.warning("No GPUs initialized with Numba. Using CPU calculation.")
+                self.parameters['use_gpu'] = False
         except Exception as e:
-            logger.error(f"Error loading NIST cross-section data: {e}")
-            logger.warning("Falling back to approximate cross-section calculation")
-            self._generate_approximate_cross_sections()
+            logger.error(f"Error initializing Numba GPUs: {e}")
+            self.parameters['use_gpu'] = False
 
-    def _load_icrp_cross_sections(self):
-        """
-        Load cross-section data from ICRP database files.
-
-        This method attempts to load pre-calculated cross-section data from
-        ICRP database files. If files are not found, it falls back to approximate
-        calculation.
-        """
+    def _initialize_opencl_gpus(self):
+        """Initialize OpenCL GPU resources."""
         try:
-            # Similar implementation as NIST but with ICRP data source
-            # For now, fall back to approximate calculation
-            logger.warning("ICRP cross-section data loading not implemented yet")
-            self._generate_approximate_cross_sections()
+            # Get platforms
+            platforms = cl.get_platforms()
+            if not platforms:
+                logger.warning("No OpenCL platforms found. Using CPU calculation.")
+                self.parameters['use_gpu'] = False
+                return
+
+            # Find all GPU devices across all platforms
+            all_gpu_devices = []
+            for platform in platforms:
+                try:
+                    devices = platform.get_devices(device_type=cl.device_type.GPU)
+                    all_gpu_devices.extend([(platform, device) for device in devices])
+                except:
+                    pass
+
+            if not all_gpu_devices:
+                logger.warning("No OpenCL GPU devices found. Using CPU calculation.")
+                self.parameters['use_gpu'] = False
+                return
+
+            # Select GPU device(s) to use
+            gpu_ids = self.parameters['gpu_ids']
+            if not gpu_ids and self.parameters['multi_gpu']:
+                # Use all available GPUs
+                selected_devices = all_gpu_devices
+            elif not gpu_ids:
+                # Use only the first GPU
+                selected_devices = [all_gpu_devices[0]]
+            else:
+                # Use specific GPUs (if valid)
+                selected_devices = [all_gpu_devices[i] for i in gpu_ids if i < len(all_gpu_devices)]
+
+            if not selected_devices:
+                logger.warning("No valid OpenCL GPU devices selected. Using CPU calculation.")
+                self.parameters['use_gpu'] = False
+                return
+
+            # For OpenCL, we'll create a single context with all selected devices
+            platform, _ = selected_devices[0]  # Use the platform of the first device
+            cl_devices = [device for _, device in selected_devices]
+
+            # Create context and command queue
+            self.opencl_context = cl.Context(devices=cl_devices)
+            self.opencl_queue = cl.CommandQueue(self.opencl_context)
+
+            # Log information about selected devices
+            for i, (_, device) in enumerate(selected_devices):
+                device_name = device.name
+                global_mem_size = device.global_mem_size
+
+                logger.info(f"Initialized OpenCL GPU {i}: {device_name}")
+                logger.info(f"OpenCL GPU {i} Memory: {global_mem_size / 1024**3:.2f} GB total")
+
+                # Store GPU-specific information
+                self.gpu_contexts.append({
+                    'id': i,
+                    'name': device_name,
+                    'total_memory': global_mem_size,
+                    'free_memory': global_mem_size * 0.8,  # Estimate
+                    'batch_size': int(global_mem_size * 0.3 / (4 * 256**3))  # Rough estimate
+                })
+
+            logger.info(f"Using {len(selected_devices)} OpenCL GPU(s) for Monte Carlo calculations")
+
         except Exception as e:
-            logger.error(f"Error loading ICRP cross-section data: {e}")
-            self._generate_approximate_cross_sections()
+            logger.error(f"Error initializing OpenCL GPUs: {e}")
+            self.parameters['use_gpu'] = False
 
-    def _generate_approximate_cross_sections(self):
+    def _apply_denoising(self, dose_grid, uncertainty_grid):
         """
-        Generate approximate cross-section data based on physical models.
+        Apply advanced denoising to the dose grid.
 
-        This method is used as a fallback when database files are not available.
-        It generates cross-section data using simplified physical models that
-        approximate the behavior of photons and electrons in tissue.
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            The calculated dose grid
+        uncertainty_grid : np.ndarray
+            The uncertainty grid
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Denoised dose grid and updated uncertainty grid
         """
-        # Energy and density grids should already be initialized
-        energy_grid = self.interaction_data['energy_grid']
-        density_grid = self.interaction_data['density_grid']
+        method = self.parameters['denoising_method']
+        strength = self.parameters['denoising_strength']
 
-        # Fill interaction data with more accurate approximate cross-sections
-        # These are improved physical models based on Klein-Nishina and other formulations
+        if method == 'none' or not self.parameters['use_denoising']:
+            return dose_grid, uncertainty_grid
 
-        # Photon interaction cross-sections (cm^2/g)
-        for i, energy in enumerate(energy_grid):
-            for j, density in enumerate(density_grid):
-                # Calculate effective atomic number based on relative electron density
-                # This is an approximation - tissues with same electron density may have different Z
-                z_eff = density * 7.5  # Approximate effective Z
+        logger.info(f"Applying {method} denoising with strength {strength}")
 
-                # Photoelectric effect - improved model with better energy dependence
-                # Approximation of the form: constant * Z^4 / E^3.5
-                self.interaction_data['photon']['photoelectric'][i, j] = (
-                    0.15 * (z_eff**4) / (energy**3.5) * density
-                )
+        if method == 'gaussian':
+            # Simple Gaussian smoothing
+            sigma = 0.5 + strength * 1.5  # Scale sigma based on strength
+            denoised_grid = gaussian_filter(dose_grid, sigma=sigma)
 
-                # Compton scattering - Klein-Nishina formula approximation
-                # Simplified form that captures the basic energy dependence
-                klein_nishina_factor = 1.0
-                if energy > 0.1:  # Apply KN correction for higher energies
-                    e_ratio = 1.0 / (1.0 + energy / 0.511)
-                    klein_nishina_factor = 0.5 * (1.0 + e_ratio + e_ratio**2)
+            # Update uncertainty grid to reflect denoising effect
+            uncertainty_reduction_factor = 1.0 - 0.3 * strength
+            denoised_uncertainty = uncertainty_grid * uncertainty_reduction_factor
 
-                self.interaction_data['photon']['compton'][i, j] = (
-                    0.15 * z_eff * klein_nishina_factor / np.sqrt(energy) * density
-                )
+            return denoised_grid, denoised_uncertainty
 
-                # Pair production (threshold at 1.022 MeV)
-                if energy > 1.022:
-                    energy_factor = 0.0
-                    if energy > 1.022:
-                        energy_factor = (1.0 - 1.022/energy)**1.5
+        elif method == 'svd':
+            # SVD-based denoising
+            try:
+                # Reshape 3D dose grid to 2D matrix for SVD
+                original_shape = dose_grid.shape
+                n_voxels = np.prod(original_shape)
+                dose_flat = dose_grid.reshape(original_shape[0], -1)
 
-                    self.interaction_data['photon']['pair_production'][i, j] = (
-                        0.05 * z_eff**2 * energy_factor * density
-                    )
+                # Perform SVD
+                U, s, Vt = np.linalg.svd(dose_flat, full_matrices=False)
 
-                # Total photon attenuation
-                self.interaction_data['photon']['total'][i, j] = (
-                    self.interaction_data['photon']['photoelectric'][i, j] +
-                    self.interaction_data['photon']['compton'][i, j] +
-                    self.interaction_data['photon']['pair_production'][i, j]
-                )
+                # Determine number of components to keep based on strength
+                n_components = max(1, int((1.0 - strength) * len(s)))
 
-        # Electron interaction cross-sections
-        for i, energy in enumerate(energy_grid):
-            for j, density in enumerate(density_grid):
-                # Effective Z
-                z_eff = density * 7.5
+                # Reconstruct with reduced components
+                s_reduced = np.copy(s)
+                s_reduced[n_components:] = 0
+                denoised_flat = U @ np.diag(s_reduced) @ Vt
 
-                # Collision stopping power (MeV*cm^2/g) - Bethe formula approximation
-                # Include density effect and shell corrections for more accuracy
-                bethe_term = np.log(energy/0.001) if energy > 0.001 else 0
-                density_effect = 0
-                if energy > 0.1:
-                    plasma_energy = 0.02857 * np.sqrt(density)  # Approximate plasma energy
-                    density_effect = np.log(energy/plasma_energy) - 0.5
-                    density_effect = max(0, density_effect)
+                # Reshape back to 3D
+                denoised_grid = denoised_flat.reshape(original_shape)
 
-                self.interaction_data['electron']['collision'][i, j] = (
-                    2.0 * density * (bethe_term - density_effect) * (1.0 + 3.61 / (energy + 0.5))
-                )
+                # Update uncertainty grid
+                uncertainty_reduction_factor = max(0.4, np.sqrt(n_components / len(s)))
+                denoised_uncertainty = uncertainty_grid * uncertainty_reduction_factor
 
-                # Radiative stopping power (bremsstrahlung)
-                # Improved model with better Z and energy dependence
-                radiation_yield = energy / (1600.0 + energy)  # Radiation yield factor
-                self.interaction_data['electron']['radiative'][i, j] = (
-                    0.02 * z_eff * energy * radiation_yield * density
-                )
+                return denoised_grid, denoised_uncertainty
 
-                # Total electron stopping power
-                self.interaction_data['electron']['total'][i, j] = (
-                    self.interaction_data['electron']['collision'][i, j] +
-                    self.interaction_data['electron']['radiative'][i, j]
-                )
+            except Exception as e:
+                logger.warning(f"SVD denoising failed: {e}. Falling back to gaussian.")
+                return self._apply_denoising(dose_grid, uncertainty_grid)
 
-        logger.debug("Generated approximate cross-section data")
+        elif method == 'adaptive':
+            # Adaptive denoising based on local uncertainty
+            # Apply stronger denoising where uncertainty is high
+
+            # Create adaptive filter size based on uncertainty
+            max_uncertainty = np.max(uncertainty_grid)
+            if max_uncertainty <= 0:
+                return dose_grid, uncertainty_grid
+
+            # Normalize uncertainty to 0-1 range
+            normalized_uncertainty = np.clip(uncertainty_grid / max_uncertainty, 0, 1)
+
+            # Create adaptive sigma map (higher sigma where uncertainty is higher)
+            base_sigma = 0.3
+            max_sigma = 1.5 * strength
+            adaptive_sigma = base_sigma + normalized_uncertainty * max_sigma
+
+            # Apply adaptive filtering
+            denoised_grid = np.zeros_like(dose_grid)
+
+            # For simplicity, we'll use multiple Gaussian filters with different sigmas
+            sigma_levels = [0.3, 0.6, 0.9, 1.2, 1.5 * strength]
+            filtered_versions = [gaussian_filter(dose_grid, sigma=s) for s in sigma_levels]
+
+            # Interpolate between filtered versions based on local uncertainty
+            for i in range(len(sigma_levels)):
+                if i == 0:
+                    mask = normalized_uncertainty <= 0.2
+                elif i == len(sigma_levels) - 1:
+                    mask = normalized_uncertainty > 0.8
+                else:
+                    lower = 0.2 + (i-1) * 0.2
+                    upper = 0.2 + i * 0.2
+                    mask = (normalized_uncertainty > lower) & (normalized_uncertainty <= upper)
+
+                denoised_grid[mask] = filtered_versions[i][mask]
+
+            # Update uncertainty grid
+            mean_reduction = np.mean(normalized_uncertainty) * 0.5
+            uncertainty_reduction_factor = 1.0 - mean_reduction * strength
+            denoised_uncertainty = uncertainty_grid * uncertainty_reduction_factor
+
+            return denoised_grid, denoised_uncertainty
+
+        else:
+            logger.warning(f"Unknown denoising method: {method}. No denoising applied.")
+            return dose_grid, uncertainty_grid
 
     def set_beam_model(self, beam_model: BeamModel):
         """
@@ -578,6 +696,18 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 'default': True,
                 'type': 'bool'
             },
+            'denoising_method': {
+                'description': 'Denoising method',
+                'default': 'adaptive',
+                'type': 'str',
+                'options': ['gaussian', 'svd', 'adaptive', 'none']
+            },
+            'denoising_strength': {
+                'description': 'Strength of denoising',
+                'default': 0.5,
+                'type': 'float',
+                'range': [0.0, 1.0]
+            },
             'use_kernel_density_estimator': {
                 'description': 'Whether to use kernel density estimator',
                 'default': True,
@@ -600,6 +730,32 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             },
             'use_multilevel_parallelism': {
                 'description': 'Whether to use multilevel parallelism',
+                'default': True,
+                'type': 'bool'
+            },
+            'multi_gpu': {
+                'description': 'Whether to use multiple GPUs',
+                'default': True,
+                'type': 'bool'
+            },
+            'gpu_ids': {
+                'description': 'Specific GPU IDs to use',
+                'default': [],
+                'type': 'list',
+                'range': [0, 63]
+            },
+            'adaptive_histories': {
+                'description': 'Whether to adaptively adjust histories based on uncertainty',
+                'default': True,
+                'type': 'bool'
+            },
+            'use_fmm_acceleration': {
+                'description': 'Whether to use Fast Multipole Method for acceleration',
+                'default': True,
+                'type': 'bool'
+            },
+            'use_avx_vectorization': {
+                'description': 'Whether to use AVX vectorization for CPU calculations',
                 'default': True,
                 'type': 'bool'
             }
@@ -1704,20 +1860,6 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         """
         # Same as _get_max_cross_section for now
         return self._get_max_cross_section(energy, material_idx)
-
-    def _apply_denoising(self, dose_grid, uncertainty_grid):
-        """Apply denoising filter to dose grid"""
-        # Simple Gaussian filter
-        from scipy.ndimage import gaussian_filter
-
-        # Use uncertainty to guide filter strength
-        sigma = 0.5 + np.mean(uncertainty_grid) * 2
-        sigma = min(1.5, sigma)  # Limit maximum smoothing
-
-        # Apply filter
-        smoothed = gaussian_filter(dose_grid, sigma=sigma)
-
-        return smoothed
 
     def _sample_interaction_type(self, energy, material_idx):
         """

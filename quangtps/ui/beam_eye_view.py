@@ -18,10 +18,11 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle, Circle, Polygon
 from matplotlib.lines import Line2D
 import matplotlib.colors as mcolors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # Import PyQt5 using try/except pattern to handle potential import errors
 try:
-    from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import (
         QWidget,
         QVBoxLayout,
         QHBoxLayout,
@@ -38,9 +39,10 @@ try:
         QStyle,
         QFrame,
         QFormLayout,
-    )
-    from PyQt5.QtCore import Qt, pyqtSignal, QSize
-    from PyQt5.QtGui import QIcon, QPixmap, QColor
+        QSpinBox,
+)
+from PyQt5.QtCore import Qt, pyqtSignal, QSize
+from PyQt5.QtGui import QIcon, QPixmap, QColor
 
     PYQT_AVAILABLE = True
 except ImportError as e:
@@ -328,204 +330,411 @@ class BEVCanvas(FigureCanvas):
         # Clear the axes
         self.axes.clear()
 
-        # Setup axes
-        self.setup_figure()
+        # Set limits based on field size
+        field_width, field_height = self.field_size
+        margin = max(field_width, field_height) * 0.2
+        self.axes.set_xlim(-field_width / 2 - margin, field_width / 2 + margin)
+        self.axes.set_ylim(-field_height / 2 - margin, field_height / 2 + margin)
 
-        # Draw structures if enabled
-        if self.show_structures and self.structures:
-            self._draw_structures()
-
-        # Draw field if enabled
-        if self.show_field:
-            self._draw_field()
-
-        # Draw MLC if enabled
-        if self.show_mlc and self.mlc_positions is not None:
-            self._draw_mlc()
-
-        # Draw jaws if enabled
-        if self.show_jaws and self.jaw_positions is not None:
-            self._draw_jaws()
-
-        # Set limits based on field size or default
-        field_margin = 20  # mm
-        if self.field_size:
-            xlim = max(200, self.field_size[0] + field_margin)
-            ylim = max(200, self.field_size[1] + field_margin)
-            self.axes.set_xlim(-xlim / 2, xlim / 2)
-            self.axes.set_ylim(-ylim / 2, ylim / 2)
-        else:
-            self.axes.set_xlim(-150, 150)
-            self.axes.set_ylim(-150, 150)
-
-        # Draw grid if enabled
+        # Draw background
         if self.show_grid:
-            self.axes.grid(True, color="gray", linestyle="-", linewidth=0.2, alpha=0.5)
-        else:
-            self.axes.grid(False)
+            self._draw_grid()
 
-        # Draw rulers if enabled
+        # Draw rulers
         if self.show_rulers:
             self._draw_rulers()
 
-        # Draw a center crosshair
-        self._draw_crosshair()
+        # Draw treatment field
+        if self.show_field:
+            self._draw_field()
 
-        # Draw legend
+        # Draw jaws
+        if self.show_jaws and self.jaw_positions is not None:
+            self._draw_jaws()
+
+        # Draw structures
         if self.show_structures and self.structures:
-            self._draw_legend()
+            # Kiểm tra xem có hiển thị độ sâu hay không
+            if hasattr(self, "show_depth") and self.show_depth:
+                self._draw_depth_indicator()
+                self._draw_depth_information()
+        else:
+                self._draw_structures()
 
-        # Update canvas
-        self.fig.canvas.draw()
+        # Draw MLC
+        if self.show_mlc and self.mlc_positions is not None:
+            self._draw_mlc()
 
-    def _draw_structures(self):
-        """Draw the structures in beam's eye view."""
-        if not self.structures:
+        # Add crosshair at isocenter
+        self._draw_isocenter()
+
+        # Hiển thị thông tin kỹ thuật nếu được kích hoạt
+        if hasattr(self, "show_technical_info") and self.show_technical_info:
+            self._add_technical_info()
+
+        # Refresh canvas
+        self.draw_idle()
+
+    def _add_technical_info(self):
+        """
+        Thêm thông tin kỹ thuật vào góc BEV.
+        """
+        if not hasattr(self, "beam"):
             return
 
-        # Lưu lại các đường viền của mỗi cấu trúc để hiển thị trong legend
-        structure_contours = {}
+        axes = self.axes
+
+        # Thu thập thông tin kỹ thuật
+        info_text = []
+        if hasattr(self.beam, "gantry_angle"):
+            info_text.append(f"Gantry: {self.beam.gantry_angle:.1f}°")
+        if hasattr(self.beam, "collimator_angle"):
+            info_text.append(f"Collimator: {self.beam.collimator_angle:.1f}°")
+        if hasattr(self.beam, "couch_angle"):
+            info_text.append(f"Couch: {self.beam.couch_angle:.1f}°")
+        if hasattr(self.beam, "energy"):
+            info_text.append(f"Energy: {self.beam.energy}")
+        if hasattr(self.beam, "mu"):
+            info_text.append(f"MU: {self.beam.mu:.1f}")
+
+        # Hiển thị thông tin ở góc trái dưới
+        if info_text:
+            info_str = "\n".join(info_text)
+            axes.text(
+                -0.95 * max(self.field_size[0], self.field_size[1]) * 0.7,
+                -0.95 * max(self.field_size[0], self.field_size[1]) * 0.7,
+                info_str,
+                fontsize=8,
+                verticalalignment="bottom",
+                horizontalalignment="left",
+                bbox=dict(boxstyle="round,pad=0.5", facecolor="white", alpha=0.7),
+            )
+
+    def _draw_structures(self):
+        """
+        Vẽ các cấu trúc giải phẫu trong góc nhìn BEV.
+        Cải tiến với khả năng hiển thị thông tin độ sâu và bản đồ cường độ.
+        """
+        if (
+            not self.show_structures
+            or not hasattr(self, "structures")
+            or not self.structures
+        ):
+            return
+
+        # Lưu trữ danh sách contour đã vẽ để tạo legend
+        self.structure_contours = {}
+
+        # Xác định chế độ hiển thị: đường viền, bề mặt, hoặc kết hợp
+        display_mode = getattr(
+            self, "structure_display_mode", "contour"
+        )  # contour, surface, hybrid
+        depth_shading = getattr(
+            self, "depth_shading", True
+        )  # Bật/tắt hiển thị thông tin độ sâu
+
+        axes = self.axes
 
         for structure in self.structures:
-            # Lấy màu của cấu trúc
-            if structure.id in self.structure_colors:
-                color = self.structure_colors[structure.id]
-            elif structure.name in self.default_colors:
-                color = self.default_colors[structure.name]
-            else:
-                color = "white"
+            if not structure:
+                continue
 
-            alpha = 0.5 if "PTV" in structure.name.upper() else 0.3
+            # Lấy màu cấu trúc
+            color = structure.color if hasattr(structure, "color") else "blue"
+            alpha = 0.7 if display_mode in ("surface", "hybrid") else 1.0
 
-            # Lấy tất cả các contour của cấu trúc
+            # Lấy contour của cấu trúc trong hệ tọa độ BEV
             contours = self._get_structure_contours(structure)
 
-            # Biến đổi contours sang hệ tọa độ beam's eye view
-            bev_contours = []
-            for contour in contours:
-                if self.transform:
-                    # Sử dụng BEVTransform nếu có
-                    bev_points = self.transform.transform_points(contour)
-                    # Convert from cm to mm
-                    bev_points = bev_points * 10
-                else:
-                    # Sử dụng phương pháp chiếu đơn giản
-                    bev_points = self._project_to_bev(contour)
+            if not contours:
+                continue
 
-                if len(bev_points) >= 3:  # Cần ít nhất 3 điểm để tạo polygon
-                    bev_contours.append(bev_points)
+            # Lưu contour để tạo legend
+            if structure.name not in self.structure_contours:
+                self.structure_contours[structure.name] = {
+                    "color": color,
+                    "contours": contours,
+                }
 
-            # Vẽ các contour
-            for contour in bev_contours:
-                poly = Polygon(
-                    contour,
-                    closed=True,
-                    fill=True,
-                    facecolor=color,
-                    alpha=alpha,
-                    edgecolor=color,
-                    linewidth=1.5,
-                )
-                self.axes.add_patch(poly)
+            # Vẽ cấu trúc theo chế độ hiển thị đã chọn
+            if display_mode in ("contour", "hybrid"):
+                # Vẽ đường viền
+                for contour in contours:
+                    axes.plot(contour[:, 0], contour[:, 1], color=color, linewidth=1.5)
 
-            # Lưu lại contour đầu tiên cho legend
-            if bev_contours:
-                structure_contours[structure.name] = bev_contours[0]
+            if display_mode in ("surface", "hybrid") and depth_shading:
+                # Tạo bản đồ độ sâu cho cấu trúc
+                try:
+                    structure_map = self.transform.structure_to_bev_map(
+                        structure,
+                        resolution=(256, 256),
+                        field_size=(self.field_size[0], self.field_size[1]),
+                    )
 
-        # Vẽ legend
-        self._draw_legend(structure_contours)
+                    # Map độ sâu từ ray tracing (nếu có)
+                    depth_map = np.zeros_like(structure_map)
+                    max_depth = 30.0  # cm, giá trị tối đa hiển thị
 
-    def _get_structure_contours(self, structure):
-        """
-        Lấy các contour của cấu trúc cho hiển thị BEV.
+                    # Bản đồ độ sâu tạm thời đơn giản dành cho demo
+                    # Trong triển khai thực tế, cần sử dụng ray tracing chi tiết cho từng pixel
+                    for y in range(structure_map.shape[0]):
+                        for x in range(structure_map.shape[1]):
+                            if structure_map[y, x] > 0:
+                                # Chuyển từ pixel sang tọa độ BEV
+                                bev_x = (
+                                    x / structure_map.shape[1] - 0.5
+                                ) * self.field_size[0]
+                                bev_y = (
+                                    y / structure_map.shape[0] - 0.5
+                                ) * self.field_size[1]
 
-        Parameters
-        ----------
-        structure : Structure
-            Cấu trúc cần lấy contour
+                                # Ray tracing để lấy độ sâu
+                                ray_result = self.transform.ray_trace_to_depth(
+                                    (bev_x, bev_y), structure
+                                )
 
-        Returns
-        -------
-        list
-            Danh sách các contour (mỗi contour là một mảng các điểm 3D)
-        """
-        contours = []
+                                if ray_result["has_intersection"]:
+                                    depth_map[y, x] = min(
+                                        ray_result["mid_depth"], max_depth
+                                    )
+
+                    # Vẽ bản đồ độ sâu với thang màu
+                    try:
+                        cmap = plt.cm.get_cmap("viridis")
+                    except:
+                        cmap = plt.cm.get_cmap("jet")
+                    mask = (structure_map > 0) & (depth_map > 0)
+
+                    if np.any(mask):
+                        # Normalize độ sâu để hiển thị
+                        norm = plt.Normalize(0, max_depth)
+                        masked_depth = np.ma.array(depth_map, mask=~mask)
+
+                        # Vẽ bản đồ độ sâu
+                        extent = [
+                            -self.field_size[0] / 2,
+                            self.field_size[0] / 2,
+                            -self.field_size[1] / 2,
+                            self.field_size[1] / 2,
+                        ]
+                        axes.imshow(
+                            masked_depth,
+                            cmap=cmap,
+                            norm=norm,
+                            alpha=0.5,
+                            extent=extent,
+                            origin="lower",
+                        )
+
+                        # Bật hiển thị chỉ báo độ sâu
+                        self.show_depth_indicator = True
+
+                except Exception as e:
+                    logger.warning(
+                        f"Không thể tạo bản đồ độ sâu cho {structure.name}: {str(e)}"
+                    )
+                    # Vẽ mặt nạ đơn giản (chỉ có/không)
+                    for contour in contours:
+                        # Vẽ vùng lấp đầy
+                        polygon = plt.Polygon(
+                            contour, closed=True, fill=True, color=color, alpha=0.3
+                        )
+                        axes.add_patch(polygon)
+
+        # Cập nhật chú thích
+        self._draw_legend()
+
+        # Đảm bảo hiển thị thông tin độ sâu
+        self._draw_depth_indicator()
+
+    def _draw_depth_indicator(self):
+        """Draw a depth indicator for structures in the beam path."""
+        if not self.structures or not self.beam:
+            return
 
         try:
-            # Cách 1: Sử dụng phương thức get_contours nếu có
-            if hasattr(structure, "get_contours"):
-                contours = structure.get_contours()
+            # Tính vị trí nguồn tia
+            if hasattr(self.beam, "get_source_position"):
+                source_pos = self.beam.get_source_position()
+            elif hasattr(self.beam, "source_position"):
+                source_pos = self.beam.source_position
+                else:
+                # Vị trí mặc định dựa trên góc gantry và couch
+                gantry_angle = getattr(self.beam, "gantry_angle", 0)
+                couch_angle = getattr(self.beam, "couch_angle", 0)
 
-            # Cách 2: Sử dụng thuộc tính contours nếu có
-            elif hasattr(structure, "contours"):
-                contours = structure.contours
+                # Chuyển đổi sang radian
+                gantry_rad = np.radians(gantry_angle)
+                couch_rad = np.radians(couch_angle)
 
-            # Cách 3: Tạo contour từ mask 3D (nếu có)
-            elif hasattr(structure, "mask") and hasattr(structure, "image"):
-                from skimage import measure
+                # Tính vị trí nguồn
+                x = self.current_sad * np.sin(gantry_rad) * np.cos(couch_rad)
+                y = self.current_sad * np.sin(gantry_rad) * np.sin(couch_rad)
+                z = self.current_sad * np.cos(gantry_rad) * np.cos(couch_rad)
 
-                mask = structure.mask
-                spacing = (
-                    structure.image.spacing
-                    if hasattr(structure.image, "spacing")
-                    else [1, 1, 1]
+                source_pos = np.array([x, y, z]) + self.isocenter
+
+            # Tính hướng tia
+            beam_dir = self.isocenter - source_pos
+            beam_dir = beam_dir / np.linalg.norm(beam_dir)
+
+            # Lưu trữ độ sâu của các cấu trúc
+            depth_info = {}
+
+            # Tạo colormap cho hiển thị độ sâu
+            try:
+                cmap = plt.cm.get_cmap("viridis")
+            except:
+                cmap = plt.cm.get_cmap("jet")
+
+            # Vẽ các cấu trúc với mã màu độ sâu
+            for structure in self.structures:
+                if not hasattr(structure, "contours") or not structure.contours:
+                    continue
+
+                # Tập hợp tất cả các điểm từ contours
+                all_points = np.vstack(
+                    [contour for contour in structure.contours if len(contour) > 0]
                 )
-                origin = (
-                    structure.image.origin
-                    if hasattr(structure.image, "origin")
-                    else [0, 0, 0]
+
+                if len(all_points) == 0:
+                    continue
+
+                # Tính khoảng cách từ nguồn đến mỗi điểm (theo hướng tia)
+                vectors = all_points - source_pos
+                distances = np.dot(vectors, beam_dir)
+
+                # Tìm điểm gần nhất và xa nhất
+                entry_depth = np.min(distances)
+                exit_depth = np.max(distances)
+                thickness = exit_depth - entry_depth
+
+                # Lưu thông tin độ sâu
+                depth_info[structure.id] = {
+                    "entry": entry_depth,
+                    "exit": exit_depth,
+                    "thickness": thickness,
+                    "name": structure.name,
+                }
+
+                # Chiếu các điểm lên mặt phẳng BEV
+                bev_points = self._project_to_bev(all_points)
+
+                # Vẽ cấu trúc với mã màu dựa trên độ sâu
+                norm = plt.Normalize(min(distances), max(distances))
+                scatter = self.axes.scatter(
+                    bev_points[:, 0],
+                    bev_points[:, 1],
+                    c=distances,
+                    cmap=cmap,
+                    alpha=0.7,
+                    s=10,
+                    norm=norm,
                 )
 
-                # Tạo contour từ mask 3D
-                verts = []
-                for i in range(mask.shape[0]):
-                    if np.any(mask[i, :, :]):
-                        slice_contours = measure.find_contours(mask[i, :, :], 0.5)
-                        for contour in slice_contours:
-                            # Chuyển đổi từ chỉ số pixel sang tọa độ vật lý
-                            physical_contour = np.zeros((contour.shape[0], 3))
-                            physical_contour[:, 0] = (
-                                contour[:, 1] * spacing[0] + origin[0]
-                            )
-                            physical_contour[:, 1] = (
-                                contour[:, 0] * spacing[1] + origin[1]
-                            )
-                            physical_contour[:, 2] = i * spacing[2] + origin[2]
-                            verts.append(physical_contour)
+            # Thêm colorbar
+            if depth_info:
+                divider = make_axes_locatable(self.axes)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                cbar = self.fig.colorbar(scatter, cax=cax)
+                cbar.set_label("Độ sâu (mm)", color="white")
+                cbar.ax.yaxis.set_tick_params(color="white")
+                plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
 
-                contours = verts
-
-            # Cách 4: Sử dụng meshes 3D (nếu có)
-            elif hasattr(structure, "mesh_vertices") and hasattr(
-                structure, "mesh_faces"
-            ):
-                # Tạo contour từ lưới 3D bằng cách lấy các cạnh biên
-                try:
-                    from scipy.spatial import ConvexHull
-
-                    vertices = structure.mesh_vertices
-                    faces = structure.mesh_faces
-
-                    # Tạo các contour từ các mặt của lưới
-                    # Đối với mỗi mặt, lấy các đỉnh và tạo hull 2D
-                    for face in faces:
-                        face_vertices = vertices[face]
-                        hull = ConvexHull(face_vertices[:, :2])
-                        hull_vertices = face_vertices[hull.vertices]
-                        contours.append(hull_vertices)
-                except ImportError:
-                    logger.warning("Could not import scipy.spatial.ConvexHull")
-                except Exception as e:
-                    logger.error(f"Error creating convex hull: {str(e)}")
-
-            # Nếu không có phương thức nào hoạt động, ghi nhật ký lỗi
-            if not contours:
-                logger.warning(f"Không thể lấy contour cho cấu trúc {structure.name}")
+            # Lưu thông tin độ sâu cho hiển thị
+            self.structure_depths = depth_info
 
         except Exception as e:
-            logger.error(f"Lỗi khi lấy contour cho cấu trúc {structure.name}: {str(e)}")
+            logger.error(f"Error drawing depth indicator: {str(e)}")
 
-        return contours
+    def _draw_depth_information(self):
+        """Draw depth information table for structures."""
+        if not hasattr(self, "structure_depths") or not self.structure_depths:
+            return
+
+        try:
+            # Tìm cấu trúc được chọn
+            selected_id = getattr(self, "selected_structure_id", None)
+
+            # Nếu không có cấu trúc được chọn, chọn cấu trúc đầu tiên
+            if selected_id is None and self.structures:
+                selected_id = self.structures[0].id
+
+            # Nếu không có thông tin độ sâu cho cấu trúc được chọn, thoát
+            if selected_id not in self.structure_depths:
+                return
+
+            # Lấy thông tin độ sâu cho cấu trúc được chọn
+            depth_data = self.structure_depths[selected_id]
+            structure_name = depth_data.get("name", "Cấu trúc")
+
+            # Chuyển đổi từ mm sang cm
+            entry_cm = depth_data.get("entry", 0) / 10
+            exit_cm = depth_data.get("exit", 0) / 10
+            thickness_cm = depth_data.get("thickness", 0) / 10
+
+            # Tạo bảng thông tin
+            table_data = [
+                ["Điểm vào", f"{entry_cm:.2f} cm"],
+                ["Điểm ra", f"{exit_cm:.2f} cm"],
+                ["Độ dày", f"{thickness_cm:.2f} cm"],
+            ]
+
+            # Vị trí bảng ở góc dưới phải
+            x = 0.70
+            y = 0.05
+            width = 0.28
+            height = 0.15
+
+            # Xóa bảng cũ nếu có
+            if hasattr(self.fig, "axes"):
+                axes_list = list(self.fig.axes)
+                for ax in axes_list:
+                    if hasattr(ax, "is_depth_table") and ax.is_depth_table:
+                        self.fig.delaxes(ax)
+
+            # Tạo bảng mới
+            table_ax = self.fig.add_axes([x, y, width, height], frameon=True)
+            table_ax.is_depth_table = True
+            table_ax.axis("off")
+
+            # Tạo tiêu đề
+            table_ax.text(
+                0.5,
+                1.05,
+                f"Độ sâu: {structure_name}",
+                color="white",
+                fontsize=9,
+                horizontalalignment="center",
+                transform=table_ax.transAxes,
+            )
+
+            # Tạo bảng
+            table = table_ax.table(
+                cellText=[[row[1]] for row in table_data],
+                rowLabels=[row[0] for row in table_data],
+                cellLoc="center",
+                rowLoc="center",
+                loc="center",
+                bbox=[0, 0, 1, 1],
+            )
+
+            # Chỉnh style cho bảng
+            table.auto_set_font_size(False)
+            table.set_fontsize(8)
+
+            # Màu nền cho bảng
+            for (i, j), cell in table.get_celld().items():
+                cell.set_facecolor("#333333")
+                cell.set_edgecolor("white")
+                cell.set_text_props(color="white")
+
+                # Highlight hàng với độ dày
+                if i == 2:  # Độ dày
+                    cell.set_facecolor("#555555")
+
+        except Exception as e:
+            logger.error(f"Error drawing depth information: {str(e)}")
 
     def _draw_field(self):
         """Draw the treatment field."""
@@ -789,14 +998,9 @@ class BEVCanvas(FigureCanvas):
                     -10, y, f"{y}", color="white", ha="right", va="center", fontsize=8
                 )
 
-    def _draw_legend(self, structure_contours=None):
+    def _draw_legend(self):
         """
         Draw legend showing structure names and colors.
-
-        Parameters
-        ----------
-        structure_contours : dict, optional
-            Dictionary mapping structure names to sample contours
         """
         if not self.structures:
             return
@@ -875,7 +1079,7 @@ class BEVCanvas(FigureCanvas):
                 # Calculate source position
                 x = self.current_sad * np.sin(gantry_rad) * np.cos(couch_rad)
                 y = self.current_sad * np.sin(gantry_rad) * np.sin(couch_rad)
-                z = self.current_sad * np.cos(gantry_rad)
+                z = self.current_sad * np.cos(gantry_rad) * np.cos(couch_rad)
 
                 source_pos = np.array([x, y, z]) + self.isocenter
 
@@ -1109,169 +1313,249 @@ class BEVCanvas(FigureCanvas):
 
         self.fig.canvas.draw_idle()
 
+    def set_structure_display_mode(self, mode):
+        """
+        Thiết lập chế độ hiển thị cấu trúc.
+
+        Parameters
+        ----------
+        mode : str
+            Chế độ hiển thị: 'contour', 'surface', hoặc 'hybrid'
+        """
+        if mode in ["contour", "surface", "hybrid"]:
+            self.structure_display_mode = mode
+            self.update_view()
+        else:
+            logger.warning(f"Chế độ hiển thị không hợp lệ: {mode}")
+
+    def toggle_depth_shading(self, enabled):
+        """
+        Bật/tắt hiển thị thông tin độ sâu của cấu trúc.
+
+        Parameters
+        ----------
+        enabled : bool
+            True để bật hiển thị độ sâu, False để tắt
+        """
+        self.depth_shading = enabled
+        self.show_depth_indicator = enabled
+        self.update_view()
+
+    def toggle_technical_info(self, show):
+        """
+        Bật/tắt hiển thị thông tin kỹ thuật.
+
+        Parameters
+        ----------
+        show : bool
+            True để hiển thị thông tin kỹ thuật, False để ẩn
+        """
+        self.show_technical_info = show
+        self.update_view()
+
+    def toggle_depth(self, checked):
+        """Bật/tắt hiển thị độ sâu cấu trúc."""
+        self.show_depth = checked
+        self.bev_canvas.toggle_depth(checked)
+        self.depth_colormap_combo.setEnabled(checked)
+
+        # Cập nhật trạng thái
+        if checked:
+            self.status_label.setText("Hiển thị độ sâu: Bật")
+            # Tính toán độ sâu cấu trúc
+            self.bev_canvas.calculate_structure_depths()
+        else:
+            self.status_label.setText("Hiển thị độ sâu: Tắt")
+
+    def set_depth_colormap(self, cmap_name):
+        """Thiết lập colormap cho hiển thị độ sâu."""
+        try:
+            self.depth_colormap = plt.cm.get_cmap(cmap_name)
+            if hasattr(self, "show_depth") and self.show_depth:
+                self.update_view()
+        except Exception as e:
+            logger.error(f"Error setting depth colormap: {str(e)}")
+
+    def set_selected_structure(self, structure_id):
+        """Thiết lập cấu trúc được chọn để hiển thị thông tin độ sâu."""
+        self.selected_structure_id = structure_id
+        if hasattr(self, "show_depth") and self.show_depth:
+            self.update_view()
+
+    def calculate_structure_depths(self):
+        """Tính toán độ sâu của các cấu trúc từ nguồn tia đến cấu trúc."""
+        self._draw_depth_indicator()  # Phương thức này đã xử lý việc tính toán độ sâu
+        self.update_view()
+
 
 class BeamEyeView(QWidget):
     """Widget for displaying and interacting with beam's eye view."""
 
-    # Signals
-    fieldSizeChanged = pyqtSignal(float, float)
-    mlcPositionChanged = pyqtSignal(
-        int, float, float
-    )  # leaf_index, bankA_pos, bankB_pos
     structureSelected = pyqtSignal(str)  # structure_id
+    fieldSizeChanged = pyqtSignal(float, float)  # width, height
+    mlcPositionChanged = pyqtSignal(list)  # list of positions
+    mlcFittedToStructure = pyqtSignal()
 
     def __init__(self, parent=None):
         """Initialize the beam's eye view widget."""
-        super(BeamEyeView, self).__init__(parent)
-        self.structures = []
-        self.beam = None
-        self.init_ui()
+        super().__init__(parent)
 
-    def init_ui(self):
-        """Initialize the user interface."""
+        # Setup UI
+        self.setup_ui()
+
+        # Initialize variables
+        self.beam = None
+        self.structures = []
+        self._selected_structure_id = None
+        self.mlc_edit_mode = False
+        self.beam_info_visible = True  # Hiển thị thông tin kỹ thuật của chùm tia
+        self.show_depth = False  # Hiển thị độ sâu mặc định tắt
+
+    def setup_ui(self):
+        """Setup the user interface."""
         # Main layout
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         # Toolbar
         toolbar = QToolBar()
-        toolbar.setIconSize(QSize(16, 16))
-
-        # Visibility toggles
-        self.toggle_structures_action = QAction(
-            QIcon.fromTheme("view-list-icons", QIcon()), "Show Structures", self
-        )
-        self.toggle_structures_action.setCheckable(True)
-        self.toggle_structures_action.setChecked(True)
-        self.toggle_structures_action.toggled.connect(self._toggle_structures)
-        toolbar.addAction(self.toggle_structures_action)
-
-        self.toggle_field_action = QAction(
-            QIcon.fromTheme("view-grid", QIcon()), "Show Field", self
-        )
-        self.toggle_field_action.setCheckable(True)
-        self.toggle_field_action.setChecked(True)
-        self.toggle_field_action.toggled.connect(self._toggle_field)
-        toolbar.addAction(self.toggle_field_action)
-
-        self.toggle_mlc_action = QAction(
-            QIcon.fromTheme("document-properties", QIcon()), "Show MLC", self
-        )
-        self.toggle_mlc_action.setCheckable(True)
-        self.toggle_mlc_action.setChecked(True)
-        self.toggle_mlc_action.toggled.connect(self._toggle_mlc)
-        toolbar.addAction(self.toggle_mlc_action)
-
-        self.toggle_jaws_action = QAction(
-            QIcon.fromTheme("document-page-setup", QIcon()), "Show Jaws", self
-        )
-        self.toggle_jaws_action.setCheckable(True)
-        self.toggle_jaws_action.setChecked(True)
-        self.toggle_jaws_action.toggled.connect(self._toggle_jaws)
-        toolbar.addAction(self.toggle_jaws_action)
-
-        toolbar.addSeparator()
-
-        # Fit MLC to structure action
-        self.fit_mlc_action = QAction(
-            QIcon.fromTheme("insert-object", QIcon()), "Fit MLC to Structure", self
-        )
-        self.fit_mlc_action.triggered.connect(self._fit_mlc_to_structure)
-        toolbar.addAction(self.fit_mlc_action)
-
-        # Edit MLC action
-        self.edit_mlc_action = QAction(
-            QIcon.fromTheme("document-edit", QIcon()), "Edit MLC", self
-        )
-        self.edit_mlc_action.setCheckable(True)
-        self.edit_mlc_action.toggled.connect(self._toggle_mlc_edit_mode)
-        toolbar.addAction(self.edit_mlc_action)
-
-        toolbar.addSeparator()
-
-        # Export view action
-        self.export_action = QAction(
-            QIcon.fromTheme("document-save-as", QIcon()), "Export View", self
-        )
-        self.export_action.triggered.connect(self._export_view)
-        toolbar.addAction(self.export_action)
-
-        # Add toolbar to layout
         main_layout.addWidget(toolbar)
 
-        # Options panel
-        options_layout = QHBoxLayout()
-
-        # Structure selection
-        structure_form = QFormLayout()
-        self.structure_combo = QComboBox()
-        self.structure_combo.setToolTip("Select a structure to highlight or fit MLC to")
-        self.structure_combo.currentIndexChanged.connect(self._on_structure_selected)
-        structure_form.addRow("Structure:", self.structure_combo)
-
-        structure_group = QGroupBox("Structures")
-        structure_group.setLayout(structure_form)
-        options_layout.addWidget(structure_group)
-
         # Field size controls
-        field_form = QFormLayout()
+        field_label = QLabel("Kích thước trường:")
+        toolbar.addWidget(field_label)
 
-        self.field_width_spin = QSlider(Qt.Horizontal)
+        self.field_width_spin = QSpinBox()
         self.field_width_spin.setRange(10, 400)
         self.field_width_spin.setValue(100)
-        self.field_width_spin.setToolTip("Field width (mm)")
+        self.field_width_spin.setSuffix(" mm")
         self.field_width_spin.valueChanged.connect(self._on_field_size_changed)
-        field_form.addRow("Width (mm):", self.field_width_spin)
+        toolbar.addWidget(self.field_width_spin)
 
-        self.field_height_spin = QSlider(Qt.Horizontal)
+        self.field_height_spin = QSpinBox()
         self.field_height_spin.setRange(10, 400)
         self.field_height_spin.setValue(100)
-        self.field_height_spin.setToolTip("Field height (mm)")
+        self.field_height_spin.setSuffix(" mm")
         self.field_height_spin.valueChanged.connect(self._on_field_size_changed)
-        field_form.addRow("Height (mm):", self.field_height_spin)
+        toolbar.addWidget(self.field_height_spin)
 
-        field_group = QGroupBox("Field Size")
-        field_group.setLayout(field_form)
-        options_layout.addWidget(field_group)
+        toolbar.addSeparator()
 
         # SAD control
-        sad_form = QFormLayout()
+        sad_label = QLabel("SAD:")
+        toolbar.addWidget(sad_label)
 
         self.sad_slider = QSlider(Qt.Horizontal)
-        self.sad_slider.setRange(500, 2000)
+        self.sad_slider.setRange(800, 1200)
         self.sad_slider.setValue(1000)
-        self.sad_slider.setToolTip("Source-to-axis distance (mm)")
+        self.sad_slider.setFixedWidth(100)
         self.sad_slider.valueChanged.connect(self._on_sad_changed)
-        sad_form.addRow("SAD (mm):", self.sad_slider)
+        toolbar.addWidget(self.sad_slider)
 
-        sad_group = QGroupBox("Source Distance")
-        sad_group.setLayout(sad_form)
-        options_layout.addWidget(sad_group)
+        self.sad_value_label = QLabel("1000 mm")
+        toolbar.addWidget(self.sad_value_label)
 
-        # Add options to layout
-        main_layout.addLayout(options_layout)
+        toolbar.addSeparator()
 
-        # Add horizontal separator
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        main_layout.addWidget(line)
+        # Structure selection
+        structure_label = QLabel("Cấu trúc:")
+        toolbar.addWidget(structure_label)
+
+        self.structure_combo = QComboBox()
+        self.structure_combo.setFixedWidth(150)
+        self.structure_combo.currentIndexChanged.connect(self._on_structure_selected)
+        toolbar.addWidget(self.structure_combo)
+
+        toolbar.addSeparator()
+
+        # Fit MLC button
+        self.fit_mlc_button = QPushButton("Fit MLC")
+        self.fit_mlc_button.clicked.connect(self._fit_mlc_to_structure)
+        toolbar.addWidget(self.fit_mlc_button)
+
+        toolbar.addSeparator()
+
+        # Edit MLC toggle
+        self.edit_mlc_checkbox = QCheckBox("Chỉnh sửa MLC")
+        self.edit_mlc_checkbox.toggled.connect(self._toggle_mlc_edit)
+        toolbar.addWidget(self.edit_mlc_checkbox)
+
+        toolbar.addSeparator()
+
+        # Hiển thị độ sâu
+        self.show_depth_checkbox = QCheckBox("Hiển thị độ sâu")
+        self.show_depth_checkbox.toggled.connect(self._toggle_depth)
+        toolbar.addWidget(self.show_depth_checkbox)
+
+        # Dropdown chọn colormap
+        self.depth_colormap_combo = QComboBox()
+        self.depth_colormap_combo.addItems(
+            ["viridis", "jet", "plasma", "inferno", "magma", "cividis"]
+        )
+        self.depth_colormap_combo.setCurrentIndex(0)
+        self.depth_colormap_combo.currentTextChanged.connect(
+            self._on_depth_colormap_changed
+        )
+        self.depth_colormap_combo.setEnabled(False)
+        toolbar.addWidget(self.depth_colormap_combo)
+
+        # Second toolbar
+        toolbar2 = QToolBar()
+        main_layout.addWidget(toolbar2)
+
+        # View controls
+        view_label = QLabel("Hiển thị:")
+        toolbar2.addWidget(view_label)
+
+        self.structures_checkbox = QCheckBox("Cấu trúc")
+        self.structures_checkbox.setChecked(True)
+        self.structures_checkbox.toggled.connect(self._toggle_structures)
+        toolbar2.addWidget(self.structures_checkbox)
+
+        self.field_checkbox = QCheckBox("Trường điều trị")
+        self.field_checkbox.setChecked(True)
+        self.field_checkbox.toggled.connect(self._toggle_field)
+        toolbar2.addWidget(self.field_checkbox)
+
+        self.mlc_checkbox = QCheckBox("MLC")
+        self.mlc_checkbox.setChecked(True)
+        self.mlc_checkbox.toggled.connect(self._toggle_mlc)
+        toolbar2.addWidget(self.mlc_checkbox)
+
+        self.jaws_checkbox = QCheckBox("Hàm")
+        self.jaws_checkbox.setChecked(True)
+        self.jaws_checkbox.toggled.connect(self._toggle_jaws)
+        toolbar2.addWidget(self.jaws_checkbox)
+
+        self.grid_checkbox = QCheckBox("Lưới")
+        self.grid_checkbox.setChecked(True)
+        self.grid_checkbox.toggled.connect(self._toggle_grid)
+        toolbar2.addWidget(self.grid_checkbox)
+
+        self.rulers_checkbox = QCheckBox("Thước")
+        self.rulers_checkbox.setChecked(True)
+        self.rulers_checkbox.toggled.connect(self._toggle_rulers)
+        toolbar2.addWidget(self.rulers_checkbox)
+
+        self.beam_info_checkbox = QCheckBox("Thông tin chùm tia")
+        self.beam_info_checkbox.setChecked(True)
+        self.beam_info_checkbox.toggled.connect(self._toggle_beam_info)
+        toolbar2.addWidget(self.beam_info_checkbox)
 
         # BEV canvas
-        self.bev_canvas = BEVCanvas(self)
+        self.bev_canvas = BEVCanvas(self, width=8, height=8, dpi=100)
         main_layout.addWidget(self.bev_canvas, 1)
 
-        # Connect MLC position changed signal
-        self.bev_canvas.mlc_position_changed.connect(self.mlcPositionChanged)
-
         # Status bar
-        self.status_label = QLabel("Ready")
-        main_layout.addWidget(self.status_label)
+        status_layout = QHBoxLayout()
+        main_layout.addLayout(status_layout)
 
-        self.setLayout(main_layout)
+        self.status_label = QLabel("Sẵn sàng")
+        status_layout.addWidget(self.status_label)
 
-        # Set initial state
-        self._mlc_edit_mode = False
-        self._selected_structure_id = None
+        # Connect canvas signals
+        self.bev_canvas.mlc_position_changed.connect(self._on_mlc_position_changed)
 
     def set_beam(self, beam):
         """
@@ -1320,6 +1604,10 @@ class BeamEyeView(QWidget):
         # Update canvas
         self.bev_canvas.set_structures(structures)
 
+        # Nếu hiển thị độ sâu đang bật, tính toán độ sâu cấu trúc
+        if self.show_depth:
+            self.bev_canvas.calculate_structure_depths()
+
     def _on_structure_selected(self, index):
         """Handle structure selection."""
         if index >= 0 and index < len(self.structures):
@@ -1328,6 +1616,9 @@ class BeamEyeView(QWidget):
             self.status_label.setText(
                 f"Selected structure: {self.structures[index].name}"
             )
+
+            # Cập nhật cấu trúc được chọn trong canvas
+            self.bev_canvas.set_selected_structure(self._selected_structure_id)
 
     def _fit_mlc_to_structure(self):
         """Fit MLC to the currently selected structure."""
@@ -1467,9 +1758,9 @@ class BeamEyeView(QWidget):
             logger.error(f"Error fitting MLC to structure: {str(e)}")
             self.status_label.setText(f"Error fitting MLC: {str(e)}")
 
-    def _toggle_mlc_edit_mode(self, enabled):
+    def _toggle_mlc_edit(self, enabled):
         """Toggle MLC editing mode."""
-        self._mlc_edit_mode = enabled
+        self.mlc_edit_mode = enabled
         self.bev_canvas.mlc_edit_mode = enabled
 
         if enabled:
@@ -1505,6 +1796,13 @@ class BeamEyeView(QWidget):
         """Toggle rulers visibility."""
         self.bev_canvas.toggle_rulers(checked)
 
+    def _toggle_beam_info(self, checked):
+        """Bật/tắt hiển thị thông tin kỹ thuật của chùm tia."""
+        self.beam_info_visible = checked
+        if hasattr(self.bev_canvas, "show_technical_info"):
+            self.bev_canvas.show_technical_info = checked
+            self.bev_canvas.update_view()
+
     def _on_field_size_changed(self):
         """Handle field size change."""
         width = self.field_width_spin.value()
@@ -1528,44 +1826,13 @@ class BeamEyeView(QWidget):
         if self.beam and hasattr(self.beam, "sad"):
             self.beam.sad = value
 
-    def _export_view(self):
-        """Export the current view to an image file."""
-        try:
-            # Sử dụng try/except để xử lý việc import QFileDialog
-            try:
-                from PyQt5.QtWidgets import QFileDialog
-            except ImportError as e:
-                logger.error(f"Could not import QFileDialog: {e}")
-                self.status_label.setText(
-                    "Error: Could not export image, QFileDialog not available"
-                )
-                return
+    def _on_mlc_position_changed(self, mlc_positions):
+        """Handle MLC position change."""
+        self.mlcPositionChanged.emit(mlc_positions)
 
-            filename, _ = QFileDialog.getSaveFileName(
-                self,
-                "Export Beam's Eye View",
-                "",
-                "PNG Files (*.png);;JPEG Files (*.jpg);;All Files (*)",
-            )
-
-            if filename:
-                self.bev_canvas.export_view(filename)
-                self.status_label.setText(f"Exported view to {filename}")
-        except Exception as e:
-            logger.error(f"Error exporting view: {str(e)}")
-            self.status_label.setText(f"Error exporting view: {str(e)}")
-
-    def update_leaf_positions(self, mlc_positions):
-        """
-        Update MLC leaf positions externally.
-
-        Parameters
-        ----------
-        mlc_positions : list
-            List of dictionaries with leaf positions
-        """
-        self.bev_canvas.mlc_positions = mlc_positions
-        self.bev_canvas.update_view()
+    def _on_depth_colormap_changed(self, cmap_name):
+        """Xử lý khi colormap được thay đổi."""
+        self.bev_canvas.set_depth_colormap(cmap_name)
 
 
 def test_beam_eye_view():
@@ -1575,69 +1842,69 @@ def test_beam_eye_view():
     try:
         # Sử dụng try/except để xử lý các lỗi import
         try:
-            from PyQt5.QtWidgets import QApplication, QMainWindow
+    from PyQt5.QtWidgets import QApplication, QMainWindow
         except ImportError as e:
             logger.error(f"Unable to import PyQt5 components: {e}")
             print(f"Unable to import PyQt5 components: {e}")
             return 1
 
-        app = QApplication(sys.argv)
+    app = QApplication(sys.argv)
 
-        # Create main window
-        window = QMainWindow()
-        window.setWindowTitle("Beam's Eye View Test")
-        window.resize(800, 800)
+    # Create main window
+    window = QMainWindow()
+    window.setWindowTitle("Beam's Eye View Test")
+    window.resize(800, 800)
 
-        # Create BEV widget
-        bev_widget = BeamEyeView()
+    # Create BEV widget
+    bev_widget = BeamEyeView()
 
-        # Create test beam
-        class TestBeam:
-            def __init__(self):
+    # Create test beam
+    class TestBeam:
+        def __init__(self):
                 self.name = "Test Beam"
-                self.gantry_angle = 0
-                self.collimator_angle = 0
-                self.sad = 1000
-                self.isocenter = [0, 0, 0]
-                self.field_size = [100, 100]
-                self.mlc_positions = None
-                self.jaw_positions = None
+            self.gantry_angle = 0
+            self.collimator_angle = 0
+            self.sad = 1000
+            self.isocenter = [0, 0, 0]
+            self.field_size = [100, 100]
+            self.mlc_positions = None
+            self.jaw_positions = None
 
-        # Create test structures
-        class TestStructure:
-            def __init__(self, name, id, contours=None):
-                self.name = name
-                self.id = id
-                self.contours = contours or []
+    # Create test structures
+    class TestStructure:
+        def __init__(self, name, id, contours=None):
+            self.name = name
+            self.id = id
+            self.contours = contours or []
 
-        # Create test data
-        beam = TestBeam()
+    # Create test data
+    beam = TestBeam()
 
-        # Create some test contours (simplified for example)
+    # Create some test contours (simplified for example)
         try:
-            ptv_contours = [
+    ptv_contours = [
                 np.array([[20, 30, 0], [20, -30, 0], [-20, -30, 0], [-20, 30, 0]])
-            ]
+    ]
 
-            cord_contours = [
+    cord_contours = [
                 np.array([[5, 10, 20], [5, -10, 20], [-5, -10, 20], [-5, 10, 20]])
-            ]
+    ]
 
-            body_contours = [
+    body_contours = [
                 np.array(
                     [[100, 100, 0], [100, -100, 0], [-100, -100, 0], [-100, 100, 0]]
                 )
-            ]
+    ]
 
-            structures = [
-                TestStructure("PTV", "ptv1", ptv_contours),
-                TestStructure("Spinal Cord", "cord", cord_contours),
+    structures = [
+        TestStructure("PTV", "ptv1", ptv_contours),
+        TestStructure("Spinal Cord", "cord", cord_contours),
                 TestStructure("BODY", "body", body_contours),
-            ]
+    ]
 
-            # Set data in widget
-            bev_widget.set_beam(beam)
-            bev_widget.set_structures(structures)
+    # Set data in widget
+    bev_widget.set_beam(beam)
+    bev_widget.set_structures(structures)
         except Exception as e:
             logger.error(f"Error creating test data: {e}")
             structures = [
@@ -1648,12 +1915,12 @@ def test_beam_eye_view():
             bev_widget.set_beam(beam)
             bev_widget.set_structures(structures)
 
-        # Set as central widget
-        window.setCentralWidget(bev_widget)
+    # Set as central widget
+    window.setCentralWidget(bev_widget)
 
-        window.show()
+    window.show()
         try:
-            return app.exec_()
+    return app.exec_()
         except Exception as e:
             logger.error(f"Error in Qt event loop: {e}")
             return 1

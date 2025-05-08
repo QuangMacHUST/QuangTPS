@@ -1,173 +1,93 @@
-# QuangTPS - Radiation Therapy Treatment Planning System
+# QuangTPS - Hệ thống Lập kế hoạch Xạ trị
 
-QuangTPS is a comprehensive radiation therapy treatment planning system designed for educational and research purposes. It provides a set of tools for radiotherapy planning, including image visualization, structure contouring, beam planning, dose calculation, and plan evaluation.
+QuangTPS là một hệ thống lập kế hoạch xạ trị toàn diện được phát triển cho mục đích nghiên cứu và giáo dục. Hệ thống cung cấp đầy đủ công cụ cho quy trình xạ trị, bao gồm hiển thị hình ảnh, vẽ cấu trúc, thiết lập chùm tia, tính toán liều, và đánh giá kế hoạch.
 
-## Features
+## Phiên bản hiện tại
+**[v0.7.26]** - Đã phát triển module dự đoán thay đổi giải phẫu với biến dạng nâng cao và module tối ưu hóa đa tiêu chí (MCO) với bề mặt Pareto.
 
-- **Eclipse-like Interface** - Modern user interface similar to Varian Eclipse TPS with intuitive workflow and comprehensive tools
-- **Multi-Planar Reconstruction (MPR)** - View and navigate through medical images in axial, sagittal, and coronal planes
-- **3D Visualization** - Visualize patient anatomy, structures, and dose distribution in 3D using VTK
-- **Structure Contouring** - Draw and edit structures with advanced contouring tools (brush, pencil, polygon, threshold)
-- **External Beam Planning** - Create and manage external beam radiation therapy plans with comprehensive beam parameters
-- **Dose Calculation** - Calculate dose distribution using a simplified pencil beam algorithm
-- **Clinical Protocols** - Define, import, and manage clinical protocols for plan evaluation
-- **Plan Quality Evaluation** - Automated assessment of plan quality against clinical protocols and goals
-- **Plan Evaluation** - Analyze treatment plans with DVH (Dose-Volume Histogram) and structure statistics
-- **DICOM Support** - Import and export DICOM images, structures, plans, and dose
+## Tính năng chính
 
-## Screenshots
+- **Giao diện tương tự Eclipse** - Giao diện người dùng hiện đại tương tự Varian Eclipse TPS với quy trình trực quan và công cụ toàn diện
+- **Tái tạo hình ảnh đa mặt phẳng (MPR)** - Xem và điều hướng hình ảnh y tế trên các mặt phẳng axial, sagittal và coronal
+- **Hiển thị 3D** - Trực quan hóa giải phẫu, cấu trúc và phân bố liều trong không gian 3D sử dụng VTK
+- **Công cụ vẽ cấu trúc** - Vẽ và chỉnh sửa cấu trúc với các công cụ vẽ nâng cao (brush, pencil, polygon, threshold)
+- **Lập kế hoạch chùm tia ngoài** - Tạo và quản lý kế hoạch xạ trị chùm tia ngoài với đầy đủ tham số chùm tia
+- **Tính toán liều nâng cao** - Tính toán phân bố liều sử dụng AAA, Acuros XB, Monte Carlo và các thuật toán đơn giản hóa
+- **Tối ưu hóa VMAT** - Tối ưu hóa kế hoạch VMAT với chất lượng tương đương các hệ thống thương mại
+- **Trình biên tập MLC** - Trình biên tập MLC nâng cao với chế độ Beam's Eye View để tạo hình trường chùm tia chính xác
+- **Giao thức lâm sàng** - Định nghĩa, nhập và quản lý giao thức lâm sàng để đánh giá kế hoạch
+- **Đánh giá chất lượng kế hoạch** - Đánh giá tự động chất lượng kế hoạch theo giao thức và mục tiêu lâm sàng
+- **Các chỉ số đánh giá toàn diện** - Tính toán CI, HI, GI, TCP, NTCP và các chỉ số chất lượng khác
+- **Tối ưu hóa đa tiêu chí (MCO)** - Tìm kiếm kế hoạch tối ưu với bề mặt Pareto và bộ điều hướng tương tác
+- **Lập kế hoạch thích ứng** - Hỗ trợ dự đoán thay đổi giải phẫu và tối ưu hóa kế hoạch thích ứng
+- **Hỗ trợ DICOM** - Nhập và xuất hình ảnh DICOM, cấu trúc, kế hoạch và liều
 
-*(Screenshots would be included here)*
+## Cài đặt
 
-## Installation
+### Yêu cầu
 
-### Prerequisites
-
-- Python 3.8 or higher
+- Python 3.8 trở lên
 - Git
 
-### Installation Steps
+### Các bước cài đặt
 
-1. Clone the repository:
+1. Clone repository:
    ```
    git clone https://github.com/yourusername/QuangTPS.git
    cd QuangTPS
    ```
 
-2. Install dependencies:
+2. Cài đặt thư viện phụ thuộc:
    ```
    python scripts/install_all_dependencies.py
    ```
 
-3. Verify installation:
+3. Xác nhận cài đặt:
    ```
    python scripts/run_quangtps.py
    ```
 
-### Dependencies
+### Thư viện phụ thuộc
 
-QuangTPS requires the following main libraries:
+QuangTPS yêu cầu các thư viện chính sau:
 
-- **NumPy** - For numerical computations
-- **PyQt5** - For the graphical user interface
-- **VTK** - For 3D visualization
-- **SimpleITK** - For image processing
-- **pydicom** - For DICOM file handling
-- **matplotlib** - For plotting
-- **scikit-image** - For image processing
+- **NumPy** - Cho tính toán số học
+- **PyQt5** - Cho giao diện đồ họa
+- **VTK** - Cho hiển thị 3D
+- **SimpleITK** - Cho xử lý hình ảnh
+- **pydicom** - Cho xử lý file DICOM
+- **matplotlib** - Cho vẽ biểu đồ
+- **scikit-image** - Cho xử lý hình ảnh
 
-## Usage
+## Cách sử dụng
 
-### Running the Application
+### Chạy ứng dụng
 
 ```
 python scripts/run_quangtps.py [options]
 ```
 
-Options:
-- `--debug` - Enable debug logging
-- `--patient-dir PATH` - Open a specific patient directory at startup
+Tùy chọn:
+- `--debug` - Bật ghi log debug
+- `--patient-dir PATH` - Mở thư mục bệnh nhân cụ thể khi khởi động
 
-### Basic Workflow
+### Quy trình cơ bản
 
-1. **Patient Tab**: Select or import patient data
-2. **Structure Tab**: Create and edit structures (targets and organs at risk)
-3. **External Beam Planning Tab**: Create and configure treatment beams and calculate dose
-4. **Evaluation Tab**: Evaluate the treatment plan with DVH, statistics, and protocol compliance
+1. **Tab Bệnh nhân**: Chọn hoặc nhập dữ liệu bệnh nhân
+2. **Tab Cấu trúc**: Tạo và chỉnh sửa cấu trúc (mục tiêu và cơ quan nguy cấp)
+3. **Tab Lập kế hoạch chùm tia ngoài**: Tạo và cấu hình chùm tia điều trị và tính toán liều
+4. **Tab Đánh giá**: Đánh giá kế hoạch điều trị với DVH, thống kê và tuân thủ giao thức
 
-## Component Documentation
+## Đóng góp
 
-### MPR Viewer
+Đóng góp vào QuangTPS được khuyến khích! Vui lòng làm theo các bước sau:
 
-The MPR Viewer provides a synchronized view of the patient's medical images in three planes:
-- Axial (transverse)
-- Sagittal
-- Coronal
+1. Fork repository
+2. Tạo nhánh tính năng mới (`git checkout -b feature/amazing-feature`)
+3. Commit các thay đổi của bạn (`git commit -m 'Add some amazing feature'`)
+4. Push lên nhánh của bạn (`git push origin feature/amazing-feature`)
+5. Mở Pull Request
 
-Features include:
-- Window/level adjustment
-- Structure overlay
-- Dose overlay
-- Measurement tools
-- Synchronized scrolling
+## Tuyên bố từ chối trách nhiệm
 
-### Structure Tools
-
-The Structure Tab offers advanced contouring tools:
-- **Brush Tool**: Freehand drawing with adjustable size and hardness
-- **Pencil Tool**: Precise contour drawing
-- **Polygon Tool**: Create polygon contours
-- **Threshold Tool**: Semi-automatic contouring based on intensity thresholds
-
-### Beam Planning
-
-The External Beam Planning Tab allows creating and managing external radiation therapy beams:
-- Setup of beam parameters (energy, gantry angle, couch angle, collimator angle)
-- Field size adjustment
-- Beam weighting
-- Beam visualization
-- MLC (Multi-Leaf Collimator) editing
-- Real-time dose calculation and visualization
-- Integration with plan evaluation
-
-### Dose Calculation
-
-The dose calculation module implements a simplified pencil beam algorithm with:
-- Percentage depth dose (PDD) modeling
-- Beam profile modeling
-- Tissue heterogeneity handling
-- Dose grid resolution setting
-- Multi-beam dose accumulation
-
-### Clinical Protocols
-
-The Clinical Protocol system provides tools for plan quality assessment:
-- **Protocol Management**: Create, edit, import, and export clinical protocols
-- **Structure Matching**: Automatically match structures to protocol goals
-- **Goal Definition**: Define various goal types (D95, V20, Max Dose, etc.)
-- **Predefined Protocols**: Built-in protocols for common treatment sites
-- **Priority Levels**: Critical, High, Medium, and Low priority goals
-- **Acceptable Variations**: Define acceptable variations for each goal
-
-### Plan Quality Evaluation
-
-The Plan Quality Evaluation system provides automated assessment:
-- **Automated Evaluation**: Evaluate plans against clinical protocols
-- **Score Calculation**: Overall, target, and OAR scores
-- **Visual Feedback**: Color-coded progress bars and status indicators
-- **Detailed Results**: Comprehensive table of goals and achievements
-- **Report Generation**: Generate detailed evaluation reports
-
-### Plan Evaluation
-
-The Evaluation Tab provides tools for plan analysis:
-- DVH calculation and visualization
-- Structure dose statistics (min, max, mean, D95, D50, D2, V95)
-- Clinical protocol compliance checking
-- Plan quality scores and metrics
-- Plan report generation
-
-## Documentation
-
-For more detailed information, see the following documentation:
-- [Eclipse-like Features Documentation](docs/ECLIPSE_FEATURES.md)
-- [User Guide for Eclipse-like Features](docs/USER_GUIDE_ECLIPSE_FEATURES.md)
-- [Demo Guide](DEMO_GUIDE.md)
-
-## Contributing
-
-Contributions to QuangTPS are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- The VTK development team for their visualization toolkit
-- The PyQt team for the GUI framework
-- The medical physics community for their guidance and standards
-
-## Disclaimer
-
-QuangTPS is designed for educational and research purposes. It is not FDA-approved or CE-marked, and should not be used for clinical treatment planning without appropriate validation and approval.
+QuangTPS được thiết kế cho mục đích giáo dục và nghiên cứu. Hệ thống không được FDA phê duyệt hoặc đánh dấu CE, và không nên sử dụng cho lập kế hoạch điều trị lâm sàng mà không có xác nhận và phê duyệt thích hợp.

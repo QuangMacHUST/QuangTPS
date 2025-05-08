@@ -37,10 +37,33 @@ except ImportError:
 try:
     import tensorflow as tf
 
-    HAS_TF = True
+    # Kiểm tra xem tf có keras submodule không
+    if hasattr(tf, "keras"):
+        HAS_TF = True
+    else:
+        HAS_TF = False
+
+        # Tạo lớp giả lập để tránh lỗi linter
+        class MockKerasModule:
+            class models:
+                @staticmethod
+                def load_model(path):
+                    raise ImportError("TensorFlow không có keras module")
+
+        tf.keras = MockKerasModule()
 except ImportError:
     HAS_TF = False
-    tf = None
+    tf = type(
+        "MockTensorFlow",
+        (),
+        {
+            "keras": type(
+                "MockKeras",
+                (),
+                {"models": type("MockModels", (), {"load_model": lambda path: None})},
+            )
+        },
+    )()
 
 try:
     from scipy.ndimage import zoom, binary_closing, binary_opening
@@ -386,6 +409,11 @@ class TensorFlowSegmentationEngine(AISegmentationEngine):
             True nếu tải thành công, False nếu không
         """
         try:
+            # Kiểm tra TensorFlow có sẵn không
+            if not HAS_TF:
+                logger.error("TensorFlow không khả dụng để tải mô hình")
+                return False
+
             # Tải mô hình
             self.model = tf.keras.models.load_model(model_path)
 
