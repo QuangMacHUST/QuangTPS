@@ -392,7 +392,7 @@ class MCOEngine:
             target_objectives
         )
         if solution:
-            self.current_solution = solution
+        self.current_solution = solution
 
         return solution
 
@@ -602,7 +602,7 @@ class MCOEngine:
                     pass  # TODO: Load navigation history
 
             logger.info(f"Loaded MCO session from {filepath}")
-            return engine
+    return engine
 
         except Exception as e:
             logger.error(f"Error loading MCO session: {str(e)}")

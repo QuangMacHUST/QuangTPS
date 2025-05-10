@@ -19,10 +19,11 @@ from matplotlib.patches import Rectangle, Circle, Polygon
 from matplotlib.lines import Line2D
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from typing import List, Dict, Any, Tuple, Optional, Union
 
 # Import PyQt5 using try/except pattern to handle potential import errors
 try:
-from PyQt5.QtWidgets import (
+    from PyQt5.QtWidgets import (
         QWidget,
         QVBoxLayout,
         QHBoxLayout,
@@ -40,15 +41,15 @@ from PyQt5.QtWidgets import (
         QFrame,
         QFormLayout,
         QSpinBox,
-)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QIcon, QPixmap, QColor
+    )
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize
+    from PyQt5.QtGui import QIcon, QPixmap, QColor
 
     PYQT_AVAILABLE = True
-except ImportError as e:
-    logging.error(f"Unable to import PyQt5 components: {e}")
+except ImportError:
+    # Fallback if PyQt5 is not available
+    PYQT_AVAILABLE = False
 
-    # Define placeholder classes if needed for type checking to avoid errors
     class FigureCanvasQTAgg:
         pass
 
@@ -62,10 +63,9 @@ except ImportError as e:
         pass
 
     class pyqtSignal:
-        pass
+        def __init__(self, *args):
+            pass
 
-    # And other required classes...
-    PYQT_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -77,58 +77,117 @@ class BEVCanvas(FigureCanvas):
         int, float, float
     )  # leaf_index, bankA_pos, bankB_pos
 
-    def __init__(self, parent=None, width=6, height=6, dpi=100):
+    def __init__(self, parent=None, width=5, height=5, dpi=100):
         """Initialize the BEV canvas."""
-        self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor="black")
+        # Create figure and axes
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
-        super().__init__(self.fig)
+        super(BEVCanvas, self).__init__(self.fig)
         self.setParent(parent)
 
-        # Setup figure
-        self.setup_figure()
-
-        # Initialize variables
-        self.beam = None
-        self.structures = []
-        self.current_sad = 1000.0  # Source-to-axis distance in mm
-        self.isocenter = np.array([0, 0, 0])
-        self.field_size = [100, 100]  # mm
-        self.mlc_positions = None
-        self.jaw_positions = None
+        # Display parameters
         self.show_structures = True
         self.show_field = True
         self.show_mlc = True
-        self.show_jaws = True
-        self.show_grid = True
-        self.show_rulers = True
-        self.structure_colors = {}
+        self.show_depth_colorwash = False
+        self.opacity = 0.7
+        self.field_size = (10, 10)  # cm x cm
+        self.grid_spacing = 1.0  # cm
+        self.display_range = (-15, 15, -15, 15)  # xmin, xmax, ymin, ymax in cm
+        self.current_sad = 100.0  # cm
+        self.colorbar = None
 
-        # MLC interaction
-        self.drag_leaf = None
-        self.mlc_edit_mode = False
+        # Data
+        self.beam = None
+        self.structures = []
+        self.structure_colors = {}
+        self.isocenter = np.array([0, 0, 0])
+        self.mlc_positions = None
+        self.jaw_positions = None
         self.transform = None
+        self.depth_map = None
+        self.thickness_map = None
+        # Sử dụng cách an toàn để lấy colormap
+        try:
+            import matplotlib.cm as cm
+
+            self.depth_colormap = getattr(cm, "jet")
+            if self.depth_colormap is None:
+                self.depth_colormap = getattr(cm, "plasma")
+        except Exception as e:
+            import matplotlib.pyplot as plt
+
+            self.depth_colormap = plt.cm.jet
+        self.depth_range = (0, 30)  # Default depth range in cm
+
+        # Default structure colors
+        self.default_colors = {
+            "CTV": "#FF0000",
+            "PTV": "#FF6347",
+            "GTV": "#8B0000",
+            "Spinal Cord": "#FFFF00",
+            "Lung_L": "#ADD8E6",
+            "Lung_R": "#87CEEB",
+            "Heart": "#FF69B4",
+            "Liver": "#8B4513",
+            "Kidney_L": "#32CD32",
+            "Kidney_R": "#228B22",
+            "Bowel": "#CD853F",
+            "Bladder": "#1E90FF",
+            "Rectum": "#8A2BE2",
+            "Brain": "#808080",
+            "Brainstem": "#A9A9A9",
+            "Eye_L": "#00FFFF",
+            "Eye_R": "#00CED1",
+            "Parotid_L": "#9ACD32",
+            "Parotid_R": "#7CFC00",
+            "Body": "#A0522D",
+        }
+
+        # Set up the canvas
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.updateGeometry()
 
         # Connect mouse events
-        self.mpl_connect("button_press_event", self.on_press)
-        self.mpl_connect("button_release_event", self.on_release)
-        self.mpl_connect("motion_notify_event", self.on_motion)
+        self.mpl_connect("button_press_event", self._on_click)
+        self.mpl_connect("motion_notify_event", self._on_mouse_move)
 
-        # Set default colors for structures
-        self.default_colors = {
-            "PTV": "red",
-            "CTV": "pink",
-            "GTV": "maroon",
-            "BODY": "blue",
-            "LUNG": "yellow",
-            "HEART": "red",
-            "CORD": "green",
-            "ESOPHAGUS": "orange",
-            "LIVER": "brown",
-            "KIDNEY": "purple",
-            "BRAIN": "lightblue",
-            "LENS": "cyan",
-            "PAROTID": "magenta",
-        }
+        # Setup the axes
+        self._setup_axes()
+
+    def _on_click(self, event):
+        """Handle mouse click events."""
+        if event.inaxes != self.axes:
+            return
+
+        # Handle click events here
+        logger.debug(f"Click at BEV coordinates: ({event.xdata}, {event.ydata})")
+
+    def _on_mouse_move(self, event):
+        """Handle mouse movement events."""
+        if event.inaxes != self.axes:
+            return
+
+        # Handle mouse move events here
+        pass
+
+    def _setup_axes(self):
+        """Set up the axes for BEV display."""
+        # Set equal aspect ratio for proper display
+        self.axes.set_aspect("equal")
+
+        # Set limits
+        x_min, x_max, y_min, y_max = self.display_range
+        self.axes.set_xlim(x_min, x_max)
+        self.axes.set_ylim(y_min, y_max)
+
+        # Set labels
+        self.axes.set_xlabel("X (cm)")
+        self.axes.set_ylabel("Y (cm)")
+        self.axes.set_title("Beam's Eye View")
+
+        # Add grid
+        self.axes.grid(True, linestyle="--", alpha=0.5)
 
     def setup_figure(self):
         """Setup the figure appearance."""
@@ -308,433 +367,415 @@ class BEVCanvas(FigureCanvas):
                 color = np.random.rand(3)
                 self.structure_colors[structure.id] = mcolors.to_hex(color)
 
+        # If we have a beam and transform available, generate the depth maps
+        if self.transform is not None and len(structures) > 0:
+            self._generate_depth_maps()
+
         # Update the view
         self.update_view()
 
-    def set_sad(self, sad):
+    def _generate_depth_maps(self):
+        """Generate depth and thickness maps for all structures."""
+        # If no structures or transform, return
+        if not self.structures or not self.transform:
+            self.depth_map = None
+            self.thickness_map = None
+            logger.debug(
+                "Không có cấu trúc hoặc BEVTransform, không thể tạo bản đồ độ sâu"
+            )
+            return
+
+        # Initialize combined depth and thickness maps
+        resolution = (256, 256)  # Default resolution for depth map
+        field_size = self.field_size if hasattr(self, "field_size") else (20.0, 20.0)
+
+        # Create empty maps with NaN for depth (to allow proper masking later)
+        combined_depth_map = np.full(resolution, np.nan, dtype=float)
+        combined_thickness_map = np.zeros(resolution, dtype=float)
+
+        # Store structures that contribute to depth map for legend
+        self.depth_contributing_structures = []
+
+        # Process target structures first, then OARs, then other structures
+        # This ensures target structures have priority in the depth map visualization
+        all_structures = []
+
+        # Get targets first
+        targets = [
+            s for s in self.structures if hasattr(s, "is_target") and s.is_target
+        ]
+        all_structures.extend(targets)
+
+        # Then OARs
+        oars = [s for s in self.structures if hasattr(s, "is_oar") and s.is_oar]
+        all_structures.extend(oars)
+
+        # Then other structures
+        others = [s for s in self.structures if s not in targets and s not in oars]
+        all_structures.extend(others)
+
+        logger.debug(f"Generating depth maps for {len(all_structures)} structures")
+
+        # Generate depth maps for all structures
+        for structure in all_structures:
+            # Skip if structure is not visible
+            if hasattr(structure, "visible") and not structure.visible:
+                continue
+
+            # Skip if structure should not be displayed in BEV
+            if hasattr(structure, "show_in_bev") and not structure.show_in_bev:
+                continue
+
+            try:
+                # Get depth and thickness maps for this structure using BEVTransform
+                depth_map, thickness_map = self.transform.structure_to_bev_depth_map(
+                    structure, resolution=resolution, field_size=field_size
+                )
+
+                # Update combined maps where this structure is closer to the source
+                # and where we don't already have values
+                valid_depths = ~np.isnan(depth_map)
+
+                if not np.any(valid_depths):
+                    continue  # Skip if no valid depths
+
+                # For pixels where we don't have depth info yet
+                new_pixels = valid_depths & np.isnan(combined_depth_map)
+                if np.any(new_pixels):
+                    combined_depth_map[new_pixels] = depth_map[new_pixels]
+                    combined_thickness_map[new_pixels] = thickness_map[new_pixels]
+                    if structure not in self.depth_contributing_structures:
+                        self.depth_contributing_structures.append(structure)
+
+                # For pixels where this structure is closer to the source than existing
+                closer_pixels = (
+                    valid_depths
+                    & ~np.isnan(combined_depth_map)
+                    & (depth_map < combined_depth_map)
+                )
+                if np.any(closer_pixels):
+                    combined_depth_map[closer_pixels] = depth_map[closer_pixels]
+                    combined_thickness_map[closer_pixels] = thickness_map[closer_pixels]
+                    if structure not in self.depth_contributing_structures:
+                        self.depth_contributing_structures.append(structure)
+
+                logger.debug(f"Added depth map for structure: {structure.name}")
+
+            except Exception as e:
+                logger.error(
+                    f"Error generating depth map for structure {getattr(structure, 'name', 'Unknown')}: {str(e)}"
+                )
+
+        # Store the combined maps
+        self.depth_map = combined_depth_map
+        self.thickness_map = combined_thickness_map
+
+        # Calculate statistics for info display
+        valid_depths = ~np.isnan(combined_depth_map)
+        if np.any(valid_depths):
+            self.depth_min = np.nanmin(combined_depth_map)
+            self.depth_max = np.nanmax(combined_depth_map)
+            self.thickness_max = np.nanmax(combined_thickness_map)
+            logger.info(
+                f"Depth map generated: min={self.depth_min:.2f}, max={self.depth_max:.2f}, max thickness={self.thickness_max:.2f}"
+            )
+        else:
+            self.depth_min = self.depth_max = self.thickness_max = 0
+            logger.warning("Generated depth map contains no valid data")
+
+        return self.depth_contributing_structures
+
+    def toggle_depth_colorwash(self, show):
         """
-        Set the source-to-axis distance.
+        Bật/tắt hiển thị bản đồ độ sâu (depth colorwash).
 
         Parameters
         ----------
-        sad : float
-            Source-to-axis distance in mm
+        show : bool
+            True để hiển thị bản đồ độ sâu, False để ẩn
         """
-        self.current_sad = sad
-        if self.transform:
-            self.transform.sad = sad / 10.0  # Convert from mm to cm
+        self.show_depth_colorwash = show
+
+        # Nếu bật hiển thị độ sâu nhưng chưa có dữ liệu bản đồ, tạo lại bản đồ
+        if show and (self.depth_map is None or np.all(np.isnan(self.depth_map))):
+            logger.info("Tạo bản đồ độ sâu mới khi hiển thị độ sâu được bật")
+            self._generate_depth_maps()
+
         self.update_view()
+        logger.debug(f"Hiển thị bản đồ độ sâu: {'Bật' if show else 'Tắt'}")
+
+    def set_depth_colormap(self, colormap_name):
+        """
+        Thiết lập colormap cho hiển thị độ sâu.
+
+        Parameters
+        ----------
+        colormap_name : str
+            Tên của colormap từ matplotlib, ví dụ: 'jet', 'viridis', 'plasma'...
+        """
+        try:
+            import matplotlib.cm as cm
+
+            self.depth_colormap = getattr(cm, colormap_name)
+            if self.depth_colormap is None:
+                self.depth_colormap = getattr(cm, "jet")
+            logger.info(f"Đã thiết lập colormap: {colormap_name}")
+
+            if self.show_depth_colorwash:
+                self.update_view()
+        except Exception as e:
+            logger.error(f"Lỗi khi thiết lập colormap {colormap_name}: {str(e)}")
+            import matplotlib.pyplot as plt
+
+            self.depth_colormap = plt.cm.jet
+
+    def set_depth_range(self, min_depth, max_depth):
+        """
+        Thiết lập phạm vi độ sâu cho hiển thị bản đồ độ sâu.
+
+        Parameters
+        ----------
+        min_depth : float
+            Giá trị độ sâu tối thiểu (cm)
+        max_depth : float
+            Giá trị độ sâu tối đa (cm)
+        """
+        # Kiểm tra giá trị hợp lệ
+        if min_depth >= max_depth:
+            logger.warning(f"Phạm vi độ sâu không hợp lệ: {min_depth} - {max_depth}")
+            max_depth = min_depth + 10.0  # Đặt phạm vi mặc định nếu không hợp lệ
+
+        logger.debug(f"Thiết lập phạm vi độ sâu: {min_depth} - {max_depth} cm")
+        self.depth_range = (min_depth, max_depth)
+
+        if self.show_depth_colorwash:
+            self.update_view()
 
     def update_view(self):
-        """Update the beam's eye view."""
+        """Update the BEV display."""
         # Clear the axes
         self.axes.clear()
 
-        # Set limits based on field size
-        field_width, field_height = self.field_size
-        margin = max(field_width, field_height) * 0.2
-        self.axes.set_xlim(-field_width / 2 - margin, field_width / 2 + margin)
-        self.axes.set_ylim(-field_height / 2 - margin, field_height / 2 + margin)
+        # Set limits and labels
+        self._setup_axes()
 
-        # Draw background
-        if self.show_grid:
-            self._draw_grid()
+        # Draw depth colorwash if enabled and available
+        if self.show_depth_colorwash and self.depth_map is not None:
+            self._draw_depth_colorwash()
 
-        # Draw rulers
-        if self.show_rulers:
-            self._draw_rulers()
+            # Draw depth indicator if we have structure depth statistics
+            if hasattr(self, "structure_depth_stats") and self.structure_depth_stats:
+                self._draw_depth_indicator()
+
+        # Draw structures
+        if self.show_structures and self.structures:
+            self._draw_structures()
 
         # Draw treatment field
         if self.show_field:
             self._draw_field()
 
-        # Draw jaws
-        if self.show_jaws and self.jaw_positions is not None:
-            self._draw_jaws()
-
-        # Draw structures
-        if self.show_structures and self.structures:
-            # Kiểm tra xem có hiển thị độ sâu hay không
-            if hasattr(self, "show_depth") and self.show_depth:
-                self._draw_depth_indicator()
-                self._draw_depth_information()
-        else:
-                self._draw_structures()
-
         # Draw MLC
         if self.show_mlc and self.mlc_positions is not None:
             self._draw_mlc()
 
-        # Add crosshair at isocenter
-        self._draw_isocenter()
-
-        # Hiển thị thông tin kỹ thuật nếu được kích hoạt
-        if hasattr(self, "show_technical_info") and self.show_technical_info:
-            self._add_technical_info()
-
         # Refresh canvas
-        self.draw_idle()
+        self.draw()
 
-    def _add_technical_info(self):
-        """
-        Thêm thông tin kỹ thuật vào góc BEV.
-        """
-        if not hasattr(self, "beam"):
+    def _draw_depth_colorwash(self):
+        """Draw depth colorwash visualization."""
+        if self.depth_map is None or np.all(np.isnan(self.depth_map)):
+            logger.debug("Không có dữ liệu độ sâu để hiển thị")
             return
 
-        axes = self.axes
+        # Get dimensions
+        height, width = self.depth_map.shape
 
-        # Thu thập thông tin kỹ thuật
-        info_text = []
-        if hasattr(self.beam, "gantry_angle"):
-            info_text.append(f"Gantry: {self.beam.gantry_angle:.1f}°")
-        if hasattr(self.beam, "collimator_angle"):
-            info_text.append(f"Collimator: {self.beam.collimator_angle:.1f}°")
-        if hasattr(self.beam, "couch_angle"):
-            info_text.append(f"Couch: {self.beam.couch_angle:.1f}°")
-        if hasattr(self.beam, "energy"):
-            info_text.append(f"Energy: {self.beam.energy}")
-        if hasattr(self.beam, "mu"):
-            info_text.append(f"MU: {self.beam.mu:.1f}")
+        # Calculate extent based on field size
+        x_field, y_field = (
+            self.field_size if hasattr(self, "field_size") else (20.0, 20.0)
+        )
+        extent = [-x_field / 2, x_field / 2, -y_field / 2, y_field / 2]
 
-        # Hiển thị thông tin ở góc trái dưới
-        if info_text:
-            info_str = "\n".join(info_text)
-            axes.text(
-                -0.95 * max(self.field_size[0], self.field_size[1]) * 0.7,
-                -0.95 * max(self.field_size[0], self.field_size[1]) * 0.7,
-                info_str,
-                fontsize=8,
-                verticalalignment="bottom",
-                horizontalalignment="left",
-                bbox=dict(boxstyle="round,pad=0.5", facecolor="white", alpha=0.7),
-            )
+        # Create a masked array for NaN values
+        masked_depth = np.ma.masked_invalid(self.depth_map)
+
+        # Get min/max depth values from actual data (ignoring NaN values)
+        actual_min = (
+            np.nanmin(self.depth_map) if not np.all(np.isnan(self.depth_map)) else 0
+        )
+        actual_max = (
+            np.nanmax(self.depth_map) if not np.all(np.isnan(self.depth_map)) else 30
+        )
+
+        # Get depth range with fallback to actual values if not set
+        vmin, vmax = self.depth_range
+        if np.isnan(vmin) or np.isnan(vmax):
+            vmin, vmax = actual_min, actual_max
+
+        # Make sure we have a reasonable range (avoid zero division)
+        if abs(vmax - vmin) < 1e-6:
+            vmax = vmin + 10.0
+
+        # Display the depth map with the selected colormap
+        im = self.axes.imshow(
+            masked_depth,
+            extent=extent,
+            origin="upper",
+            cmap=self.depth_colormap,
+            alpha=self.opacity,
+            vmin=vmin,
+            vmax=vmax,
+            interpolation="bilinear",
+        )
+
+        # Add or update colorbar
+        if hasattr(self, "colorbar") and self.colorbar is not None:
+            self.colorbar.update_normal(im)
+        else:
+            divider = make_axes_locatable(self.axes)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            self.colorbar = self.fig.colorbar(im, cax=cax)
+            self.colorbar.set_label("Độ sâu (cm)")
+
+        # Add contour lines for depth
+        if not np.all(np.isnan(masked_depth)):
+            try:
+                # Create evenly spaced depth levels for contours
+                contour_levels = np.linspace(vmin, vmax, 5)
+                # Round to 1 decimal place for cleaner display
+                contour_levels = np.round(contour_levels, 1)
+
+                # Draw contour lines
+                cs = self.axes.contour(
+                    masked_depth,
+                    levels=contour_levels,
+                    colors="white",
+                    alpha=0.6,
+                    linewidths=0.5,
+                    extent=extent,
+                )
+
+                # Add labels to contour lines
+                self.axes.clabel(cs, inline=True, fontsize=8, fmt="%.1f")
+            except Exception as e:
+                logger.warning(f"Failed to draw depth contours: {e}")
+
+        # Add a title with depth information
+        self.axes.set_title(
+            f"Bản đồ độ sâu (min: {actual_min:.1f} cm, max: {actual_max:.1f} cm)",
+            color="white",
+            fontsize=10,
+        )
+
+        # Draw depth legend with color bar
+        x_pos = -x_field / 2 + 1
+        y_pos = -y_field / 2 + 1
+        self.axes.text(
+            x_pos,
+            y_pos,
+            "Chú thích:\n- Màu đỏ: Gần\n- Màu xanh: Xa\n- Đơn vị: cm",
+            color="white",
+            fontsize=8,
+            bbox=dict(facecolor="black", alpha=0.7, boxstyle="round,pad=0.3"),
+            verticalalignment="bottom",
+            horizontalalignment="left",
+        )
 
     def _draw_structures(self):
-        """
-        Vẽ các cấu trúc giải phẫu trong góc nhìn BEV.
-        Cải tiến với khả năng hiển thị thông tin độ sâu và bản đồ cường độ.
-        """
-        if (
-            not self.show_structures
-            or not hasattr(self, "structures")
-            or not self.structures
-        ):
+        """Draw the structures in BEV."""
+        if not self.transform:
             return
 
-        # Lưu trữ danh sách contour đã vẽ để tạo legend
-        self.structure_contours = {}
+        # Determine the resolution based on canvas size
+        fig_width, fig_height = self.fig.get_size_inches()
+        dpi = self.fig.dpi
+        width_pixels = int(fig_width * dpi / 4)  # Reduce for performance
+        height_pixels = int(fig_height * dpi / 4)
+        resolution = (width_pixels, height_pixels)
 
-        # Xác định chế độ hiển thị: đường viền, bề mặt, hoặc kết hợp
-        display_mode = getattr(
-            self, "structure_display_mode", "contour"
-        )  # contour, surface, hybrid
-        depth_shading = getattr(
-            self, "depth_shading", True
-        )  # Bật/tắt hiển thị thông tin độ sâu
-
-        axes = self.axes
-
+        # Draw each structure
         for structure in self.structures:
-            if not structure:
+            # Skip if structure has no points
+            if not hasattr(structure, "points") or not structure.points:
                 continue
 
-            # Lấy màu cấu trúc
-            color = structure.color if hasattr(structure, "color") else "blue"
-            alpha = 0.7 if display_mode in ("surface", "hybrid") else 1.0
+            # Get structure color
+            color = self.structure_colors.get(structure.id, "#AAAAAA")
 
-            # Lấy contour của cấu trúc trong hệ tọa độ BEV
-            contours = self._get_structure_contours(structure)
-
-            if not contours:
-                continue
-
-            # Lưu contour để tạo legend
-            if structure.name not in self.structure_contours:
-                self.structure_contours[structure.name] = {
-                    "color": color,
-                    "contours": contours,
-                }
-
-            # Vẽ cấu trúc theo chế độ hiển thị đã chọn
-            if display_mode in ("contour", "hybrid"):
-                # Vẽ đường viền
-                for contour in contours:
-                    axes.plot(contour[:, 0], contour[:, 1], color=color, linewidth=1.5)
-
-            if display_mode in ("surface", "hybrid") and depth_shading:
-                # Tạo bản đồ độ sâu cho cấu trúc
-                try:
-                    structure_map = self.transform.structure_to_bev_map(
-                        structure,
-                        resolution=(256, 256),
-                        field_size=(self.field_size[0], self.field_size[1]),
-                    )
-
-                    # Map độ sâu từ ray tracing (nếu có)
-                    depth_map = np.zeros_like(structure_map)
-                    max_depth = 30.0  # cm, giá trị tối đa hiển thị
-
-                    # Bản đồ độ sâu tạm thời đơn giản dành cho demo
-                    # Trong triển khai thực tế, cần sử dụng ray tracing chi tiết cho từng pixel
-                    for y in range(structure_map.shape[0]):
-                        for x in range(structure_map.shape[1]):
-                            if structure_map[y, x] > 0:
-                                # Chuyển từ pixel sang tọa độ BEV
-                                bev_x = (
-                                    x / structure_map.shape[1] - 0.5
-                                ) * self.field_size[0]
-                                bev_y = (
-                                    y / structure_map.shape[0] - 0.5
-                                ) * self.field_size[1]
-
-                                # Ray tracing để lấy độ sâu
-                                ray_result = self.transform.ray_trace_to_depth(
-                                    (bev_x, bev_y), structure
-                                )
-
-                                if ray_result["has_intersection"]:
-                                    depth_map[y, x] = min(
-                                        ray_result["mid_depth"], max_depth
-                                    )
-
-                    # Vẽ bản đồ độ sâu với thang màu
-                    try:
-                        cmap = plt.cm.get_cmap("viridis")
-                    except:
-                        cmap = plt.cm.get_cmap("jet")
-                    mask = (structure_map > 0) & (depth_map > 0)
-
-                    if np.any(mask):
-                        # Normalize độ sâu để hiển thị
-                        norm = plt.Normalize(0, max_depth)
-                        masked_depth = np.ma.array(depth_map, mask=~mask)
-
-                        # Vẽ bản đồ độ sâu
-                        extent = [
-                            -self.field_size[0] / 2,
-                            self.field_size[0] / 2,
-                            -self.field_size[1] / 2,
-                            self.field_size[1] / 2,
-                        ]
-                        axes.imshow(
-                            masked_depth,
-                            cmap=cmap,
-                            norm=norm,
-                            alpha=0.5,
-                            extent=extent,
-                            origin="lower",
-                        )
-
-                        # Bật hiển thị chỉ báo độ sâu
-                        self.show_depth_indicator = True
-
-                except Exception as e:
-                    logger.warning(
-                        f"Không thể tạo bản đồ độ sâu cho {structure.name}: {str(e)}"
-                    )
-                    # Vẽ mặt nạ đơn giản (chỉ có/không)
-                    for contour in contours:
-                        # Vẽ vùng lấp đầy
-                        polygon = plt.Polygon(
-                            contour, closed=True, fill=True, color=color, alpha=0.3
-                        )
-                        axes.add_patch(polygon)
-
-        # Cập nhật chú thích
-        self._draw_legend()
-
-        # Đảm bảo hiển thị thông tin độ sâu
-        self._draw_depth_indicator()
-
-    def _draw_depth_indicator(self):
-        """Draw a depth indicator for structures in the beam path."""
-        if not self.structures or not self.beam:
-            return
-
-        try:
-            # Tính vị trí nguồn tia
-            if hasattr(self.beam, "get_source_position"):
-                source_pos = self.beam.get_source_position()
-            elif hasattr(self.beam, "source_position"):
-                source_pos = self.beam.source_position
-                else:
-                # Vị trí mặc định dựa trên góc gantry và couch
-                gantry_angle = getattr(self.beam, "gantry_angle", 0)
-                couch_angle = getattr(self.beam, "couch_angle", 0)
-
-                # Chuyển đổi sang radian
-                gantry_rad = np.radians(gantry_angle)
-                couch_rad = np.radians(couch_angle)
-
-                # Tính vị trí nguồn
-                x = self.current_sad * np.sin(gantry_rad) * np.cos(couch_rad)
-                y = self.current_sad * np.sin(gantry_rad) * np.sin(couch_rad)
-                z = self.current_sad * np.cos(gantry_rad) * np.cos(couch_rad)
-
-                source_pos = np.array([x, y, z]) + self.isocenter
-
-            # Tính hướng tia
-            beam_dir = self.isocenter - source_pos
-            beam_dir = beam_dir / np.linalg.norm(beam_dir)
-
-            # Lưu trữ độ sâu của các cấu trúc
-            depth_info = {}
-
-            # Tạo colormap cho hiển thị độ sâu
             try:
-                cmap = plt.cm.get_cmap("viridis")
-            except:
-                cmap = plt.cm.get_cmap("jet")
+                if self.color_by_depth:
+                    # Use depth-based coloring
+                    bev_map = self.transform.structure_to_bev_map(
+                        structure,
+                        resolution=resolution,
+                        field_size=self.field_size,
+                        color_by_depth=True,
+                        max_depth=self.max_depth,
+                    )
 
-            # Vẽ các cấu trúc với mã màu độ sâu
-            for structure in self.structures:
-                if not hasattr(structure, "contours") or not structure.contours:
-                    continue
+                    # Also get depth information for contour display
+                    depth_map, thickness_map = (
+                        self.transform.structure_to_bev_depth_map(
+                            structure, resolution=resolution, field_size=self.field_size
+                        )
+                    )
 
-                # Tập hợp tất cả các điểm từ contours
-                all_points = np.vstack(
-                    [contour for contour in structure.contours if len(contour) > 0]
-                )
+                    # Create a masked array to handle missing values
+                    masked_depth = np.ma.masked_invalid(depth_map)
 
-                if len(all_points) == 0:
-                    continue
+                    # Calculate the field coordinates for the BEV map
+                    x_field, y_field = self.field_size
+                    extent = [-x_field / 2, x_field / 2, -y_field / 2, y_field / 2]
 
-                # Tính khoảng cách từ nguồn đến mỗi điểm (theo hướng tia)
-                vectors = all_points - source_pos
-                distances = np.dot(vectors, beam_dir)
+                    # Display as color image
+                    self.axes.imshow(
+                        bev_map,
+                        origin="lower",
+                        extent=extent,
+                        interpolation="bilinear",
+                        alpha=0.7,
+                    )
 
-                # Tìm điểm gần nhất và xa nhất
-                entry_depth = np.min(distances)
-                exit_depth = np.max(distances)
-                thickness = exit_depth - entry_depth
+                    # Add contour lines based on depth
+                    if not np.all(np.isnan(depth_map)):
+                        levels = np.linspace(
+                            np.nanmin(depth_map), np.nanmax(depth_map), 5
+                        )
+                        cs = self.axes.contour(
+                            np.linspace(-x_field / 2, x_field / 2, resolution[0]),
+                            np.linspace(-y_field / 2, y_field / 2, resolution[1]),
+                            masked_depth,
+                            levels=levels,
+                            colors="white",
+                            linewidths=0.5,
+                            alpha=0.8,
+                        )
+                        self.axes.clabel(cs, fmt="%0.1f", fontsize=8)
+                else:
+                    # Convert structure to BEV
+                    bev_map = self.transform.structure_to_bev_map(
+                        structure, resolution=resolution, field_size=self.field_size
+                    )
 
-                # Lưu thông tin độ sâu
-                depth_info[structure.id] = {
-                    "entry": entry_depth,
-                    "exit": exit_depth,
-                    "thickness": thickness,
-                    "name": structure.name,
-                }
+                    # Calculate the field coordinates for the BEV map
+                    x_field, y_field = self.field_size
+                    extent = [-x_field / 2, x_field / 2, -y_field / 2, y_field / 2]
 
-                # Chiếu các điểm lên mặt phẳng BEV
-                bev_points = self._project_to_bev(all_points)
+                    # Get a colormap based on the structure's color
+                    cmap = self._get_custom_cmap(color)
 
-                # Vẽ cấu trúc với mã màu dựa trên độ sâu
-                norm = plt.Normalize(min(distances), max(distances))
-                scatter = self.axes.scatter(
-                    bev_points[:, 0],
-                    bev_points[:, 1],
-                    c=distances,
-                    cmap=cmap,
-                    alpha=0.7,
-                    s=10,
-                    norm=norm,
-                )
-
-            # Thêm colorbar
-            if depth_info:
-                divider = make_axes_locatable(self.axes)
-                cax = divider.append_axes("right", size="5%", pad=0.05)
-                cbar = self.fig.colorbar(scatter, cax=cax)
-                cbar.set_label("Độ sâu (mm)", color="white")
-                cbar.ax.yaxis.set_tick_params(color="white")
-                plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
-
-            # Lưu thông tin độ sâu cho hiển thị
-            self.structure_depths = depth_info
-
-        except Exception as e:
-            logger.error(f"Error drawing depth indicator: {str(e)}")
-
-    def _draw_depth_information(self):
-        """Draw depth information table for structures."""
-        if not hasattr(self, "structure_depths") or not self.structure_depths:
-            return
-
-        try:
-            # Tìm cấu trúc được chọn
-            selected_id = getattr(self, "selected_structure_id", None)
-
-            # Nếu không có cấu trúc được chọn, chọn cấu trúc đầu tiên
-            if selected_id is None and self.structures:
-                selected_id = self.structures[0].id
-
-            # Nếu không có thông tin độ sâu cho cấu trúc được chọn, thoát
-            if selected_id not in self.structure_depths:
-                return
-
-            # Lấy thông tin độ sâu cho cấu trúc được chọn
-            depth_data = self.structure_depths[selected_id]
-            structure_name = depth_data.get("name", "Cấu trúc")
-
-            # Chuyển đổi từ mm sang cm
-            entry_cm = depth_data.get("entry", 0) / 10
-            exit_cm = depth_data.get("exit", 0) / 10
-            thickness_cm = depth_data.get("thickness", 0) / 10
-
-            # Tạo bảng thông tin
-            table_data = [
-                ["Điểm vào", f"{entry_cm:.2f} cm"],
-                ["Điểm ra", f"{exit_cm:.2f} cm"],
-                ["Độ dày", f"{thickness_cm:.2f} cm"],
-            ]
-
-            # Vị trí bảng ở góc dưới phải
-            x = 0.70
-            y = 0.05
-            width = 0.28
-            height = 0.15
-
-            # Xóa bảng cũ nếu có
-            if hasattr(self.fig, "axes"):
-                axes_list = list(self.fig.axes)
-                for ax in axes_list:
-                    if hasattr(ax, "is_depth_table") and ax.is_depth_table:
-                        self.fig.delaxes(ax)
-
-            # Tạo bảng mới
-            table_ax = self.fig.add_axes([x, y, width, height], frameon=True)
-            table_ax.is_depth_table = True
-            table_ax.axis("off")
-
-            # Tạo tiêu đề
-            table_ax.text(
-                0.5,
-                1.05,
-                f"Độ sâu: {structure_name}",
-                color="white",
-                fontsize=9,
-                horizontalalignment="center",
-                transform=table_ax.transAxes,
-            )
-
-            # Tạo bảng
-            table = table_ax.table(
-                cellText=[[row[1]] for row in table_data],
-                rowLabels=[row[0] for row in table_data],
-                cellLoc="center",
-                rowLoc="center",
-                loc="center",
-                bbox=[0, 0, 1, 1],
-            )
-
-            # Chỉnh style cho bảng
-            table.auto_set_font_size(False)
-            table.set_fontsize(8)
-
-            # Màu nền cho bảng
-            for (i, j), cell in table.get_celld().items():
-                cell.set_facecolor("#333333")
-                cell.set_edgecolor("white")
-                cell.set_text_props(color="white")
-
-                # Highlight hàng với độ dày
-                if i == 2:  # Độ dày
-                    cell.set_facecolor("#555555")
-
-        except Exception as e:
-            logger.error(f"Error drawing depth information: {str(e)}")
+                    # Display the structure
+                    self.axes.imshow(
+                        bev_map,
+                        cmap=cmap,
+                        origin="lower",
+                        extent=extent,
+                        interpolation="bilinear",
+                        alpha=0.7,
+                    )
+            except Exception as e:
+                logger.error(f"Error drawing structure {structure.name}: {str(e)}")
 
     def _draw_field(self):
         """Draw the treatment field."""
@@ -1337,8 +1378,8 @@ class BEVCanvas(FigureCanvas):
         enabled : bool
             True để bật hiển thị độ sâu, False để tắt
         """
-        self.depth_shading = enabled
-        self.show_depth_indicator = enabled
+        self.color_by_depth = enabled
+        self.show_depth_scale = enabled
         self.update_view()
 
     def toggle_technical_info(self, show):
@@ -1356,25 +1397,7 @@ class BEVCanvas(FigureCanvas):
     def toggle_depth(self, checked):
         """Bật/tắt hiển thị độ sâu cấu trúc."""
         self.show_depth = checked
-        self.bev_canvas.toggle_depth(checked)
-        self.depth_colormap_combo.setEnabled(checked)
-
-        # Cập nhật trạng thái
-        if checked:
-            self.status_label.setText("Hiển thị độ sâu: Bật")
-            # Tính toán độ sâu cấu trúc
-            self.bev_canvas.calculate_structure_depths()
-        else:
-            self.status_label.setText("Hiển thị độ sâu: Tắt")
-
-    def set_depth_colormap(self, cmap_name):
-        """Thiết lập colormap cho hiển thị độ sâu."""
-        try:
-            self.depth_colormap = plt.cm.get_cmap(cmap_name)
-            if hasattr(self, "show_depth") and self.show_depth:
-                self.update_view()
-        except Exception as e:
-            logger.error(f"Error setting depth colormap: {str(e)}")
+        self.update_view()
 
     def set_selected_structure(self, structure_id):
         """Thiết lập cấu trúc được chọn để hiển thị thông tin độ sâu."""
@@ -1383,9 +1406,135 @@ class BEVCanvas(FigureCanvas):
             self.update_view()
 
     def calculate_structure_depths(self):
-        """Tính toán độ sâu của các cấu trúc từ nguồn tia đến cấu trúc."""
-        self._draw_depth_indicator()  # Phương thức này đã xử lý việc tính toán độ sâu
-        self.update_view()
+        """
+        Tính toán độ sâu của các cấu trúc từ nguồn tia đến cấu trúc.
+
+        Phương thức này tính toán và cập nhật thông tin độ sâu cho tất cả các cấu trúc
+        được hiển thị trong góc nhìn BEV. Thông tin này được sử dụng để hiển thị bản đồ
+        độ sâu và các chỉ báo độ sâu.
+
+        Returns
+        -------
+        Dict[str, Dict[str, float]]
+            Từ điển chứa thông tin độ sâu cho mỗi cấu trúc theo ID:
+            {structure_id: {'min_depth': min_depth, 'max_depth': max_depth, 'avg_depth': avg_depth, 'thickness': avg_thickness}}
+        """
+        if not self.transform or not self.structures:
+            logger.warning(
+                "Không thể tính toán độ sâu: thiếu BEVTransform hoặc cấu trúc"
+            )
+            return {}
+
+        # Generate depth maps for all structures
+        structures_with_depth = self._generate_depth_maps()
+
+        # Calculate depth statistics for each structure
+        depth_stats = {}
+
+        for structure in structures_with_depth:
+            if not hasattr(structure, "id"):
+                continue
+
+            try:
+                # Get depth and thickness maps for this structure
+                depth_map, thickness_map = self.transform.structure_to_bev_depth_map(
+                    structure,
+                    resolution=(128, 128),  # Lower resolution for faster computation
+                    field_size=self.field_size
+                    if hasattr(self, "field_size")
+                    else (20.0, 20.0),
+                )
+
+                # Calculate statistics (ignoring NaN values)
+                valid_depths = ~np.isnan(depth_map)
+                if np.any(valid_depths):
+                    min_depth = np.nanmin(depth_map)
+                    max_depth = np.nanmax(depth_map)
+                    avg_depth = np.nanmean(depth_map)
+                    avg_thickness = np.nanmean(thickness_map[valid_depths])
+
+                    # Store depth statistics
+                    depth_stats[structure.id] = {
+                        "min_depth": min_depth,
+                        "max_depth": max_depth,
+                        "avg_depth": avg_depth,
+                        "thickness": avg_thickness,
+                        "name": getattr(structure, "name", "Unknown"),
+                    }
+
+                    logger.debug(
+                        f"Cấu trúc {structure.name}: độ sâu min={min_depth:.2f}, max={max_depth:.2f}, trung bình={avg_depth:.2f}, độ dày={avg_thickness:.2f}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Lỗi khi tính toán độ sâu cho cấu trúc {getattr(structure, 'name', 'Unknown')}: {str(e)}"
+                )
+
+        # Store depth statistics for later use
+        self.structure_depth_stats = depth_stats
+
+        # Update the view to show depth information
+        if self.show_depth_colorwash:
+            self.update_view()
+
+        return depth_stats
+
+    def _draw_depth_indicator(self):
+        """
+        Vẽ chỉ báo độ sâu cho các cấu trúc được hiển thị.
+
+        Phương thức này hiển thị một bảng thông tin về độ sâu của các cấu trúc
+        trong góc nhìn BEV, bao gồm giá trị min, max, trung bình và độ dày.
+        """
+        if not hasattr(self, "structure_depth_stats") or not self.structure_depth_stats:
+            return
+
+        # Get field size for positioning
+        x_field, y_field = (
+            self.field_size if hasattr(self, "field_size") else (20.0, 20.0)
+        )
+
+        # Create a string with depth statistics for display
+        info_text = "THÔNG TIN ĐỘ SÂU CẤU TRÚC:\n"
+        info_text += "-" * 30 + "\n"
+        info_text += "Cấu trúc       Min     Max    Trung bình    Độ dày\n"
+        info_text += "-" * 30 + "\n"
+
+        # Sort structures by average depth
+        sorted_stats = sorted(
+            self.structure_depth_stats.items(), key=lambda x: x[1]["avg_depth"]
+        )
+
+        for struct_id, stats in sorted_stats:
+            name = stats["name"]
+            # Truncate name if too long
+            if len(name) > 10:
+                name = name[:8] + ".."
+
+            info_text += f"{name:<12} {stats['min_depth']:>5.1f} {stats['max_depth']:>5.1f} {stats['avg_depth']:>8.1f} {stats['thickness']:>10.1f}\n"
+
+        # Add note about units
+        info_text += "-" * 30 + "\n"
+        info_text += "Đơn vị: cm. Giá trị âm = phía trước isocenter.\n"
+
+        # Position in top-left corner with some padding
+        x_pos = -x_field / 2 + 1
+        y_pos = y_field / 2 - 2
+
+        # Draw text with background
+        self.axes.text(
+            x_pos,
+            y_pos,
+            info_text,
+            color="white",
+            fontsize=8,
+            family="monospace",  # Fixed-width font for alignment
+            verticalalignment="top",
+            horizontalalignment="left",
+            bbox=dict(
+                facecolor="black", alpha=0.7, edgecolor="gray", boxstyle="round,pad=0.5"
+            ),
+        )
 
 
 class BeamEyeView(QWidget):
@@ -1836,96 +1985,99 @@ class BeamEyeView(QWidget):
 
 
 def test_beam_eye_view():
-    """Test function for the beam eye view widget."""
-    import sys
-
+    """Test function to demonstrate BEVCanvas functionality."""
     try:
-        # Sử dụng try/except để xử lý các lỗi import
-        try:
-    from PyQt5.QtWidgets import QApplication, QMainWindow
-        except ImportError as e:
-            logger.error(f"Unable to import PyQt5 components: {e}")
-            print(f"Unable to import PyQt5 components: {e}")
-            return 1
+        from PyQt5.QtWidgets import QApplication, QMainWindow
+    except ImportError:
+        from PyQt6.QtWidgets import QApplication, QMainWindow
 
-    app = QApplication(sys.argv)
+    import sys
+    import numpy as np
 
-    # Create main window
-    window = QMainWindow()
-    window.setWindowTitle("Beam's Eye View Test")
-    window.resize(800, 800)
-
-    # Create BEV widget
-    bev_widget = BeamEyeView()
-
-    # Create test beam
-    class TestBeam:
-        def __init__(self):
-                self.name = "Test Beam"
-            self.gantry_angle = 0
-            self.collimator_angle = 0
-            self.sad = 1000
-            self.isocenter = [0, 0, 0]
-            self.field_size = [100, 100]
-            self.mlc_positions = None
-            self.jaw_positions = None
-
-    # Create test structures
     class TestStructure:
-        def __init__(self, name, id, contours=None):
+        def __init__(self, name, id):
             self.name = name
             self.id = id
-            self.contours = contours or []
+            self.visible = True
+            self.is_target = name == "PTV"
+
+    class TestBeam:
+        def __init__(self):
+            self.gantry_angle = 0.0
+            self.collimator_angle = 0.0
+            self.couch_angle = 0.0
+            self.sad = 100.0
+            self.isocenter = (0.0, 0.0, 0.0)
+            self.field_size = (10.0, 10.0)
+            self.mlc_positions = []
+            self.jaw_positions = {"X1": -5.0, "X2": 5.0, "Y1": -5.0, "Y2": 5.0}
+
+    # Create application
+    app = QApplication(sys.argv)
+    window = QMainWindow()
+    window.setWindowTitle("BEV Tester")
+    window.resize(800, 600)
+
+    # Create BEV widget
+    bev_widget = BEVCanvas(parent=window)
 
     # Create test data
-    beam = TestBeam()
+    try:
+        beam = TestBeam()
 
-    # Create some test contours (simplified for example)
-        try:
-    ptv_contours = [
-                np.array([[20, 30, 0], [20, -30, 0], [-20, -30, 0], [-20, 30, 0]])
-    ]
+        # Create some test contours (simplified for example)
+        ptv_contours = [
+            np.array([[20, 30, 0], [20, -30, 0], [-20, -30, 0], [-20, 30, 0]])
+        ]
 
-    cord_contours = [
-                np.array([[5, 10, 20], [5, -10, 20], [-5, -10, 20], [-5, 10, 20]])
-    ]
+        cord_contours = [
+            np.array([[5, 30, 10], [5, -30, 10], [-5, -30, 10], [-5, 30, 10]])
+        ]
 
-    body_contours = [
-                np.array(
-                    [[100, 100, 0], [100, -100, 0], [-100, -100, 0], [-100, 100, 0]]
-                )
-    ]
+        body_contours = [
+            np.array([[30, 40, -10], [30, -40, -10], [-30, -40, -10], [-30, 40, -10]])
+        ]
 
-    structures = [
-        TestStructure("PTV", "ptv1", ptv_contours),
-        TestStructure("Spinal Cord", "cord", cord_contours),
-                TestStructure("BODY", "body", body_contours),
-    ]
+        # Create test structures
+        structures = []
 
-    # Set data in widget
-    bev_widget.set_beam(beam)
-    bev_widget.set_structures(structures)
-        except Exception as e:
-            logger.error(f"Error creating test data: {e}")
-            structures = [
-                TestStructure("PTV", "ptv1"),
-                TestStructure("Spinal Cord", "cord"),
-                TestStructure("BODY", "body"),
-            ]
-            bev_widget.set_beam(beam)
-            bev_widget.set_structures(structures)
+        ptv = TestStructure("PTV", "ptv1")
+        ptv.contours = ptv_contours
+        structures.append(ptv)
+
+        cord = TestStructure("Spinal Cord", "cord")
+        cord.contours = cord_contours
+        structures.append(cord)
+
+        body = TestStructure("BODY", "body")
+        body.contours = body_contours
+        structures.append(body)
+
+        # Add MLC positions
+        beam.mlc_positions = [(i, -5.0 + i * 0.5, 5.0 - i * 0.5) for i in range(20)]
+
+        # Set beam and structures
+        bev_widget.set_beam(beam)
+        bev_widget.set_structures(structures)
+    except Exception as e:
+        logger.error(f"Error creating test data: {e}")
+        structures = [
+            TestStructure("PTV", "ptv1"),
+            TestStructure("Spinal Cord", "cord"),
+            TestStructure("BODY", "body"),
+        ]
+        beam = TestBeam()
+        bev_widget.set_beam(beam)
+        bev_widget.set_structures(structures)
 
     # Set as central widget
     window.setCentralWidget(bev_widget)
 
     window.show()
-        try:
-    return app.exec_()
-        except Exception as e:
-            logger.error(f"Error in Qt event loop: {e}")
-            return 1
+    try:
+        return app.exec_()
     except Exception as e:
-        logger.error(f"Uncaught exception in test_beam_eye_view: {e}")
+        logger.error(f"Error in Qt event loop: {e}")
         return 1
 
 

@@ -2,674 +2,504 @@
 # -*- coding: utf-8 -*-
 
 """
-Module dự đoán thay đổi giải phẫu dựa trên biến dạng hình ảnh trong QuangTPS.
+Module cung cấp các lớp dự đoán thay đổi giải phẫu dựa trên mô hình biến dạng.
 
-Module này cung cấp các chức năng nâng cao để dự đoán sự thay đổi hình ảnh và cấu trúc
-dựa trên phân tích biến dạng qua thời gian, hỗ trợ cho việc lập kế hoạch thích ứng chủ động.
+Module này cung cấp các công cụ để dự đoán thay đổi thể tích, hình dạng và vị trí
+của các cấu trúc giải phẫu theo thời gian, phục vụ cho lập kế hoạch thích ứng.
 """
 
 import os
+import enum
 import logging
-import datetime
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from typing import List, Dict, Tuple, Optional, Union, Any, Sequence
-from enum import Enum, auto
-from scipy import interpolate
-import SimpleITK as sitk
+from typing import Dict, List, Optional, Any, Tuple, Union
+from datetime import datetime, timedelta
 
-from quangtps.core.types import Patient, Image, Structure, DoseGrid, Plan
+import SimpleITK as sitk
+import joblib
+from sklearn.linear_model import ElasticNet
+
+from quangtps.core.types import Image, Structure
+from quangtps.core.patient import Patient
 from quangtps.core.exceptions import PredictionError
-from quangtps.imaging.registration import ImageRegistration, RegistrationType
-from quangtps.adaptive.deformation.deformable_registration import DeformableRegistration
-from quangtps.adaptive.deformation.displacement_field import DisplacementField
-from quangtps.adaptive.prediction.anatomy_prediction import (
-    AnatomyPrediction,
-    PredictionMethod,
-    AnatomyPredictor,
-)
-from quangtps.core.utils import get_timestamp, create_directory_if_not_exists
+from quangtps.adaptive.deformation.deformation_map import DeformationMap
 
 logger = logging.getLogger(__name__)
 
 
-class DeformationModelType(Enum):
-    """Các loại mô hình biến dạng giải phẫu."""
+class DeformationModelType(enum.Enum):
+    """Enum định nghĩa các loại mô hình biến dạng."""
 
-    LINEAR = auto()  # Biến dạng tuyến tính
-    ELASTIC = auto()  # Biến dạng đàn hồi
-    VISCOUS = auto()  # Biến dạng nhớt
-    GROWTH = auto()  # Mô hình tăng trưởng/teo nhỏ mô
-    COMBINED = auto()  # Kết hợp các mô hình
-
-
-class DeformationVectorAnalysis:
-    """
-    Phân tích trường vector biến dạng để xác định các pattern thay đổi.
-    """
-
-    def __init__(self, displacement_field: DisplacementField):
-        """
-        Khởi tạo phân tích trường vector biến dạng.
-
-        Parameters
-        ----------
-        displacement_field : DisplacementField
-            Trường vector biến dạng cần phân tích
-        """
-        self.displacement_field = displacement_field
-        self.vector_data = displacement_field.get_vector_field()
-        self.magnitudes = None
-        self.directions = None
-        self.divergence = None
-        self.curl = None
-        self._analyze()
-
-    def _analyze(self):
-        """Phân tích các đặc tính của trường vector biến dạng."""
-        # Tính độ lớn của các vector
-        self.magnitudes = np.sqrt(np.sum(self.vector_data**2, axis=3))
-
-        # Tính hướng của các vector (có thể bổ sung tùy ứng dụng)
-
-        # Tính divergence để phát hiện vùng co giãn
-        self._calculate_divergence()
-
-        # Tính curl để phát hiện vùng xoay
-        self._calculate_curl()
-
-    def _calculate_divergence(self):
-        """Tính divergence của trường vector."""
-        # Giả sử vector_data có shape (z, y, x, 3)
-        vx = self.vector_data[:, :, :, 0]
-        vy = self.vector_data[:, :, :, 1]
-        vz = self.vector_data[:, :, :, 2]
-
-        # Tính gradient
-        z, y, x = self.vector_data.shape[:3]
-        dvx_dx = np.zeros((z, y, x))
-        dvy_dy = np.zeros((z, y, x))
-        dvz_dz = np.zeros((z, y, x))
-
-        # Tính xấp xỉ gradient bằng sai phân hữu hạn
-        dvx_dx[:, :, :-1] = vx[:, :, 1:] - vx[:, :, :-1]
-        dvy_dy[:, :-1, :] = vy[:, 1:, :] - vy[:, :-1, :]
-        dvz_dz[:-1, :, :] = vz[1:, :, :] - vz[:-1, :, :]
-
-        # Divergence = dvx/dx + dvy/dy + dvz/dz
-        self.divergence = dvx_dx + dvy_dy + dvz_dz
-
-    def _calculate_curl(self):
-        """Tính curl của trường vector."""
-        # Giả sử vector_data có shape (z, y, x, 3)
-        vx = self.vector_data[:, :, :, 0]
-        vy = self.vector_data[:, :, :, 1]
-        vz = self.vector_data[:, :, :, 2]
-
-        # Tính gradient
-        z, y, x = self.vector_data.shape[:3]
-        dvz_dy = np.zeros((z, y, x))
-        dvy_dz = np.zeros((z, y, x))
-        dvx_dz = np.zeros((z, y, x))
-        dvz_dx = np.zeros((z, y, x))
-        dvy_dx = np.zeros((z, y, x))
-        dvx_dy = np.zeros((z, y, x))
-
-        # Tính xấp xỉ gradient bằng sai phân hữu hạn
-        dvz_dy[:, :-1, :] = vz[:, 1:, :] - vz[:, :-1, :]
-        dvy_dz[:-1, :, :] = vy[1:, :, :] - vy[:-1, :, :]
-
-        dvx_dz[:-1, :, :] = vx[1:, :, :] - vx[:-1, :, :]
-        dvz_dx[:, :, :-1] = vz[:, :, 1:] - vz[:, :, :-1]
-
-        dvy_dx[:, :, :-1] = vy[:, :, 1:] - vy[:, :, :-1]
-        dvx_dy[:, :-1, :] = vx[:, 1:, :] - vx[:, :-1, :]
-
-        # Curl = [dvz/dy - dvy/dz, dvx/dz - dvz/dx, dvy/dx - dvx/dy]
-        curl_x = dvz_dy - dvy_dz
-        curl_y = dvx_dz - dvz_dx
-        curl_z = dvy_dx - dvx_dy
-
-        self.curl = np.stack([curl_x, curl_y, curl_z], axis=3)
-
-    def get_growth_regions(self, threshold: float = 0.5) -> np.ndarray:
-        """
-        Xác định các vùng mô đang tăng trưởng (divergence > 0).
-
-        Parameters
-        ----------
-        threshold : float, optional
-            Ngưỡng divergence để xác định vùng tăng trưởng, mặc định là 0.5
-
-        Returns
-        -------
-        np.ndarray
-            Mặt nạ nhị phân của các vùng tăng trưởng
-        """
-        return self.divergence > threshold
-
-    def get_shrinkage_regions(self, threshold: float = 0.5) -> np.ndarray:
-        """
-        Xác định các vùng mô đang co lại (divergence < 0).
-
-        Parameters
-        ----------
-        threshold : float, optional
-            Ngưỡng divergence (âm) để xác định vùng co lại, mặc định là 0.5
-
-        Returns
-        -------
-        np.ndarray
-            Mặt nạ nhị phân của các vùng co lại
-        """
-        return self.divergence < -threshold
-
-    def get_deformation_statistics(self) -> Dict[str, Any]:
-        """
-        Tính toán các thống kê về biến dạng.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Từ điển các thống kê về biến dạng
-        """
-        stats = {
-            "mean_magnitude": np.mean(self.magnitudes),
-            "max_magnitude": np.max(self.magnitudes),
-            "std_magnitude": np.std(self.magnitudes),
-            "mean_divergence": np.mean(self.divergence),
-            "positive_divergence_ratio": np.sum(self.divergence > 0)
-            / self.divergence.size,
-            "negative_divergence_ratio": np.sum(self.divergence < 0)
-            / self.divergence.size,
-        }
-        return stats
+    LINEAR = "linear"
+    BSPLINE = "bspline"
+    DIFFEOMORPHIC = "diffeomorphic"
+    BIOMECHANICAL = "biomechanical"
+    DEEP_LEARNING = "deep_learning"
+    CUSTOM = "custom"
 
 
 class DeformableAnatomyPredictor:
     """
-    Dự đoán thay đổi giải phẫu dựa trên biến dạng hình ảnh.
+    Lớp dự đoán thay đổi giải phẫu dựa trên mô hình biến dạng.
+
+    Lớp này cung cấp các phương thức để dự đoán thay đổi thể tích, hình dạng và vị trí
+    của các cấu trúc giải phẫu dựa trên mô hình học máy và biến dạng.
     """
 
     def __init__(
         self,
-        deformable_registration: Optional[DeformableRegistration] = None,
-        base_predictor: Optional[AnatomyPredictor] = None,
-    ):
-        """
-        Khởi tạo bộ dự đoán thay đổi giải phẫu dựa trên biến dạng.
-
-        Parameters
-        ----------
-        deformable_registration : Optional[DeformableRegistration], optional
-            Đối tượng đăng ký biến dạng, mặc định là None
-        base_predictor : Optional[AnatomyPredictor], optional
-            Bộ dự đoán cơ bản, mặc định là None
-        """
-        self.deformable_registration = (
-            deformable_registration or DeformableRegistration()
-        )
-        self.base_predictor = base_predictor or AnatomyPredictor()
-        self.historical_displacement_fields = []
-        self.historical_dates = []
-        self.deformation_models = {}
-
-    def add_historical_data(
-        self,
-        reference_image: Image,
-        target_image: Image,
-        reference_date: datetime.datetime,
-        target_date: datetime.datetime,
-    ):
-        """
-        Thêm dữ liệu lịch sử để dùng cho phân tích biến dạng.
-
-        Parameters
-        ----------
-        reference_image : Image
-            Hình ảnh tham chiếu
-        target_image : Image
-            Hình ảnh đích
-        reference_date : datetime.datetime
-            Ngày của hình ảnh tham chiếu
-        target_date : datetime.datetime
-            Ngày của hình ảnh đích
-        """
-        # Thực hiện đăng ký biến dạng
-        try:
-            displacement_field = self.deformable_registration.register(
-                reference_image, target_image
-            )
-
-            # Lưu trữ trường biến dạng và ngày tương ứng
-            self.historical_displacement_fields.append(displacement_field)
-            self.historical_dates.append((reference_date, target_date))
-
-            # Phân tích trường biến dạng
-            analysis = DeformationVectorAnalysis(displacement_field)
-
-            # Tính toán thời gian giữa hai ảnh
-            days_between = (target_date - reference_date).days
-
-            # Lưu mô hình biến dạng
-            self.deformation_models[target_date] = {
-                "displacement_field": displacement_field,
-                "analysis": analysis,
-                "reference_date": reference_date,
-                "days_between": days_between,
-                "statistics": analysis.get_deformation_statistics(),
-            }
-
-        except Exception as e:
-            logger.error(f"Không thể thêm dữ liệu lịch sử: {str(e)}")
-            raise PredictionError(f"Lỗi khi thêm dữ liệu lịch sử: {str(e)}")
-
-    def predict_future_anatomy(
-        self,
         patient: Patient,
         reference_image: Image,
-        reference_structures: Dict[str, Structure],
-        reference_date: datetime.datetime,
-        prediction_date: datetime.datetime,
-        model_type: DeformationModelType = DeformationModelType.COMBINED,
-        target_structures: Optional[List[str]] = None,
-    ) -> AnatomyPrediction:
+        model_type: DeformationModelType = DeformationModelType.BSPLINE,
+    ):
         """
-        Dự đoán giải phẫu tương lai dựa trên mô hình biến dạng.
+        Khởi tạo bộ dự đoán thay đổi giải phẫu.
 
-        Parameters
-        ----------
-        patient : Patient
-            Thông tin bệnh nhân
-        reference_image : Image
-            Hình ảnh tham chiếu hiện tại
-        reference_structures : Dict[str, Structure]
-            Các cấu trúc tham chiếu hiện tại
-        reference_date : datetime.datetime
-            Ngày của hình ảnh tham chiếu
-        prediction_date : datetime.datetime
-            Ngày cần dự đoán
-        model_type : DeformationModelType, optional
-            Loại mô hình biến dạng, mặc định là DeformationModelType.COMBINED
-        target_structures : Optional[List[str]], optional
-            Danh sách tên cấu trúc cần dự đoán, mặc định là None (tất cả)
-
-        Returns
-        -------
-        AnatomyPrediction
-            Kết quả dự đoán giải phẫu
+        Args:
+            patient: Đối tượng bệnh nhân.
+            reference_image: Ảnh tham chiếu.
+            model_type: Loại mô hình biến dạng.
         """
-        if not self.historical_displacement_fields:
-            logger.warning("Không có dữ liệu lịch sử để dự đoán giải phẫu tương lai")
-            # Sử dụng bộ dự đoán cơ bản nếu không có dữ liệu biến dạng
-            return self.base_predictor.predict_anatomy_changes(
-                patient=patient,
-                historical_images=[reference_image],
-                historical_structures=[reference_structures],
-                historical_dates=[reference_date],
-                prediction_dates=[prediction_date],
-                method=PredictionMethod.LINEAR,
-                target_structures=target_structures,
-            )
+        self.patient = patient
+        self.reference_image = reference_image
+        self.model_type = model_type
 
-        # Tạo đối tượng dự đoán
-        prediction = AnatomyPrediction(reference_date, patient.patient_id)
+        # Từ điển mô hình dự đoán theo cấu trúc
+        self.prediction_models: Dict[str, Any] = {}
 
-        # Tính toán trường biến dạng dự đoán
-        predicted_displacement_field = self._predict_displacement_field(
-            reference_date, prediction_date, model_type
+        # Tham số mô hình
+        self.model_params: Dict[str, Any] = {
+            "grid_spacing": 20.0,  # mm
+            "smoothing_sigma": 3.0,  # mm
+            "optimization_steps": 100,
+            "learning_rate": 0.1,
+        }
+
+        logger.info(
+            f"Khởi tạo bộ dự đoán thay đổi giải phẫu với mô hình {model_type.name}"
         )
 
-        # Áp dụng trường biến dạng dự đoán vào hình ảnh tham chiếu
-        predicted_image = self._apply_displacement_field_to_image(
-            reference_image, predicted_displacement_field
-        )
-
-        # Lọc cấu trúc cần dự đoán
-        structures_to_predict = reference_structures
-        if target_structures:
-            structures_to_predict = {
-                name: struct
-                for name, struct in reference_structures.items()
-                if name in target_structures
-            }
-
-        # Áp dụng trường biến dạng dự đoán vào các cấu trúc
-        predicted_structures = self._apply_displacement_field_to_structures(
-            structures_to_predict, predicted_displacement_field
-        )
-
-        # Tính toán độ tin cậy dựa trên độ chênh lệch thời gian
-        # Độ tin cậy giảm khi khoảng thời gian dự đoán tăng
-        days_to_predict = (prediction_date - reference_date).days
-        max_confident_days = 30  # Giả sử dự đoán tin cậy trong vòng 30 ngày
-        confidence = max(
-            0.1, min(1.0, 1.0 - (days_to_predict / (max_confident_days * 2)))
-        )
-
-        # Thêm dữ liệu dự đoán
-        prediction.add_prediction_timepoint(
-            prediction_date, predicted_structures, predicted_image, confidence
-        )
-
-        return prediction
-
-    def _predict_displacement_field(
-        self,
-        reference_date: datetime.datetime,
-        prediction_date: datetime.datetime,
-        model_type: DeformationModelType,
-    ) -> DisplacementField:
+    def load_model(self, structure_id: str, model_path: str) -> bool:
         """
-        Dự đoán trường biến dạng tại một thời điểm trong tương lai.
+        Tải mô hình dự đoán cho một cấu trúc cụ thể.
 
-        Parameters
-        ----------
-        reference_date : datetime.datetime
-            Ngày tham chiếu
-        prediction_date : datetime.datetime
-            Ngày cần dự đoán
-        model_type : DeformationModelType
-            Loại mô hình biến dạng
+        Args:
+            structure_id: ID của cấu trúc.
+            model_path: Đường dẫn đến tệp mô hình.
 
-        Returns
-        -------
-        DisplacementField
-            Trường biến dạng dự đoán
+        Returns:
+            bool: True nếu tải thành công, False nếu thất bại.
         """
-        # Tìm mô hình biến dạng gần nhất với reference_date
-        closest_model = None
-        min_diff = float("inf")
-
-        for date, model in self.deformation_models.items():
-            if model["reference_date"] == reference_date:
-                diff = abs((date - prediction_date).days)
-                if diff < min_diff:
-                    min_diff = diff
-                    closest_model = model
-
-        if not closest_model:
-            # Nếu không tìm thấy mô hình phù hợp, sử dụng mô hình gần nhất với reference_date
-            for date, model in self.deformation_models.items():
-                diff = abs((model["reference_date"] - reference_date).days)
-                if diff < min_diff:
-                    min_diff = diff
-                    closest_model = model
-
-        if not closest_model:
-            raise PredictionError("Không thể tìm thấy mô hình biến dạng phù hợp")
-
-        # Lấy trường biến dạng cơ sở
-        base_field = closest_model["displacement_field"]
-
-        # Tính toán hệ số nhân dựa trên thời gian
-        target_days = (prediction_date - reference_date).days
-        base_days = closest_model["days_between"]
-
-        # Hệ số nhân khác nhau tùy theo loại mô hình
-        if model_type == DeformationModelType.LINEAR:
-            # Mô hình tuyến tính
-            scale_factor = target_days / base_days if base_days != 0 else 1.0
-
-        elif model_type == DeformationModelType.ELASTIC:
-            # Mô hình đàn hồi: biến dạng ban đầu nhanh, sau đó chậm lại
-            scale_factor = (
-                1.0 - np.exp(-target_days / (base_days * 1.5))
-                if base_days != 0
-                else 1.0
-            )
-
-        elif model_type == DeformationModelType.VISCOUS:
-            # Mô hình nhớt: biến dạng ban đầu chậm, sau đó nhanh hơn
-            scale_factor = np.tanh(target_days / base_days) if base_days != 0 else 1.0
-
-        elif model_type == DeformationModelType.GROWTH:
-            # Mô hình tăng trưởng: phi tuyến, có thể tăng hoặc giảm
-            growth_rate = 0.03  # Tỷ lệ tăng trưởng ngày
-            scale_factor = np.exp(growth_rate * target_days) - 1
-
-        else:  # DeformationModelType.COMBINED
-            # Kết hợp các mô hình
-            linear_factor = target_days / base_days if base_days != 0 else 1.0
-            elastic_factor = (
-                1.0 - np.exp(-target_days / (base_days * 1.5))
-                if base_days != 0
-                else 1.0
-            )
-            scale_factor = (linear_factor + elastic_factor) / 2.0
-
-        # Nhân trường vector biến dạng với hệ số
-        scaled_field = base_field.scale(scale_factor)
-
-        return scaled_field
-
-    def _apply_displacement_field_to_image(
-        self, image: Image, displacement_field: DisplacementField
-    ) -> Image:
-        """
-        Áp dụng trường biến dạng vào hình ảnh.
-
-        Parameters
-        ----------
-        image : Image
-            Hình ảnh đầu vào
-        displacement_field : DisplacementField
-            Trường biến dạng cần áp dụng
-
-        Returns
-        -------
-        Image
-            Hình ảnh đã biến dạng
-        """
-        # Trong ứng dụng thực tế, đây sẽ là việc áp dụng trường biến dạng vào hình ảnh
-        # Ở đây tạo một bản sao của hình ảnh gốc
-        deformed_image = Image(id=f"{image.id}_deformed", modality=image.modality)
-
         try:
-            # Chuyển đổi hình ảnh sang định dạng SimpleITK
-            sitk_image = sitk.GetImageFromArray(image.data)
-            sitk_image.SetSpacing(
-                (image.pixel_spacing[0], image.pixel_spacing[1], image.slice_thickness)
+            if not os.path.exists(model_path):
+                logger.error(f"Không tìm thấy tệp mô hình: {model_path}")
+                return False
+
+            # Tải mô hình
+            model = joblib.load(model_path)
+
+            # Kiểm tra loại mô hình
+            if not isinstance(model, (ElasticNet, dict)):
+                logger.error(f"Loại mô hình không được hỗ trợ: {type(model)}")
+                return False
+
+            # Lưu mô hình
+            self.prediction_models[structure_id] = model
+
+            logger.info(
+                f"Đã tải mô hình dự đoán cho cấu trúc {structure_id} từ {model_path}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tải mô hình dự đoán: {str(e)}")
+            return False
+
+    def predict_volume_changes(self, structure_id: str, days: int) -> List[float]:
+        """
+        Dự đoán thay đổi thể tích của một cấu trúc theo thời gian.
+
+        Args:
+            structure_id: ID của cấu trúc.
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            List[float]: Danh sách thể tích dự đoán, mỗi phần tử tương ứng với một ngày.
+        """
+        logger.info(
+            f"Dự đoán thay đổi thể tích cho cấu trúc {structure_id} trong {days} ngày"
+        )
+
+        # Tìm cấu trúc trong danh sách
+        structure = None
+        for s in self.patient.structures:
+            if s.id == structure_id:
+                structure = s
+                break
+
+        if not structure:
+            logger.warning(f"Không tìm thấy cấu trúc {structure_id}")
+            return [0.0] * days
+
+        # Kiểm tra mô hình dự đoán
+        model = self.prediction_models.get(structure_id)
+
+        if model is not None:
+            try:
+                # Dự đoán sử dụng mô hình ML
+                return self._predict_volumes_with_ml(structure, model, days)
+            except Exception as e:
+                logger.error(f"Lỗi khi dự đoán với mô hình ML: {str(e)}")
+
+        # Sử dụng phương pháp dự đoán mặc định nếu không có mô hình
+        return self._predict_volumes_default(structure, days)
+
+    def _predict_volumes_with_ml(
+        self, structure: Structure, model: Any, days: int
+    ) -> List[float]:
+        """
+        Dự đoán thể tích sử dụng mô hình học máy.
+
+        Args:
+            structure: Cấu trúc cần dự đoán.
+            model: Mô hình học máy.
+            days: Số ngày cần dự đoán.
+
+        Returns:
+            List[float]: Danh sách thể tích dự đoán.
+        """
+        # Lấy thể tích hiện tại
+        current_volume = structure.volume
+
+        if isinstance(model, ElasticNet):
+            # Tạo đặc trưng đầu vào là số ngày
+            X = np.array([i + 1 for i in range(days)]).reshape(-1, 1)
+
+            # Dự đoán tỷ lệ thay đổi
+            change_ratios = model.predict(X).flatten()
+
+            # Tính thể tích mới
+            volumes = [current_volume * (1.0 + ratio) for ratio in change_ratios]
+
+            return volumes
+
+        elif isinstance(model, dict) and "type" in model:
+            # Mô hình tùy chỉnh dưới dạng từ điển
+            if model["type"] == "exponential_decay":
+                decay_rate = model.get("decay_rate", 0.01)
+                volumes = [
+                    current_volume * np.exp(-decay_rate * i) for i in range(1, days + 1)
+                ]
+                return volumes
+
+            elif model["type"] == "linear_trend":
+                slope = model.get("slope", -0.5)  # cc/ngày
+                volumes = [
+                    max(0.1, current_volume + slope * i) for i in range(1, days + 1)
+                ]
+                return volumes
+
+            else:
+                logger.warning(f"Không hỗ trợ loại mô hình: {model['type']}")
+
+        # Mô hình không được hỗ trợ, sử dụng mặc định
+        return self._predict_volumes_default(structure, days)
+
+    def _predict_volumes_default(self, structure: Structure, days: int) -> List[float]:
+        """
+        Phương pháp dự đoán mặc định khi không có mô hình học máy.
+
+        Args:
+            structure: Cấu trúc cần dự đoán.
+            days: Số ngày cần dự đoán.
+
+        Returns:
+            List[float]: Danh sách thể tích dự đoán.
+        """
+        # Thể tích hiện tại
+        current_volume = structure.volume
+
+        # Tỷ lệ thay đổi mặc định dựa trên loại cấu trúc
+        change_ratio = 0.0
+
+        if structure.type.lower() in ("ptv", "ctv", "gtv", "target"):
+            # Mục tiêu có xu hướng giảm
+            change_ratio = -0.01  # Giảm 1%/ngày
+        elif "parotid" in structure.name.lower():
+            # Tuyến mang tai có xu hướng giảm mạnh
+            change_ratio = -0.015  # Giảm 1.5%/ngày
+        elif any(
+            org in structure.name.lower()
+            for org in ["heart", "lung", "kidney", "liver"]
+        ):
+            # Các cơ quan này thường ổn định hơn
+            change_ratio = -0.005  # Giảm 0.5%/ngày
+
+        # Áp dụng thay đổi
+        volumes = []
+        for i in range(1, days + 1):
+            # Công thức thay đổi theo hàm mũ
+            new_volume = current_volume * (1.0 + change_ratio) ** i
+            volumes.append(max(0.1, new_volume))  # Đảm bảo thể tích không âm
+
+        return volumes
+
+    def predict_deformation_map(self, days: int = 1) -> DeformationMap:
+        """
+        Dự đoán ánh xạ biến dạng cho ngày cụ thể trong tương lai.
+
+        Args:
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            DeformationMap: Ánh xạ biến dạng dự đoán.
+        """
+        logger.info(f"Dự đoán ánh xạ biến dạng cho {days} ngày trong tương lai")
+
+        if days < 1:
+            logger.warning(f"Số ngày không hợp lệ: {days}, sử dụng mặc định là 1")
+            days = 1
+
+        # Tạo ánh xạ biến dạng dựa trên loại mô hình
+        if self.model_type == DeformationModelType.BSPLINE:
+            return self._create_bspline_deformation_map(days)
+
+        elif self.model_type == DeformationModelType.DIFFEOMORPHIC:
+            return self._create_diffeomorphic_deformation_map(days)
+
+        elif self.model_type == DeformationModelType.BIOMECHANICAL:
+            return self._create_biomechanical_deformation_map(days)
+
+        elif self.model_type == DeformationModelType.DEEP_LEARNING:
+            return self._create_deep_learning_deformation_map(days)
+
+        else:
+            # Mặc định sử dụng B-spline
+            return self._create_bspline_deformation_map(days)
+
+    def _create_bspline_deformation_map(self, days: int) -> DeformationMap:
+        """
+        Tạo ánh xạ biến dạng dự đoán sử dụng biến dạng B-spline.
+
+        Args:
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            DeformationMap: Ánh xạ biến dạng dự đoán.
+        """
+        logger.info("Tạo ánh xạ biến dạng B-spline")
+
+        # Lấy tham số từ cấu hình
+        grid_spacing = self.model_params.get("grid_spacing", 20.0)
+        sigma = self.model_params.get("smoothing_sigma", 3.0)
+
+        # Tạo đối tượng sitk cho biến dạng B-spline
+        image_sitk = (
+            self.reference_image.to_sitk()
+            if hasattr(self.reference_image, "to_sitk")
+            else self.reference_image
+        )
+
+        # Tạo trường dịch chuyển
+        displacement_field = sitk.Image(image_sitk.GetSize(), sitk.sitkVectorFloat64)
+        displacement_field.SetSpacing(image_sitk.GetSpacing())
+        displacement_field.SetOrigin(image_sitk.GetOrigin())
+        displacement_field.SetDirection(image_sitk.GetDirection())
+
+        # Tỷ lệ biến dạng dựa trên số ngày
+        deformation_scale = min(1.0, days * 0.2)  # Giới hạn tỷ lệ tối đa
+
+        # Tạo biến dạng giả định dựa trên các thay đổi sinh lý thường gặp
+        # Ví dụ: thu nhỏ các mô mềm, giảm thể tích nước
+
+        # Tạo lưới điểm điều khiển B-spline
+        transform = sitk.BSplineTransformInitializer(
+            image_sitk, [int(image_sitk.GetSize()[i] / grid_spacing) for i in range(3)]
+        )
+
+        # Tạo các hệ số biến dạng
+        params = transform.GetParameters()
+
+        # Thay đổi các tham số biến dạng dựa trên các mô hình thay đổi
+        # Đây là mô phỏng đơn giản về thay đổi giải phẫu theo thời gian
+        np.random.seed(42)  # Đảm bảo tính lặp lại
+
+        # Cấu trúc của tham số biến dạng:
+        # mỗi 3 tham số liên tiếp là Vector3D (dx, dy, dz) cho một điểm lưới
+        num_params = len(params)
+
+        # Đối với mỗi thông số biến dạng (nhóm theo 3)
+        for i in range(0, num_params, 3):
+            # Tạo biến dạng có xu hướng co lại về phía trung tâm
+            coords = [
+                (i // 3)
+                % transform.GetTransform().GetCoefficientImages()[0].GetSize()[j]
+                for j in range(3)
+            ]
+
+            # Khoảng cách từ trung tâm
+            center = [
+                transform.GetTransform().GetCoefficientImages()[0].GetSize()[j] / 2
+                for j in range(3)
+            ]
+            dist_from_center = (
+                sum([(coords[j] - center[j]) ** 2 for j in range(3)]) ** 0.5
             )
 
-            # Chuyển đổi trường biến dạng sang định dạng SimpleITK
-            vector_field = displacement_field.get_vector_field()
-            sitk_vector_field = sitk.GetImageFromArray(vector_field, isVector=True)
-            sitk_vector_field.SetSpacing(
-                (image.pixel_spacing[0], image.pixel_spacing[1], image.slice_thickness)
+            # Biến dạng phụ thuộc vào khoảng cách từ trung tâm
+            direction = [coords[j] - center[j] for j in range(3)]
+            magnitude = (
+                deformation_scale
+                * (dist_from_center / 10.0)
+                * np.exp(-dist_from_center / 20.0)
             )
 
             # Áp dụng biến dạng
-            displacement_filter = sitk.DisplacementFieldTransform(sitk_vector_field)
-            resampler = sitk.ResampleImageFilter()
-            resampler.SetReferenceImage(sitk_image)
-            resampler.SetInterpolator(sitk.sitkLinear)
-            resampler.SetTransform(displacement_filter)
+            if i + 2 < num_params:
+                params[i] = -direction[0] * magnitude
+                params[i + 1] = -direction[1] * magnitude
+                params[i + 2] = -direction[2] * magnitude
 
-            deformed_sitk_image = resampler.Execute(sitk_image)
+        # Cập nhật tham số biến dạng
+        transform.SetParameters(params)
 
-            # Chuyển đổi trở lại
-            deformed_image.data = sitk.GetArrayFromImage(deformed_sitk_image)
-            deformed_image.pixel_spacing = image.pixel_spacing
-            deformed_image.slice_thickness = image.slice_thickness
-
-        except Exception as e:
-            logger.error(f"Lỗi khi áp dụng trường biến dạng vào hình ảnh: {str(e)}")
-            # Trường hợp lỗi, trả về bản sao hình ảnh gốc
-            deformed_image.data = image.data.copy() if image.data is not None else None
-            deformed_image.pixel_spacing = image.pixel_spacing
-            deformed_image.slice_thickness = image.slice_thickness
-
-        return deformed_image
-
-    def _apply_displacement_field_to_structures(
-        self, structures: Dict[str, Structure], displacement_field: DisplacementField
-    ) -> Dict[str, Structure]:
-        """
-        Áp dụng trường biến dạng vào các cấu trúc.
-
-        Parameters
-        ----------
-        structures : Dict[str, Structure]
-            Từ điển các cấu trúc đầu vào
-        displacement_field : DisplacementField
-            Trường biến dạng cần áp dụng
-
-        Returns
-        -------
-        Dict[str, Structure]
-            Từ điển các cấu trúc đã biến dạng
-        """
-        deformed_structures = {}
-
-        for name, structure in structures.items():
-            try:
-                # Tạo cấu trúc mới
-                deformed_struct = Structure(
-                    id=f"{structure.id}_deformed",
-                    name=structure.name,
-                    type=structure.type,
-                    color=structure.color,
-                )
-
-                # Lấy mặt nạ nhị phân
-                mask = structure.get_binary_mask()
-
-                # Chuyển đổi mặt nạ sang định dạng SimpleITK
-                sitk_mask = sitk.GetImageFromArray(mask.astype(np.uint8))
-                voxel_spacing = structure.get_voxel_spacing()
-                sitk_mask.SetSpacing(voxel_spacing)
-
-                # Chuyển đổi trường biến dạng sang định dạng SimpleITK
-                vector_field = displacement_field.get_vector_field()
-                sitk_vector_field = sitk.GetImageFromArray(vector_field, isVector=True)
-                sitk_vector_field.SetSpacing(voxel_spacing)
-
-                # Áp dụng biến dạng
-                displacement_filter = sitk.DisplacementFieldTransform(sitk_vector_field)
-                resampler = sitk.ResampleImageFilter()
-                resampler.SetReferenceImage(sitk_mask)
-                resampler.SetInterpolator(
-                    sitk.sitkNearestNeighbor
-                )  # Sử dụng nearest neighbor cho mặt nạ nhị phân
-                resampler.SetTransform(displacement_filter)
-
-                deformed_sitk_mask = resampler.Execute(sitk_mask)
-
-                # Chuyển đổi trở lại
-                deformed_mask = sitk.GetArrayFromImage(deformed_sitk_mask).astype(bool)
-
-                # Thiết lập mặt nạ mới
-                deformed_struct.set_binary_mask(deformed_mask)
-                deformed_struct.set_voxel_spacing(voxel_spacing)
-
-                # Tính toán thể tích
-                deformed_struct.calculate_volume()
-
-                deformed_structures[name] = deformed_struct
-
-            except Exception as e:
-                logger.error(
-                    f"Lỗi khi áp dụng trường biến dạng vào cấu trúc {name}: {str(e)}"
-                )
-                # Trường hợp lỗi, sử dụng cấu trúc gốc
-                deformed_structures[name] = structure
-
-        return deformed_structures
-
-    def visualize_deformation_field(
-        self,
-        displacement_field: DisplacementField,
-        slice_idx: int = None,
-        save_path: Optional[str] = None,
-    ):
-        """
-        Trực quan hóa trường biến dạng.
-
-        Parameters
-        ----------
-        displacement_field : DisplacementField
-            Trường biến dạng cần trực quan hóa
-        slice_idx : int, optional
-            Chỉ số lát cắt cần hiển thị, mặc định là None (lát cắt giữa)
-        save_path : Optional[str], optional
-            Đường dẫn để lưu hình ảnh, mặc định là None
-        """
-        vector_field = displacement_field.get_vector_field()
-
-        if slice_idx is None:
-            slice_idx = vector_field.shape[0] // 2
-
-        # Lấy lát cắt
-        slice_data = vector_field[slice_idx, :, :, :]
-
-        # Tính độ lớn vector
-        magnitudes = np.sqrt(np.sum(slice_data**2, axis=2))
-
-        plt.figure(figsize=(15, 10))
-
-        # Vẽ trường biến dạng
-        plt.subplot(2, 2, 1)
-        plt.imshow(magnitudes, cmap="jet")
-        plt.colorbar(label="Magnitude (mm)")
-        plt.title(f"Magnitude of Deformation Field (Slice {slice_idx})")
-
-        # Vẽ vector field (subsample để dễ nhìn)
-        plt.subplot(2, 2, 2)
-        step = 8  # Subsampling step
-        Y, X = np.mgrid[: slice_data.shape[0] : step, : slice_data.shape[1] : step]
-        U = slice_data[::step, ::step, 0]
-        V = slice_data[::step, ::step, 1]
-
-        plt.quiver(X, Y, U, V, magnitudes[::step, ::step], cmap="jet")
-        plt.colorbar(label="Magnitude (mm)")
-        plt.title("Vector Direction")
-
-        # Vẽ thành phần X
-        plt.subplot(2, 2, 3)
-        plt.imshow(slice_data[:, :, 0], cmap="RdBu")
-        plt.colorbar(label="X Displacement (mm)")
-        plt.title("X Component")
-
-        # Vẽ thành phần Y
-        plt.subplot(2, 2, 4)
-        plt.imshow(slice_data[:, :, 1], cmap="RdBu")
-        plt.colorbar(label="Y Displacement (mm)")
-        plt.title("Y Component")
-
-        plt.tight_layout()
-
-        if save_path:
-            plt.savefig(save_path)
-            plt.close()
-        else:
-            plt.show()
-
-
-def create_deformable_anatomy_predictor() -> DeformableAnatomyPredictor:
-    """
-    Tạo và cấu hình bộ dự đoán giải phẫu biến dạng.
-
-    Returns
-    -------
-    DeformableAnatomyPredictor
-        Bộ dự đoán đã cấu hình
-    """
-    try:
-        # Tạo đối tượng đăng ký biến dạng
-        deformable_reg = DeformableRegistration()
-
-        # Tạo bộ dự đoán cơ bản
-        base_predictor = AnatomyPredictor()
-
-        # Tạo bộ dự đoán biến dạng
-        predictor = DeformableAnatomyPredictor(
-            deformable_registration=deformable_reg, base_predictor=base_predictor
+        # Áp dụng biến dạng vào trường dịch chuyển
+        displacement = sitk.TransformToDisplacementField(
+            transform,
+            sitk.sitkVectorFloat64,
+            displacement_field.GetSize(),
+            displacement_field.GetOrigin(),
+            displacement_field.GetSpacing(),
+            displacement_field.GetDirection(),
         )
 
-        return predictor
+        # Làm trơn trường dịch chuyển
+        displacement_smooth = sitk.SmoothingRecursiveGaussian(displacement, sigma)
 
-    except Exception as e:
-        logger.error(f"Lỗi khi tạo bộ dự đoán giải phẫu biến dạng: {str(e)}")
-        raise
+        # Tạo ánh xạ biến dạng từ trường dịch chuyển
+        return DeformationMap(
+            reference_image=self.reference_image,
+            displacement_field=displacement_smooth,
+            description=f"Dự đoán biến dạng B-spline sau {days} ngày",
+        )
+
+    def _create_diffeomorphic_deformation_map(self, days: int) -> DeformationMap:
+        """
+        Tạo ánh xạ biến dạng dự đoán sử dụng biến dạng diffeomorphic.
+
+        Args:
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            DeformationMap: Ánh xạ biến dạng dự đoán.
+        """
+        logger.info("Tạo ánh xạ biến dạng diffeomorphic")
+
+        # Trong trường hợp thực tế, sẽ triển khai thuật toán biến dạng diffeomorphic
+        # như Demons hoặc SyN
+
+        # Hiện tại, sử dụng B-spline làm dự phòng
+        return self._create_bspline_deformation_map(days)
+
+    def _create_biomechanical_deformation_map(self, days: int) -> DeformationMap:
+        """
+        Tạo ánh xạ biến dạng dự đoán sử dụng mô hình cơ học sinh học.
+
+        Args:
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            DeformationMap: Ánh xạ biến dạng dự đoán.
+        """
+        logger.info("Tạo ánh xạ biến dạng cơ học sinh học")
+
+        # Mô hình cơ học sinh học cần tích hợp với các công cụ mô phỏng FEM
+        # như FEniCS, ANSYS, hoặc SOFA
+
+        # Hiện tại, sử dụng B-spline làm dự phòng
+        return self._create_bspline_deformation_map(days)
+
+    def _create_deep_learning_deformation_map(self, days: int) -> DeformationMap:
+        """
+        Tạo ánh xạ biến dạng dự đoán sử dụng mô hình học sâu.
+
+        Args:
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            DeformationMap: Ánh xạ biến dạng dự đoán.
+        """
+        logger.info("Tạo ánh xạ biến dạng học sâu")
+
+        # Trong trường hợp thực tế, sẽ tải mô hình học sâu đã huấn luyện trước
+        # như U-Net hoặc VoxelMorph
+
+        # Hiện tại, sử dụng B-spline làm dự phòng
+        return self._create_bspline_deformation_map(days)
+
+    def get_prediction_uncertainty(self, structure_id: str, days: int) -> List[float]:
+        """
+        Ước tính độ không chắc chắn của dự đoán thay đổi thể tích.
+
+        Args:
+            structure_id: ID của cấu trúc.
+            days: Số ngày cần dự đoán trong tương lai.
+
+        Returns:
+            List[float]: Danh sách độ không chắc chắn (độ lệch chuẩn) cho mỗi ngày.
+        """
+        # Độ không chắc chắn tăng theo số ngày dự đoán
+        base_uncertainty = 0.02  # 2% cho ngày đầu tiên
+
+        # Tính toán độ không chắc chắn cho mỗi ngày
+        uncertainties = [base_uncertainty * (1 + 0.2 * i) for i in range(days)]
+
+        return uncertainties
+
+    def export_prediction_report(
+        self, predictions: Dict[str, Dict[str, Any]], output_path: str
+    ) -> bool:
+        """
+        Xuất báo cáo dự đoán thay đổi giải phẫu.
+
+        Args:
+            predictions: Kết quả dự đoán từ phương thức predict_volume_changes.
+            output_path: Đường dẫn tệp đầu ra.
+
+        Returns:
+            bool: True nếu xuất thành công, False nếu thất bại.
+        """
+        try:
+            with open(output_path, "w") as f:
+                f.write("BÁOCÁO DỰ ĐOÁN THAY ĐỔI GIẢI PHẪU\n")
+                f.write("=" * 40 + "\n\n")
+
+                f.write(f"ID bệnh nhân: {self.patient.patient_id}\n")
+                f.write(f"Ngày tạo: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+                for structure_id, data in predictions.items():
+                    f.write(f"Cấu trúc: {data.get('structure_name', structure_id)}\n")
+                    f.write(
+                        f"Thể tích hiện tại: {data.get('current_volume', 0):.2f} cc\n"
+                    )
+
+                    f.write("Dự đoán thay đổi:\n")
+                    for pred in data.get("predictions", []):
+                        date = pred.get("date", "")
+                        volume = pred.get("volume", 0)
+
+                        date_str = (
+                            date.strftime("%Y-%m-%d")
+                            if isinstance(date, datetime)
+                            else str(date)
+                        )
+                        f.write(f"  - {date_str}: {volume:.2f} cc\n")
+
+                    f.write("\n")
+
+            logger.info(f"Đã xuất báo cáo dự đoán thành công: {output_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Lỗi khi xuất báo cáo dự đoán: {str(e)}")
+            return False

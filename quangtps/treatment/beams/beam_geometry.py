@@ -494,12 +494,15 @@ class BEVTransform:
     def _calculate_source_position(self):
         """
         Tính toán vị trí nguồn chùm tia dựa trên các thông số góc và SAD.
+        Cải thiện độ chính xác bằng cách xét cả ảnh hưởng của góc gantry, góc collimator và góc bàn.
         """
         # Chuyển góc sang radian
         gantry_rad = np.radians(self.gantry_angle)
         couch_rad = np.radians(self.couch_angle)
 
-        # Tính tọa độ nguồn (ngược với hướng chùm tia)
+        # Tính tọa độ nguồn trong không gian IEC
+        # Theo chuẩn IEC 61217, nguồn nằm ở phía trên trục Z khi gantry = 0
+        # Khi gantry quay, nguồn di chuyển trong mặt phẳng X-Z
         x = -self.sad * np.sin(gantry_rad) * np.cos(couch_rad)
         y = -self.sad * np.sin(gantry_rad) * np.sin(couch_rad)
         z = -self.sad * np.cos(gantry_rad)
@@ -508,11 +511,48 @@ class BEVTransform:
         source_rel = np.array([x, y, z])
 
         # Vị trí nguồn tuyệt đối
-        self.source_position = self.isocenter + source_rel
+        source_position = self.isocenter + source_rel
 
         # Đơn vị vector hướng chùm tia (từ nguồn đến isocenter)
-        beam_direction = self.isocenter - self.source_position
-        self.beam_direction = beam_direction / np.linalg.norm(beam_direction)
+        # Chùm tia luôn hướng từ nguồn đến isocenter
+        beam_direction = self.isocenter - source_position
+        beam_direction = beam_direction / np.linalg.norm(beam_direction)
+
+        # Lưu thông tin để sử dụng sau này
+        self.source_position = source_position
+        self.beam_direction = beam_direction
+
+        # Tính các trục chính của hệ tọa độ chùm tia
+        # Trục Z là hướng chùm tia
+        self.beam_z_axis = beam_direction
+
+        # Tính trục X (ngang) và Y (dọc) của chùm tia
+        # Trục X ban đầu nằm trong mặt phẳng X-Y của bệnh nhân
+        # Sau đó quay theo góc collimator
+        collimator_rad = np.radians(self.collimator_angle)
+
+        # Tính trục X và Y cơ bản (chưa xoay collimator)
+        if abs(abs(gantry_rad) - np.pi / 2) < 1e-6:  # Gantry = ±90°
+            beam_x_base = np.array([0, 0, np.sign(np.sin(gantry_rad))])
+        else:
+            beam_x_base = np.array([1, 0, 0])
+
+        # Đảm bảo beam_x_base vuông góc với beam_direction
+        beam_x_base = beam_x_base - np.dot(beam_x_base, beam_direction) * beam_direction
+        beam_x_base = beam_x_base / np.linalg.norm(beam_x_base)
+
+        # Tính trục Y bằng cách lấy tích có hướng của Z và X
+        beam_y_base = np.cross(beam_direction, beam_x_base)
+
+        # Xoay trục X và Y theo góc collimator
+        self.beam_x_axis = beam_x_base * np.cos(collimator_rad) + beam_y_base * np.sin(
+            collimator_rad
+        )
+        self.beam_y_axis = -beam_x_base * np.sin(collimator_rad) + beam_y_base * np.cos(
+            collimator_rad
+        )
+
+        return source_position
 
     def transform_point(
         self, point: Union[Tuple[float, float, float], np.ndarray]
@@ -608,344 +648,149 @@ class BEVTransform:
 
         return patient_point
 
-    def inverse_transform_points(
-        self,
-        bev_points: Union[List[Tuple[float, float]], np.ndarray],
-        depths: Union[float, List[float], np.ndarray] = 0.0,
-    ) -> np.ndarray:
-        """
-        Chuyển đổi ngược nhiều điểm từ tọa độ BEV sang tọa độ bệnh nhân.
-
-        Parameters
-        ----------
-        bev_points : Union[List[Tuple[float, float]], np.ndarray]
-            Danh sách các điểm trong hệ tọa độ BEV (cm)
-        depths : Union[float, List[float], np.ndarray], optional
-            Độ sâu hoặc danh sách độ sâu dọc theo trục chùm tia cho mỗi điểm (cm),
-            giá trị mặc định là 0.0 (mặt phẳng isocentric)
-
-        Returns
-        -------
-        np.ndarray
-            Mảng các điểm trong hệ tọa độ bệnh nhân (cm), mỗi điểm là [x, y, z]
-        """
-        bev_points_np = np.array(bev_points, dtype=float)
-
-        # Kiểm tra nếu không có điểm
-        if len(bev_points_np) == 0:
-            return np.zeros((0, 3))
-
-        # Nếu depths là một số, tạo mảng có cùng kích thước với số điểm BEV
-        if isinstance(depths, (int, float)):
-            depths = np.full(len(bev_points_np), depths)
-        else:
-            depths = np.array(depths, dtype=float)
-
-        # Đảm bảo depths có đúng kích thước
-        if len(depths) != len(bev_points_np):
-            raise ValueError("Số lượng độ sâu phải bằng số lượng điểm BEV")
-
-        # Tạo mảng 3D với các điểm BEV và độ sâu tương ứng
-        bev_points_3d = np.zeros((len(bev_points_np), 3))
-        bev_points_3d[:, 0] = bev_points_np[:, 0]
-        bev_points_3d[:, 1] = bev_points_np[:, 1]
-        bev_points_3d[:, 2] = depths
-
-        # Áp dụng phép quay nghịch đảo (vectorized)
-        rotated_points = np.dot(bev_points_3d, self.inverse_rotation_matrix.T)
-
-        # Dịch chuyển về hệ tọa độ bệnh nhân
-        patient_points = rotated_points + self.isocenter
-
-        return patient_points
-
-    def calculate_magnification(self, z_distance: float) -> float:
-        """
-        Tính hệ số phóng đại tại một khoảng cách z dọc theo trục chùm tia.
-
-        Parameters
-        ----------
-        z_distance : float
-            Khoảng cách dọc theo trục chùm tia từ isocenter (cm)
-
-        Returns
-        -------
-        float
-            Hệ số phóng đại
-        """
-        # SAD là khoảng cách từ nguồn đến isocenter
-        # Hệ số phóng đại = SAD / (SAD - z)
-
-        # Đảm bảo không chia cho 0 hoặc số âm quá nhỏ
-        denominator = self.sad - z_distance
-        if abs(denominator) < 1e-6:
-            # Trả về giá trị lớn nhưng hữu hạn nếu z_distance gần bằng SAD
-            return 1e6 if denominator >= 0 else -1e6
-
-        return self.sad / denominator
-
-    def project_to_isocentric_plane(
-        self, point: Union[Tuple[float, float, float], np.ndarray]
-    ) -> np.ndarray:
-        """
-        Chiếu một điểm từ không gian 3D lên mặt phẳng isocentric trong tọa độ BEV.
-
-        Parameters
-        ----------
-        point : Union[Tuple[float, float, float], np.ndarray]
-            Điểm trong hệ tọa độ bệnh nhân (cm)
-
-        Returns
-        -------
-        np.ndarray
-            Điểm đã chiếu trong hệ tọa độ BEV (cm)
-        """
-        point_np = np.array(point, dtype=float)
-
-        # Vector từ nguồn đến điểm
-        v_source_to_point = point_np - self.source_position
-
-        # Vector từ nguồn đến isocenter
-        v_source_to_iso = self.isocenter - self.source_position
-
-        # Tỷ lệ để chiếu lên mặt phẳng isocentric
-        # Mặt phẳng isocentric vuông góc với v_source_to_iso
-        iso_direction = v_source_to_iso / np.linalg.norm(v_source_to_iso)
-
-        # Tính tỷ lệ dựa trên công thức chiếu
-        dot_product = np.dot(v_source_to_point, iso_direction)
-        if abs(dot_product) < 1e-10:
-            # Điểm nằm trên mặt phẳng vuông góc với v_source_to_iso
-            # Không thể chiếu lên mặt phẳng isocentric
-            logger.warning("Không thể chiếu điểm lên mặt phẳng isocentric")
-            return np.array([0.0, 0.0])
-
-        ratio = np.dot(v_source_to_iso, iso_direction) / dot_product
-
-        # Điểm được chiếu trong hệ tọa độ bệnh nhân
-        projected_point = self.source_position + ratio * v_source_to_point
-
-        # Chuyển đổi sang tọa độ BEV
-        return self.transform_point(projected_point)
-
-    def project_points_to_isocentric_plane(
-        self, points: Union[List[Tuple[float, float, float]], np.ndarray]
-    ) -> np.ndarray:
-        """
-        Chiếu nhiều điểm từ không gian 3D lên mặt phẳng isocentric trong tọa độ BEV.
-        Tối ưu hóa cho hiệu suất với nhiều điểm.
-
-        Parameters
-        ----------
-        points : Union[List[Tuple[float, float, float]], np.ndarray]
-            Danh sách các điểm trong hệ tọa độ bệnh nhân (cm)
-
-        Returns
-        -------
-        np.ndarray
-            Mảng các điểm đã chiếu trong hệ tọa độ BEV (cm)
-        """
-        points_np = np.array(points, dtype=float)
-
-        # Kiểm tra nếu không có điểm
-        if len(points_np) == 0:
-            return np.zeros((0, 2))
-
-        # Vector từ nguồn đến isocenter
-        v_source_to_iso = self.isocenter - self.source_position
-
-        # Hướng chiếu (đơn vị hóa)
-        iso_direction = v_source_to_iso / np.linalg.norm(v_source_to_iso)
-
-        # Khoảng cách từ nguồn đến mặt phẳng isocentric dọc theo hướng chiếu
-        iso_distance = np.dot(v_source_to_iso, iso_direction)
-
-        # Tính vector từ nguồn đến mỗi điểm
-        v_source_to_points = points_np - self.source_position
-
-        # Tính tỷ lệ chiếu cho mỗi điểm
-        # dot_products[i] = dot(v_source_to_points[i], iso_direction)
-        dot_products = np.dot(v_source_to_points, iso_direction)
-
-        # Xử lý các điểm có dot_product gần 0 (không thể chiếu)
-        valid_mask = np.abs(dot_products) > 1e-10
-
-        # Tạo mảng kết quả với giá trị mặc định
-        projected_points_bev = np.zeros((len(points_np), 2))
-
-        if np.any(valid_mask):
-            # Tính tỷ lệ chiếu cho các điểm hợp lệ
-            ratios = np.zeros_like(dot_products)
-            ratios[valid_mask] = iso_distance / dot_products[valid_mask]
-
-            # Áp dụng tỷ lệ để tìm điểm chiếu trong hệ tọa độ bệnh nhân
-            # projected_points[i] = source_position + ratios[i] * v_source_to_points[i]
-
-            # Mở rộng ratios để nhân với mỗi thành phần của vector
-            ratios_expanded = ratios[:, np.newaxis]
-            projected_points = (
-                self.source_position + ratios_expanded * v_source_to_points
-            )
-
-            # Chỉ chuyển đổi các điểm hợp lệ sang BEV
-            valid_projected_points = projected_points[valid_mask]
-            projected_points_bev[valid_mask] = self.transform_points(
-                valid_projected_points
-            )
-
-        # Với các điểm không hợp lệ, đã gán giá trị 0 làm mặc định
-
-        return projected_points_bev
-
-    def ray_trace(
-        self,
-        point: Union[Tuple[float, float, float], np.ndarray],
-        structures: List[Any] = None,
-    ) -> Dict[str, float]:
-        """
-        Thực hiện ray-tracing từ nguồn phát xạ qua điểm đến và xác định các
-        cấu trúc được đi qua và khoảng cách đi qua mỗi cấu trúc.
-
-        Parameters
-        ----------
-        point : Union[Tuple[float, float, float], np.ndarray]
-            Điểm đích trong hệ tọa độ bệnh nhân (cm)
-        structures : List[Any], optional
-            Danh sách các cấu trúc cần kiểm tra
-
-        Returns
-        -------
-        Dict[str, float]
-            Dictionary chứa tên cấu trúc và khoảng cách đi qua (cm)
-        """
-        if structures is None or len(structures) == 0:
-            return {}
-
-        point_np = np.array(point, dtype=float)
-
-        # Vector từ nguồn đến điểm đích
-        ray_vector = point_np - self.source_position
-        ray_length = np.linalg.norm(ray_vector)
-        ray_direction = ray_vector / ray_length
-
-        # Lưu trữ kết quả
-        intersections = {}
-
-        # Kiểm tra mỗi cấu trúc
-        for structure in structures:
-            try:
-                # Gọi phương thức từ cấu trúc để tính khoảng cách giao
-                if hasattr(structure, "compute_ray_intersection"):
-                    distance = structure.compute_ray_intersection(
-                        self.source_position, ray_direction, max_distance=ray_length
-                    )
-                    if distance > 0:
-                        intersections[structure.name] = distance
-            except Exception as e:
-                logger.error(
-                    f"Lỗi khi thực hiện ray-tracing với cấu trúc {structure.name}: {e}"
-                )
-
-        return intersections
-
     def ray_trace_to_depth(
         self,
         bev_point: Union[Tuple[float, float], np.ndarray],
         structure: Any,
-        max_depth: float = 30.0,
+        max_distance: float = 50.0,
         step_size: float = 0.2,
     ) -> Dict[str, Any]:
         """
-        Thực hiện ray tracing từ nguồn chùm tia qua một điểm trong không gian BEV
-        để xác định độ sâu của cấu trúc.
+        Phương thức truy vết tia từ nguồn phát xạ qua một điểm trong mặt phẳng BEV
+        để xác định điểm vào, điểm ra và độ dày của cấu trúc.
 
         Parameters
         ----------
         bev_point : Union[Tuple[float, float], np.ndarray]
-            Điểm trong hệ tọa độ BEV (cm)
+            Tọa độ điểm trong hệ tọa độ BEV (cm)
         structure : Any
-            Cấu trúc để kiểm tra giao điểm
-        max_depth : float, optional
-            Độ sâu tối đa để tìm kiếm (cm), mặc định là 30.0 cm
+            Cấu trúc cần xác định độ sâu
+        max_distance : float, optional
+            Khoảng cách tối đa để truy vết (cm), mặc định là 50.0 cm
         step_size : float, optional
-            Bước di chuyển cho thuật toán ray tracing (cm), mặc định là 0.2 cm
+            Kích thước bước dò tia (cm), mặc định là 0.2 cm
 
         Returns
         -------
         Dict[str, Any]
-            Kết quả ray tracing với các thông tin:
-            - entry_depth: Độ sâu khi tia bắt đầu đi vào cấu trúc (cm)
-            - exit_depth: Độ sâu khi tia đi ra khỏi cấu trúc (cm)
-            - mid_depth: Độ sâu trung bình giữa entry và exit (cm)
-            - thickness: Độ dày của cấu trúc theo hướng chùm tia (cm)
-            - has_intersection: True nếu tia giao với cấu trúc, False nếu không
+            Kết quả truy vết bao gồm:
+            - has_intersection: bool - Có giao cắt với cấu trúc hay không
+            - entry_point: np.ndarray - Tọa độ điểm vào cấu trúc
+            - exit_point: np.ndarray - Tọa độ điểm ra cấu trúc
+            - entry_depth: float - Độ sâu của điểm vào so với isocenter (cm)
+            - exit_depth: float - Độ sâu của điểm ra so với isocenter (cm)
+            - thickness: float - Độ dày của cấu trúc dọc theo tia (cm)
+            - path_points: List[np.ndarray] - Danh sách các điểm trong đường đi của tia
         """
-        # Mặc định kết quả nếu không tìm thấy giao điểm
-        result = {
-            "entry_depth": None,
-            "exit_depth": None,
-            "mid_depth": None,
-            "thickness": 0.0,
-            "has_intersection": False,
-        }
+        # Kiểm tra cấu trúc có hợp lệ không
+        if structure is None or not hasattr(structure, "contains_point"):
+            return {
+                "has_intersection": False,
+                "entry_point": None,
+                "exit_point": None,
+                "entry_depth": np.nan,
+                "exit_depth": np.nan,
+                "thickness": 0.0,
+                "path_points": [],
+            }
 
-        if not hasattr(structure, "contains_point"):
-            return result
+        # Chuyển tọa độ BEV sang mặt phẳng isocentric trong hệ tọa độ bệnh nhân
+        plane_point = self.inverse_transform_point(bev_point, depth=0.0)
 
-        # Chuyển điểm BEV thành đường thẳng ray (từ nguồn qua điểm BEV)
-        entry_point = self.inverse_transform_point(bev_point, depth=0.0)
-
-        # Hướng ray là hướng từ nguồn đến điểm entry_point
-        ray_direction = entry_point - self.source_position
+        # Tính hướng của tia (từ nguồn đến điểm trong mặt phẳng isocentric)
+        ray_direction = plane_point - self.source_position
         ray_direction = ray_direction / np.linalg.norm(ray_direction)
 
-        # Số bước tính toán
-        num_steps = int(max_depth / step_size)
+        # Vị trí hiện tại (bắt đầu từ điểm nguồn phát xạ)
+        current_position = self.source_position.copy()
 
-        # Thực hiện ray tracing
+        # Các biến để theo dõi quá trình dò tia
         inside_structure = False
-        entry_depth = None
-        exit_depth = None
+        entry_point = None
+        exit_point = None
+        entry_depth = np.nan
+        exit_depth = np.nan
+        path_points = []
 
-        for i in range(num_steps):
-            current_depth = i * step_size
+        # Truy vết tia từ nguồn theo hướng xác định
+        total_distance = 0.0
 
-            # Tính vị trí điểm trong không gian bệnh nhân
-            current_point = entry_point + ray_direction * current_depth
+        while total_distance < max_distance:
+            # Lưu vị trí hiện tại
+            path_points.append(current_position.copy())
 
-            # Kiểm tra điểm có nằm trong cấu trúc không
-            is_inside = structure.contains_point(current_point)
+            # Kiểm tra điểm hiện tại có nằm trong cấu trúc không
+            is_inside = structure.contains_point(current_position)
 
-            # Phát hiện điểm vào cấu trúc
+            # Phát hiện chuyển trạng thái (vào/ra cấu trúc)
             if is_inside and not inside_structure:
-                inside_structure = True
-                entry_depth = current_depth
+                # Chuyển từ ngoài vào trong: ghi nhận điểm vào
+                entry_point = current_position.copy()
 
-            # Phát hiện điểm ra khỏi cấu trúc
+                # Tính độ sâu của điểm vào
+                vec_to_isocenter = self.isocenter - self.source_position
+                vec_to_entry = entry_point - self.source_position
+
+                # Chiếu vec_to_entry lên vec_to_isocenter để tính độ sâu so với isocenter
+                sad_length = np.linalg.norm(vec_to_isocenter)
+                projection = np.dot(vec_to_entry, vec_to_isocenter) / sad_length
+                entry_depth = projection - sad_length
+
+                inside_structure = True
+
             elif not is_inside and inside_structure:
-                inside_structure = False
-                exit_depth = current_depth
+                # Chuyển từ trong ra ngoài: ghi nhận điểm ra
+                exit_point = current_position.copy()
+
+                # Tính độ sâu của điểm ra
+                vec_to_isocenter = self.isocenter - self.source_position
+                vec_to_exit = exit_point - self.source_position
+
+                # Chiếu vec_to_exit lên vec_to_isocenter để tính độ sâu so với isocenter
+                sad_length = np.linalg.norm(vec_to_isocenter)
+                projection = np.dot(vec_to_exit, vec_to_isocenter) / sad_length
+                exit_depth = projection - sad_length
+
+                # Đã tìm thấy cả điểm vào và điểm ra, có thể thoát vòng lặp
                 break
 
-        # Nếu vẫn đang ở trong cấu trúc khi kết thúc
-        if inside_structure:
-            exit_depth = max_depth
+            # Di chuyển dọc theo tia
+            current_position += step_size * ray_direction
+            total_distance += step_size
 
-        # Cập nhật kết quả nếu có giao điểm
-        if entry_depth is not None:
-            result["entry_depth"] = entry_depth
-            result["exit_depth"] = exit_depth
-            result["thickness"] = exit_depth - entry_depth
-            result["mid_depth"] = (entry_depth + exit_depth) / 2
-            result["has_intersection"] = True
+        # Tính độ dày của cấu trúc
+        thickness = 0.0
+        if inside_structure and exit_point is not None and entry_point is not None:
+            thickness = np.linalg.norm(exit_point - entry_point)
+        elif inside_structure and entry_point is not None:
+            # Trường hợp tia đi vào cấu trúc nhưng chưa ra (đến giới hạn max_distance)
+            thickness = np.linalg.norm(current_position - entry_point)
+            exit_point = current_position.copy()
 
-        return result
+            # Tính độ sâu của điểm cuối
+            vec_to_isocenter = self.isocenter - self.source_position
+            vec_to_exit = exit_point - self.source_position
+            sad_length = np.linalg.norm(vec_to_isocenter)
+            projection = np.dot(vec_to_exit, vec_to_isocenter) / sad_length
+            exit_depth = projection - sad_length
+
+        return {
+            "has_intersection": entry_point is not None,
+            "entry_point": entry_point,
+            "exit_point": exit_point,
+            "entry_depth": entry_depth,
+            "exit_depth": exit_depth,
+            "thickness": thickness,
+            "path_points": path_points,
+        }
 
     def structure_to_bev_map(
         self,
         structure: Any,
         resolution: Tuple[int, int] = (256, 256),
         field_size: Tuple[float, float] = (20.0, 20.0),
+        color_by_depth: bool = False,
+        max_depth: float = 30.0,
     ) -> np.ndarray:
         """
         Chuyển đổi cấu trúc thành bản đồ BEV 2D.
@@ -958,17 +803,27 @@ class BEVTransform:
             Độ phân giải của bản đồ BEV (pixels), mặc định là (256, 256)
         field_size : Tuple[float, float], optional
             Kích thước trường chiếu (cm), mặc định là (20.0, 20.0)
+        color_by_depth : bool, optional
+            Nếu True, màu sắc sẽ thay đổi theo độ sâu của cấu trúc
+        max_depth : float, optional
+            Độ sâu tối đa (cm) để chuẩn hóa màu sắc, mặc định là 30.0
 
         Returns
         -------
         np.ndarray
-            Bản đồ BEV của cấu trúc (0-1)
+            Nếu color_by_depth=False: Bản đồ BEV của cấu trúc (0-1)
+            Nếu color_by_depth=True: Bản đồ BEV màu RGB (shape: [height, width, 3])
         """
         width, height = resolution
         x_field, y_field = field_size
 
         # Tạo bản đồ rỗng
-        bev_map = np.zeros(resolution, dtype=float)
+        if color_by_depth:
+            # Tạo bản đồ màu RGB
+            bev_map = np.zeros((height, width, 3), dtype=float)
+        else:
+            # Tạo bản đồ đơn sắc
+            bev_map = np.zeros(resolution, dtype=float)
 
         # Tính kích thước một pixel
         x_step = x_field / width
@@ -986,33 +841,88 @@ class BEVTransform:
 
                 # Nếu tia đi qua cấu trúc, đánh dấu pixel
                 if ray_result["has_intersection"]:
-                    # Có thể sử dụng thông tin độ dày để tính toán alpha
-                    # Cài đặt đơn giản: đánh dấu 1 cho mọi điểm giao
-                    bev_map[j, i] = 1.0
+                    if color_by_depth:
+                        # Màu sắc dựa trên độ sâu
+                        entry_depth = ray_result["entry_depth"]
+                        thickness = ray_result["thickness"]
+
+                        # Chuẩn hóa độ sâu vào khoảng [0, 1]
+                        norm_depth = min(abs(entry_depth), max_depth) / max_depth
+                        norm_thickness = min(thickness, max_depth / 2) / (max_depth / 2)
+
+                        # Tạo màu dựa trên độ sâu: Đỏ -> Vàng -> Xanh lá
+                        if entry_depth < 0:
+                            # Phía trước isocenter: Đỏ -> Vàng
+                            bev_map[j, i, 0] = 1.0  # R
+                            bev_map[j, i, 1] = 1.0 - norm_depth  # G
+                            bev_map[j, i, 2] = 0.0  # B
+                        else:
+                            # Phía sau isocenter: Vàng -> Xanh lá
+                            bev_map[j, i, 0] = 1.0 - norm_depth  # R
+                            bev_map[j, i, 1] = 1.0  # G
+                            bev_map[j, i, 2] = 0.0  # B
+
+                        # Điều chỉnh độ đậm dựa trên độ dày
+                        alpha = min(0.3 + 0.7 * norm_thickness, 1.0)
+                        bev_map[j, i] *= alpha
+                    else:
+                        # Đánh dấu 1 cho mọi điểm giao
+                        bev_map[j, i] = 1.0
 
         return bev_map
 
-    def get_source_position(self) -> np.ndarray:
+    def structure_to_bev_depth_map(
+        self,
+        structure: Any,
+        resolution: Tuple[int, int] = (256, 256),
+        field_size: Tuple[float, float] = (20.0, 20.0),
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Trả về vị trí nguồn chùm tia trong hệ tọa độ bệnh nhân.
+        Tạo bản đồ độ sâu cho cấu trúc trong BEV.
+
+        Parameters
+        ----------
+        structure : Any
+            Cấu trúc cần chuyển đổi
+        resolution : Tuple[int, int], optional
+            Độ phân giải của bản đồ BEV (pixels), mặc định là (256, 256)
+        field_size : Tuple[float, float], optional
+            Kích thước trường chiếu (cm), mặc định là (20.0, 20.0)
 
         Returns
         -------
-        np.ndarray
-            Vị trí nguồn (cm)
+        Tuple[np.ndarray, np.ndarray]
+            Trả về một tuple gồm:
+            - depth_map: Bản đồ độ sâu của điểm vào (cm)
+            - thickness_map: Bản đồ độ dày của cấu trúc (cm)
         """
-        return self.source_position
+        width, height = resolution
+        x_field, y_field = field_size
 
-    def get_beam_direction(self) -> np.ndarray:
-        """
-        Trả về vector đơn vị chỉ hướng chùm tia.
+        # Tạo bản đồ rỗng
+        depth_map = np.full(resolution, np.nan, dtype=float)
+        thickness_map = np.zeros(resolution, dtype=float)
 
-        Returns
-        -------
-        np.ndarray
-            Vector đơn vị chỉ hướng chùm tia
-        """
-        return self.beam_direction
+        # Tính kích thước một pixel
+        x_step = x_field / width
+        y_step = y_field / height
+
+        # Tính tọa độ BEV cho mỗi pixel
+        for i in range(width):
+            for j in range(height):
+                # Tọa độ BEV của trung tâm pixel
+                x_bev = (i - width / 2) * x_step + x_step / 2
+                y_bev = (j - height / 2) * y_step + y_step / 2
+
+                # Ray trace qua cấu trúc
+                ray_result = self.ray_trace_to_depth((x_bev, y_bev), structure)
+
+                # Nếu tia đi qua cấu trúc, lưu thông tin độ sâu
+                if ray_result["has_intersection"]:
+                    depth_map[j, i] = ray_result["entry_depth"]
+                    thickness_map[j, i] = ray_result["thickness"]
+
+        return depth_map, thickness_map
 
 
 def get_bev_transform(beam) -> BEVTransform:
