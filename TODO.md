@@ -27,6 +27,10 @@
 - [x] Complete leaf sequencing algorithm for IMRT plans
 - [x] Add verification tools for plan quality assurance
 - [x] Add comprehensive dependency installation script (install_all_dependencies.py)
+- [x] Improved 3D visualization colormap handling and error recovery
+- [x] Enhanced Monte Carlo GPU integration with automatic hardware detection
+- [x] Fixed adaptive planning module component integration
+- [x] Improved BEV visualization with robust colormap fallback mechanisms
 
 ## Current Tasks
 - [ ] Integrate 3D dose visualization in External Beam Planning tab
@@ -35,9 +39,12 @@
 - [ ] Implement better integration between Structure tab and External Beam Planning tab
 - [ ] Add multi-criteria optimization to Eclipse-like interface
 - [ ] Implement inverse planning algorithms for IMRT/VMAT optimization
-- [ ] Add support for multi-criteria optimization
 - [ ] Enhance image registration for multi-modality image fusion
 - [ ] Extend robust optimization for respiratory motion
+- [ ] Add comprehensive GPU memory management for large Monte Carlo calculations
+- [ ] Implement real-time adaptive planning with anatomy prediction
+- [ ] Enhance DVH visualization with interpolation and clinical goal markers
+- [ ] Add export functionality for 3D visualizations and BEV snapshots
 
 ## Future Tasks
 - [ ] Further enhance Eclipse-like UI with ribbon interface
@@ -60,6 +67,8 @@
 - [ ] Add support for deformable image registration
 - [ ] Create pre-treatment validation workflow
 - [ ] Develop uncertainty analysis tools for multi-institutional studies
+- [ ] Add distributed Monte Carlo computation across multiple workstations
+- [ ] Implement anatomically constrained dose painting for biologically guided RT
 
 ## High Priority
 
@@ -70,6 +79,8 @@
 - [ ] Implement comprehensive clinical protocol system for plan validation
 - [ ] Add DICOM-RT export functionality for treatment plans
 - [ ] Create better integration with record-and-verify systems
+- [ ] Expand GPU acceleration to support multiple vendors (NVIDIA, AMD, Intel)
+- [ ] Improve error handling for all critical algorithms in production mode
 
 ## Medium Priority
 
@@ -100,4 +111,4 @@
 - [ ] Add more treatment planning templates
 - [ ] Implement multi-threaded optimization
 - [ ] Add support for additional treatment delivery systems
-- [ ] Implement integration with commercial PACS systems 
+- [ ] Implement integration with commercial PACS systems

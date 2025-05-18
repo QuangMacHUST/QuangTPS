@@ -137,91 +137,147 @@ def create_integrated_adaptive_system(patient=None, reference_image=None):
     dict
         Dictionary chứa các thành phần của hệ thống thích ứng tích hợp
     """
-    try:
-        # Import các module cần thiết
-        from quangtps.adaptive.prediction import DeformableAnatomyPredictor
-        from quangtps.adaptive.model_validator import ModelValidator
-        import logging
+    import logging
 
-        # Khởi tạo các thành phần với tham số tùy chọn
-        anatomy_predictor = None
+    # Tạo logger cho hàm này
+    logger = logging.getLogger(__name__)
+
+    # Theo dõi các thành phần đã tạo thành công
+    components = {
+        "predictor": None,
+        "realtime_planner": None,
+        "validator": None,
+        "prediction_integrator": None,
+    }
+
+    # 1. Khởi tạo bộ dự đoán thay đổi giải phẫu
+    try:
+        # Thử import các module cần thiết
+        from quangtps.adaptive.prediction import DeformableAnatomyPredictor
+
+        # Khởi tạo dự đoán với tham số nếu có
         if patient is not None and reference_image is not None:
             try:
                 anatomy_predictor = DeformableAnatomyPredictor(
                     patient=patient, reference_image=reference_image
                 )
+                components["predictor"] = anatomy_predictor
+                logger.info("Đã tạo DeformableAnatomyPredictor thành công")
             except Exception as e:
-                logging.warning(
-                    f"Không thể khởi tạo DeformableAnatomyPredictor: {str(e)}"
+                logger.warning(
+                    f"Không thể khởi tạo DeformableAnatomyPredictor với tham số: {str(e)}"
                 )
-                # Tạo đối tượng rỗng nếu không thể khởi tạo với tham số
+                # Tạo đối tượng rỗng
+                try:
+                    anatomy_predictor = DeformableAnatomyPredictor.__new__(
+                        DeformableAnatomyPredictor
+                    )
+                    components["predictor"] = anatomy_predictor
+                    logger.info("Đã tạo đối tượng DeformableAnatomyPredictor rỗng")
+                except Exception as nested_e:
+                    logger.error(
+                        f"Không thể tạo đối tượng dự đoán rỗng: {str(nested_e)}"
+                    )
+        else:
+            # Thử tạo đối tượng rỗng
+            try:
                 anatomy_predictor = DeformableAnatomyPredictor.__new__(
                     DeformableAnatomyPredictor
                 )
-        else:
-            # Tạo đối tượng rỗng nếu chưa có tham số
-            anatomy_predictor = DeformableAnatomyPredictor.__new__(
-                DeformableAnatomyPredictor
-            )
+                components["predictor"] = anatomy_predictor
+                logger.info("Đã tạo đối tượng DeformableAnatomyPredictor rỗng")
+            except Exception as e:
+                logger.warning(f"Không thể tạo đối tượng dự đoán: {str(e)}")
+    except ImportError as e:
+        logger.warning(f"Không thể import DeformableAnatomyPredictor: {str(e)}")
 
-        # Khởi tạo real-time planner
-        realtime_planner = create_real_time_adaptive_planner()
+    # 2. Khởi tạo ModelValidator
+    try:
+        from quangtps.adaptive.model_validator import ModelValidator
+
         model_validator = ModelValidator()
+        components["validator"] = model_validator
+        logger.info("Đã tạo ModelValidator thành công")
+    except (ImportError, Exception) as e:
+        logger.warning(f"Không thể tạo ModelValidator: {str(e)}")
 
-        # Tạo tích hợp với AnatomyPredictionIntegrator
+    # 3. Khởi tạo RealTimeAdaptivePlanner với hàm tiện ích
+    try:
+        realtime_planner = create_real_time_adaptive_planner()
+        components["realtime_planner"] = realtime_planner
+        logger.info(
+            f"Đã tạo RealTimeAdaptivePlanner thành công: {realtime_planner.__class__.__name__}"
+        )
+    except Exception as e:
+        logger.warning(f"Không thể tạo RealTimeAdaptivePlanner: {str(e)}")
+
+    # 4. Tạo AnatomyPredictionIntegrator khi có các thành phần cần thiết
+    if components["predictor"] is not None or components["validator"] is not None:
         try:
             from quangtps.adaptive.optimization.anatomy_prediction_integration import (
                 AnatomyPredictionIntegrator,
             )
 
+            # Nếu một trong hai thành phần bị thiếu, đặt giá trị None
+            predictor = components.get("predictor")
+            validator = components.get("validator")
+
             prediction_integrator = AnatomyPredictionIntegrator(
-                predictor=anatomy_predictor, validator=model_validator
+                predictor=predictor, validator=validator
             )
+            components["prediction_integrator"] = prediction_integrator
+            logger.info("Đã tạo AnatomyPredictionIntegrator thành công")
         except (ImportError, Exception) as e:
-            logging.warning(f"Không thể tạo AnatomyPredictionIntegrator: {str(e)}")
-            prediction_integrator = None
+            logger.warning(f"Không thể tạo AnatomyPredictionIntegrator: {str(e)}")
 
-        # Tích hợp các thành phần
-        integrated_system = {
-            "predictor": anatomy_predictor,
-            "realtime_planner": realtime_planner,
-            "validator": model_validator,
-            "prediction_integrator": prediction_integrator,
-        }
+    # 5. Thiết lập các liên kết giữa các thành phần
+    # 5.1. Kết nối Validator với Predictor
+    if components["validator"] is not None and components["predictor"] is not None:
+        try:
+            if hasattr(components["predictor"], "set_validator"):
+                components["predictor"].set_validator(components["validator"])
+                logger.info("Đã kết nối validator với predictor")
+        except Exception as e:
+            logger.warning(f"Không thể kết nối validator với predictor: {str(e)}")
 
-        # Thiết lập các liên kết giữa các thành phần
-        if anatomy_predictor is not None:
-            try:
-                # Thử thiết lập validator nếu phương thức tồn tại
-                if hasattr(anatomy_predictor, "set_validator"):
-                    anatomy_predictor.set_validator(model_validator)
-            except (AttributeError, TypeError) as e:
-                logging.warning(f"Không thể thiết lập validator: {str(e)}")
+    # 5.2. Kết nối Predictor với RealTime Planner
+    if (
+        components["predictor"] is not None
+        and components["realtime_planner"] is not None
+    ):
+        try:
+            if hasattr(components["realtime_planner"], "set_predictor"):
+                components["realtime_planner"].set_predictor(components["predictor"])
+                logger.info("Đã kết nối predictor với realtime_planner")
+        except Exception as e:
+            logger.warning(
+                f"Không thể kết nối predictor với realtime_planner: {str(e)}"
+            )
 
-        if realtime_planner is not None:
-            try:
-                # Thử thiết lập predictor nếu phương thức tồn tại
-                if hasattr(realtime_planner, "set_predictor"):
-                    realtime_planner.set_predictor(anatomy_predictor)
-            except (AttributeError, TypeError) as e:
-                logging.warning(f"Không thể thiết lập predictor: {str(e)}")
-
-        # Thiết lập tích hợp giữa prediction_integrator và realtime_planner
-        if prediction_integrator is not None and realtime_planner is not None:
-            try:
-                if hasattr(prediction_integrator, "connect_planner"):
-                    prediction_integrator.connect_planner(realtime_planner)
-            except Exception as e:
-                logging.warning(
-                    f"Không thể kết nối prediction_integrator với planner: {str(e)}"
+    # 5.3. Kết nối AnatomyPredictionIntegrator với RealTime Planner
+    if (
+        components["prediction_integrator"] is not None
+        and components["realtime_planner"] is not None
+    ):
+        try:
+            if hasattr(components["prediction_integrator"], "connect_planner"):
+                components["prediction_integrator"].connect_planner(
+                    components["realtime_planner"]
                 )
+                logger.info("Đã kết nối prediction_integrator với realtime_planner")
+        except Exception as e:
+            logger.warning(
+                f"Không thể kết nối prediction_integrator với planner: {str(e)}"
+            )
 
-        return integrated_system
-    except ImportError as e:
-        import logging
+    # Kiểm tra và báo cáo tình trạng của hệ thống thích ứng
+    components_status = {
+        name: (component is not None) for name, component in components.items()
+    }
+    logger.info(f"Trạng thái khởi tạo hệ thống thích ứng: {components_status}")
 
-        logging.error(f"Không thể tạo hệ thống thích ứng tích hợp: {str(e)}")
-        return None
+    # Trả về dictionary các thành phần đã tạo
+    return components
 
 
 __all__ = [

@@ -195,6 +195,97 @@ except ImportError as e:
     logger.warning(f"Không thể import MonteCarloGPUAlgorithm: {str(e)}")
     algorithms["MONTE_CARLO_GPU"] = MonteCarloGPUAlgorithm
 
+# Thêm xử lý lỗi cụ thể cho Monte Carlo GPU
+try:
+    # Kiểm tra GPU có sẵn hay không để cung cấp thông tin chi tiết hơn
+    import sys
+    import os
+
+    # Kiểm tra CUDA thông qua biến môi trường
+    cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+
+    # Thử kiểm tra thông tin GPU thông qua các thư viện phổ biến
+    gpu_info = {
+        "available": False,
+        "library": None,
+        "device_count": 0,
+        "device_names": [],
+    }
+
+    # Thử kiểm tra với cupy
+    try:
+        import cupy as cp
+
+        gpu_info["library"] = "cupy"
+        gpu_info["available"] = True
+        gpu_info["device_count"] = cp.cuda.runtime.getDeviceCount()
+        for i in range(gpu_info["device_count"]):
+            try:
+                device_name = cp.cuda.runtime.getDeviceProperties(i)["name"].decode(
+                    "utf-8"
+                )
+                gpu_info["device_names"].append(device_name)
+            except:
+                gpu_info["device_names"].append(f"GPU {i}")
+        logger.info(
+            f"CuPy đã phát hiện {gpu_info['device_count']} GPU: {', '.join(gpu_info['device_names'])}"
+        )
+    except ImportError:
+        try:
+            # Thử với PyTorch
+            import torch
+
+            if torch.cuda.is_available():
+                gpu_info["library"] = "torch"
+                gpu_info["available"] = True
+                gpu_info["device_count"] = torch.cuda.device_count()
+                for i in range(gpu_info["device_count"]):
+                    try:
+                        device_name = torch.cuda.get_device_name(i)
+                        gpu_info["device_names"].append(device_name)
+                    except:
+                        gpu_info["device_names"].append(f"GPU {i}")
+                logger.info(
+                    f"PyTorch đã phát hiện {gpu_info['device_count']} GPU: {', '.join(gpu_info['device_names'])}"
+                )
+        except ImportError:
+            try:
+                # Thử với tensorflow
+                import tensorflow as tf
+
+                gpus = tf.config.experimental.list_physical_devices("GPU")
+                if gpus:
+                    gpu_info["library"] = "tensorflow"
+                    gpu_info["available"] = True
+                    gpu_info["device_count"] = len(gpus)
+                    gpu_info["device_names"] = [f"GPU {i}" for i in range(len(gpus))]
+                    logger.info(
+                        f"TensorFlow đã phát hiện {gpu_info['device_count']} GPU"
+                    )
+            except ImportError:
+                # Không có thư viện GPU nào
+                pass
+
+    # Cập nhật thông tin về GPU cho thuật toán Monte Carlo GPU
+    if "MONTE_CARLO_GPU" in algorithms:
+        if gpu_info["available"]:
+            logger.info(
+                f"Thuật toán Monte Carlo GPU sẽ sử dụng {gpu_info['device_count']} GPU"
+            )
+            # Thêm thông tin GPU vào thuật toán nếu đối tượng hỗ trợ
+            try:
+                algo_instance = algorithms["MONTE_CARLO_GPU"]()
+                if hasattr(algo_instance, "set_gpu_info"):
+                    algo_instance.set_gpu_info(gpu_info)
+            except:
+                pass
+        else:
+            logger.warning(
+                "Không phát hiện GPU nào - Monte Carlo GPU sẽ sử dụng CPU (hiệu suất thấp)"
+            )
+except Exception as e:
+    logger.warning(f"Không thể kiểm tra thông tin GPU: {str(e)}")
+
 
 class DoseAlgorithmType(Enum):
     """Enum cho các loại thuật toán tính liều."""

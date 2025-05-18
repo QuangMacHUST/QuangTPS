@@ -198,61 +198,84 @@ class BEVCanvas(FigureCanvas):
             "hot",
             "coolwarm",
             "RdBu",
+            "turbo",  # Thêm turbo là một colormap mới và phổ biến
         ]
 
-        try:
-            # Thử import và lấy colormap từ matplotlib.cm
-            import matplotlib.cm as cm
+        # Thử lấy colormap theo thứ tự ưu tiên
+        self.colormap = None
+        self.colormap_name = None
 
-            # Thử từng colormap trong danh sách
-            for cmap_name in colormap_names:
-                self.depth_colormap = getattr(cm, cmap_name, None)
-                if self.depth_colormap is not None:
-                    logger.debug(f"Sử dụng colormap '{cmap_name}' từ matplotlib.cm")
-                    return
+        for name in colormap_names:
+            try:
+                # Sử dụng getattr an toàn với matplotlib.cm
+                cmap = getattr(plt.cm, name, None)
+                if cmap is not None:
+                    self.colormap = cmap
+                    self.colormap_name = name
+                    logger.debug(f"Đã sử dụng colormap '{name}' từ matplotlib")
+                    break
+            except Exception as e:
+                logger.warning(f"Không thể sử dụng colormap '{name}': {str(e)}")
 
-            # Nếu vẫn không tìm thấy, thử từ plt.cm
-            import matplotlib.pyplot as plt
+        # Nếu vẫn không có colormap, tạo một colormap đơn giản
+        if self.colormap is None:
+            logger.warning("Không tìm thấy colormap phù hợp, tạo colormap đơn giản")
+            self.colormap = self._create_simple_colormap()
+            self.colormap_name = "simple"
 
-            for cmap_name in colormap_names:
-                self.depth_colormap = getattr(plt.cm, cmap_name, None)
-                if self.depth_colormap is not None:
-                    logger.debug(f"Sử dụng colormap '{cmap_name}' từ plt.cm")
-                    return
-
-            # Nếu vẫn không có, tạo colormap đơn giản
-            self._create_simple_colormap()
-
-        except Exception as e:
-            logger.warning(f"Lỗi khi thiết lập colormap: {str(e)}")
-            # Tạo colormap đơn giản khi có lỗi
-            self._create_simple_colormap()
+        # Hiển thị thông tin debug về colormap đã chọn
+        logger.debug(f"Đang sử dụng colormap: {self.colormap_name}")
 
     def _create_simple_colormap(self):
         """
-        Tạo một colormap đơn giản khi không tìm thấy colormap nào từ matplotlib.
+        Tạo colormap đơn giản khi không có colormap từ matplotlib.
+
+        Returns
+        -------
+        matplotlib.colors.LinearSegmentedColormap
+            Colormap tạo thủ công
         """
         try:
-            from matplotlib.colors import LinearSegmentedColormap
+            # Tạo colormap dựa trên các màu cơ bản
+            cdict = {
+                "red": [
+                    (0.0, 0.0, 0.0),
+                    (0.25, 0.0, 0.0),
+                    (0.5, 0.0, 0.0),
+                    (0.75, 1.0, 1.0),
+                    (1.0, 1.0, 1.0),
+                ],
+                "green": [
+                    (0.0, 0.0, 0.0),
+                    (0.25, 0.0, 0.0),
+                    (0.5, 1.0, 1.0),
+                    (0.75, 1.0, 1.0),
+                    (1.0, 0.0, 0.0),
+                ],
+                "blue": [
+                    (0.0, 0.5, 0.5),
+                    (0.25, 1.0, 1.0),
+                    (0.5, 0.0, 0.0),
+                    (0.75, 0.0, 0.0),
+                    (1.0, 0.0, 0.0),
+                ],
+            }
 
-            # Tạo colormap đơn giản từ danh sách màu
-            logger.info("Tạo colormap đơn giản thay thế")
-            colors = [
-                (0, 0, 0.8),
-                (0, 0.5, 1),
-                (0, 1, 0),
-                (1, 1, 0),
-                (1, 0.5, 0),
-                (1, 0, 0),
-            ]
-            self.depth_colormap = LinearSegmentedColormap.from_list(
-                "simple_depth", colors, N=256
+            return matplotlib.colors.LinearSegmentedColormap(
+                "SimpleColormap", cdict, 256
             )
-
         except Exception as e:
-            logger.error(f"Không thể tạo colormap đơn giản: {str(e)}")
-            # Nếu ngay cả việc tạo colormap cũng thất bại, đặt None để xử lý sau
-            self.depth_colormap = None
+            logger.error(f"Lỗi khi tạo colormap đơn giản: {str(e)}")
+
+            # Trường hợp cực kỳ không có cách khác, tạo colormap nhị phân đơn giản
+            import numpy as np
+
+            cmap_array = np.ones((256, 4))
+            cmap_array[:, 0] = np.linspace(0, 1, 256)  # Red tăng dần
+            cmap_array[:, 1] = np.linspace(0, 0.5, 256)  # Green không đổi
+            cmap_array[:, 2] = np.linspace(1, 0, 256)  # Blue giảm dần
+
+            return matplotlib.colors.ListedColormap(cmap_array)
 
     def setup_figure(self):
         """Setup the figure appearance."""

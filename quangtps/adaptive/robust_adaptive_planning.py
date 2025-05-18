@@ -397,31 +397,68 @@ class RobustAdaptivePlan:
         self, current_structures: Dict[str, Structure], current_plan: Plan
     ) -> Dict[str, float]:
         """
-        Đánh giá sự khác biệt giữa các cấu trúc sử dụng hệ số Dice.
+        Đánh giá sự khác biệt về cấu trúc giữa các cấu trúc hiện tại và cấu trúc trong kế hoạch.
+
+        Phương thức này tính toán các chỉ số định lượng sự khác biệt về hình dạng và vị trí
+        của các cấu trúc, chủ yếu sử dụng hệ số Dice để đánh giá độ trùng khớp giữa các cấu trúc.
 
         Parameters
         ----------
         current_structures : Dict[str, Structure]
-            Từ điển cấu trúc hiện tại
+            Dictionary chứa các cấu trúc hiện tại
         current_plan : Plan
-            Kế hoạch hiện tại
+            Kế hoạch hiện tại đang được đánh giá
 
         Returns
         -------
         Dict[str, float]
-            Từ điển hệ số Dice cho mỗi cấu trúc
+            Dictionary chứa các giá trị đánh giá sự khác biệt cho từng cấu trúc,
+            với khóa là ID của cấu trúc và giá trị là hệ số Dice (0-1)
         """
         differences = {}
 
-        # Lấy các cấu trúc từ kế hoạch
-        plan_structures = current_plan.get_structures()
+        try:
+            # Lấy cấu trúc từ kế hoạch
+            plan_structures = current_plan.get_structures()
+            if not plan_structures:
+                logger.warning("Không có cấu trúc trong kế hoạch để so sánh.")
+                return differences
 
-        # Tính hệ số Dice
-        for struct_name, struct in current_structures.items():
-            if struct_name in plan_structures:
-                plan_struct = plan_structures[struct_name]
-                dice = calculate_dice_coefficient(struct, plan_struct)
-                differences[struct_name] = dice
+            # Import hàm tính hệ số Dice
+            from quangtps.segmentation.contour.dice import calculate_dice_coefficient
+
+            # So sánh các cấu trúc hiện có trong cả hai tập cấu trúc
+            for structure_id, current_structure in current_structures.items():
+                if structure_id in plan_structures:
+                    plan_structure = plan_structures[structure_id]
+
+                    try:
+                        # Tính hệ số Dice giữa hai cấu trúc
+                        dice_coef = calculate_dice_coefficient(
+                            current_structure, plan_structure
+                        )
+                        differences[structure_id] = dice_coef
+
+                        # Log kết quả để dễ điều tra
+                        logger.debug(
+                            f"Hệ số Dice cho cấu trúc {structure_id}: {dice_coef}"
+                        )
+
+                    except Exception as e:
+                        logger.error(
+                            f"Lỗi khi tính hệ số Dice cho cấu trúc {structure_id}: {str(e)}"
+                        )
+                        # Gán giá trị -1 để biểu thị lỗi
+                        differences[structure_id] = -1
+
+            # Kiểm tra xem có cấu trúc nào được đánh giá không
+            if not differences:
+                logger.warning(
+                    "Không thể đánh giá sự khác biệt của bất kỳ cấu trúc nào."
+                )
+
+        except Exception as e:
+            logger.error(f"Lỗi khi đánh giá sự khác biệt cấu trúc: {str(e)}")
 
         return differences
 

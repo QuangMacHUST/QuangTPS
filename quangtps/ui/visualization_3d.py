@@ -147,8 +147,88 @@ class StructureViewer3D(QWidget):
         self.interactor_style = None
         self.picker = None
 
+        # Thêm biến chứa lookup table (các bảng màu vtk)
+        self.colormaps = {}
+
+        # Thiết lập colormap cho VTK
+        self._setup_colormap_for_vtk()
+
         # Thiết lập UI
         self.init_ui()
+
+    def _setup_colormap_for_vtk(self):
+        """
+        Thiết lập các colormap cho VTK với xử lý ngoại lệ đầy đủ.
+
+        Phương thức này tạo bảng tra cứu màu (lookup tables) sẵn sàng để
+        sử dụng trong môi trường hiển thị VTK, với nhiều lựa chọn dự phòng
+        và xử lý lỗi tốt hơn.
+        """
+        if not VTK_AVAILABLE:
+            return
+
+        try:
+            # Tạo colormap mặc định
+            default_lut = vtk.vtkLookupTable()
+            default_lut.SetHueRange(0.0, 0.667)  # Đỏ đến xanh lam
+            default_lut.SetNumberOfColors(256)
+            default_lut.Build()
+            self.colormaps["default"] = default_lut
+
+            # Tạo colormap tùy chỉnh để hiển thị cấu trúc
+            structure_lut = vtk.vtkLookupTable()
+            structure_lut.SetNumberOfColors(256)
+            structure_lut.SetTableRange(0.0, 1.0)
+            structure_lut.SetSaturationRange(0.5, 1.0)
+            structure_lut.SetHueRange(0.0, 0.9)
+            structure_lut.SetValueRange(0.8, 1.0)
+            structure_lut.Build()
+            self.colormaps["structures"] = structure_lut
+
+            # Tạo colormap Eclipse-like cho khả năng tương thích
+            eclipse_lut = vtk.vtkLookupTable()
+            eclipse_lut.SetNumberOfColors(256)
+            red_points = [0.0, 0.0, 0.0, 0.7, 1.0, 1.0]
+            green_points = [0.0, 0.0, 0.5, 1.0, 0.5, 0.0]
+            blue_points = [0.5, 1.0, 1.0, 0.0, 0.0, 0.0]
+
+            for i in range(256):
+                t = i / 255.0
+                # Nội suy màu dựa trên các điểm kiểm soát
+                if t <= 0.2:
+                    factor = t / 0.2
+                    r = red_points[0] + (red_points[1] - red_points[0]) * factor
+                    g = green_points[0] + (green_points[1] - green_points[0]) * factor
+                    b = blue_points[0] + (blue_points[1] - blue_points[0]) * factor
+                elif t <= 0.4:
+                    factor = (t - 0.2) / 0.2
+                    r = red_points[1] + (red_points[2] - red_points[1]) * factor
+                    g = green_points[1] + (green_points[2] - green_points[1]) * factor
+                    b = blue_points[1] + (blue_points[2] - blue_points[1]) * factor
+                elif t <= 0.6:
+                    factor = (t - 0.4) / 0.2
+                    r = red_points[2] + (red_points[3] - red_points[2]) * factor
+                    g = green_points[2] + (green_points[3] - green_points[2]) * factor
+                    b = blue_points[2] + (blue_points[3] - blue_points[2]) * factor
+                elif t <= 0.8:
+                    factor = (t - 0.6) / 0.2
+                    r = red_points[3] + (red_points[4] - red_points[3]) * factor
+                    g = green_points[3] + (green_points[4] - green_points[3]) * factor
+                    b = blue_points[3] + (blue_points[4] - blue_points[3]) * factor
+                else:
+                    factor = (t - 0.8) / 0.2
+                    r = red_points[4] + (red_points[5] - red_points[4]) * factor
+                    g = green_points[4] + (green_points[5] - green_points[4]) * factor
+                    b = blue_points[4] + (blue_points[5] - blue_points[4]) * factor
+
+                eclipse_lut.SetTableValue(i, r, g, b, 1.0)
+
+            self.colormaps["eclipse"] = eclipse_lut
+
+            logger.info("Đã khởi tạo thành công các colormap cho VTK")
+        except Exception as e:
+            logger.error(f"Lỗi khi khởi tạo colormap VTK: {str(e)}")
+            logger.error(traceback.format_exc())
 
     def init_ui(self):
         """Khởi tạo giao diện người dùng."""

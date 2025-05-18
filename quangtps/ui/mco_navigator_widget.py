@@ -94,6 +94,15 @@ class ParetoFigureCanvas(FigureCanvasQTAgg):
         self.highlighted_solution = None
         self.selected_objectives = []
 
+        # Thêm các thuộc tính mới
+        self.color_by_objective = None  # Mục tiêu để tô màu
+        self.solution_points = None  # Lưu trữ các điểm để cập nhật màu
+        self.colorbar = None  # Thanh màu
+
+        # Đặt màu nền cho Eclipse-like style
+        self.fig.patch.set_facecolor("#f0f0f0")
+        self.axes.set_facecolor("#ffffff")
+
         # Kết nối sự kiện click chuột
         self.mpl_connect("button_press_event", self._on_click)
 
@@ -140,6 +149,97 @@ class ParetoFigureCanvas(FigureCanvasQTAgg):
 
         if closest_id and min_dist < 0.1:  # Ngưỡng khoảng cách
             self.clicked_point.emit(closest_id)
+
+    def highlight_solution(self, solution_id):
+        """
+        Tô sáng một giải pháp cụ thể trên đồ thị.
+
+        Args:
+            solution_id (str): ID của giải pháp cần tô sáng
+        """
+        self.highlighted_solution = solution_id
+        self.update_plot()
+
+    def set_color_by_objective(self, objective_name):
+        """
+        Thiết lập mục tiêu dùng để tô màu các điểm.
+
+        Args:
+            objective_name (str): Tên mục tiêu hoặc None để không tô màu
+        """
+        self.color_by_objective = objective_name
+        self.update_plot()
+
+    def update_plot(self):
+        """Cập nhật đồ thị với cấu hình hiện tại mà không vẽ lại toàn bộ."""
+        if (
+            not self.solutions
+            or not self.selected_objectives
+            or not self.solution_points
+        ):
+            return
+
+        # Cập nhật màu sắc dựa trên mục tiêu được chọn
+        if (
+            self.color_by_objective
+            and self.color_by_objective in self.selected_objectives
+        ):
+            values = []
+            for sol_id in self.solutions:
+                if sol_id in self.solutions:
+                    sol = self.solutions[sol_id]
+                    if self.color_by_objective in sol.objective_values:
+                        values.append(sol.objective_values[self.color_by_objective])
+                    else:
+                        values.append(0)
+
+            if values:
+                self.solution_points.set_array(np.array(values))
+
+                # Cập nhật hoặc tạo thanh màu
+                if self.colorbar:
+                    self.colorbar.update_normal(self.solution_points)
+                else:
+                    self.colorbar = self.fig.colorbar(
+                        self.solution_points, ax=self.axes
+                    )
+                    self.colorbar.set_label(self.color_by_objective)
+
+        # Tô sáng giải pháp được chọn
+        if self.highlighted_solution and self.highlighted_solution in self.solutions:
+            sol = self.solutions[self.highlighted_solution]
+            x_obj, y_obj = self.selected_objectives[:2]
+            z_obj = (
+                self.selected_objectives[2]
+                if len(self.selected_objectives) > 2
+                else None
+            )
+
+            if x_obj in sol.objective_values and y_obj in sol.objective_values:
+                x = sol.objective_values[x_obj]
+                y = sol.objective_values[y_obj]
+
+                if z_obj and z_obj in sol.objective_values:
+                    z = sol.objective_values[z_obj]
+                    self.axes.scatter(
+                        [x], [y], [z], c="red", s=100, marker="*", zorder=10
+                    )
+                else:
+                    self.axes.scatter(
+                        [x], [y], [0], c="red", s=100, marker="*", zorder=10
+                    )
+
+        self.draw()
+
+    def clear(self):
+        """Xóa đồ thị và đặt lại các tham số."""
+        self.axes.clear()
+        self.highlighted_solution = None
+        self.solution_points = None
+        if self.colorbar:
+            self.colorbar.remove()
+            self.colorbar = None
+        self.draw()
 
 
 class ObjectiveWeightEditor(QWidget):
@@ -497,7 +597,7 @@ class ParetoNavigatorWidget(QWidget):
             return
 
         # Xóa đồ thị
-        self.figure_canvas.axes.clear()
+        self.figure_canvas.clear()
 
         # Lấy các mục tiêu đã chọn
         if self.obj_x_combo.currentIndex() < 0 or self.obj_y_combo.currentIndex() < 0:
@@ -529,6 +629,11 @@ class ParetoNavigatorWidget(QWidget):
         x_values = []
         y_values = []
         z_values = []
+        colors = []  # Giá trị màu dựa trên mục tiêu được chọn
+
+        # Xác định mục tiêu để tô màu (mục tiêu thứ 3 hoặc đầu tiên nếu không có mục tiêu thứ 3)
+        color_objective = z_obj if z_obj else x_obj
+        self.figure_canvas.color_by_objective = color_objective
 
         for sol in solutions:
             if x_obj in sol.objective_values and y_obj in sol.objective_values:
@@ -540,94 +645,209 @@ class ParetoNavigatorWidget(QWidget):
                 else:
                     z_values.append(0)
 
+                # Thêm giá trị cho tô màu
+                if color_objective in sol.objective_values:
+                    colors.append(sol.objective_values[color_objective])
+                else:
+                    colors.append(0)
+
         # Vẽ bề mặt Pareto
+        if not x_values:
+            return
+
         if use_3d and z_obj:
             # Mặt 3D
-            self.figure_canvas.axes.scatter(
-                x_values, y_values, z_values, c="b", marker="o"
+            scatter = self.figure_canvas.axes.scatter(
+                x_values,
+                y_values,
+                z_values,
+                c=colors,
+                cmap="viridis",
+                marker="o",
+                alpha=0.7,
             )
             self.figure_canvas.axes.set_xlabel(x_obj)
             self.figure_canvas.axes.set_ylabel(y_obj)
             self.figure_canvas.axes.set_zlabel(z_obj)
+
+            # Cập nhật giới hạn trục
+            x_range = max(x_values) - min(x_values)
+            y_range = max(y_values) - min(y_values)
+            z_range = max(z_values) - min(z_values)
+
+            self.figure_canvas.axes.set_xlim(
+                [min(x_values) - 0.1 * x_range, max(x_values) + 0.1 * x_range]
+            )
+            self.figure_canvas.axes.set_ylim(
+                [min(y_values) - 0.1 * y_range, max(y_values) + 0.1 * y_range]
+            )
+            self.figure_canvas.axes.set_zlim(
+                [min(z_values) - 0.1 * z_range, max(z_values) + 0.1 * z_range]
+            )
+
         else:
             # Mặt 2D
-            self.figure_canvas.axes = self.figure_canvas.fig.add_subplot(111)
-            self.figure_canvas.axes.scatter(x_values, y_values, c="b", marker="o")
+            scatter = self.figure_canvas.axes.scatter(
+                x_values, y_values, c=colors, cmap="viridis", marker="o", alpha=0.7
+            )
             self.figure_canvas.axes.set_xlabel(x_obj)
             self.figure_canvas.axes.set_ylabel(y_obj)
 
-        # Đánh dấu giải pháp hiện tại nếu có
+            # Cập nhật giới hạn trục
+            x_range = max(x_values) - min(x_values)
+            y_range = max(y_values) - min(y_values)
+
+            self.figure_canvas.axes.set_xlim(
+                [min(x_values) - 0.1 * x_range, max(x_values) + 0.1 * x_range]
+            )
+            self.figure_canvas.axes.set_ylim(
+                [min(y_values) - 0.1 * y_range, max(y_values) + 0.1 * y_range]
+            )
+
+            # Ẩn trục Z trong chế độ 2D
+            self.figure_canvas.axes.set_zticks([])
+
+        # Thêm tiêu đề
+        self.figure_canvas.axes.set_title("Bề mặt Pareto")
+
+        # Lưu đối tượng scatter để cập nhật sau này
+        self.figure_canvas.solution_points = scatter
+
+        # Cập nhật thanh màu và tô sáng giải pháp được chọn
+        self.figure_canvas.colorbar = self.figure_canvas.fig.colorbar(
+            scatter, ax=self.figure_canvas.axes
+        )
+        self.figure_canvas.colorbar.set_label(color_objective)
+
+        # Nếu có giải pháp hiện tại, tô sáng nó
         if self.current_solution:
-            if (
-                x_obj in self.current_solution.objective_values
-                and y_obj in self.current_solution.objective_values
-            ):
-                x = self.current_solution.objective_values[x_obj]
-                y = self.current_solution.objective_values[y_obj]
+            self.figure_canvas.highlight_solution(self.current_solution.id)
 
-                if use_3d and z_obj and z_obj in self.current_solution.objective_values:
-                    z = self.current_solution.objective_values[z_obj]
-                    self.figure_canvas.axes.scatter(
-                        [x], [y], [z], c="r", marker="*", s=100
-                    )
-                else:
-                    self.figure_canvas.axes.scatter([x], [y], c="r", marker="*", s=100)
+        # Thêm lưới và cải thiện hiển thị
+        self.figure_canvas.axes.grid(True, alpha=0.3)
 
-        # Cập nhật canvas
-        self.figure_canvas.fig.tight_layout()
+        # Vẽ lại canvas
         self.figure_canvas.draw()
 
     def _on_weights_changed(self, weights: Dict[str, float]):
-        """Xử lý khi trọng số thay đổi."""
-        if not self.navigator:
+        """
+        Xử lý khi trọng số được thay đổi thông qua giao diện sliders.
+
+        Args:
+            weights: Dict[str, float] - Từ điển chứa tên mục tiêu và trọng số tương ứng
+        """
+        if not self.navigator or not weights:
             return
 
-        # Lưu trọng số vào navigator
-        self.navigator.set_objective_weights(weights)
+        try:
+            # Hiển thị thông tin trạng thái
+            status_msg = "Đang tìm giải pháp tối ưu với trọng số mới..."
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+
+            # Tìm giải pháp phù hợp nhất với các trọng số mới
+            solution = self.navigator.find_solution_by_weights(weights)
+
+            # Hiển thị giải pháp được tìm thấy
+            if solution:
+                self.current_solution = solution
+
+                # Cập nhật hiển thị giải pháp
+                self.details_panel.display_solution(solution)
+
+                # Tô sáng giải pháp trên đồ thị
+                self.figure_canvas.highlight_solution(solution.id)
+
+                status_msg = "Đã tìm thấy giải pháp phù hợp với trọng số được chọn."
+            else:
+                status_msg = "Không tìm thấy giải pháp phù hợp với trọng số được chọn."
+
+            # Reset con trỏ chuột
+            QApplication.restoreOverrideCursor()
+
+            # Hiển thị thông báo trạng thái tạm thời ở góc phải dưới
+            if hasattr(self, "statusBar") and self.statusBar():
+                self.statusBar().showMessage(status_msg, 3000)
+
+        except Exception as e:
+            # Hiển thị thông báo lỗi
+            QMessageBox.warning(
+                self,
+                "Lỗi tìm kiếm giải pháp",
+                f"Không thể tìm giải pháp với trọng số đã chọn: {str(e)}",
+            )
+            logger.error(f"Error finding solution by weights: {str(e)}")
+
+            # Reset con trỏ chuột
+            QApplication.restoreOverrideCursor()
 
     def _select_by_weights(self):
-        """Chọn giải pháp dựa trên trọng số hiện tại."""
+        """
+        Chọn giải pháp tốt nhất dựa trên trọng số hiện tại.
+
+        Chức năng này tìm kiếm giải pháp phù hợp nhất với trọng số hiện tại
+        hoặc nội suy một giải pháp mới nếu không có giải pháp trực tiếp.
+        """
         if not self.navigator:
-            QMessageBox.warning(
-                self, "Lỗi", "Không có ParetoNavigator nào được thiết lập."
-            )
+            QMessageBox.warning(self, "Lỗi", "Chưa khởi tạo ParetoNavigator.")
             return
 
-        # Chọn giải pháp dựa trên trọng số hiện tại
-        solution = self.navigator.select_solution_by_weights()
+        try:
+            # Lấy trọng số hiện tại từ widget điều chỉnh trọng số
+            weights = {}
+            for obj in self.navigator.pareto_surface.objectives.keys():
+                if obj in self.weight_editor.sliders:
+                    weights[obj] = self.weight_editor.sliders[obj].value() / 100.0
 
-        if solution:
-            self.current_solution = solution
-            self.details_panel.display_solution(solution)
-            self._draw_pareto_surface()  # Vẽ lại đồ thị với giải pháp đã chọn
-        else:
-            QMessageBox.warning(
-                self, "Lỗi", "Không tìm thấy giải pháp phù hợp với trọng số đã cho."
-            )
+            if not weights:
+                QMessageBox.warning(
+                    self, "Lỗi", "Không có mục tiêu nào được thiết lập."
+                )
+                return
 
-    def _on_solution_selected(self, solution_id: str):
-        """Xử lý khi người dùng chọn một giải pháp từ đồ thị."""
-        if not self.navigator:
-            return
+            # Hiển thị thông tin trạng thái
+            wait_dialog = QMessageBox(self)
+            wait_dialog.setWindowTitle("Đang xử lý")
+            wait_dialog.setText("Đang tìm giải pháp tối ưu với trọng số mới...")
+            wait_dialog.setStandardButtons(QMessageBox.NoButton)
+            QTimer.singleShot(
+                100, wait_dialog.close
+            )  # Chỉ hiển thị trong thời gian ngắn
+            wait_dialog.show()
+            QApplication.processEvents()
+            QApplication.setOverrideCursor(Qt.WaitCursor)
 
-        # Lấy giải pháp theo ID
-        solution = self.navigator.select_solution_by_id(solution_id)
+            # Tìm giải pháp phù hợp với trọng số hoặc nội suy một giải pháp mới
+            solution = self.navigator.navigate_to_weights(weights)
 
-        if solution:
-            self.current_solution = solution
-            self.details_panel.display_solution(solution)
+            QApplication.restoreOverrideCursor()
 
-            # Cập nhật trọng số trong widget
-            if hasattr(solution, "weights") and solution.weights:
-                # Tránh vòng lặp tín hiệu
-                self.weight_editor.is_updating = True
+            if solution:
+                # Cập nhật giải pháp hiện tại
+                self.current_solution = solution
 
-                for obj, weight in solution.weights.items():
-                    if obj in self.weight_editor.sliders:
-                        self.weight_editor.sliders[obj].setValue(int(weight * 100))
-                        self.weight_editor.weight_labels[obj].setText(f"{weight:.2f}")
+                # Cập nhật hiển thị giải pháp
+                self.details_panel.display_solution(solution)
 
-                self.weight_editor.is_updating = False
+                # Tô sáng giải pháp trên đồ thị
+                self.figure_canvas.highlight_solution(solution.id)
+
+                # Thông báo thành công
+                QMessageBox.information(
+                    self,
+                    "Thành công",
+                    "Đã tìm thấy giải pháp tối ưu với trọng số đã chọn.",
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Thông báo",
+                    "Không thể tìm thấy hoặc nội suy giải pháp với trọng số đã chọn.",
+                )
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Lỗi", f"Lỗi khi tìm kiếm giải pháp: {str(e)}")
+            logger.error(f"Error in _select_by_weights: {str(e)}", exc_info=True)
 
     def _show_neighboring_solutions(self):
         """Hiển thị các giải pháp lân cận của giải pháp hiện tại."""
@@ -745,6 +965,73 @@ class ParetoNavigatorWidget(QWidget):
             QMessageBox.warning(
                 self, "Lỗi", "Không thể lưu phiên điều hướng. Vui lòng thử lại."
             )
+
+    def _on_solution_selected(self, solution_id: str):
+        """
+        Xử lý khi người dùng chọn một giải pháp từ đồ thị.
+
+        Args:
+            solution_id (str): ID của giải pháp được chọn
+        """
+        if not self.navigator:
+            return
+
+        try:
+            # Lấy giải pháp theo ID
+            solution = None
+            for sol in self.navigator.pareto_surface.solutions:
+                if sol.id == solution_id:
+                    solution = sol
+                    break
+
+            if not solution:
+                logger.warning(f"Không tìm thấy giải pháp với ID: {solution_id}")
+                return
+
+            # Cập nhật giải pháp hiện tại
+            self.current_solution = solution
+
+            # Cập nhật hiển thị giải pháp
+            self.details_panel.display_solution(solution)
+
+            # Tô sáng giải pháp trên đồ thị
+            self.figure_canvas.highlight_solution(solution.id)
+
+            # Cập nhật trọng số trong widget điều chỉnh trọng số
+            if hasattr(solution, "weights") and solution.weights:
+                # Tránh gọi lại hàm xử lý thay đổi trọng số
+                self.weight_editor.is_updating = True
+
+                for obj, weight in solution.weights.items():
+                    if obj in self.weight_editor.sliders:
+                        self.weight_editor.sliders[obj].setValue(int(weight * 100))
+                        self.weight_editor.weight_labels[obj].setText(f"{weight:.2f}")
+
+                self.weight_editor.is_updating = False
+
+            # Tạo hiệu ứng nhấp nháy nhẹ để thu hút sự chú ý
+            old_border = self.details_panel.styleSheet()
+            self.details_panel.setStyleSheet(
+                "border: 2px solid #3498db; border-radius: 5px;"
+            )
+
+            # Sau 500ms, quay lại kiểu cũ
+            QTimer.singleShot(500, lambda: self.details_panel.setStyleSheet(old_border))
+
+            # Hiển thị các mục tiêu chính của giải pháp này
+            if hasattr(solution, "objective_values") and solution.objective_values:
+                values_text = ", ".join(
+                    [f"{k}: {v:.4f}" for k, v in solution.objective_values.items()]
+                )
+                if hasattr(self, "statusBar") and self.statusBar():
+                    self.statusBar().showMessage(
+                        f"Đã chọn giải pháp: {values_text}", 5000
+                    )
+
+        except Exception as e:
+            logger.error(f"Lỗi khi chọn giải pháp: {str(e)}", exc_info=True)
+            if hasattr(self, "statusBar") and self.statusBar():
+                self.statusBar().showMessage(f"Lỗi khi chọn giải pháp: {str(e)}", 3000)
 
 
 def create_pareto_navigator_widget(

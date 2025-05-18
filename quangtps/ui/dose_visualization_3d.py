@@ -17,8 +17,8 @@ from datetime import datetime
 
 # Sử dụng try/except cho các import không đảm bảo
 try:
-import vtk
-from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+    import vtk
+    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
     from vtk.util.numpy_support import numpy_to_vtk, vtk_to_numpy
 
     HAS_VTK = True
@@ -186,34 +186,34 @@ else:
     VTK_FLOAT = vtk.VTK_FLOAT
 
 try:
-from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QSlider,
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QSlider,
         QCheckBox,
         QComboBox,
         QGroupBox,
-    QFrame,
+        QFrame,
         QSplitter,
-    QSpinBox,
+        QSpinBox,
         QDoubleSpinBox,
         QTabWidget,
         QMessageBox,
-    QSizePolicy,
+        QSizePolicy,
         QStackedWidget,
         QApplication,  # Thêm QApplication cho test standalone
         QDialog,
         QFileDialog,
-    QToolBar,
-    QAction,
+        QToolBar,
+        QAction,
         QActionGroup,
         QDialogButtonBox,
         QInputDialog,
-    QTableWidget,
-    QTableWidgetItem,
+        QTableWidget,
+        QTableWidgetItem,
         QProgressBar,
     )
     from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer, QThread, pyqtSlot, QPoint
@@ -235,7 +235,7 @@ except ImportError as e:
 
 # Import các module nội bộ của QuangTPS
 try:
-from quangtps.ui.vtk_viewer_3d import VTKViewer3D
+    from quangtps.ui.vtk_viewer_3d import VTKViewer3D
     from quangtps.ui.isodose_selector import IsodoseSelector
     from quangtps.ui.structure_visibility_panel import StructureVisibilityPanel
     from quangtps.ui.colormap_selector import ColorMapSelector
@@ -645,35 +645,93 @@ class DoseVisualization3D(QWidget):
             logger.error(f"Error creating isodose surfaces: {e}")
 
     def _convert_dose_grid_to_vtk(self):
-        """Convert dose grid to VTK image data."""
-        if not HAS_VTK or self.dose_grid is None:
+        """
+        Chuyển đổi lưới liều (dose grid) thành định dạng dữ liệu VTK để hiển thị 3D.
+
+        Phương thức này xử lý việc chuyển đổi lưới liều từ định dạng mảng NumPy
+        sang đối tượng vtkImageData. Bao gồm việc thiết lập kích thước, vị trí gốc,
+        khoảng cách giữa các điểm, và giá trị liều cho từng voxel.
+
+        Returns
+        -------
+        vtkImageData hoặc None
+            Đối tượng vtkImageData chứa dữ liệu liều để hiển thị 3D,
+            hoặc None nếu không thể chuyển đổi
+        """
+        if (
+            not HAS_VTK
+            or self.dose_grid is None
+            or not hasattr(self.dose_grid, "data")
+            or self.dose_grid.data is None
+        ):
             return None
 
         try:
-            # Get dose grid data
-            dose_array = self.dose_grid.get_dose_array()
-            spacing = self.dose_grid.get_spacing()
-            origin = self.dose_grid.get_origin()
+            # Lấy dữ liệu liều
+            dose_data = self.dose_grid.data
 
-            # Create VTK image data
+            # Kiểm tra và đảm bảo dữ liệu hợp lệ
+            if dose_data.size == 0:
+                logger.error("Dose grid trống hoặc không hợp lệ")
+                return None
+
+            # Lấy kích thước dữ liệu liều
+            dims = dose_data.shape
+            if len(dims) != 3:
+                logger.error(f"Dose grid phải là mảng 3D, nhưng có kích thước {dims}")
+                return None
+
+            # Tạo đối tượng vtkImageData mới
             vtk_image = vtkImageData()
-            vtk_image.SetDimensions(dose_array.shape)
-            vtk_image.SetSpacing(spacing)
-            vtk_image.SetOrigin(origin)
+
+            # Thiết lập kích thước (VTK yêu cầu số ô (cells), không phải số điểm (points))
+            vtk_image.SetDimensions(dims[0], dims[1], dims[2])
+
+            # Thiết lập khoảng cách giữa các voxel
+            spacing = (
+                self.dose_grid.spacing
+                if hasattr(self.dose_grid, "spacing")
+                else (1.0, 1.0, 1.0)
+            )
+            vtk_image.SetSpacing(*spacing)
+
+            # Thiết lập điểm gốc
+            origin = (
+                self.dose_grid.origin
+                if hasattr(self.dose_grid, "origin")
+                else (0.0, 0.0, 0.0)
+            )
+            vtk_image.SetOrigin(*origin)
+
+            # Chuẩn bị dữ liệu
             vtk_image.AllocateScalars(VTK_FLOAT, 1)
 
-            # Copy dose data to VTK image
-            for i in range(dose_array.shape[0]):
-                for j in range(dose_array.shape[1]):
-                    for k in range(dose_array.shape[2]):
-                        vtk_image.SetScalarComponentFromFloat(
-                            i, j, k, 0, dose_array[i, j, k]
-                        )
+            # Gán giá trị liều cho từng voxel
+            # Chúng ta cần đảm bảo định dạng chính xác cho VTK
+            if HAS_VTK and hasattr(vtk.util.numpy_support, "numpy_to_vtk"):
+                # Sử dụng numpy_to_vtk để chuyển đổi nhanh chóng
+                flat_dose = dose_data.flatten(order="F")  # VTK sử dụng thứ tự Fortran
+                vtk_array = vtk.util.numpy_support.numpy_to_vtk(
+                    flat_dose, deep=True, array_type=VTK_FLOAT
+                )
+                vtk_array.SetName("DoseValues")
+                vtk_image.GetPointData().SetScalars(vtk_array)
+            else:
+                # Phương pháp thay thế nếu không có numpy_to_vtk
+                for i in range(dims[0]):
+                    for j in range(dims[1]):
+                        for k in range(dims[2]):
+                            vtk_image.SetScalarComponentFromFloat(
+                                i, j, k, 0, float(dose_data[i, j, k])
+                            )
 
+            logger.debug(
+                f"Đã tạo đối tượng vtkImageData từ dose grid kích thước {dims}"
+            )
             return vtk_image
 
         except Exception as e:
-            logger.error(f"Error converting dose grid to VTK: {e}")
+            logger.error(f"Lỗi khi chuyển đổi dose grid sang VTK: {str(e)}")
             return None
 
     def _create_isodose_volume(self):

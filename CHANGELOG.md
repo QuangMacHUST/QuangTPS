@@ -5,6 +5,36 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.13] - 2026-05-20
+
+### Thay đổi
+
+- Nâng cấp module tối ưu hóa đa tiêu chí (MCO) với hiển thị bề mặt Pareto nâng cao
+- Cải thiện giao diện người dùng điều hướng Pareto tương tự Eclipse của Varian
+- Thêm tính năng đồ thị màu nhiệt theo giá trị mục tiêu
+- Tối ưu hóa tương tác người dùng với thông tin phản hồi trực quan
+- Tăng cường xử lý lỗi và đồng bộ hóa giữa trọng số và các giải pháp
+
+### Sửa lỗi
+
+- Khắc phục vấn đề hiển thị khi không có giải pháp Pareto
+- Sửa lỗi đồng bộ hóa trọng số khi chọn giải pháp mới
+- Cải thiện xử lý ngoại lệ khi tìm kiếm giải pháp theo trọng số
+
+## [0.7.12] - 2026-05-15
+
+### Thay đổi
+
+- Cải thiện phân tích độ bền vững với tính toán song song và xử lý lỗi toàn diện
+- Nâng cấp hiển thị 3D phân phối liều với chuyển đổi dữ liệu tối ưu hơn
+- Tăng cường lập kế hoạch thích ứng với đánh giá cấu trúc chuẩn xác hơn
+
+### Sửa lỗi
+
+- Khắc phục vấn đề trong phân tích độ bền vững khi xử lý nhiều kịch bản
+- Sửa lỗi định dạng dữ liệu khi chuyển đổi phân phối liều sang VTK
+- Cải thiện tính toán hệ số Dice để đánh giá sự khác biệt giữa các cấu trúc
+
 ## [Chưa phát hành]
 
 ### Thêm mới
@@ -124,3 +154,28 @@ và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.
 [0.7.9]: https://github.com/username/QuangTPS/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/username/QuangTPS/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/username/QuangTPS/compare/v0.7.6...v0.7.7
+
+## [0.7.11] - 2026-05-10
+
+### Thay đổi
+
+- Nâng cấp hiển thị 3D với colormap VTK tùy chỉnh và Eclipse-style
+- Cải thiện xử lý colormap trong BEV với cơ chế dự phòng nhiều lớp
+- Tăng cường module thuật toán tính liều với hệ thống kiểm tra GPU tích hợp
+- Nâng cao hệ thống thích ứng với xử lý lỗi toàn diện
+
+### Sửa lỗi
+
+- Khắc phục vấn đề "không tìm thấy colormap" trong hiển thị 3D và BEV
+- Cải thiện xử lý tình huống không có GPU với dự phòng CPU tự động
+- Sửa lỗi khi các thành phần trong hệ thống thích ứng không thể kết nối
+- Đảm bảo tính ổn định khi GPU không đủ bộ nhớ cho tính toán Monte Carlo
+
+## [0.7.10] - 2026-05-01
+
+### Thay đổi
+
+- Cải thiện đáng kể module hiển thị 3D với xử lý lỗi tốt hơn
+- Tăng cường hiệu suất hiển thị 3D và tối ưu hóa tạo mesh
+- Nâng cao trải nghiệm người dùng với nhiều chế độ hiển thị 3D
+- Tích hợp tốt hơn giữa `StructureViewer3D` và `structure_tab.py`

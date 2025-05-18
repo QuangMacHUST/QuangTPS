@@ -156,25 +156,57 @@ class ParetoSurface:
     def find_solution_by_weights(
         self, weights: Dict[str, float]
     ) -> Optional[ParetoSolution]:
-        """Tìm giải pháp tối ưu dựa trên trọng số cho trước."""
+        """
+        Tìm giải pháp phù hợp nhất với một bộ trọng số cho trước.
+
+        Phương thức này tìm kiếm trong tập giải pháp Pareto để tìm một giải pháp
+        có vector trọng số gần với vector đầu vào nhất.
+
+        Parameters
+        ----------
+        weights : Dict[str, float]
+            Từ điển chứa tên mục tiêu và trọng số tương ứng
+
+        Returns
+        -------
+        ParetoSolution hoặc None
+            Giải pháp phù hợp nhất hoặc None nếu không tìm thấy
+        """
         if not self.solutions:
+            logger.warning("Không có giải pháp Pareto nào để tìm kiếm")
             return None
 
-        max_score = float("-inf")
-        best_solution = None
-
-        # Chuẩn hóa trọng số
+        # Chuẩn hóa vector trọng số đầu vào
         weight_sum = sum(weights.values())
         if weight_sum > 0:
-            normalized_weights = {k: w / weight_sum for k, w in weights.items()}
+            normalized_weights = {k: v / weight_sum for k, v in weights.items()}
         else:
             normalized_weights = weights
 
+        # Tìm giải pháp gần nhất
+        min_distance = float("inf")
+        best_solution = None
+
         for solution in self.solutions:
-            score = solution.get_score(normalized_weights)
-            if score > max_score:
-                max_score = score
+            if not hasattr(solution, "weights") or not solution.weights:
+                continue
+
+            # Tính khoảng cách Euclidean giữa các vector trọng số
+            distance = 0
+            for obj_name, weight in normalized_weights.items():
+                if obj_name in solution.weights:
+                    distance += (weight - solution.weights[obj_name]) ** 2
+                else:
+                    distance += weight**2
+
+            distance = distance**0.5
+
+            if distance < min_distance:
+                min_distance = distance
                 best_solution = solution
+
+        if best_solution is None:
+            logger.warning("Không tìm được giải pháp nào gần với trọng số đã cho")
 
         return best_solution
 
@@ -628,3 +660,143 @@ class ParetoNavigator:
         except Exception as e:
             logger.error(f"Lỗi khi tải phiên điều hướng Pareto: {e}")
             return None
+
+    def navigate_to_weights(
+        self, weights: Dict[str, float]
+    ) -> Optional[ParetoSolution]:
+        """
+        Điều hướng đến giải pháp dựa trên vector trọng số.
+
+        Phương thức này tìm kiếm giải pháp phù hợp nhất với vector trọng số
+        hoặc nội suy một giải pháp mới nếu không tìm thấy giải pháp chính xác.
+
+        Parameters
+        ----------
+        weights : Dict[str, float]
+            Từ điển chứa tên mục tiêu và trọng số tương ứng
+
+        Returns
+        -------
+        ParetoSolution hoặc None
+            Giải pháp phù hợp nhất hoặc giải pháp nội suy, None nếu không thể tìm hoặc nội suy
+        """
+        # Đầu tiên tìm giải pháp gần nhất
+        solution = self.find_solution_by_weights(weights)
+
+        if solution:
+            return solution
+
+        # Nếu không tìm thấy, thử nội suy giải pháp mới
+        try:
+            if hasattr(self.pareto_surface, "interpolate"):
+                # Nếu bề mặt Pareto hỗ trợ nội suy, sử dụng phương thức đó
+                return self.pareto_surface.interpolate(weights)
+            else:
+                # Triển khai nội suy đơn giản nếu không có phương thức có sẵn
+                return self._interpolate_solution(weights)
+        except Exception as e:
+            logger.error(f"Lỗi khi nội suy giải pháp Pareto: {str(e)}")
+            return None
+
+    def _interpolate_solution(
+        self, weights: Dict[str, float]
+    ) -> Optional[ParetoSolution]:
+        """
+        Nội suy một giải pháp mới từ các giải pháp hiện có.
+
+        Parameters
+        ----------
+        weights : Dict[str, float]
+            Từ điển chứa tên mục tiêu và trọng số tương ứng
+
+        Returns
+        -------
+        ParetoSolution hoặc None
+            Giải pháp được nội suy hoặc None nếu không thể
+        """
+        if (
+            not self.pareto_surface
+            or not self.pareto_surface.solutions
+            or len(self.pareto_surface.solutions) < 2
+        ):
+            return None
+
+        # Tìm ba giải pháp gần nhất để nội suy
+        solutions = self.pareto_surface.solutions
+        distances = []
+
+        # Chuẩn hóa trọng số
+        weight_sum = sum(weights.values())
+        if weight_sum > 0:
+            normalized_weights = {k: v / weight_sum for k, v in weights.items()}
+        else:
+            normalized_weights = weights
+
+        for solution in solutions:
+            if not hasattr(solution, "weights") or not solution.weights:
+                continue
+
+            # Tính khoảng cách
+            distance = 0
+            for obj_name, weight in normalized_weights.items():
+                if obj_name in solution.weights:
+                    distance += (weight - solution.weights[obj_name]) ** 2
+                else:
+                    distance += weight**2
+
+            distances.append((solution, distance**0.5))
+
+        if not distances:
+            return None
+
+        # Sắp xếp theo khoảng cách tăng dần
+        distances.sort(key=lambda x: x[1])
+
+        # Lấy ba giải pháp gần nhất (hoặc ít hơn nếu không đủ)
+        closest_solutions = [s[0] for s in distances[: min(3, len(distances))]]
+
+        if len(closest_solutions) < 2:
+            return closest_solutions[0]  # Không đủ giải pháp để nội suy
+
+        # Tính trọng số nội suy
+        total_distance = sum(1.0 / d[1] for d in distances[: len(closest_solutions)])
+        if total_distance == 0:
+            return closest_solutions[0]
+
+        interpolation_weights = [
+            1.0 / (d[1] * total_distance) for d in distances[: len(closest_solutions)]
+        ]
+
+        # Nội suy các giá trị mục tiêu
+        objective_values = {}
+
+        # Lấy danh sách tất cả các mục tiêu từ các giải pháp
+        all_objectives = set()
+        for sol in closest_solutions:
+            if hasattr(sol, "objective_values"):
+                all_objectives.update(sol.objective_values.keys())
+
+        for obj_name in all_objectives:
+            weighted_sum = 0
+            for i, solution in enumerate(closest_solutions):
+                if obj_name in solution.objective_values:
+                    weighted_sum += (
+                        solution.objective_values[obj_name] * interpolation_weights[i]
+                    )
+            objective_values[obj_name] = weighted_sum
+
+        # Tạo giải pháp nội suy
+        from uuid import uuid4
+
+        solution_id = f"interpolated_{uuid4()}"
+
+        # Tạo đối tượng giải pháp mới
+        return ParetoSolution(
+            id=solution_id,
+            objective_values=objective_values,
+            weights=normalized_weights,
+            metadata={
+                "interpolated": True,
+                "closest_solutions": [s.id for s in closest_solutions],
+            },
+        )

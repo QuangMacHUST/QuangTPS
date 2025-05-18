@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any, Union, Callable
 import logging
 import time
+import os
 
 from quangtps.core.logging import get_logger
 from quangtps.core.types import DoseGrid
@@ -217,7 +218,7 @@ class RobustnessResult:
                 # Plot nominal scenario
                 nominal_data = dvh_data.get(self.nominal_scenario.scenario_name)
                 if nominal_data and "volume" in nominal_data and "dose" in nominal_data:
-                ax.plot(
+                    ax.plot(
                         nominal_data["dose"],
                         nominal_data["volume"],
                         color=color,
@@ -472,7 +473,7 @@ class RobustnessAnalyzer:
                 structure = self.structures[oar_name]
                 try:
                     dvh_data[oar_name] = calculate_dvh(structure, dose_grid)
-            except Exception as e:
+                except Exception as e:
                     logger.error(f"Error calculating DVH for OAR {oar_name}: {e}")
 
         return dvh_data
@@ -631,118 +632,252 @@ class RobustnessAnalyzer:
 
     def analyze(self) -> RobustnessResult:
         """
-        Analyze plan robustness against uncertainties.
+        Phân tích độ bền vững của kế hoạch đối với các yếu tố không chắc chắn.
+
+        Phương thức này phân tích sự ảnh hưởng của các yếu tố không chắc chắn (setup và range)
+        lên kế hoạch điều trị bằng cách tạo và đánh giá nhiều kịch bản khác nhau. Kết quả cho thấy
+        khả năng kế hoạch duy trì hiệu quả khi có sai số về setup hoặc range.
 
         Returns
         -------
         RobustnessResult
-            Results of robustness analysis
+            Kết quả phân tích độ bền vững, bao gồm thông tin về tất cả các kịch bản đã phân tích
         """
-        logger.info("Starting robustness analysis")
+        logger.info("Bắt đầu phân tích độ bền vững cho kế hoạch")
         start_time = time.time()
 
-        # Generate scenarios
-        scenarios = self._generate_scenarios()
+        try:
+            # Tạo các kịch bản để phân tích
+            scenarios = self._generate_scenarios()
+            logger.info(f"Đã tạo {len(scenarios)} kịch bản để phân tích")
 
-        # Initialize results containers
-        scenario_results = []
-        nominal_result = None
+            # Khởi tạo containers cho kết quả
+            scenario_results = []
+            nominal_result = None
 
-        # Process nominal scenario first
-        nominal_params = scenarios.pop("nominal")
-        nominal_dvh = self._calculate_dvh_for_scenario(self.dose_grid)
+            # Xử lý kịch bản danh nghĩa (nominal) trước
+            try:
+                nominal_params = scenarios.pop("nominal")
+                nominal_dvh = self._calculate_dvh_for_scenario(self.dose_grid)
 
-        nominal_result = ScenarioResult(
-            scenario_name="nominal",
-            uncertainty_parameters=nominal_params,
-            dose_grid=self.dose_grid,
-            dvh_data=nominal_dvh,
-        )
-
-        # Calculate target coverage and OAR doses for nominal scenario
-        nominal_coverage = self._calculate_target_coverage(nominal_dvh)
-        nominal_oar_doses = self._calculate_oar_doses(nominal_dvh)
-
-        # Initialize min/max values with nominal values
-        min_coverage = {t: v for t, v in nominal_coverage.items()}
-        max_coverage = {t: v for t, v in nominal_coverage.items()}
-        min_oar_doses = {o: v for o, v in nominal_oar_doses.items()}
-        max_oar_doses = {o: v for o, v in nominal_oar_doses.items()}
-
-        # Process all other scenarios
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            # Submit dose calculation tasks
-            future_to_scenario = {}
-            for scenario_name, params in scenarios.items():
-                future = executor.submit(
-                    self._calculate_dose_for_scenario, scenario_name, params
+                nominal_result = ScenarioResult(
+                    scenario_name="nominal",
+                    uncertainty_parameters=nominal_params,
+                    dose_grid=self.dose_grid,
+                    dvh_data=nominal_dvh,
                 )
-                future_to_scenario[future] = (scenario_name, params)
 
-            # Process results as they complete
-            for future in as_completed(future_to_scenario):
-                scenario_name, params = future_to_scenario[future]
-                try:
-                    scenario_dose = future.result()
+                # Tính toán độ bao phủ mục tiêu và liều OAR cho kịch bản danh nghĩa
+                nominal_coverage = self._calculate_target_coverage(nominal_dvh)
+                nominal_oar_doses = self._calculate_oar_doses(nominal_dvh)
 
-                    # Calculate DVH
-                    scenario_dvh = self._calculate_dvh_for_scenario(scenario_dose)
+                # Khởi tạo giá trị min/max bằng giá trị danh nghĩa
+                min_coverage = {t: v for t, v in nominal_coverage.items()}
+                max_coverage = {t: v for t, v in nominal_coverage.items()}
+                min_oar_doses = {o: v for o, v in nominal_oar_doses.items()}
+                max_oar_doses = {o: v for o, v in nominal_oar_doses.items()}
 
-                    # Create scenario result
-                    scenario_result = ScenarioResult(
-                        scenario_name=scenario_name,
-                        uncertainty_parameters=params,
-                        dose_grid=scenario_dose,
-                        dvh_data=scenario_dvh,
+                logger.info(
+                    f"Đã xử lý kịch bản danh nghĩa: Target coverage = {nominal_coverage}"
+                )
+            except Exception as e:
+                logger.error(f"Lỗi khi xử lý kịch bản danh nghĩa: {str(e)}")
+                # Tiếp tục với các kịch bản khác nếu kịch bản danh nghĩa thất bại
+
+            # Xử lý các kịch bản phân tích độ bền vững
+            successful_scenarios = 0
+            failed_scenarios = 0
+
+            # Sử dụng ThreadPoolExecutor để tính toán song song (nếu có thể)
+            with ThreadPoolExecutor(
+                max_workers=min(8, os.cpu_count() or 4)
+            ) as executor:
+                # Submit các tác vụ tính toán và theo dõi kết quả
+                future_to_scenario = {}
+                for scenario_name, params in scenarios.items():
+                    future = executor.submit(
+                        self._process_scenario, scenario_name, params
                     )
+                    future_to_scenario[future] = scenario_name
 
-                    # Calculate metrics
-                    scenario_coverage = self._calculate_target_coverage(scenario_dvh)
-                    scenario_oar_doses = self._calculate_oar_doses(scenario_dvh)
+                # Xử lý kết quả khi hoàn thành
+                for future in as_completed(future_to_scenario):
+                    scenario_name = future_to_scenario[future]
+                    try:
+                        result = future.result()
+                        if result:
+                            scenario_results.append(result)
 
-                    # Update min/max values
-                    for target, coverage in scenario_coverage.items():
-                        min_coverage[target] = min(
-                            min_coverage.get(target, float("inf")), coverage
+                            # Cập nhật min/max coverage và liều OAR
+                            scenario_coverage = self._calculate_target_coverage(
+                                result.dvh_data
+                            )
+                            scenario_oar_doses = self._calculate_oar_doses(
+                                result.dvh_data
+                            )
+
+                            for target, coverage in scenario_coverage.items():
+                                if target in min_coverage:
+                                    min_coverage[target] = min(
+                                        min_coverage[target], coverage
+                                    )
+                                    max_coverage[target] = max(
+                                        max_coverage[target], coverage
+                                    )
+                                else:
+                                    min_coverage[target] = coverage
+                                    max_coverage[target] = coverage
+
+                            for oar, dose in scenario_oar_doses.items():
+                                if oar in min_oar_doses:
+                                    min_oar_doses[oar] = min(min_oar_doses[oar], dose)
+                                    max_oar_doses[oar] = max(max_oar_doses[oar], dose)
+                                else:
+                                    min_oar_doses[oar] = dose
+                                    max_oar_doses[oar] = dose
+
+                            successful_scenarios += 1
+                            logger.debug(
+                                f"Kịch bản {scenario_name} đã hoàn thành thành công"
+                            )
+                        else:
+                            failed_scenarios += 1
+                            logger.warning(
+                                f"Kịch bản {scenario_name} không trả về kết quả"
+                            )
+                    except Exception as e:
+                        failed_scenarios += 1
+                        logger.error(
+                            f"Lỗi khi xử lý kịch bản {scenario_name}: {str(e)}"
                         )
-                        max_coverage[target] = max(
-                            max_coverage.get(target, float("-inf")), coverage
-                        )
 
-                    for oar, dose in scenario_oar_doses.items():
-                        min_oar_doses[oar] = min(
-                            min_oar_doses.get(oar, float("inf")), dose
-                        )
-                        max_oar_doses[oar] = max(
-                            max_oar_doses.get(oar, float("-inf")), dose
-                        )
+            # Tạo kết quả tổng hợp
+            elapsed_time = time.time() - start_time
+            logger.info(
+                f"Phân tích độ bền vững hoàn thành trong {elapsed_time:.2f} giây"
+            )
+            logger.info(
+                f"Số kịch bản thành công: {successful_scenarios}, thất bại: {failed_scenarios}"
+            )
 
-                    # Store result
-                    scenario_results.append(scenario_result)
+            if not nominal_result and not scenario_results:
+                logger.error(
+                    "Không thể hoàn thành bất kỳ kịch bản nào, không có kết quả phân tích"
+                )
+                return RobustnessResult(
+                    nominal=None,
+                    scenarios=[],
+                    min_target_coverage={},
+                    max_target_coverage={},
+                    min_oar_doses={},
+                    max_oar_doses={},
+                )
 
-                except Exception as e:
-                    logger.error(f"Error processing scenario {scenario_name}: {e}")
+            result = RobustnessResult(
+                nominal=nominal_result,
+                scenarios=scenario_results,
+                min_target_coverage=min_coverage,
+                max_target_coverage=max_coverage,
+                min_oar_doses=min_oar_doses,
+                max_oar_doses=max_oar_doses,
+            )
 
-        # Compute final ranges
-        target_coverage_range = {
-            t: (min_coverage[t], max_coverage[t]) for t in min_coverage
-        }
-        oar_dose_range = {
-            o: (min_oar_doses[o], max_oar_doses[o]) for o in min_oar_doses
-        }
+            # Tạo tóm tắt kết quả
+            self._log_robustness_summary(result)
 
-        # Create final result
-        result = RobustnessResult(
-            nominal_scenario=nominal_result,
-            scenarios=scenario_results,
-            target_coverage_range=target_coverage_range,
-            oar_dose_range=oar_dose_range,
-        )
+            return result
 
-        elapsed_time = time.time() - start_time
-        logger.info(f"Robustness analysis completed in {elapsed_time:.2f} seconds")
+        except Exception as e:
+            logger.error(f"Lỗi khi phân tích độ bền vững: {str(e)}")
+            # Trả về kết quả trống trong trường hợp lỗi
+            return RobustnessResult(
+                nominal=None,
+                scenarios=[],
+                min_target_coverage={},
+                max_target_coverage={},
+                min_oar_doses={},
+                max_oar_doses={},
+            )
 
-        return result
+    def _process_scenario(self, scenario_name, params):
+        """
+        Xử lý một kịch bản đánh giá độ bền vững.
+
+        Parameters
+        ----------
+        scenario_name : str
+            Tên kịch bản
+        params : dict
+            Tham số kịch bản
+
+        Returns
+        -------
+        ScenarioResult hoặc None
+            Kết quả kịch bản hoặc None nếu có lỗi
+        """
+        try:
+            logger.debug(f"Đang xử lý kịch bản: {scenario_name}")
+
+            # Tính liều cho kịch bản
+            dose_grid = self._calculate_dose_for_scenario(scenario_name, params)
+
+            if dose_grid is None:
+                logger.warning(f"Không thể tính toán liều cho kịch bản {scenario_name}")
+                return None
+
+            # Tính DVH cho kịch bản
+            dvh_data = self._calculate_dvh_for_scenario(dose_grid)
+
+            # Tạo kết quả kịch bản
+            result = ScenarioResult(
+                scenario_name=scenario_name,
+                uncertainty_parameters=params,
+                dose_grid=dose_grid,
+                dvh_data=dvh_data,
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Lỗi trong kịch bản {scenario_name}: {str(e)}")
+            return None
+
+    def _log_robustness_summary(self, result):
+        """
+        Tạo và ghi log tóm tắt kết quả phân tích độ bền vững.
+
+        Parameters
+        ----------
+        result : RobustnessResult
+            Kết quả phân tích độ bền vững
+        """
+        logger.info("=== TÓM TẮT PHÂN TÍCH ĐỘ BỀN VỮNG ===")
+
+        # Tóm tắt độ bao phủ mục tiêu
+        logger.info("Độ bao phủ mục tiêu:")
+        for target, min_cov in result.min_target_coverage.items():
+            max_cov = result.max_target_coverage.get(target, min_cov)
+            nominal_cov = 0
+            if result.nominal and target in result.nominal.dvh_data:
+                nominal_dvh = result.nominal.dvh_data[target]
+                nominal_cov = self._calculate_d95(nominal_dvh)
+
+            logger.info(
+                f"  {target}: {min_cov:.2f}% - {nominal_cov:.2f}% - {max_cov:.2f}% (Min-Nominal-Max)"
+            )
+
+        # Tóm tắt liều OAR
+        logger.info("Liều OAR (D1cc):")
+        for oar, min_dose in result.min_oar_doses.items():
+            max_dose = result.max_oar_doses.get(oar, min_dose)
+            nominal_dose = 0
+            if result.nominal and oar in result.nominal.dvh_data:
+                nominal_dvh = result.nominal.dvh_data[oar]
+                nominal_dose = self._calculate_d1cc(nominal_dvh)
+
+            logger.info(
+                f"  {oar}: {min_dose:.2f} - {nominal_dose:.2f} - {max_dose:.2f} Gy (Min-Nominal-Max)"
+            )
 
     def plot_dvh_bands(self, figsize=(12, 8)):
         """
