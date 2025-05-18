@@ -795,6 +795,16 @@ class StructureTab(QWidget):
             try:
                 import vtk
                 import pyvista as pv
+
+                # Sử dụng cách import này để tránh lỗi linter
+                from PyQt5.QtWidgets import (
+                    QDialog,
+                    QVBoxLayout,
+                    QHBoxLayout,
+                    QComboBox,
+                    QLabel,
+                    QSlider,
+                )
                 from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
             except ImportError as e:
                 dependency = str(e).split("'")[1] if "'" in str(e) else "thư viện"
@@ -808,15 +818,7 @@ class StructureTab(QWidget):
 
             # Tạo dialog hiển thị 3D nếu chưa có
             if not hasattr(self, "viewer_3d_dialog"):
-                from PyQt5.QtWidgets import (
-                    QDialog,
-                    QVBoxLayout,
-                    QHBoxLayout,
-                    QComboBox,
-                    QLabel,
-                    QSlider,
-                )
-
+                # Các widget đã được import ở trên
                 self.viewer_3d_dialog = QDialog(self)
                 self.viewer_3d_dialog.setWindowTitle("Hiển thị 3D - QuangTPS")
                 self.viewer_3d_dialog.setMinimumSize(1000, 700)
@@ -1938,12 +1940,14 @@ class StructureTab(QWidget):
 def test_structure_tab():
     """Test function for the structure tab."""
     import sys
-    from PyQt5.QtWidgets import QApplication, QMainWindow
 
-    app = QApplication(sys.argv)
+    # Sử dụng cách import này để tránh lỗi linter
+    from PyQt5 import QtWidgets
+
+    app = QtWidgets.QApplication(sys.argv)
 
     # Create main window
-    main_window = QMainWindow()
+    main_window = QtWidgets.QMainWindow()
 
     # Create test patient
     class TestPatient:
