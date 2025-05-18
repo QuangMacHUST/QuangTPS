@@ -183,99 +183,197 @@ class BEVCanvas(FigureCanvas):
         self.axes.grid(True, linestyle="--", alpha=0.5)
 
     def _setup_colormap(self):
-        """
-        Thiết lập colormap cho hiển thị độ sâu một cách an toàn.
+        """Thiết lập colormap cho hiển thị BEV."""
+        try:
+            # Thử nhiều colormap theo độ ưu tiên, ghi log chi tiết
+            colormap_names = [
+                "viridis",
+                "jet",
+                "plasma",
+                "inferno",
+                "magma",
+                "cividis",
+                "rainbow",
+            ]
 
-        Phương thức này thử lấy colormap từ matplotlib.cm, nếu không có sẽ
-        thử các colormap thay thế và cuối cùng tạo một colormap đơn giản.
-        """
-        # Danh sách colormap phổ biến để thử
-        colormap_names = [
-            "jet",
-            "viridis",
-            "plasma",
-            "rainbow",
-            "hot",
-            "coolwarm",
-            "RdBu",
-            "turbo",  # Thêm turbo là một colormap mới và phổ biến
-        ]
+            for cmap_name in colormap_names:
+                try:
+                    self.cmap = getattr(plt.cm, cmap_name, None)
+                    if self.cmap is not None:
+                        logger.info(f"Đã thiết lập colormap: {cmap_name}")
+                        return
+                except Exception as e:
+                    logger.debug(f"Không thể sử dụng colormap {cmap_name}: {str(e)}")
 
-        # Thử lấy colormap theo thứ tự ưu tiên
-        self.colormap = None
-        self.colormap_name = None
+            # Nếu không tìm thấy colormap nào, tạo colormap đơn giản
+            logger.warning(
+                "Không tìm thấy colormap tiêu chuẩn, sử dụng colormap tùy chỉnh"
+            )
+            self.cmap = self._create_simple_colormap()
 
-        for name in colormap_names:
-            try:
-                # Sử dụng getattr an toàn với matplotlib.cm
-                cmap = getattr(plt.cm, name, None)
-                if cmap is not None:
-                    self.colormap = cmap
-                    self.colormap_name = name
-                    logger.debug(f"Đã sử dụng colormap '{name}' từ matplotlib")
-                    break
-            except Exception as e:
-                logger.warning(f"Không thể sử dụng colormap '{name}': {str(e)}")
-
-        # Nếu vẫn không có colormap, tạo một colormap đơn giản
-        if self.colormap is None:
-            logger.warning("Không tìm thấy colormap phù hợp, tạo colormap đơn giản")
-            self.colormap = self._create_simple_colormap()
-            self.colormap_name = "simple"
-
-        # Hiển thị thông tin debug về colormap đã chọn
-        logger.debug(f"Đang sử dụng colormap: {self.colormap_name}")
+        except Exception as e:
+            logger.error(f"Lỗi khi thiết lập colormap: {str(e)}")
+            # Fallback cuối cùng - tạo colormap đơn giản
+            self.cmap = self._create_simple_colormap()
 
     def _create_simple_colormap(self):
         """
-        Tạo colormap đơn giản khi không có colormap từ matplotlib.
+        Tạo một colormap đơn giản khi không tìm thấy colormap tiêu chuẩn.
 
         Returns
         -------
         matplotlib.colors.LinearSegmentedColormap
-            Colormap tạo thủ công
+            Colormap đơn giản từ xanh lam đến đỏ.
         """
         try:
-            # Tạo colormap dựa trên các màu cơ bản
-            cdict = {
+            # Thử tạo colormap từ điểm màu
+            colors = [(0, 0, 1), (0, 1, 1), (0, 1, 0), (1, 1, 0), (1, 0, 0)]
+
+            # Sử dụng LinearSegmentedColormap nếu có
+            if hasattr(mcolors, "LinearSegmentedColormap"):
+                return mcolors.LinearSegmentedColormap.from_list(
+                    "simple_colormap", colors
+                )
+
+            # Fallback cuối cùng - dictionary màu
+            color_dict = {
+                "red": [(0.0, 0.0, 0.0), (0.5, 0.0, 0.0), (1.0, 1.0, 1.0)],
+                "green": [
+                    (0.0, 0.0, 0.0),
+                    (0.25, 0.0, 0.0),
+                    (0.75, 1.0, 1.0),
+                    (1.0, 0.0, 0.0),
+                ],
+                "blue": [(0.0, 1.0, 1.0), (0.5, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            }
+
+            return mcolors.LinearSegmentedColormap("simple_colormap", color_dict)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo colormap đơn giản: {str(e)}")
+
+            # Fallback tuyệt đối - trả về một dict với hàm __call__ giả lập colormap
+            class SimpleFallbackColormap:
+                def __call__(self, val):
+                    # Đơn giản trả về màu từ xanh lam đến đỏ dựa trên giá trị
+                    if val < 0.25:
+                        return (0, 0, 1)  # Xanh lam
+                    elif val < 0.5:
+                        return (0, 1, 1)  # Xanh lục lam
+                    elif val < 0.75:
+                        return (0, 1, 0)  # Xanh lục
+                    elif val < 0.9:
+                        return (1, 1, 0)  # Vàng
+                    else:
+                        return (1, 0, 0)  # Đỏ
+
+            return SimpleFallbackColormap()
+
+    def set_depth_colormap(self, colormap_name="viridis"):
+        """
+        Thiết lập colormap cho hiển thị độ sâu.
+
+        Parameters
+        ----------
+        colormap_name : str
+            Tên của colormap sẽ sử dụng.
+        """
+        try:
+            # Thử sử dụng colormap được yêu cầu
+            self.depth_cmap = getattr(plt.cm, colormap_name, None)
+
+            if self.depth_cmap is None:
+                # Thử một số colormap phổ biến khác
+                backup_cmaps = ["jet", "viridis", "plasma", "inferno", "magma"]
+
+                for cmap in backup_cmaps:
+                    if cmap != colormap_name:  # Tránh thử lại colormap đã thất bại
+                        self.depth_cmap = getattr(plt.cm, cmap, None)
+                        if self.depth_cmap is not None:
+                            logger.info(
+                                f"Sử dụng colormap dự phòng {cmap} thay cho {colormap_name}"
+                            )
+                            break
+
+            # Nếu vẫn không tìm thấy colormap nào, tạo colormap độ sâu tùy chỉnh
+            if self.depth_cmap is None:
+                logger.warning(
+                    f"Không tìm thấy colormap {colormap_name} hoặc bất kỳ colormap dự phòng nào"
+                )
+                self.depth_cmap = self._create_depth_colormap()
+
+            # Cập nhật hiển thị nếu cần thiết
+            if self.show_depth_colorwash:
+                self.update_view()
+
+        except Exception as e:
+            logger.error(f"Lỗi khi thiết lập colormap độ sâu: {str(e)}")
+            # Tạo colormap độ sâu tùy chỉnh trong trường hợp lỗi
+            self.depth_cmap = self._create_depth_colormap()
+
+    def _create_depth_colormap(self):
+        """
+        Tạo colormap độ sâu tùy chỉnh khi không tìm thấy colormap tiêu chuẩn.
+
+        Returns
+        -------
+        matplotlib.colors.LinearSegmentedColormap
+            Colormap tùy chỉnh cho hiển thị độ sâu.
+        """
+        try:
+            # Màu cho độ sâu, từ gần (đỏ) đến xa (xanh lam)
+            colors = [(1, 0, 0), (1, 1, 0), (0, 1, 0), (0, 1, 1), (0, 0, 1)]
+
+            if hasattr(mcolors, "LinearSegmentedColormap"):
+                return mcolors.LinearSegmentedColormap.from_list(
+                    "depth_colormap", colors
+                )
+
+            # Fallback nếu không có LinearSegmentedColormap
+            color_dict = {
                 "red": [
+                    (0.0, 1.0, 1.0),
+                    (0.25, 1.0, 1.0),
+                    (0.5, 0.0, 0.0),
+                    (0.75, 0.0, 0.0),
+                    (1.0, 0.0, 0.0),
+                ],
+                "green": [
+                    (0.0, 0.0, 0.0),
+                    (0.25, 1.0, 1.0),
+                    (0.5, 1.0, 1.0),
+                    (0.75, 1.0, 1.0),
+                    (1.0, 0.0, 0.0),
+                ],
+                "blue": [
                     (0.0, 0.0, 0.0),
                     (0.25, 0.0, 0.0),
                     (0.5, 0.0, 0.0),
                     (0.75, 1.0, 1.0),
                     (1.0, 1.0, 1.0),
                 ],
-                "green": [
-                    (0.0, 0.0, 0.0),
-                    (0.25, 0.0, 0.0),
-                    (0.5, 1.0, 1.0),
-                    (0.75, 1.0, 1.0),
-                    (1.0, 0.0, 0.0),
-                ],
-                "blue": [
-                    (0.0, 0.5, 0.5),
-                    (0.25, 1.0, 1.0),
-                    (0.5, 0.0, 0.0),
-                    (0.75, 0.0, 0.0),
-                    (1.0, 0.0, 0.0),
-                ],
             }
 
-            return matplotlib.colors.LinearSegmentedColormap(
-                "SimpleColormap", cdict, 256
-            )
+            return mcolors.LinearSegmentedColormap("depth_colormap", color_dict)
+
         except Exception as e:
-            logger.error(f"Lỗi khi tạo colormap đơn giản: {str(e)}")
+            logger.error(f"Lỗi khi tạo colormap độ sâu tùy chỉnh: {str(e)}")
 
-            # Trường hợp cực kỳ không có cách khác, tạo colormap nhị phân đơn giản
-            import numpy as np
+            # Fallback tuyệt đối - giả lập colormap
+            class DepthFallbackColormap:
+                def __call__(self, val):
+                    if val < 0.2:
+                        return (1, 0, 0)  # Đỏ - gần
+                    elif val < 0.4:
+                        return (1, 1, 0)  # Vàng
+                    elif val < 0.6:
+                        return (0, 1, 0)  # Xanh lục
+                    elif val < 0.8:
+                        return (0, 1, 1)  # Xanh lục lam
+                    else:
+                        return (0, 0, 1)  # Xanh lam - xa
 
-            cmap_array = np.ones((256, 4))
-            cmap_array[:, 0] = np.linspace(0, 1, 256)  # Red tăng dần
-            cmap_array[:, 1] = np.linspace(0, 0.5, 256)  # Green không đổi
-            cmap_array[:, 2] = np.linspace(1, 0, 256)  # Blue giảm dần
-
-            return matplotlib.colors.ListedColormap(cmap_array)
+            return DepthFallbackColormap()
 
     def setup_figure(self):
         """Setup the figure appearance."""
@@ -592,63 +690,6 @@ class BEVCanvas(FigureCanvas):
         self.update_view()
         logger.debug(f"Hiển thị bản đồ độ sâu: {'Bật' if show else 'Tắt'}")
 
-    def set_depth_colormap(self, colormap_name):
-        """
-        Thiết lập colormap cho hiển thị độ sâu.
-
-        Parameters
-        ----------
-        colormap_name : str
-            Tên của colormap từ matplotlib, ví dụ: 'jet', 'viridis', 'plasma'...
-        """
-        try:
-            import matplotlib.cm as cm
-
-            # Sử dụng getattr với giá trị mặc định để tránh AttributeError
-            self.depth_colormap = getattr(cm, colormap_name, None)
-
-            # Nếu không tìm thấy colormap, thử sử dụng plt.cm
-            if self.depth_colormap is None:
-                import matplotlib.pyplot as plt
-
-                # Sử dụng phương thức an toàn để lấy colormap
-                self.depth_colormap = getattr(plt.cm, colormap_name, None)
-
-                # Nếu vẫn không tìm thấy, thử các colormap phổ biến
-                if self.depth_colormap is None:
-                    for cmap_name in ["jet", "viridis", "plasma", "rainbow", "hot"]:
-                        self.depth_colormap = getattr(plt.cm, cmap_name, None)
-                        if self.depth_colormap is not None:
-                            logger.info(f"Sử dụng colormap thay thế: {cmap_name}")
-                            break
-
-            logger.info(f"Đã thiết lập colormap: {colormap_name}")
-
-            if self.show_depth_colorwash:
-                self.update_view()
-        except Exception as e:
-            logger.error(f"Lỗi khi thiết lập colormap {colormap_name}: {str(e)}")
-            import matplotlib.pyplot as plt
-
-            # Sử dụng phương thức an toàn để lấy colormap
-            self.depth_colormap = getattr(plt.cm, "jet", None)
-            if self.depth_colormap is None:
-                # Nếu jet không có sẵn, thử các colormap phổ biến khác
-                for cmap_name in ["viridis", "plasma", "rainbow", "hot"]:
-                    self.depth_colormap = getattr(plt.cm, cmap_name, None)
-                    if self.depth_colormap is not None:
-                        logger.info(f"Sử dụng colormap thay thế: {cmap_name}")
-                        break
-
-                # Nếu vẫn không tìm thấy colormap nào, tạo một colormap đơn giản
-                if self.depth_colormap is None:
-                    logger.warning("Không tìm thấy colormap nào, tạo colormap đơn giản")
-                    from matplotlib.colors import LinearSegmentedColormap
-
-                    self.depth_colormap = LinearSegmentedColormap.from_list(
-                        "simple_cmap", ["blue", "green", "yellow", "red"], N=256
-                    )
-
     def set_depth_range(self, min_depth, max_depth):
         """
         Thiết lập phạm vi độ sâu cho hiển thị bản đồ độ sâu.
@@ -742,7 +783,7 @@ class BEVCanvas(FigureCanvas):
             masked_depth,
             extent=extent,
             origin="upper",
-            cmap=self.depth_colormap,
+            cmap=self.depth_cmap,
             alpha=self.opacity,
             vmin=vmin,
             vmax=vmax,

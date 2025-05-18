@@ -17,7 +17,7 @@ import numpy as np
 
 # Thêm xử lý ngoại lệ khi import PyQt5
 try:
-from PyQt5.QtWidgets import (
+    from PyQt5.QtWidgets import (
         QDialog,
         QPushButton,
         QVBoxLayout,

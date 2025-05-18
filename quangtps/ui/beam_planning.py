@@ -370,9 +370,9 @@ class BeamSetupWidget(QWidget):
         del self.beams[self.selected_beam_index]
 
         # Update table
-            self.update_beam_table()
+        self.update_beam_table()
 
-            # Emit signal
+        # Emit signal
         self.beam_removed.emit(self.selected_beam_index)
 
     def _on_property_changed(self):
@@ -394,9 +394,9 @@ class BeamSetupWidget(QWidget):
         beam.field_y = self.field_y_spin.value()
 
         # Update table
-            self.update_beam_table()
+        self.update_beam_table()
 
-            # Emit signal
+        # Emit signal
         self.beam_changed.emit(self.selected_beam_index)
 
     def _create_ap_pa(self):
@@ -419,7 +419,7 @@ class BeamSetupWidget(QWidget):
         self.beams.append(pa_beam)
 
         # Update table
-            self.update_beam_table()
+        self.update_beam_table()
 
         # Select first beam
         self.beam_table.selectRow(0)

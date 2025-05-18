@@ -1,132 +1,108 @@
-# QuangTPS - Hệ thống Lập Kế hoạch Xạ trị Mã nguồn Mở
+# QuangTPS: Hệ thống Lập kế hoạch Xạ trị Mã nguồn mở
 
-<p align="center">
-  <img src="docs/images/quangtps_logo.png" alt="QuangTPS Logo" width="200"/>
-</p>
+<div align="center">
+  <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
+</div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên%20bản-0.7.8-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.7.5-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
-![Giấy phép](https://img.shields.io/badge/Giấy%20phép-MIT-yellow)
-![Trạng thái](https://img.shields.io/badge/Trạng%20thái-Đang%20phát%20triển-orange)
+![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
-## Giới thiệu
+## Tổng quan
 
-QuangTPS là hệ thống lập kế hoạch xạ trị (TPS) mã nguồn mở toàn diện cung cấp các tính năng và công cụ cần thiết để lập kế hoạch điều trị ung thư bằng bức xạ. Hệ thống được phát triển với mục tiêu tạo ra một nền tảng mạnh mẽ, linh hoạt và dễ tiếp cận cho các nhà nghiên cứu, bác sĩ và kỹ sư y sinh.
+QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở cung cấp đầy đủ các công cụ cần thiết cho việc lập kế hoạch điều trị bệnh nhân trong xạ trị. Từ việc nhập dữ liệu hình ảnh DICOM, phân đoạn cấu trúc, tối ưu hóa và tính toán phân bố liều xạ trị, QuangTPS cung cấp một giải pháp toàn diện cho các chuyên gia vật lý xạ trị và các nhà nghiên cứu.
 
-<p align="center">
-  <img src="docs/images/quangtps_screenshot.png" alt="QuangTPS Screenshot" width="80%"/>
-</p>
+### Tính năng chính
 
-## Tính năng chính
+- **Nhập/Xuất DICOM**: Nhập CT, MRI, PET và xuất RT Structure, RT Dose, RT Plan
+- **Phân đoạn cấu trúc**: Công cụ phân đoạn thủ công và tự động với hỗ trợ AI
+- **Lập kế hoạch xạ trị**:
+  - Kỹ thuật 3D-CRT, IMRT, VMAT, SRS/SBRT
+  - Tối ưu hóa dựa trên ràng buộc và mục tiêu
+  - Tối ưu hóa đa tiêu chí (MCO) với giao diện Pareto Navigator hiện đại
+- **Thuật toán tính liều**:
+  - Pencil Beam, Collapsed Cone, Monte Carlo
+  - Hỗ trợ Monte Carlo GPU với tăng tốc 50-200x
+- **Lập kế hoạch thích ứng**:
+  - Dự đoán thay đổi giải phẫu
+  - Tạo kế hoạch thích ứng tự động
+  - Đánh giá độ bền vững của kế hoạch
+- **Đánh giá kế hoạch**:
+  - DVH, chỉ số đánh giá lâm sàng
+  - Phân tích gamma
+  - So sánh kế hoạch
+- **Đảm bảo chất lượng**:
+  - Phân tích log file máy điều trị
+  - QA cho kế hoạch xạ trị
+  - Báo cáo QA tự động
 
-- **Xử lý hình ảnh y tế đa dạng**: Hỗ trợ đọc/ghi DICOM, phân đoạn, hiển thị 3D
-- **Lập kế hoạch xạ trị nâng cao**: IMRT, VMAT, proton, brachytherapy
-- **Tối ưu hóa đa tiêu chí (MCO)**: Khám phá mặt Pareto với điều hướng trực quan
-- **Tính toán liều chính xác**: Thuật toán tích hợp Monte Carlo GPU
-- **Lập kế hoạch thích ứng**: Cập nhật kế hoạch dựa trên thay đổi giải phẫu
-- **Đánh giá kế hoạch**: Phân tích DVH, chỉ số sinh học, và đánh giá tự động
-- **Báo cáo linh hoạt**: Tạo báo cáo tùy chỉnh với nhiều mẫu
-- **Tích hợp và mở rộng**: API cho phát triển module mở rộng
+### Cải tiến trong phiên bản 0.7.14
 
-### Tính năng mới trong phiên bản 0.7.8
+- **Nâng cao tương thích với Eclipse của Varian**:
+  - Cải thiện giao diện điều hướng MCO để tương đương Eclipse
+  - Tối ưu hóa cơ chế xử lý colormap với nhiều cơ chế dự phòng
+  - Tái cấu trúc module lập kế hoạch thích ứng với thiết kế component-based
+  - Cải thiện xử lý lỗi và tăng độ ổn định hệ thống
 
-- **Hiển thị 3D nâng cao**: Lớp `Image3DWidget` hỗ trợ nhiều chế độ hiển thị (surface, volume, MIP, X-ray) với các công nghệ PyVista và VTK
-- **Phân tích gamma tích hợp**: Module phân tích gamma 3D/2D đầy đủ với hỗ trợ phân tích theo vùng liều và thống kê chi tiết
-- **Monte Carlo GPU cải tiến**: Tự động điều chỉnh cấu hình dựa trên tài nguyên phần cứng với dự phòng CPU thông minh
-- **Giao diện tương tự Eclipse**: Bảng màu isodose và giao diện người dùng tương tự hệ thống Eclipse của Varian
-- **Tích hợp thông minh**: Tự động phát hiện và tận dụng các thư viện khả dụng, chuyển đổi linh hoạt giữa các backend
+- **Tính năng mới**:
+  - Nâng cấp module tích hợp lập kế hoạch thích ứng
+  - Cải thiện hệ thống phát hiện GPU và tính toán liều Monte Carlo
+  - Thêm module dự đoán thay đổi giải phẫu
+  - Tích hợp giữa dự đoán giải phẫu và lập kế hoạch
 
-## Tính năng mới trong phiên bản 0.7.9
-
-### Phân tích Gamma tốc độ cao với GPU
-- **Tăng tốc GPU**: Đạt tốc độ tính toán phân tích gamma nhanh hơn 20-50 lần với GPU
-- **Kernel CUDA tối ưu**: Triển khai các kernel CuPy tùy chỉnh để tính toán khoảng cách hiệu quả
-- **Dự phòng tự động**: Tự động chuyển về CPU khi không có GPU khả dụng
-- **Trực quan hóa kết quả**: Biểu đồ histogram và bản đồ nhiệt với colormap tùy chỉnh
-
-### Tích hợp Monte Carlo GPU và Phân tích Gamma
-- Tính toán và so sánh kế hoạch điều trị chính xác và nhanh chóng
-- Phân tích theo vùng liều với tính toán song song
-- Báo cáo chi tiết với biểu đồ trực quan
-
-### Hiện đại hóa theo dõi thay đổi
-- CHANGELOG.md chuẩn định dạng Keep a Changelog
-- Phân loại các thay đổi theo Added, Changed, Fixed
-- Tự động liên kết các phiên bản với tag GitHub
-
-## Yêu cầu hệ thống
-
-- Python 3.8+
-- CUDA 11.2+ (cho tính năng Monte Carlo GPU)
-- 8GB RAM trở lên
-- 2GB VRAM trở lên
-- Windows 10/11, Linux, hoặc macOS
+- **Sửa lỗi**:
+  - Khắc phục vấn đề colormap trong hiển thị BEV và 3D
+  - Sửa lỗi linter trong nhiều module
+  - Cải thiện xử lý ngoại lệ trong module thích ứng
+  - Tăng cường tích hợp giữa các module
 
 ## Cài đặt
 
+### Yêu cầu
+
+- Python 3.8, 3.9 hoặc 3.10
+- 8GB RAM trở lên (khuyến nghị: 16GB)
+- GPU với hỗ trợ CUDA (tùy chọn, cho tính toán Monte Carlo)
+
+### Hướng dẫn cài đặt
+
 ```bash
-# Tạo môi trường ảo (tùy chọn)
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate     # Windows
-
-# Cài đặt từ PyPI
-pip install quangtps
-
-# Hoặc cài đặt từ mã nguồn
-git clone https://github.com/yourusername/QuangTPS.git
+# Clone repository
+git clone https://github.com/username/QuangTPS.git
 cd QuangTPS
+
+# Tạo môi trường ảo
+python -m venv venv
+source venv/bin/activate  # trên Windows: venv\Scripts\activate
+
+# Cài đặt các gói phụ thuộc
+pip install -r requirements.txt
+
+# Cài đặt gói trong chế độ phát triển
 pip install -e .
 ```
 
-## Sử dụng nhanh
+## Bắt đầu sử dụng
 
-```python
-from quangtps import QuangTPS
-
-# Khởi tạo hệ thống
-tps = QuangTPS()
-
-# Tải dữ liệu bệnh nhân
-patient = tps.load_patient('path/to/dicom/data')
-
-# Lập kế hoạch VMAT đơn giản
-plan = tps.create_vmat_plan(patient,
-                            prescription=60.0,
-                            fractions=30,
-                            target_structure='PTV')
-
-# Tối ưu hóa kế hoạch
-optimizer = tps.get_optimizer(algorithm='gradient_descent')
-result = optimizer.optimize(plan)
-
-# Tính toán liều với Monte Carlo
-dose = tps.calculate_dose(plan, algorithm='monte_carlo_gpu')
-
-# Đánh giá kế hoạch
-evaluation = tps.evaluate_plan(plan, dose)
-print(evaluation.summary())
-
-# Hiển thị DVH
-tps.show_dvh(dose)
-
-# Tạo báo cáo
-tps.create_report(plan, dose, evaluation, template='clinical')
+```bash
+# Khởi động QuangTPS
+python -m quangtps
 ```
 
 ## Tài liệu
 
-Tài liệu đầy đủ có sẵn tại: https://quangtps.readthedocs.io
-
-- [Hướng dẫn người dùng](docs/user_guide/)
-- [Hướng dẫn phát triển](docs/developer_guide/)
-- [API Documentation](docs/api/)
-- [Ví dụ](examples/)
+- [Hướng dẫn người dùng](docs/user_guide/index.md)
+- [Hướng dẫn nhà phát triển](docs/developer_guide/index.md)
+- [Tài liệu API](docs/api/index.md)
 
 ## Đóng góp
 
-Chúng tôi chào đón sự đóng góp từ cộng đồng! Vui lòng xem [CONTRIBUTING.md](CONTRIBUTING.md) để biết thêm chi tiết.
+Chúng tôi khuyến khích và hoan nghênh các đóng góp từ cộng đồng. Vui lòng đọc [hướng dẫn đóng góp](CONTRIBUTING.md) để biết chi tiết về quy trình gửi pull request.
 
 ## Giấy phép
 
-QuangTPS được phát hành dưới giấy phép MIT. Xem [LICENSE](LICENSE) để biết thêm chi tiết.
+QuangTPS được phát hành dưới [Giấy phép MIT](LICENSE).
+
+## Liên hệ
+
+Nếu bạn có câu hỏi hoặc góp ý, vui lòng tạo issue hoặc liên hệ qua email: example@example.com.

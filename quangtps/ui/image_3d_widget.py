@@ -14,7 +14,7 @@ import logging
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Union, Callable
 
-from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import (  # pylint: disable=no-name-in-module
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -27,8 +27,9 @@ from PyQt5.QtWidgets import (
     QFrame,
     QSizePolicy,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, pyqtSlot
-from PyQt5.QtGui import QIcon, QColor
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, pyqtSlot  # pylint: disable=no-name-in-module
+from PyQt5.QtGui import QIcon, QColor  # pylint: disable=no-name-in-module
+
 
 # Thử import VTK
 try:

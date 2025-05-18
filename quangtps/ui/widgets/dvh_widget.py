@@ -100,8 +100,8 @@ try:
     if PYQT_AVAILABLE:
         matplotlib.use("Qt5Agg")
 
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt5agg import (
         NavigationToolbar2QT as NavigationToolbar,
     )
@@ -405,7 +405,7 @@ class DVHWidget(QWidget):
 
             dvh_layout.addWidget(self.toolbar)
             dvh_layout.addWidget(self.canvas)
-            else:
+        else:
             # Hiển thị thông báo nếu matplotlib không khả dụng
             dvh_label = QLabel(
                 "Matplotlib không khả dụng. Không thể hiển thị biểu đồ DVH."
@@ -655,7 +655,7 @@ class DVHWidget(QWidget):
                     self.ptv_layout.addWidget(checkbox)
                 elif structure.type == StructureType.OAR:
                     self.oar_layout.addWidget(checkbox)
-        else:
+                else:
                     self.other_layout.addWidget(checkbox)
             else:
                 self.other_layout.addWidget(checkbox)
@@ -894,7 +894,7 @@ class DVHWidget(QWidget):
 
         if not self.current_plan_name or not self.selected_structures:
             # Xóa biểu đồ nếu không có dữ liệu
-        self.ax.clear()
+            self.ax.clear()
             self.canvas.draw()
             return
 

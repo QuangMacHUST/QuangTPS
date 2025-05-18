@@ -26,13 +26,17 @@ from quangtps.core.exceptions import DoseCalculationError, ValidationError
 from quangtps.imaging.image import Image
 from quangtps.planning.beam import Beam
 from quangtps.dose.beam_data_processor import BeamModel, BeamModelParameter
-from quangtps.dose.algorithms.base import DoseCalculationAlgorithm, DoseCalculationResult
+from quangtps.dose.algorithms.base import (
+    DoseCalculationAlgorithm,
+    DoseCalculationResult,
+)
 from quangtps.dose.physics.terma import calculate_terma_from_beam
 
 # Conditional imports for GPU acceleration
 try:
     import cupy as cp
     import cupyx.scipy.ndimage
+
     HAS_CUPY = True
     logger = logging.getLogger(__name__)
     logger.info("CuPy GPU acceleration available for Monte Carlo calculations")
@@ -43,9 +47,12 @@ except ImportError:
 
 try:
     from numba import cuda
+
     HAS_NUMBA = True
     if not HAS_CUPY:
-        logger.info("Numba CUDA GPU acceleration available for Monte Carlo calculations")
+        logger.info(
+            "Numba CUDA GPU acceleration available for Monte Carlo calculations"
+        )
 except ImportError:
     HAS_NUMBA = False
     if not HAS_CUPY:
@@ -53,6 +60,7 @@ except ImportError:
 
 try:
     import pyopencl as cl
+
     HAS_OPENCL = True
     if not (HAS_CUPY or HAS_NUMBA):
         logger.info("OpenCL GPU acceleration available for Monte Carlo calculations")
@@ -64,7 +72,9 @@ except ImportError:
 # Define global constant for GPU availability
 HAS_GPU = HAS_CUPY or HAS_NUMBA or HAS_OPENCL
 if not HAS_GPU:
-    logger.warning("No GPU acceleration available - falling back to CPU for Monte Carlo calculations")
+    logger.warning(
+        "No GPU acceleration available - falling back to CPU for Monte Carlo calculations"
+    )
 
 
 class MonteCarloAlgorithm(DoseCalculationAlgorithm):
@@ -93,43 +103,47 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         self.version = "3.0"
 
         # Default parameters
-        self.parameters.update({
-            'num_histories': 1000000,           # Number of particle histories to simulate
-            'grid_size': 0.3,                   # Calculation grid size in cm
-            'threads': max(1, multiprocessing.cpu_count() - 1),  # Number of parallel threads
-            'max_energy': 20.0,                 # Maximum energy in MeV
-            'particle_type': 'photon',          # Particle type: 'photon', 'electron', 'mixed'
-            'statistical_uncertainty': 2.0,     # Target statistical uncertainty in %
-            'voxel_scale_factor': 1.0,          # Scaling factor for voxel size
-            'electron_cutoff': 0.2,             # Energy cutoff for electron transport in MeV
-            'photon_cutoff': 0.01,              # Energy cutoff for photon transport in MeV
-            'use_variance_reduction': True,     # Whether to use variance reduction techniques
-            'seed': None,                       # Random seed (None for random initialization)
-            'save_phase_space': False,          # Whether to save phase space data
-            'phase_space_file': '',             # Path to phase space file
-            'density_threshold': 0.01,          # Density threshold for considering a voxel
-            'use_gpu': HAS_GPU,                 # Whether to use GPU acceleration
-            'gpu_batch_size': 10000,            # Batch size for GPU calculations
-            'use_importance_sampling': True,    # Whether to use importance sampling
-            'use_photon_splitting': True,       # Use photon splitting variance reduction
-            'split_factor': 5,                  # Number of split photons
-            'use_interaction_forcing': True,    # Use interaction forcing for variance reduction
-            'cross_section_table': 'NIST',      # Cross-section data source: 'NIST', 'ICRP', 'custom'
-            'report_progress': True,            # Whether to report calculation progress
-            'use_denoising': True,              # Enable dose denoising
-            'denoising_method': 'adaptive',     # Denoising method: 'gaussian', 'svd', 'adaptive', 'none'
-            'denoising_strength': 0.5,          # Strength of denoising (0-1)
-            'use_kernel_density_estimator': True,  # Use KDE scoring
-            'use_track_length_estimator': True,  # Use track length scoring
-            'enable_russian_roulette': True,    # Russian roulette variance reduction
-            'use_opencl_fallback': True,        # Use OpenCL if CUDA is not available
-            'use_multilevel_parallelism': True, # Nested parallelism
-            'multi_gpu': True,                  # Use multiple GPUs if available
-            'gpu_ids': [],                      # Specific GPU IDs to use (empty=all available)
-            'adaptive_histories': True,         # Adaptively adjust histories based on uncertainty
-            'use_fmm_acceleration': True,       # Use Fast Multipole Method for acceleration
-            'use_avx_vectorization': True       # Use AVX vectorization for CPU calculations
-        })
+        self.parameters.update(
+            {
+                "num_histories": 1000000,  # Number of particle histories to simulate
+                "grid_size": 0.3,  # Calculation grid size in cm
+                "threads": max(
+                    1, multiprocessing.cpu_count() - 1
+                ),  # Number of parallel threads
+                "max_energy": 20.0,  # Maximum energy in MeV
+                "particle_type": "photon",  # Particle type: 'photon', 'electron', 'mixed'
+                "statistical_uncertainty": 2.0,  # Target statistical uncertainty in %
+                "voxel_scale_factor": 1.0,  # Scaling factor for voxel size
+                "electron_cutoff": 0.2,  # Energy cutoff for electron transport in MeV
+                "photon_cutoff": 0.01,  # Energy cutoff for photon transport in MeV
+                "use_variance_reduction": True,  # Whether to use variance reduction techniques
+                "seed": None,  # Random seed (None for random initialization)
+                "save_phase_space": False,  # Whether to save phase space data
+                "phase_space_file": "",  # Path to phase space file
+                "density_threshold": 0.01,  # Density threshold for considering a voxel
+                "use_gpu": HAS_GPU,  # Whether to use GPU acceleration
+                "gpu_batch_size": 10000,  # Batch size for GPU calculations
+                "use_importance_sampling": True,  # Whether to use importance sampling
+                "use_photon_splitting": True,  # Use photon splitting variance reduction
+                "split_factor": 5,  # Number of split photons
+                "use_interaction_forcing": True,  # Use interaction forcing for variance reduction
+                "cross_section_table": "NIST",  # Cross-section data source: 'NIST', 'ICRP', 'custom'
+                "report_progress": True,  # Whether to report calculation progress
+                "use_denoising": True,  # Enable dose denoising
+                "denoising_method": "adaptive",  # Denoising method: 'gaussian', 'svd', 'adaptive', 'none'
+                "denoising_strength": 0.5,  # Strength of denoising (0-1)
+                "use_kernel_density_estimator": True,  # Use KDE scoring
+                "use_track_length_estimator": True,  # Use track length scoring
+                "enable_russian_roulette": True,  # Russian roulette variance reduction
+                "use_opencl_fallback": True,  # Use OpenCL if CUDA is not available
+                "use_multilevel_parallelism": True,  # Nested parallelism
+                "multi_gpu": True,  # Use multiple GPUs if available
+                "gpu_ids": [],  # Specific GPU IDs to use (empty=all available)
+                "adaptive_histories": True,  # Adaptively adjust histories based on uncertainty
+                "use_fmm_acceleration": True,  # Use Fast Multipole Method for acceleration
+                "use_avx_vectorization": True,  # Use AVX vectorization for CPU calculations
+            }
+        )
 
         self.beam_model = None
         self.interaction_data = None
@@ -147,7 +161,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         self._initialize_interaction_data()
 
         # Initialize GPU if available
-        if HAS_GPU and self.parameters['use_gpu']:
+        if HAS_GPU and self.parameters["use_gpu"]:
             self._initialize_gpu()
 
         logger.info(f"Initialized {self.name} algorithm version {self.version}")
@@ -156,7 +170,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         """Initialize GPU resources if available."""
         if not HAS_GPU:
             logger.warning("No GPU acceleration libraries available")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
             return
 
         try:
@@ -164,28 +178,30 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 self._initialize_cupy_gpus()
             elif HAS_NUMBA:
                 self._initialize_numba_gpus()
-            elif HAS_OPENCL and self.parameters['use_opencl_fallback']:
+            elif HAS_OPENCL and self.parameters["use_opencl_fallback"]:
                 self._initialize_opencl_gpus()
             else:
                 logger.warning("No supported GPU acceleration method available")
-                self.parameters['use_gpu'] = False
+                self.parameters["use_gpu"] = False
         except Exception as e:
             logger.error(f"Error initializing GPU: {e}")
             logger.warning("Falling back to CPU calculation.")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
 
     def _initialize_cupy_gpus(self):
         """Initialize CuPy GPU resources."""
-            num_gpus = cp.cuda.runtime.getDeviceCount()
+        num_gpus = cp.cuda.runtime.getDeviceCount()
 
         if num_gpus == 0:
-            logger.warning("No CUDA-compatible GPUs found with CuPy. Using CPU calculation.")
-            self.parameters['use_gpu'] = False
+            logger.warning(
+                "No CUDA-compatible GPUs found with CuPy. Using CPU calculation."
+            )
+            self.parameters["use_gpu"] = False
             return
 
         # Get list of GPU IDs to use
-        gpu_ids = self.parameters['gpu_ids']
-        if not gpu_ids and self.parameters['multi_gpu']:
+        gpu_ids = self.parameters["gpu_ids"]
+        if not gpu_ids and self.parameters["multi_gpu"]:
             # Use all available GPUs if no specific IDs provided
             gpu_ids = list(range(num_gpus))
         elif not gpu_ids:
@@ -197,7 +213,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
         if not gpu_ids:
             logger.warning("No valid GPU IDs provided. Using CPU calculation.")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
             return
 
         # Initialize each selected GPU
@@ -208,31 +224,41 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             with device:
                 # Get device info
                 mem_info = device.mem_info
-                    free_memory = mem_info[0]
-                    total_memory = mem_info[1]
-                device_name = cp.cuda.runtime.getDeviceProperties(gpu_id)['name'].decode('utf-8')
+                free_memory = mem_info[0]
+                total_memory = mem_info[1]
+                device_name = cp.cuda.runtime.getDeviceProperties(gpu_id)[
+                    "name"
+                ].decode("utf-8")
 
                 logger.info(f"Initialized GPU {gpu_id}: {device_name}")
-                logger.info(f"GPU {gpu_id} Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total")
+                logger.info(
+                    f"GPU {gpu_id} Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total"
+                )
 
-                    # Adjust batch size based on available memory
-                    suggested_batch_size = min(self.parameters['gpu_batch_size'],
-                                              int(free_memory * 0.4 / (4 * 256**3)))  # Rough estimate
+                # Adjust batch size based on available memory
+                suggested_batch_size = min(
+                    self.parameters["gpu_batch_size"],
+                    int(free_memory * 0.4 / (4 * 256**3)),
+                )  # Rough estimate
 
                 # Store GPU-specific information
-                self.gpu_contexts.append({
-                    'id': gpu_id,
-                    'name': device_name,
-                    'free_memory': free_memory,
-                    'total_memory': total_memory,
-                    'batch_size': max(1000, suggested_batch_size)
-                })
+                self.gpu_contexts.append(
+                    {
+                        "id": gpu_id,
+                        "name": device_name,
+                        "free_memory": free_memory,
+                        "total_memory": total_memory,
+                        "batch_size": max(1000, suggested_batch_size),
+                    }
+                )
 
         if self.devices:
-            logger.info(f"Using {len(self.devices)} GPU(s) for Monte Carlo calculations")
-            else:
+            logger.info(
+                f"Using {len(self.devices)} GPU(s) for Monte Carlo calculations"
+            )
+        else:
             logger.warning("No GPUs initialized. Using CPU calculation.")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
 
     def _initialize_numba_gpus(self):
         """Initialize Numba CUDA GPU resources."""
@@ -240,13 +266,15 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             num_gpus = len(cuda.gpus)
 
             if num_gpus == 0:
-                logger.warning("No CUDA-compatible GPUs found with Numba. Using CPU calculation.")
-                self.parameters['use_gpu'] = False
+                logger.warning(
+                    "No CUDA-compatible GPUs found with Numba. Using CPU calculation."
+                )
+                self.parameters["use_gpu"] = False
                 return
 
             # Get list of GPU IDs to use
-            gpu_ids = self.parameters['gpu_ids']
-            if not gpu_ids and self.parameters['multi_gpu']:
+            gpu_ids = self.parameters["gpu_ids"]
+            if not gpu_ids and self.parameters["multi_gpu"]:
                 # Use all available GPUs if no specific IDs provided
                 gpu_ids = list(range(num_gpus))
             elif not gpu_ids:
@@ -258,7 +286,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
             if not gpu_ids:
                 logger.warning("No valid GPU IDs provided. Using CPU calculation.")
-                self.parameters['use_gpu'] = False
+                self.parameters["use_gpu"] = False
                 return
 
             # Initialize each selected GPU
@@ -270,32 +298,40 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 context = device.get_current_context()
                 free_memory = context.get_memory_info().free
                 total_memory = context.get_memory_info().total
-                device_name = device.name.decode('utf-8')
+                device_name = device.name.decode("utf-8")
 
                 logger.info(f"Initialized GPU {gpu_id}: {device_name}")
-                logger.info(f"GPU {gpu_id} Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total")
+                logger.info(
+                    f"GPU {gpu_id} Memory: {free_memory / 1024**3:.2f} GB free / {total_memory / 1024**3:.2f} GB total"
+                )
 
                 # Adjust batch size based on available memory
-                suggested_batch_size = min(self.parameters['gpu_batch_size'],
-                                         int(free_memory * 0.4 / (4 * 256**3)))  # Rough estimate
+                suggested_batch_size = min(
+                    self.parameters["gpu_batch_size"],
+                    int(free_memory * 0.4 / (4 * 256**3)),
+                )  # Rough estimate
 
                 # Store GPU-specific information
-                self.gpu_contexts.append({
-                    'id': gpu_id,
-                    'name': device_name,
-                    'free_memory': free_memory,
-                    'total_memory': total_memory,
-                    'batch_size': max(1000, suggested_batch_size)
-                })
+                self.gpu_contexts.append(
+                    {
+                        "id": gpu_id,
+                        "name": device_name,
+                        "free_memory": free_memory,
+                        "total_memory": total_memory,
+                        "batch_size": max(1000, suggested_batch_size),
+                    }
+                )
 
             if self.devices:
-                logger.info(f"Using {len(self.devices)} GPU(s) for Monte Carlo calculations with Numba")
-        else:
+                logger.info(
+                    f"Using {len(self.devices)} GPU(s) for Monte Carlo calculations with Numba"
+                )
+            else:
                 logger.warning("No GPUs initialized with Numba. Using CPU calculation.")
-                self.parameters['use_gpu'] = False
+                self.parameters["use_gpu"] = False
         except Exception as e:
             logger.error(f"Error initializing Numba GPUs: {e}")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
 
     def _initialize_opencl_gpus(self):
         """Initialize OpenCL GPU resources."""
@@ -304,7 +340,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             platforms = cl.get_platforms()
             if not platforms:
                 logger.warning("No OpenCL platforms found. Using CPU calculation.")
-                self.parameters['use_gpu'] = False
+                self.parameters["use_gpu"] = False
                 return
 
             # Find all GPU devices across all platforms
@@ -318,12 +354,12 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
             if not all_gpu_devices:
                 logger.warning("No OpenCL GPU devices found. Using CPU calculation.")
-                self.parameters['use_gpu'] = False
+                self.parameters["use_gpu"] = False
                 return
 
             # Select GPU device(s) to use
-            gpu_ids = self.parameters['gpu_ids']
-            if not gpu_ids and self.parameters['multi_gpu']:
+            gpu_ids = self.parameters["gpu_ids"]
+            if not gpu_ids and self.parameters["multi_gpu"]:
                 # Use all available GPUs
                 selected_devices = all_gpu_devices
             elif not gpu_ids:
@@ -331,11 +367,15 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 selected_devices = [all_gpu_devices[0]]
             else:
                 # Use specific GPUs (if valid)
-                selected_devices = [all_gpu_devices[i] for i in gpu_ids if i < len(all_gpu_devices)]
+                selected_devices = [
+                    all_gpu_devices[i] for i in gpu_ids if i < len(all_gpu_devices)
+                ]
 
             if not selected_devices:
-                logger.warning("No valid OpenCL GPU devices selected. Using CPU calculation.")
-                self.parameters['use_gpu'] = False
+                logger.warning(
+                    "No valid OpenCL GPU devices selected. Using CPU calculation."
+                )
+                self.parameters["use_gpu"] = False
                 return
 
             # For OpenCL, we'll create a single context with all selected devices
@@ -352,22 +392,30 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 global_mem_size = device.global_mem_size
 
                 logger.info(f"Initialized OpenCL GPU {i}: {device_name}")
-                logger.info(f"OpenCL GPU {i} Memory: {global_mem_size / 1024**3:.2f} GB total")
+                logger.info(
+                    f"OpenCL GPU {i} Memory: {global_mem_size / 1024**3:.2f} GB total"
+                )
 
                 # Store GPU-specific information
-                self.gpu_contexts.append({
-                    'id': i,
-                    'name': device_name,
-                    'total_memory': global_mem_size,
-                    'free_memory': global_mem_size * 0.8,  # Estimate
-                    'batch_size': int(global_mem_size * 0.3 / (4 * 256**3))  # Rough estimate
-                })
+                self.gpu_contexts.append(
+                    {
+                        "id": i,
+                        "name": device_name,
+                        "total_memory": global_mem_size,
+                        "free_memory": global_mem_size * 0.8,  # Estimate
+                        "batch_size": int(
+                            global_mem_size * 0.3 / (4 * 256**3)
+                        ),  # Rough estimate
+                    }
+                )
 
-            logger.info(f"Using {len(selected_devices)} OpenCL GPU(s) for Monte Carlo calculations")
+            logger.info(
+                f"Using {len(selected_devices)} OpenCL GPU(s) for Monte Carlo calculations"
+            )
 
         except Exception as e:
             logger.error(f"Error initializing OpenCL GPUs: {e}")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
 
     def _apply_denoising(self, dose_grid, uncertainty_grid):
         """
@@ -385,15 +433,15 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         Tuple[np.ndarray, np.ndarray]
             Denoised dose grid and updated uncertainty grid
         """
-        method = self.parameters['denoising_method']
-        strength = self.parameters['denoising_strength']
+        method = self.parameters["denoising_method"]
+        strength = self.parameters["denoising_strength"]
 
-        if method == 'none' or not self.parameters['use_denoising']:
+        if method == "none" or not self.parameters["use_denoising"]:
             return dose_grid, uncertainty_grid
 
         logger.info(f"Applying {method} denoising with strength {strength}")
 
-        if method == 'gaussian':
+        if method == "gaussian":
             # Simple Gaussian smoothing
             sigma = 0.5 + strength * 1.5  # Scale sigma based on strength
             denoised_grid = gaussian_filter(dose_grid, sigma=sigma)
@@ -404,7 +452,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
             return denoised_grid, denoised_uncertainty
 
-        elif method == 'svd':
+        elif method == "svd":
             # SVD-based denoising
             try:
                 # Reshape 3D dose grid to 2D matrix for SVD
@@ -436,7 +484,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 logger.warning(f"SVD denoising failed: {e}. Falling back to gaussian.")
                 return self._apply_denoising(dose_grid, uncertainty_grid)
 
-        elif method == 'adaptive':
+        elif method == "adaptive":
             # Adaptive denoising based on local uncertainty
             # Apply stronger denoising where uncertainty is high
 
@@ -458,7 +506,9 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
             # For simplicity, we'll use multiple Gaussian filters with different sigmas
             sigma_levels = [0.3, 0.6, 0.9, 1.2, 1.5 * strength]
-            filtered_versions = [gaussian_filter(dose_grid, sigma=s) for s in sigma_levels]
+            filtered_versions = [
+                gaussian_filter(dose_grid, sigma=s) for s in sigma_levels
+            ]
 
             # Interpolate between filtered versions based on local uncertainty
             for i in range(len(sigma_levels)):
@@ -467,9 +517,11 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 elif i == len(sigma_levels) - 1:
                     mask = normalized_uncertainty > 0.8
                 else:
-                    lower = 0.2 + (i-1) * 0.2
+                    lower = 0.2 + (i - 1) * 0.2
                     upper = 0.2 + i * 0.2
-                    mask = (normalized_uncertainty > lower) & (normalized_uncertainty <= upper)
+                    mask = (normalized_uncertainty > lower) & (
+                        normalized_uncertainty <= upper
+                    )
 
                 denoised_grid[mask] = filtered_versions[i][mask]
 
@@ -515,9 +567,9 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 logger.warning(f"Unknown parameter: {key}")
 
         # Special handling for GPU parameter
-        if 'use_gpu' in kwargs and kwargs['use_gpu'] and not HAS_GPU:
+        if "use_gpu" in kwargs and kwargs["use_gpu"] and not HAS_GPU:
             logger.warning("GPU acceleration requested but not available. Using CPU.")
-            self.parameters['use_gpu'] = False
+            self.parameters["use_gpu"] = False
 
     def get_parameter(self, name: str) -> Any:
         """
@@ -555,7 +607,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             If inputs are invalid
         """
         # Check if CT image is valid
-        if ct_image is None or not hasattr(ct_image, 'data') or ct_image.data is None:
+        if ct_image is None or not hasattr(ct_image, "data") or ct_image.data is None:
             raise ValidationError("Invalid CT image")
 
         # Check if beam is valid
@@ -567,11 +619,11 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             raise ValidationError("Beam model not set")
 
         # Check if CT image has valid spacing
-        if not hasattr(ct_image, 'spacing') or len(ct_image.spacing) != 3:
+        if not hasattr(ct_image, "spacing") or len(ct_image.spacing) != 3:
             raise ValidationError("CT image must have valid spacing (x, y, z)")
 
         # Check energy
-        if not hasattr(beam, 'energy'):
+        if not hasattr(beam, "energy"):
             raise ValidationError("Beam must have energy")
 
         # Add more validation as needed
@@ -601,164 +653,164 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             Parameter information
         """
         return {
-            'num_histories': {
-                'description': 'Number of particle histories to simulate',
-                'default': 1000000,
-                'type': 'int',
-                'range': [10000, 100000000]
+            "num_histories": {
+                "description": "Number of particle histories to simulate",
+                "default": 1000000,
+                "type": "int",
+                "range": [10000, 100000000],
             },
-            'grid_size': {
-                'description': 'Calculation grid size in cm',
-                'default': 0.3,
-                'type': 'float',
-                'range': [0.1, 1.0]
+            "grid_size": {
+                "description": "Calculation grid size in cm",
+                "default": 0.3,
+                "type": "float",
+                "range": [0.1, 1.0],
             },
-            'threads': {
-                'description': 'Number of parallel threads',
-                'default': max(1, multiprocessing.cpu_count() - 1),
-                'type': 'int',
-                'range': [1, 64]
+            "threads": {
+                "description": "Number of parallel threads",
+                "default": max(1, multiprocessing.cpu_count() - 1),
+                "type": "int",
+                "range": [1, 64],
             },
-            'statistical_uncertainty': {
-                'description': 'Target statistical uncertainty in %',
-                'default': 2.0,
-                'type': 'float',
-                'range': [0.5, 10.0]
+            "statistical_uncertainty": {
+                "description": "Target statistical uncertainty in %",
+                "default": 2.0,
+                "type": "float",
+                "range": [0.5, 10.0],
             },
-            'electron_cutoff': {
-                'description': 'Energy cutoff for electron transport in MeV',
-                'default': 0.2,
-                'type': 'float',
-                'range': [0.05, 1.0]
+            "electron_cutoff": {
+                "description": "Energy cutoff for electron transport in MeV",
+                "default": 0.2,
+                "type": "float",
+                "range": [0.05, 1.0],
             },
-            'photon_cutoff': {
-                'description': 'Energy cutoff for photon transport in MeV',
-                'default': 0.01,
-                'type': 'float',
-                'range': [0.001, 0.1]
+            "photon_cutoff": {
+                "description": "Energy cutoff for photon transport in MeV",
+                "default": 0.01,
+                "type": "float",
+                "range": [0.001, 0.1],
             },
-            'use_variance_reduction': {
-                'description': 'Whether to use variance reduction techniques',
-                'default': True,
-                'type': 'bool'
+            "use_variance_reduction": {
+                "description": "Whether to use variance reduction techniques",
+                "default": True,
+                "type": "bool",
             },
-            'particle_type': {
-                'description': 'Type of particles to simulate',
-                'default': 'photon',
-                'type': 'str',
-                'options': ['photon', 'electron', 'mixed']
+            "particle_type": {
+                "description": "Type of particles to simulate",
+                "default": "photon",
+                "type": "str",
+                "options": ["photon", "electron", "mixed"],
             },
-            'use_gpu': {
-                'description': 'Whether to use GPU acceleration',
-                'default': HAS_GPU,
-                'type': 'bool'
+            "use_gpu": {
+                "description": "Whether to use GPU acceleration",
+                "default": HAS_GPU,
+                "type": "bool",
             },
-            'gpu_batch_size': {
-                'description': 'Batch size for GPU calculations',
-                'default': 10000,
-                'type': 'int',
-                'range': [1000, 1000000]
+            "gpu_batch_size": {
+                "description": "Batch size for GPU calculations",
+                "default": 10000,
+                "type": "int",
+                "range": [1000, 1000000],
             },
-            'use_importance_sampling': {
-                'description': 'Whether to use importance sampling',
-                'default': True,
-                'type': 'bool'
+            "use_importance_sampling": {
+                "description": "Whether to use importance sampling",
+                "default": True,
+                "type": "bool",
             },
-            'use_photon_splitting': {
-                'description': 'Use photon splitting variance reduction',
-                'default': True,
-                'type': 'bool'
+            "use_photon_splitting": {
+                "description": "Use photon splitting variance reduction",
+                "default": True,
+                "type": "bool",
             },
-            'split_factor': {
-                'description': 'Number of split photons',
-                'default': 5,
-                'type': 'int',
-                'range': [1, 10]
+            "split_factor": {
+                "description": "Number of split photons",
+                "default": 5,
+                "type": "int",
+                "range": [1, 10],
             },
-            'use_interaction_forcing': {
-                'description': 'Use interaction forcing for variance reduction',
-                'default': True,
-                'type': 'bool'
+            "use_interaction_forcing": {
+                "description": "Use interaction forcing for variance reduction",
+                "default": True,
+                "type": "bool",
             },
-            'cross_section_table': {
-                'description': 'Cross-section data source',
-                'default': 'NIST',
-                'type': 'str',
-                'options': ['NIST', 'ICRP', 'custom']
+            "cross_section_table": {
+                "description": "Cross-section data source",
+                "default": "NIST",
+                "type": "str",
+                "options": ["NIST", "ICRP", "custom"],
             },
-            'report_progress': {
-                'description': 'Whether to report calculation progress',
-                'default': True,
-                'type': 'bool'
+            "report_progress": {
+                "description": "Whether to report calculation progress",
+                "default": True,
+                "type": "bool",
             },
-            'use_denoising': {
-                'description': 'Whether to apply dose denoising',
-                'default': True,
-                'type': 'bool'
+            "use_denoising": {
+                "description": "Whether to apply dose denoising",
+                "default": True,
+                "type": "bool",
             },
-            'denoising_method': {
-                'description': 'Denoising method',
-                'default': 'adaptive',
-                'type': 'str',
-                'options': ['gaussian', 'svd', 'adaptive', 'none']
+            "denoising_method": {
+                "description": "Denoising method",
+                "default": "adaptive",
+                "type": "str",
+                "options": ["gaussian", "svd", "adaptive", "none"],
             },
-            'denoising_strength': {
-                'description': 'Strength of denoising',
-                'default': 0.5,
-                'type': 'float',
-                'range': [0.0, 1.0]
+            "denoising_strength": {
+                "description": "Strength of denoising",
+                "default": 0.5,
+                "type": "float",
+                "range": [0.0, 1.0],
             },
-            'use_kernel_density_estimator': {
-                'description': 'Whether to use kernel density estimator',
-                'default': True,
-                'type': 'bool'
+            "use_kernel_density_estimator": {
+                "description": "Whether to use kernel density estimator",
+                "default": True,
+                "type": "bool",
             },
-            'use_track_length_estimator': {
-                'description': 'Whether to use track length estimator',
-                'default': True,
-                'type': 'bool'
+            "use_track_length_estimator": {
+                "description": "Whether to use track length estimator",
+                "default": True,
+                "type": "bool",
             },
-            'enable_russian_roulette': {
-                'description': 'Whether to enable Russian roulette variance reduction',
-                'default': True,
-                'type': 'bool'
+            "enable_russian_roulette": {
+                "description": "Whether to enable Russian roulette variance reduction",
+                "default": True,
+                "type": "bool",
             },
-            'use_opencl_fallback': {
-                'description': 'Whether to use OpenCL as a fallback',
-                'default': True,
-                'type': 'bool'
+            "use_opencl_fallback": {
+                "description": "Whether to use OpenCL as a fallback",
+                "default": True,
+                "type": "bool",
             },
-            'use_multilevel_parallelism': {
-                'description': 'Whether to use multilevel parallelism',
-                'default': True,
-                'type': 'bool'
+            "use_multilevel_parallelism": {
+                "description": "Whether to use multilevel parallelism",
+                "default": True,
+                "type": "bool",
             },
-            'multi_gpu': {
-                'description': 'Whether to use multiple GPUs',
-                'default': True,
-                'type': 'bool'
+            "multi_gpu": {
+                "description": "Whether to use multiple GPUs",
+                "default": True,
+                "type": "bool",
             },
-            'gpu_ids': {
-                'description': 'Specific GPU IDs to use',
-                'default': [],
-                'type': 'list',
-                'range': [0, 63]
+            "gpu_ids": {
+                "description": "Specific GPU IDs to use",
+                "default": [],
+                "type": "list",
+                "range": [0, 63],
             },
-            'adaptive_histories': {
-                'description': 'Whether to adaptively adjust histories based on uncertainty',
-                'default': True,
-                'type': 'bool'
+            "adaptive_histories": {
+                "description": "Whether to adaptively adjust histories based on uncertainty",
+                "default": True,
+                "type": "bool",
             },
-            'use_fmm_acceleration': {
-                'description': 'Whether to use Fast Multipole Method for acceleration',
-                'default': True,
-                'type': 'bool'
+            "use_fmm_acceleration": {
+                "description": "Whether to use Fast Multipole Method for acceleration",
+                "default": True,
+                "type": "bool",
             },
-            'use_avx_vectorization': {
-                'description': 'Whether to use AVX vectorization for CPU calculations',
-                'default': True,
-                'type': 'bool'
-            }
+            "use_avx_vectorization": {
+                "description": "Whether to use AVX vectorization for CPU calculations",
+                "default": True,
+                "type": "bool",
+            },
         }
 
     def calculate(self, ct_image: Image, beam: Beam) -> DoseCalculationResult:
@@ -791,14 +843,16 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             self.validate_inputs(ct_image, beam)
 
             # Get calculation parameters
-            num_histories = self.get_parameter('num_histories')
-            energy_cutoff = self.get_parameter('energy_cutoff')
-            statistical_uncertainty = self.get_parameter('statistical_uncertainty')
-            threads = self.get_parameter('threads')
-            use_gpu = self.get_parameter('use_gpu') and HAS_GPU
+            num_histories = self.get_parameter("num_histories")
+            energy_cutoff = self.get_parameter("energy_cutoff")
+            statistical_uncertainty = self.get_parameter("statistical_uncertainty")
+            threads = self.get_parameter("threads")
+            use_gpu = self.get_parameter("use_gpu") and HAS_GPU
 
             logger.info(f"Starting Monte Carlo calculation for beam {beam.name}")
-            logger.info(f"Parameters: histories={num_histories}, threads={threads}, uncertainty={statistical_uncertainty}%")
+            logger.info(
+                f"Parameters: histories={num_histories}, threads={threads}, uncertainty={statistical_uncertainty}%"
+            )
 
             # Convert CT to materials and densities
             materials, densities = self._convert_ct_to_materials(ct_image)
@@ -813,7 +867,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             field_size = beam.field_size
             gantry_angle = beam.gantry_angle
             collimator_angle = beam.collimator_angle
-            couch_angle = beam.couch_angle if hasattr(beam, 'couch_angle') else 0.0
+            couch_angle = beam.couch_angle if hasattr(beam, "couch_angle") else 0.0
 
             # Get energy spectrum
             if self.beam_model.has_parameter("energy_spectrum"):
@@ -840,7 +894,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 collimator_angle=collimator_angle,
                 couch_angle=couch_angle,
                 energies=energies,
-                energy_probabilities=probabilities
+                energy_probabilities=probabilities,
             )
 
             # Validate results
@@ -848,14 +902,16 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
             # Create result object
             calculation_time = time.time() - start_time
-            logger.info(f"Monte Carlo calculation completed in {calculation_time:.2f} seconds")
+            logger.info(
+                f"Monte Carlo calculation completed in {calculation_time:.2f} seconds"
+            )
 
             dose_image = Image(
                 data=dose_grid,
                 spacing=ct_image.spacing,
                 origin=ct_image.origin,
                 direction=ct_image.direction,
-                modality="RTDOSE"
+                modality="RTDOSE",
             )
 
             result = DoseCalculationResult(
@@ -863,10 +919,10 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 algorithm_name=self.name,
                 calculation_time=calculation_time,
                 additional_data={
-                    'beam_name': beam.name,
-                    'uncertainty': uncertainty_grid,
-                    'parameters': self.get_parameters()
-                }
+                    "beam_name": beam.name,
+                    "uncertainty": uncertainty_grid,
+                    "parameters": self.get_parameters(),
+                },
             )
 
             return result
@@ -881,21 +937,28 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             # Split calculation into chunks for parallelization
             try:
                 num_histories = self.parameters["num_histories"]
-                chunk_size = min(num_histories // self.parameters["threads"],
-                             self.parameters["max_chunk_size"])
+                chunk_size = min(
+                    num_histories // self.parameters["threads"],
+                    self.parameters["max_chunk_size"],
+                )
                 num_chunks = int(np.ceil(num_histories / chunk_size))
 
-                logger.info(f"Splitting calculation into {num_chunks} chunks of "
-                            f"{chunk_size} histories each")
+                logger.info(
+                    f"Splitting calculation into {num_chunks} chunks of "
+                    f"{chunk_size} histories each"
+                )
 
                 # Process chunks in parallel
-                with ProcessPoolExecutor(max_workers=self.parameters["threads"]) as executor:
+                with ProcessPoolExecutor(
+                    max_workers=self.parameters["threads"]
+                ) as executor:
                     futures = []
 
                     for i in range(num_chunks):
                         # Calculate chunk size (last chunk may be smaller)
                         actual_chunk_size = min(
-                            chunk_size, num_histories - i * chunk_size)
+                            chunk_size, num_histories - i * chunk_size
+                        )
 
                         # Submit chunk for processing
                         future = executor.submit(
@@ -914,7 +977,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                             couch_angle,
                             energies,
                             probabilities,
-                            i  # Seed offset
+                            i,  # Seed offset
                         )
                         futures.append(future)
 
@@ -937,17 +1000,20 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 # Calculate final statistical uncertainty
                 valid_dose = dose_grid > 0
                 if np.any(valid_dose):
-                    mean_uncertainty = np.mean(
-                        uncertainty_grid[valid_dose] / dose_grid[valid_dose]) * 100
+                    mean_uncertainty = (
+                        np.mean(uncertainty_grid[valid_dose] / dose_grid[valid_dose])
+                        * 100
+                    )
                     logger.info(
-                        f"Mean statistical uncertainty: {mean_uncertainty:.2f}%")
+                        f"Mean statistical uncertainty: {mean_uncertainty:.2f}%"
+                    )
 
                 # Create dose image
                 dose_image = Image(
                     data=dose_grid,
                     spacing=ct_image.spacing,
                     origin=ct_image.origin,
-                    direction=ct_image.direction
+                    direction=ct_image.direction,
                 )
 
                 # Normalize to isocenter
@@ -956,7 +1022,8 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 # Calculate total time
                 elapsed_time = time.time() - start_time
                 logger.info(
-                    f"Monte Carlo calculation completed in {elapsed_time:.2f} seconds")
+                    f"Monte Carlo calculation completed in {elapsed_time:.2f} seconds"
+                )
 
                 return dose_image
 
@@ -982,11 +1049,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         logger.info(f"Creating generic beam model for energy: {energy}")
 
         # Create basic beam model
-        model = BeamModel(
-            name=f"Generic {energy}",
-            energy=energy,
-            beam_type="PHOTON"
-        )
+        model = BeamModel(name=f"Generic {energy}", energy=energy, beam_type="PHOTON")
 
         # Add energy spectrum
         energy_mean = float(energy.replace("MV", "").replace("X", ""))
@@ -998,7 +1061,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             dimensions=["energy"],
             units=["MeV"],
             dimension_values=[energies],
-            interpolation_method="linear"
+            interpolation_method="linear",
         )
         model.add_parameter(spectrum_parameter)
 
@@ -1013,14 +1076,14 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             dimensions=["y", "x"],
             units=["cm", "cm"],
             dimension_values=[y_pos, x_pos],
-            interpolation_method="linear"
+            interpolation_method="linear",
         )
         model.add_parameter(fluence_parameter)
 
         # Add angular distribution (for particle direction sampling)
         # This is a simplified model - real implementation would include more details
         angles = np.linspace(0, 5, 11)  # Angles from 0 to 5 degrees
-        distribution = np.exp(-angles**2 / 2)  # Approximately Gaussian
+        distribution = np.exp(-(angles**2) / 2)  # Approximately Gaussian
 
         # Normalize
         distribution = distribution / np.sum(distribution)
@@ -1031,13 +1094,15 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             dimensions=["angle"],
             units=["degree"],
             dimension_values=[angles],
-            interpolation_method="linear"
+            interpolation_method="linear",
         )
         model.add_parameter(angular_parameter)
 
         return model
 
-    def _create_default_spectrum(self, nominal_energy: float) -> Tuple[np.ndarray, np.ndarray]:
+    def _create_default_spectrum(
+        self, nominal_energy: float
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Create a default energy spectrum for a given nominal energy.
 
@@ -1059,22 +1124,25 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
         # Create probabilities (simplified model)
         # Shape is roughly based on typical photon spectra
-        probabilities = (energies / nominal_energy) * \
-            np.exp(-(energies / nominal_energy)**2 * 3)
+        probabilities = (energies / nominal_energy) * np.exp(
+            -((energies / nominal_energy) ** 2) * 3
+        )
 
         # Add a peak at higher energy (bremsstrahlung peak)
         peak_pos = 0.8 * nominal_energy
         peak_idx = np.argmin(np.abs(energies - peak_pos))
-        probabilities[peak_idx:] += 0.5 * \
-            np.exp(-((energies[peak_idx:] - peak_pos) /
-                   (0.1 * nominal_energy))**2)
+        probabilities[peak_idx:] += 0.5 * np.exp(
+            -(((energies[peak_idx:] - peak_pos) / (0.1 * nominal_energy)) ** 2)
+        )
 
         # Normalize
         probabilities /= np.sum(probabilities)
 
         return energies, probabilities
 
-    def _convert_ct_to_materials(self, ct_image: Image) -> Tuple[np.ndarray, np.ndarray]:
+    def _convert_ct_to_materials(
+        self, ct_image: Image
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Convert CT image to material indices and densities.
 
@@ -1098,8 +1166,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         material_indices = np.zeros_like(hu_values, dtype=np.int32)
 
         # Set material based on HU value
-        material_indices[(hu_values > -500) &
-                         (hu_values <= 100)] = 1  # Soft tissue
+        material_indices[(hu_values > -500) & (hu_values <= 100)] = 1  # Soft tissue
         material_indices[hu_values > 100] = 2  # Bone
 
         # Calculate density relative to water
@@ -1119,22 +1186,24 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
         return material_indices, densities
 
-    def _simulate_particles(self,
-                            num_histories: int,
-                            grid_shape: Tuple[int, int, int],
-                            grid_spacing: Tuple[float, float, float],
-                            grid_origin: Tuple[float, float, float],
-                            materials: np.ndarray,
-                            densities: np.ndarray,
-                            source_position: np.ndarray,
-                            isocenter: np.ndarray,
-                            field_size: Tuple[float, float],
-                            gantry_angle: float,
-                            collimator_angle: float,
-                            couch_angle: float,
-                            energies: np.ndarray,
-                            energy_probabilities: np.ndarray,
-                            seed_offset: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+    def _simulate_particles(
+        self,
+        num_histories: int,
+        grid_shape: Tuple[int, int, int],
+        grid_spacing: Tuple[float, float, float],
+        grid_origin: Tuple[float, float, float],
+        materials: np.ndarray,
+        densities: np.ndarray,
+        source_position: np.ndarray,
+        isocenter: np.ndarray,
+        field_size: Tuple[float, float],
+        gantry_angle: float,
+        collimator_angle: float,
+        couch_angle: float,
+        energies: np.ndarray,
+        energy_probabilities: np.ndarray,
+        seed_offset: int = 0,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Simulate particle transport through the patient geometry.
 
@@ -1193,40 +1262,52 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         couch_rad = np.radians(couch_angle)
 
         # Rotation matrices
-        R_gantry = np.array([
-            [np.cos(gantry_rad), 0, -np.sin(gantry_rad)],
-            [0, 1, 0],
-            [np.sin(gantry_rad), 0, np.cos(gantry_rad)]
-        ])
+        R_gantry = np.array(
+            [
+                [np.cos(gantry_rad), 0, -np.sin(gantry_rad)],
+                [0, 1, 0],
+                [np.sin(gantry_rad), 0, np.cos(gantry_rad)],
+            ]
+        )
 
-        R_collimator = np.array([
-            [np.cos(collimator_rad), -np.sin(collimator_rad), 0],
-            [np.sin(collimator_rad), np.cos(collimator_rad), 0],
-            [0, 0, 1]
-        ])
+        R_collimator = np.array(
+            [
+                [np.cos(collimator_rad), -np.sin(collimator_rad), 0],
+                [np.sin(collimator_rad), np.cos(collimator_rad), 0],
+                [0, 0, 1],
+            ]
+        )
 
-        R_couch = np.array([
-            [np.cos(couch_rad), 0, np.sin(couch_rad)],
-            [0, 1, 0],
-            [-np.sin(couch_rad), 0, np.cos(couch_rad)]
-        ])
+        R_couch = np.array(
+            [
+                [np.cos(couch_rad), 0, np.sin(couch_rad)],
+                [0, 1, 0],
+                [-np.sin(couch_rad), 0, np.cos(couch_rad)],
+            ]
+        )
 
         # Combined rotation matrix (order: gantry → collimator → couch)
         R = R_couch @ R_gantry @ R_collimator
 
         # Set up random number generator for this thread
-        seed_value = self.parameters['seed'] + seed_offset if self.parameters['seed'] is not None else None
+        seed_value = (
+            self.parameters["seed"] + seed_offset
+            if self.parameters["seed"] is not None
+            else None
+        )
         # Use numpy's Generator instead of RandomState (which is deprecated)
         local_rng = np.random.default_rng(seed_value)
 
         # Variance reduction parameters
-        use_importance_sampling = self.parameters['use_importance_sampling']
-        use_photon_splitting = self.parameters['use_photon_splitting']
-        use_woodcock_tracking = self.parameters.get('use_woodcock_tracking', True)
-        split_factor = self.parameters['split_factor']
-        use_russian_roulette = self.parameters['enable_russian_roulette']
-        use_track_length_estimator = self.parameters['use_track_length_estimator']
-        russian_roulette_threshold = 0.1  # Energy threshold as fraction of initial energy
+        use_importance_sampling = self.parameters["use_importance_sampling"]
+        use_photon_splitting = self.parameters["use_photon_splitting"]
+        use_woodcock_tracking = self.parameters.get("use_woodcock_tracking", True)
+        split_factor = self.parameters["split_factor"]
+        use_russian_roulette = self.parameters["enable_russian_roulette"]
+        use_track_length_estimator = self.parameters["use_track_length_estimator"]
+        russian_roulette_threshold = (
+            0.1  # Energy threshold as fraction of initial energy
+        )
 
         # Find maximum density for Woodcock tracking
         max_density = np.max(densities)
@@ -1243,15 +1324,21 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 max_cross_sections[energy] = max_cross_section
 
         # Calculate maximum cross section function for interpolation
-        energy_points = np.sort(list(max_cross_sections.keys())) if use_woodcock_tracking else None
-        cross_section_points = np.array([max_cross_sections[e] for e in energy_points]) if use_woodcock_tracking else None
+        energy_points = (
+            np.sort(list(max_cross_sections.keys())) if use_woodcock_tracking else None
+        )
+        cross_section_points = (
+            np.array([max_cross_sections[e] for e in energy_points])
+            if use_woodcock_tracking
+            else None
+        )
         if use_woodcock_tracking:
             max_cross_section_func = interp1d(
                 energy_points,
                 cross_section_points,
-                kind='linear',
+                kind="linear",
                 bounds_error=False,
-                fill_value=(cross_section_points[0], cross_section_points[-1])
+                fill_value=(cross_section_points[0], cross_section_points[-1]),
             )
 
         # Start simulation
@@ -1260,12 +1347,17 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
         for history_idx in range(num_histories):
             # Report progress
-            if history_idx % report_interval == 0 and self.parameters['report_progress']:
+            if (
+                history_idx % report_interval == 0
+                and self.parameters["report_progress"]
+            ):
                 progress = (history_idx / num_histories) * 100
                 elapsed = time.time() - start_time
                 eta = (elapsed / (history_idx + 1)) * (num_histories - history_idx - 1)
-                logger.info(f"Progress: {progress:.1f}% ({history_idx}/{num_histories}), "
-                           f"Elapsed: {elapsed:.1f}s, ETA: {eta:.1f}s")
+                logger.info(
+                    f"Progress: {progress:.1f}% ({history_idx}/{num_histories}), "
+                    f"Elapsed: {elapsed:.1f}s, ETA: {eta:.1f}s"
+                )
 
             # Sample initial energy from spectrum
             energy_idx = local_rng.choice(len(energies), p=energy_probabilities)
@@ -1313,29 +1405,44 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
                     # Calculate perpendicular directions
                     if abs(current_direction[2]) < 0.9:
-                        perp1 = np.array([current_direction[1], -current_direction[0], 0])
+                        perp1 = np.array(
+                            [current_direction[1], -current_direction[0], 0]
+                        )
                     else:
-                        perp1 = np.array([1, 0, -current_direction[0]/current_direction[2]])
+                        perp1 = np.array(
+                            [1, 0, -current_direction[0] / current_direction[2]]
+                        )
 
                     perp1 = perp1 / np.linalg.norm(perp1)
                     perp2 = np.cross(current_direction, perp1)
 
                     # Apply small rotation
-                    rot_dir = (perp1 * np.cos(theta) + perp2 * np.sin(theta)) * np.sin(phi)
+                    rot_dir = (perp1 * np.cos(theta) + perp2 * np.sin(theta)) * np.sin(
+                        phi
+                    )
                     current_direction = current_direction * np.cos(phi) + rot_dir
-                    current_direction = current_direction / np.linalg.norm(current_direction)
+                    current_direction = current_direction / np.linalg.norm(
+                        current_direction
+                    )
 
                 # Transport particle until it escapes or is absorbed
-                while current_energy > self.parameters['photon_cutoff']:
+                while current_energy > self.parameters["photon_cutoff"]:
                     # Find distance to boundary
-                    t_boundary = self._distance_to_boundary(current_position, current_direction,
-                                                      grid_origin,
-                                                      [grid_shape[0] * grid_spacing[0],
-                                                       grid_shape[1] * grid_spacing[1],
-                                                       grid_shape[2] * grid_spacing[2]])
+                    t_boundary = self._distance_to_boundary(
+                        current_position,
+                        current_direction,
+                        grid_origin,
+                        [
+                            grid_shape[0] * grid_spacing[0],
+                            grid_shape[1] * grid_spacing[1],
+                            grid_shape[2] * grid_spacing[2],
+                        ],
+                    )
 
                     # Convert position to voxel indices
-                    voxel_indices = self._position_to_voxel(current_position, grid_origin, grid_spacing)
+                    voxel_indices = self._position_to_voxel(
+                        current_position, grid_origin, grid_spacing
+                    )
 
                     # Check if we're inside the grid
                     if not self._is_inside_grid(voxel_indices, grid_shape):
@@ -1347,7 +1454,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                     density = densities[tuple(voxel_indices)]
 
                     # Skip void regions or very low density
-                    if density < self.parameters['density_threshold']:
+                    if density < self.parameters["density_threshold"]:
                         # Move to boundary
                         current_position += current_direction * (t_boundary + 1e-5)
                         continue
@@ -1366,7 +1473,9 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                             current_position += current_direction * t_collision
 
                             # Get new voxel indices
-                            voxel_indices = self._position_to_voxel(current_position, grid_origin, grid_spacing)
+                            voxel_indices = self._position_to_voxel(
+                                current_position, grid_origin, grid_spacing
+                            )
 
                             # Check if we're still inside
                             if not self._is_inside_grid(voxel_indices, grid_shape):
@@ -1377,16 +1486,29 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                             density = densities[tuple(voxel_indices)]
 
                             # Get actual cross section
-                            actual_xsec = self._get_total_cross_section(current_energy, material_idx)
+                            actual_xsec = self._get_total_cross_section(
+                                current_energy, material_idx
+                            )
 
                             # Fictitious interaction check
                             if local_rng.random() < (actual_xsec / max_xsec):
                                 # Real interaction - determine type
-                                self._process_photon_interaction(current_position, current_direction, current_energy,
-                                                              current_weight, material_idx, density, dose_grid,
-                                                              dose_squared_grid, particle_counts, grid_origin,
-                                                              grid_spacing, grid_shape, local_rng,
-                                                              use_track_length_estimator)
+                                self._process_photon_interaction(
+                                    current_position,
+                                    current_direction,
+                                    current_energy,
+                                    current_weight,
+                                    material_idx,
+                                    density,
+                                    dose_grid,
+                                    dose_squared_grid,
+                                    particle_counts,
+                                    grid_origin,
+                                    grid_spacing,
+                                    grid_shape,
+                                    local_rng,
+                                    use_track_length_estimator,
+                                )
                                 # Photon is absorbed in this simplified model
                                 break
                             # Else: fictitious interaction, continue
@@ -1396,7 +1518,9 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                     else:
                         # Traditional tracking
                         # Get mean free path
-                        mfp = self._calculate_mean_free_path(current_energy, material_idx, density)
+                        mfp = self._calculate_mean_free_path(
+                            current_energy, material_idx, density
+                        )
 
                         # Sample distance to collision
                         t_collision = -mfp * np.log(local_rng.random())
@@ -1408,13 +1532,23 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
                             # Score energy using track-length estimator if enabled
                             if use_track_length_estimator:
-                                self._score_track_length(current_position - current_direction * t_collision,
-                                                      current_position, current_energy, current_weight,
-                                                      dose_grid, dose_squared_grid, grid_origin, grid_spacing,
-                                                      grid_shape, density)
+                                self._score_track_length(
+                                    current_position - current_direction * t_collision,
+                                    current_position,
+                                    current_energy,
+                                    current_weight,
+                                    dose_grid,
+                                    dose_squared_grid,
+                                    grid_origin,
+                                    grid_spacing,
+                                    grid_shape,
+                                    density,
+                                )
 
                             # Get new voxel indices
-                            voxel_indices = self._position_to_voxel(current_position, grid_origin, grid_spacing)
+                            voxel_indices = self._position_to_voxel(
+                                current_position, grid_origin, grid_spacing
+                            )
 
                             # Check if we're still inside
                             if not self._is_inside_grid(voxel_indices, grid_shape):
@@ -1422,25 +1556,46 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
                             # Process interaction and update particle state
                             # This handles different interaction types and energy deposition
-                            self._process_photon_interaction(current_position, current_direction, current_energy,
-                                                          current_weight, material_idx, density, dose_grid,
-                                                          dose_squared_grid, particle_counts, grid_origin,
-                                                          grid_spacing, grid_shape, local_rng,
-                                                          use_track_length_estimator)
+                            self._process_photon_interaction(
+                                current_position,
+                                current_direction,
+                                current_energy,
+                                current_weight,
+                                material_idx,
+                                density,
+                                dose_grid,
+                                dose_squared_grid,
+                                particle_counts,
+                                grid_origin,
+                                grid_spacing,
+                                grid_shape,
+                                local_rng,
+                                use_track_length_estimator,
+                            )
                             break  # Photon is absorbed in this simplified model
-        else:
+                        else:
                             # Move to boundary
                             current_position += current_direction * (t_boundary + 1e-5)
 
                             # Score energy using track-length estimator if enabled
                             if use_track_length_estimator:
-                                self._score_track_length(current_position - current_direction * t_boundary,
-                                                      current_position, current_energy, current_weight,
-                                                      dose_grid, dose_squared_grid, grid_origin, grid_spacing,
-                                                      grid_shape, density)
+                                self._score_track_length(
+                                    current_position - current_direction * t_boundary,
+                                    current_position,
+                                    current_energy,
+                                    current_weight,
+                                    dose_grid,
+                                    dose_squared_grid,
+                                    grid_origin,
+                                    grid_spacing,
+                                    grid_shape,
+                                    density,
+                                )
 
                     # Apply Russian roulette for low-energy particles to improve efficiency
-                    if use_russian_roulette and current_energy < (russian_roulette_threshold * initial_energy):
+                    if use_russian_roulette and current_energy < (
+                        russian_roulette_threshold * initial_energy
+                    ):
                         survival_prob = 0.2
                         if local_rng.random() > survival_prob:
                             # Particle terminated by Russian roulette
@@ -1454,32 +1609,57 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         valid_indices = particle_counts > 1
         if np.any(valid_indices):
             # Calculate standard error of the mean
-            variance = (dose_squared_grid[valid_indices] -
-                       (dose_grid[valid_indices]**2 / particle_counts[valid_indices])) / (particle_counts[valid_indices] - 1)
-            uncertainty_grid[valid_indices] = np.sqrt(variance) / dose_grid[valid_indices] * 100.0  # as percentage
+            variance = (
+                dose_squared_grid[valid_indices]
+                - (dose_grid[valid_indices] ** 2 / particle_counts[valid_indices])
+            ) / (particle_counts[valid_indices] - 1)
+            uncertainty_grid[valid_indices] = (
+                np.sqrt(variance) / dose_grid[valid_indices] * 100.0
+            )  # as percentage
 
         # Apply noise reduction if enabled
-        if self.parameters['use_denoising']:
-            dose_grid, uncertainty_grid = self._apply_denoising(dose_grid, uncertainty_grid)
+        if self.parameters["use_denoising"]:
+            dose_grid, uncertainty_grid = self._apply_denoising(
+                dose_grid, uncertainty_grid
+            )
 
         # Log simulation statistics
         simulation_time = time.time() - start_time
         particles_per_second = num_histories / simulation_time
 
-        logger.info(f"Simulation completed: {num_histories} histories in {simulation_time:.2f}s "
-                   f"({particles_per_second:.1f} particles/s)")
-        logger.info(f"Maximum dose: {np.max(dose_grid):.6f}, Non-zero voxels: {np.count_nonzero(dose_grid)}")
-        logger.info(f"Mean uncertainty in non-zero regions: {np.mean(uncertainty_grid[dose_grid > 0]):.2f}%")
+        logger.info(
+            f"Simulation completed: {num_histories} histories in {simulation_time:.2f}s "
+            f"({particles_per_second:.1f} particles/s)"
+        )
+        logger.info(
+            f"Maximum dose: {np.max(dose_grid):.6f}, Non-zero voxels: {np.count_nonzero(dose_grid)}"
+        )
+        logger.info(
+            f"Mean uncertainty in non-zero regions: {np.mean(uncertainty_grid[dose_grid > 0]):.2f}%"
+        )
 
         # Normalize dose to Gy for a standard prescription
         # This is a placeholder normalization - actual clinical systems use more complex calibration
         # Typically normalized so maximum or mean dose to a target structure equals a prescription value
-        dose_grid = dose_grid / np.max(dose_grid) if np.max(dose_grid) > 0 else dose_grid
+        dose_grid = (
+            dose_grid / np.max(dose_grid) if np.max(dose_grid) > 0 else dose_grid
+        )
 
         return dose_grid, uncertainty_grid
 
-    def _score_track_length(self, start_pos, end_pos, energy, weight, dose_grid, dose_squared_grid,
-                        grid_origin, grid_spacing, grid_shape, density):
+    def _score_track_length(
+        self,
+        start_pos,
+        end_pos,
+        energy,
+        weight,
+        dose_grid,
+        dose_squared_grid,
+        grid_origin,
+        grid_spacing,
+        grid_shape,
+        density,
+    ):
         """
         Score dose using the track-length estimator method.
 
@@ -1536,18 +1716,35 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
             # Calculate energy deposition
             # For photons, this is based on energy absorption coefficient
-            muen_over_mu = 0.03  # Approximate energy absorption ratio for water in MeV range
-            dose_contribution = weight * energy * track_length * density * muen_over_mu / num_samples
+            muen_over_mu = (
+                0.03  # Approximate energy absorption ratio for water in MeV range
+            )
+            dose_contribution = (
+                weight * energy * track_length * density * muen_over_mu / num_samples
+            )
 
             # Score dose
             voxel_indices = tuple(voxel_indices)
             dose_grid[voxel_indices] += dose_contribution
             dose_squared_grid[voxel_indices] += dose_contribution**2
 
-    def _process_photon_interaction(self, position, direction, energy, weight,
-                                 material_idx, density, dose_grid, dose_squared_grid,
-                                 particle_counts, grid_origin, grid_spacing, grid_shape,
-                                 rng, use_track_length_estimator):
+    def _process_photon_interaction(
+        self,
+        position,
+        direction,
+        energy,
+        weight,
+        material_idx,
+        density,
+        dose_grid,
+        dose_squared_grid,
+        particle_counts,
+        grid_origin,
+        grid_spacing,
+        grid_shape,
+        rng,
+        use_track_length_estimator,
+    ):
         """
         Process photon interaction and update particle state.
 
@@ -1593,14 +1790,14 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         interaction_type = self._sample_interaction_type(energy, material_idx)
 
         # Process based on interaction type
-        if interaction_type == 'photoelectric':
+        if interaction_type == "photoelectric":
             # Photoelectric effect: photon is absorbed, energy deposited locally
             dose_contribution = weight * energy
             dose_grid[voxel_indices] += dose_contribution
             dose_squared_grid[voxel_indices] += dose_contribution**2
             particle_counts[voxel_indices] += 1
 
-        elif interaction_type == 'compton':
+        elif interaction_type == "compton":
             # Compton scattering: photon scatters with energy loss
             # Simplified model: deposit a fraction of energy locally
 
@@ -1628,7 +1825,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             # For this simplified model, we'll terminate the history
             # In a real implementation, create a new photon and continue tracking
 
-        elif interaction_type == 'pair_production':
+        elif interaction_type == "pair_production":
             # Pair production: photon creates electron-positron pair
             # Simplified model: deposit all energy locally minus 1.022 MeV
 
@@ -1651,7 +1848,9 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         else:  # rayleigh or coherent scattering
             # Rayleigh (coherent) scattering: photon direction changes but energy remains the same
             # Sample scattering angle (simplified)
-            cos_theta = 2 * rng.random() - 1  # Simplification, real distribution is more forward-peaked
+            cos_theta = (
+                2 * rng.random() - 1
+            )  # Simplification, real distribution is more forward-peaked
             phi = 2 * np.pi * rng.random()
 
             # Update direction
@@ -1686,7 +1885,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
                 continue
 
             # Klein-Nishina probability (simplified)
-            kn_factor = (1 / (1 + alpha * (1 - cos_theta)))**2
+            kn_factor = (1 / (1 + alpha * (1 - cos_theta))) ** 2
             kn_factor *= (1 + cos_theta**2) / 2
 
             if rng.random() < kn_factor:
@@ -1717,7 +1916,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         if abs(z_axis[2]) < 0.9:
             x_axis = np.array([z_axis[1], -z_axis[0], 0])
         else:
-            x_axis = np.array([1, 0, -z_axis[0]/z_axis[2]])
+            x_axis = np.array([1, 0, -z_axis[0] / z_axis[2]])
 
         x_axis = x_axis / np.linalg.norm(x_axis)
         y_axis = np.cross(z_axis, x_axis)
@@ -1728,9 +1927,11 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         sin_phi = np.sin(phi)
 
         # Rotate direction
-        new_direction = (sin_theta * cos_phi * x_axis +
-                        sin_theta * sin_phi * y_axis +
-                        cos_theta * z_axis)
+        new_direction = (
+            sin_theta * cos_phi * x_axis
+            + sin_theta * sin_phi * y_axis
+            + cos_theta * z_axis
+        )
 
         return new_direction
 
@@ -1771,9 +1972,11 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         bool
             True if inside, False otherwise
         """
-        return (0 <= indices[0] < grid_shape[0] and
-                0 <= indices[1] < grid_shape[1] and
-                0 <= indices[2] < grid_shape[2])
+        return (
+            0 <= indices[0] < grid_shape[0]
+            and 0 <= indices[1] < grid_shape[1]
+            and 0 <= indices[2] < grid_shape[2]
+        )
 
     def _distance_to_boundary(self, position, direction, grid_origin, grid_size):
         """
@@ -1796,7 +1999,7 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             Distance to boundary
         """
         # Calculate distances to each boundary plane
-        t_min = float('inf')
+        t_min = float("inf")
 
         for i in range(3):
             if abs(direction[i]) < 1e-6:
@@ -1836,11 +2039,11 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         # For now, use a basic model based on energy
 
         # Find closest energy in the grid
-        energies = self.interaction_data['energy_grid']
+        energies = self.interaction_data["energy_grid"]
         closest_idx = np.argmin(np.abs(energies - energy))
 
         # Get total cross-section for this material
-        return self.interaction_data['photon']['total'][closest_idx, material_idx]
+        return self.interaction_data["photon"]["total"][closest_idx, material_idx]
 
     def _get_total_cross_section(self, energy, material_idx):
         """
@@ -1878,14 +2081,20 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             Type of interaction: 'photoelectric', 'compton', 'pair_production', or 'rayleigh'
         """
         # Get cross-sections for each interaction type at this energy
-        energies = self.interaction_data['energy_grid']
+        energies = self.interaction_data["energy_grid"]
         closest_idx = np.argmin(np.abs(energies - energy))
 
         # Get cross-sections for different interaction types
-        photoelectric = self.interaction_data['photon']['photoelectric'][closest_idx, material_idx]
-        compton = self.interaction_data['photon']['compton'][closest_idx, material_idx]
-        pair_production = self.interaction_data['photon']['pair_production'][closest_idx, material_idx]
-        rayleigh = self.interaction_data['photon']['rayleigh'][closest_idx, material_idx]
+        photoelectric = self.interaction_data["photon"]["photoelectric"][
+            closest_idx, material_idx
+        ]
+        compton = self.interaction_data["photon"]["compton"][closest_idx, material_idx]
+        pair_production = self.interaction_data["photon"]["pair_production"][
+            closest_idx, material_idx
+        ]
+        rayleigh = self.interaction_data["photon"]["rayleigh"][
+            closest_idx, material_idx
+        ]
 
         # Calculate total cross-section and probabilities
         total = photoelectric + compton + pair_production + rayleigh
@@ -1896,17 +2105,17 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
         # Determine interaction type based on relative probabilities
         cumulative_prob = photoelectric / total
         if r < cumulative_prob:
-            return 'photoelectric'
+            return "photoelectric"
 
         cumulative_prob += compton / total
         if r < cumulative_prob:
-            return 'compton'
+            return "compton"
 
         cumulative_prob += pair_production / total
         if r < cumulative_prob:
-            return 'pair_production'
+            return "pair_production"
 
-        return 'rayleigh'  # Default to Rayleigh scattering
+        return "rayleigh"  # Default to Rayleigh scattering
 
     def _calculate_mean_free_path(self, energy, material_idx, density):
         """
@@ -1965,9 +2174,9 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
         # Ensure indices are within bounds
         shape = dose_image.data.shape
-        voxel_indices = np.clip(voxel_indices,
-                               [0, 0, 0],
-                               [shape[0]-1, shape[1]-1, shape[2]-1])
+        voxel_indices = np.clip(
+            voxel_indices, [0, 0, 0], [shape[0] - 1, shape[1] - 1, shape[2] - 1]
+        )
 
         # Get dose at isocenter
         iso_dose = dose_image.data[tuple(voxel_indices)]

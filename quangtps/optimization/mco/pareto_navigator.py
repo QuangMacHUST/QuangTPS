@@ -681,7 +681,7 @@ class ParetoNavigator:
             Giải pháp phù hợp nhất hoặc giải pháp nội suy, None nếu không thể tìm hoặc nội suy
         """
         # Đầu tiên tìm giải pháp gần nhất
-        solution = self.find_solution_by_weights(weights)
+        solution = self.pareto_surface.find_solution_by_weights(weights)
 
         if solution:
             return solution

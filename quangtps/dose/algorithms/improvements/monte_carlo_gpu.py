@@ -113,6 +113,78 @@ class MonteCarloGPUResult(DoseCalculationResult):
         """
         return self.uncertainty_grid
 
+    def mean_uncertainty(self, mask=None) -> float:
+        """
+        Tính độ không đảm bảo trung bình trong vùng mask (nếu được cung cấp).
+
+        Parameters
+        ----------
+        mask : np.ndarray, optional
+            Mask nhị phân để lọc các voxel cần tính toán.
+
+        Returns
+        -------
+        float
+            Độ không đảm bảo trung bình.
+        """
+        if self.uncertainty_grid is None:
+            return 0.0
+
+        if mask is not None:
+            # Sử dụng np.array() để đảm bảo truy cập an toàn
+            unc_array = np.array(self.uncertainty_grid)
+            mask_array = np.array(mask, dtype=bool)
+
+            if unc_array.shape != mask_array.shape:
+                logger.warning(
+                    f"Kích thước mask ({mask_array.shape}) không khớp với uncertainty grid ({unc_array.shape})"
+                )
+                return 0.0
+
+            # Lấy các giá trị trong mask
+            values = unc_array[mask_array]
+            if len(values) == 0:
+                return 0.0
+            return float(np.mean(values))
+        else:
+            return float(np.mean(self.uncertainty_grid))
+
+    def max_uncertainty(self, mask=None) -> float:
+        """
+        Tính độ không đảm bảo tối đa trong vùng mask (nếu được cung cấp).
+
+        Parameters
+        ----------
+        mask : np.ndarray, optional
+            Mask nhị phân để lọc các voxel cần tính toán.
+
+        Returns
+        -------
+        float
+            Độ không đảm bảo tối đa.
+        """
+        if self.uncertainty_grid is None:
+            return 0.0
+
+        if mask is not None:
+            # Sử dụng np.array() để đảm bảo truy cập an toàn
+            unc_array = np.array(self.uncertainty_grid)
+            mask_array = np.array(mask, dtype=bool)
+
+            if unc_array.shape != mask_array.shape:
+                logger.warning(
+                    f"Kích thước mask ({mask_array.shape}) không khớp với uncertainty grid ({unc_array.shape})"
+                )
+                return 0.0
+
+            # Lấy các giá trị trong mask
+            values = unc_array[mask_array]
+            if len(values) == 0:
+                return 0.0
+            return float(np.max(values))
+        else:
+            return float(np.max(self.uncertainty_grid))
+
     def get_simulation_stats(self) -> Dict[str, Any]:
         """
         Trả về thống kê mô phỏng Monte Carlo.
@@ -129,6 +201,8 @@ class MonteCarloGPUResult(DoseCalculationResult):
             "gpu_utilization": self.gpu_utilization,
             "energy_deposited_fraction": self.energy_deposited_fraction,
             "convergence_metrics": self.convergence_metrics,
+            "mean_uncertainty": self.mean_uncertainty(),
+            "max_uncertainty": self.max_uncertainty(),
         }
 
 

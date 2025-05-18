@@ -17,7 +17,7 @@ import webbrowser
 from datetime import datetime
 
 try:
-from PyQt5.QtWidgets import (
+    from PyQt5.QtWidgets import (
         QWidget,
         QVBoxLayout,
         QHBoxLayout,
@@ -743,9 +743,9 @@ class PlanQualityWidget(QWidget):
                     # Đánh giá lại
                     self._evaluate_current_protocol()
         except ImportError:
-                QMessageBox.warning(
+            QMessageBox.warning(
                 self, "Cảnh báo", "Chức năng quản lý protocol chưa được cài đặt."
-                )
+            )
 
     def _on_export_report(self, format: str):
         """Xử lý sự kiện khi nút Export được nhấn."""
@@ -783,7 +783,7 @@ class PlanQualityWidget(QWidget):
         """Xử lý sự kiện khi một mục tiêu được chọn trong bảng."""
         selected_rows = self.goals_table.selectedItems()
         if not selected_rows:
-                return
+            return
 
         # Lấy chỉ số dòng được chọn
         row = selected_rows[0].row()
@@ -1443,14 +1443,14 @@ class PlanQualityWidget(QWidget):
                             filename.replace(".pdf", ".html"), "w", encoding="utf-8"
                         ) as f:
                             f.write(html)
-            else:
+                else:
                     with open(filename, "w", encoding="utf-8") as f:
                         f.write(html)
 
                 self.status_bar.setText(f"Đã xuất báo cáo so sánh tới {filename}")
-            QMessageBox.information(
+                QMessageBox.information(
                     self, "Xuất báo cáo", f"Báo cáo so sánh đã được xuất tới {filename}"
-            )
+                )
             except Exception as e:
                 logger.error(f"Lỗi khi xuất báo cáo: {e}")
                 QMessageBox.critical(self, "Lỗi", f"Không thể xuất báo cáo: {str(e)}")

@@ -14,6 +14,7 @@ import logging
 import numpy as np
 from typing import Dict, List, Optional, Any, Tuple, Union
 from datetime import datetime, timedelta
+import time
 
 import SimpleITK as sitk
 import joblib
@@ -35,6 +36,9 @@ class DeformationModelType(enum.Enum):
     DIFFEOMORPHIC = "diffeomorphic"
     BIOMECHANICAL = "biomechanical"
     DEEP_LEARNING = "deep_learning"
+    ELASTIC = "elastic"
+    VISCOUS = "viscous"
+    GROWTH = "growth"
     CUSTOM = "custom"
 
 
@@ -395,20 +399,25 @@ class DeformableAnatomyPredictor:
         self, patient=None, reference_image=None, model_type=DeformationModelType.LINEAR
     ):
         """
-        Khởi tạo bộ dự đoán thay đổi giải phẫu.
+        Khởi tạo đối tượng dự đoán thay đổi giải phẫu.
 
         Parameters
         ----------
         patient : Patient, optional
-            Đối tượng bệnh nhân cần dự đoán.
+            Bệnh nhân có dữ liệu giải phẫu cần dự đoán thay đổi.
         reference_image : Image, optional
-            Hình ảnh tham chiếu.
+            Hình ảnh cơ sở dùng làm tham chiếu cho dự đoán.
         model_type : DeformationModelType, optional
-            Loại mô hình biến dạng để sử dụng.
+            Loại mô hình biến dạng sử dụng cho dự đoán.
         """
         self.patient = patient
         self.reference_image = reference_image
         self.model_type = model_type
+
+        # Khởi tạo reference_date
+        self.reference_date = datetime.now() if datetime else None
+
+        # Các thuộc tính khác
         self.deformation_model = DeformationModel(model_type)
         self.image_series = {}  # Từ điển lưu trữ ảnh theo ngày
         self.training_images = []  # Danh sách các cặp ảnh huấn luyện
@@ -731,3 +740,338 @@ class DeformableAnatomyPredictor:
         if success and self.deformation_model.vector_field is not None:
             self.vector_analyzer.set_vector_field(self.deformation_model.vector_field)
         return success
+
+    def predict_multiple_timepoints(
+        self, initial_images=None, initial_structures=None, time_points=None, **kwargs
+    ):
+        """
+        Dự đoán thay đổi giải phẫu tại nhiều thời điểm.
+
+        Parameters
+        ----------
+        initial_images : List[Image] hoặc Dict[str, Image], optional
+            Danh sách hoặc từ điển hình ảnh ban đầu dùng làm tham chiếu.
+            Nếu là None, sẽ sử dụng hình ảnh đã thiết lập trong predictor.
+        initial_structures : List[Structure] hoặc Dict[str, Structure], optional
+            Danh sách hoặc từ điển cấu trúc ban đầu dùng làm tham chiếu.
+            Nếu là None, sẽ sử dụng cấu trúc đã thiết lập trong predictor.
+        time_points : List[float], List[str], List[datetime], optional
+            Danh sách các thời điểm cần dự đoán (ngày, thời gian, v.v.).
+            Nếu là None, sẽ sử dụng các thời điểm mặc định (1, 3, 5, 7 ngày).
+        **kwargs
+            Các tham số bổ sung cho việc dự đoán.
+
+        Returns
+        -------
+        Dict[str, Dict]
+            Từ điển kết quả dự đoán với từng thời điểm là một khóa, mỗi giá trị là
+            một từ điển chứa hình ảnh, cấu trúc và thông tin đánh giá dự đoán.
+        """
+        results = {}
+        summary = {
+            "total": 0,
+            "success": 0,
+            "failure": 0,
+            "volume_change_rates": {},
+            "position_change_rates": {},
+            "metrics": {},
+        }
+
+        try:
+            # Chuẩn bị dữ liệu đầu vào
+            if initial_images is None:
+                initial_images = self.reference_image
+
+            if initial_structures is None:
+                initial_structures = {}
+
+            # Chuẩn bị danh sách thời điểm nếu không được cung cấp
+            if time_points is None:
+                time_points = [1, 3, 5, 7]  # Mặc định: dự đoán 1, 3, 5, 7 ngày
+
+            # Chuẩn hóa dữ liệu đầu vào
+            image_data = self._normalize_input(initial_images)
+            structure_data = self._normalize_input(initial_structures)
+
+            logger.info(f"Bắt đầu dự đoán cho {len(time_points)} thời điểm")
+
+            # Thực hiện dự đoán cho từng thời điểm
+            for tp in time_points:
+                try:
+                    summary["total"] += 1
+
+                    # Chuẩn hóa thời điểm (chuyển đổi từ datetime, chuỗi, v.v. sang số ngày)
+                    time_factor = self._normalize_time_point(tp)
+                    tp_id = str(tp)
+
+                    # Dự đoán hình ảnh tại thời điểm
+                    logger.debug(
+                        f"Dự đoán hình ảnh tại thời điểm {tp} (time_factor={time_factor})"
+                    )
+                    predicted_image = self.predict_image_at_date(
+                        target_date=time_factor, **kwargs
+                    )
+
+                    # Dự đoán cấu trúc tại thời điểm
+                    logger.debug(f"Dự đoán cấu trúc tại thời điểm {tp}")
+                    predicted_structures = self.predict_structure_changes(
+                        structures=structure_data, target_date=time_factor, **kwargs
+                    )
+
+                    # Tạo kết quả dự đoán
+                    prediction_result = {
+                        "time_point": tp,
+                        "time_factor": time_factor,
+                        "image": predicted_image,
+                        "structures": predicted_structures,
+                        "quality": 1.0,  # Mặc định chất lượng dự đoán
+                        "metadata": {"predicted_at": time.time(), "parameters": kwargs},
+                    }
+
+                    # Đánh giá dự đoán nếu có validator
+                    if hasattr(self, "validator") and self.validator is not None:
+                        try:
+                            is_valid, confidence = self.validator.validate_prediction(
+                                prediction_result, reference=None
+                            )
+                            prediction_result["is_valid"] = is_valid
+                            prediction_result["confidence"] = confidence
+                            prediction_result["quality"] = confidence
+                            logger.debug(
+                                f"Đánh giá dự đoán tại {tp}: valid={is_valid}, confidence={confidence}"
+                            )
+                        except Exception as ve:
+                            logger.error(
+                                f"Lỗi khi đánh giá dự đoán tại {tp}: {str(ve)}"
+                            )
+
+                    # Thêm vào kết quả
+                    results[tp_id] = prediction_result
+                    summary["success"] += 1
+
+                    # Tính tốc độ thay đổi thể tích
+                    self._calculate_volume_change_rates(
+                        structure_data,
+                        predicted_structures,
+                        time_factor,
+                        summary["volume_change_rates"],
+                    )
+
+                except Exception as e:
+                    summary["failure"] += 1
+                    error_msg = f"Lỗi khi dự đoán cho thời điểm {tp}: {str(e)}"
+                    logger.error(error_msg)
+                    results[str(tp)] = {"error": error_msg}
+
+            # Tạo thông tin tổng hợp
+            results["summary"] = summary
+
+            logger.info(
+                f"Hoàn tất dự đoán: thành công {summary['success']}/{summary['total']}"
+            )
+            return results
+
+        except Exception as e:
+            error_msg = f"Lỗi khi dự đoán nhiều thời điểm: {str(e)}"
+            logger.error(error_msg)
+            return {"error": error_msg, "summary": summary}
+
+    def _normalize_input(self, input_data):
+        """
+        Chuẩn hóa dữ liệu đầu vào thành từ điển.
+
+        Parameters
+        ----------
+        input_data : Any
+            Dữ liệu đầu vào cần chuẩn hóa.
+
+        Returns
+        -------
+        Dict
+            Dữ liệu đã chuẩn hóa thành từ điển.
+        """
+        if input_data is None:
+            return {}
+
+        if isinstance(input_data, dict):
+            return input_data
+
+        if isinstance(input_data, list):
+            # Tạo từ điển với khóa là chỉ số
+            return {str(i): item for i, item in enumerate(input_data)}
+
+        # Trường hợp đơn lẻ
+        return {"default": input_data}
+
+    def _normalize_time_point(self, time_point):
+        """
+        Chuẩn hóa thời điểm thành số ngày.
+
+        Parameters
+        ----------
+        time_point : Any
+            Thời điểm cần chuẩn hóa.
+
+        Returns
+        -------
+        float
+            Số ngày tương đối.
+        """
+        # Nếu đã là số, giả định là số ngày
+        if isinstance(time_point, (int, float)):
+            return float(time_point)
+
+        # Nếu là chuỗi, thử phân tích
+        if isinstance(time_point, str):
+            # Kiểm tra định dạng "dayX" hoặc "day_X"
+            if time_point.startswith("day") or time_point.startswith("day_"):
+                try:
+                    day_part = time_point.replace("day", "").replace("_", "").strip()
+                    return float(day_part)
+                except:
+                    pass
+
+            # Thử chuyển đổi từ chuỗi datetime
+            try:
+                import dateutil.parser
+
+                dt = dateutil.parser.parse(time_point)
+                return self._days_between(self.reference_date, dt)
+            except:
+                pass
+
+        # Nếu là datetime, tính số ngày
+        if hasattr(time_point, "date"):  # Kiểm tra nếu là datetime
+            return self._days_between(self.reference_date, time_point)
+
+        # Mặc định
+        logger.warning(
+            f"Không thể chuẩn hóa thời điểm '{time_point}', sử dụng giá trị mặc định 1.0"
+        )
+        return 1.0
+
+    def _days_between(self, date1, date2):
+        """
+        Tính số ngày giữa hai ngày.
+
+        Parameters
+        ----------
+        date1 : datetime
+            Ngày thứ nhất.
+        date2 : datetime
+            Ngày thứ hai.
+
+        Returns
+        -------
+        float
+            Số ngày giữa hai ngày.
+        """
+        if date1 is None:
+            import datetime
+
+            date1 = datetime.datetime.now()
+
+        if date2 is None:
+            return 0
+
+        # Chuyển đổi về datetime nếu là date
+        if hasattr(date1, "date") and not hasattr(date1, "hour"):
+            import datetime
+
+            date1 = datetime.datetime.combine(date1, datetime.time())
+
+        if hasattr(date2, "date") and not hasattr(date2, "hour"):
+            import datetime
+
+            date2 = datetime.datetime.combine(date2, datetime.time())
+
+        # Tính số ngày
+        delta = date2 - date1
+        return delta.total_seconds() / (24 * 3600)
+
+    def _calculate_volume_change_rates(
+        self, original_structures, predicted_structures, days, rates_dict
+    ):
+        """
+        Tính toán tốc độ thay đổi thể tích của các cấu trúc.
+
+        Parameters
+        ----------
+        original_structures : Dict[str, Structure]
+            Từ điển cấu trúc gốc.
+        predicted_structures : Dict[str, Structure]
+            Từ điển cấu trúc dự đoán.
+        days : float
+            Số ngày giữa cấu trúc gốc và dự đoán.
+        rates_dict : Dict
+            Từ điển lưu trữ kết quả tốc độ thay đổi.
+        """
+        if days <= 0:
+            return
+
+        for struct_id, original in original_structures.items():
+            if struct_id in predicted_structures:
+                try:
+                    original_vol = self._get_structure_volume(original)
+                    predicted_vol = self._get_structure_volume(
+                        predicted_structures[struct_id]
+                    )
+
+                    if original_vol > 0:
+                        # Tính phần trăm thay đổi
+                        pct_change = (predicted_vol - original_vol) / original_vol * 100
+
+                        # Tính tốc độ thay đổi mỗi ngày
+                        daily_rate = pct_change / days
+
+                        # Lưu kết quả
+                        if struct_id not in rates_dict:
+                            rates_dict[struct_id] = []
+
+                        rates_dict[struct_id].append(
+                            {
+                                "days": days,
+                                "original_volume": original_vol,
+                                "predicted_volume": predicted_vol,
+                                "percent_change": pct_change,
+                                "daily_rate": daily_rate,
+                            }
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Lỗi khi tính tốc độ thay đổi thể tích cho cấu trúc {struct_id}: {str(e)}"
+                    )
+
+    def _get_structure_volume(self, structure):
+        """
+        Lấy thể tích của cấu trúc.
+
+        Parameters
+        ----------
+        structure : Structure
+            Cấu trúc cần tính thể tích.
+
+        Returns
+        -------
+        float
+            Thể tích của cấu trúc.
+        """
+        if structure is None:
+            return 0.0
+
+        # Thử gọi phương thức get_volume nếu có
+        if hasattr(structure, "get_volume"):
+            try:
+                return structure.get_volume()
+            except:
+                pass
+
+        # Thử truy cập thuộc tính volume nếu có
+        if hasattr(structure, "volume"):
+            try:
+                return structure.volume
+            except:
+                pass
+
+        # Không tìm được thể tích
+        return 0.0

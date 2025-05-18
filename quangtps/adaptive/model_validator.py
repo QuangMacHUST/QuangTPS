@@ -420,6 +420,189 @@ class ModelValidator:
         """
         return self.validation_history
 
+    def validate_predictions(
+        self, predictions, ground_truth=None, metrics=None
+    ) -> Dict[str, Any]:
+        """
+        Đánh giá nhiều dự đoán cùng lúc.
+
+        Parameters
+        ----------
+        predictions : Dict hoặc List
+            Dự đoán cần đánh giá. Có thể là danh sách các dự đoán hoặc từ điển
+            ánh xạ id dự đoán (ví dụ: thời điểm dự đoán) với dữ liệu dự đoán.
+        ground_truth : Dict hoặc List, optional
+            Dữ liệu thực tế tương ứng để so sánh. Nếu None, chỉ thực hiện
+            kiểm tra tính hợp lệ nội tại của dự đoán.
+        metrics : List[ValidationMetric], optional
+            Danh sách các metric dùng để đánh giá. Nếu None, sẽ sử dụng
+            metric mặc định của validator.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Kết quả đánh giá, bao gồm kết quả cho từng dự đoán và thống kê tổng hợp.
+        """
+        results = {}
+        overall_metrics = {}
+        valid_count = 0
+        total_count = 0
+
+        try:
+            # Chuyển đổi dự đoán thành từ điển nếu là danh sách
+            pred_dict = predictions
+            if isinstance(predictions, list):
+                pred_dict = {i: pred for i, pred in enumerate(predictions)}
+
+            # Chuyển đổi ground_truth thành từ điển nếu là danh sách
+            gt_dict = ground_truth
+            if ground_truth is not None and isinstance(ground_truth, list):
+                gt_dict = {i: gt for i, gt in enumerate(ground_truth)}
+
+            # Đánh giá từng dự đoán
+            for pred_id, prediction in pred_dict.items():
+                total_count += 1
+
+                # Lấy ground truth tương ứng nếu có
+                reference = None
+                if gt_dict and pred_id in gt_dict:
+                    reference = gt_dict[pred_id]
+
+                # Thực hiện đánh giá
+                is_valid, confidence = self.validate_prediction(
+                    prediction, reference, metrics
+                )
+
+                # Tạo kết quả đánh giá
+                validation_result = ValidationResult()
+                validation_result.set_valid(is_valid, confidence)
+
+                # Tính toán các metric cụ thể nếu có reference
+                if reference is not None:
+                    for metric in metrics or self.default_metrics:
+                        try:
+                            metric_value = self.calculate_metric(
+                                metric, prediction, reference
+                            )
+                            validation_result.add_metric(
+                                metric.name if hasattr(metric, "name") else str(metric),
+                                metric_value,
+                            )
+
+                            # Thêm vào overall metrics
+                            if metric not in overall_metrics:
+                                overall_metrics[str(metric)] = []
+                            overall_metrics[str(metric)].append(metric_value)
+                        except Exception as e:
+                            logger.error(
+                                f"Lỗi khi tính metric {metric} cho dự đoán {pred_id}: {str(e)}"
+                            )
+
+                # Thêm vào kết quả
+                results[str(pred_id)] = validation_result.get_summary()
+                if is_valid:
+                    valid_count += 1
+
+            # Tính toán thống kê tổng hợp
+            summary = {
+                "total_count": total_count,
+                "valid_count": valid_count,
+                "valid_percentage": (valid_count / total_count * 100)
+                if total_count > 0
+                else 0,
+            }
+
+            # Thêm thống kê metric
+            for metric_name, values in overall_metrics.items():
+                if values:
+                    summary[f"{metric_name}_mean"] = np.mean(values)
+                    summary[f"{metric_name}_std"] = np.std(values)
+                    summary[f"{metric_name}_min"] = np.min(values)
+                    summary[f"{metric_name}_max"] = np.max(values)
+
+            # Thêm thống kê vào kết quả
+            results["summary"] = summary
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Lỗi khi đánh giá nhiều dự đoán: {str(e)}")
+            return {
+                "error": str(e),
+                "total_count": total_count,
+                "valid_count": valid_count,
+            }
+
+    def _calculate_position_error(self, predicted_mask, reference_mask):
+        """
+        Tính toán sai số vị trí giữa hai mask.
+
+        Phương thức này tính toán khoảng cách giữa tâm (centroid) của hai mask
+        đã cho để đánh giá sai số vị trí của cấu trúc dự đoán.
+
+        Parameters
+        ----------
+        predicted_mask : np.ndarray
+            Mask nhị phân của cấu trúc được dự đoán.
+        reference_mask : np.ndarray
+            Mask nhị phân của cấu trúc tham chiếu.
+
+        Returns
+        -------
+        float
+            Khoảng cách Euclidean giữa tâm của hai mask.
+        """
+        try:
+            # Xác minh rằng cả hai mask đều có thông tin
+            if predicted_mask is None or reference_mask is None:
+                logger.warning("Một hoặc cả hai mask là None")
+                return float("inf")
+
+            if predicted_mask.sum() == 0 or reference_mask.sum() == 0:
+                logger.warning("Một hoặc cả hai mask không có pixel nào")
+                return float("inf")
+
+            # Tính tâm của các mask
+            pred_centroid = self._get_centroid(predicted_mask)
+            ref_centroid = self._get_centroid(reference_mask)
+
+            # Tính khoảng cách Euclidean
+            distance = np.sqrt(
+                np.sum((np.array(pred_centroid) - np.array(ref_centroid)) ** 2)
+            )
+            return float(distance)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính toán sai số vị trí: {str(e)}")
+            return float("inf")
+
+    def _get_centroid(self, mask):
+        """
+        Tính tâm (centroid) của mask nhị phân.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            Mask nhị phân 3D.
+
+        Returns
+        -------
+        tuple
+            Tọa độ (x, y, z) của tâm.
+        """
+        if mask.sum() == 0:
+            return (0, 0, 0)
+
+        # Tìm tọa độ các điểm không phải 0
+        indices = np.where(mask > 0)
+
+        # Tính trung bình các tọa độ để có tâm
+        centroid = []
+        for i in range(len(indices)):
+            centroid.append(float(indices[i].mean()))
+
+        return tuple(centroid)
+
 
 if __name__ == "__main__":
     # Mã để chạy thử và kiểm tra module

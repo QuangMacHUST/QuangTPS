@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-Module dự đoán thay đổi giải phẫu trong QuangTPS.
+Module dự đoán thay đổi giải phẫu theo thời gian.
 
-Module này cung cấp các lớp và hàm để dự đoán thay đổi giải phẫu của bệnh nhân
-dựa trên các hình ảnh trước đó, giúp cải thiện quá trình lập kế hoạch thích ứng.
+Module này cung cấp các lớp và phương thức để dự đoán thay đổi giải phẫu của
+bệnh nhân theo thời gian, hỗ trợ lập kế hoạch thích ứng trong xạ trị.
+
+Version: 0.7.5
 """
 
 import logging
@@ -13,44 +15,44 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Thử import các lớp dự đoán với xử lý ngoại lệ
 try:
-    from quangtps.adaptive.prediction.deformable_anatomy_predictor import (
-        DeformableAnatomyPredictor,
-        DeformationModel,
-        DeformationModelType,
-        DeformationVectorAnalysis,
-    )
+    from .deformable_anatomy_predictor import DeformableAnatomyPredictor
 
-    HAS_ANATOMY_PREDICTOR = True
-except ImportError:
-    logger.warning("Không thể import DeformableAnatomyPredictor, sử dụng lớp giả")
-    HAS_ANATOMY_PREDICTOR = False
+    logger.info("Đã import DeformableAnatomyPredictor thành công")
+except ImportError as e:
+    logger.warning(f"Không thể import DeformableAnatomyPredictor: {str(e)}")
 
-    # Tạo lớp giả cho DeformableAnatomyPredictor khi không có module
+    # Tạo lớp giả nếu không có lớp thật
     class DeformableAnatomyPredictor:
-        """Lớp giả cho DeformableAnatomyPredictor khi module thực không có sẵn."""
+        """
+        Lớp giả cho dự đoán thay đổi giải phẫu khi không load được module thật.
+        """
 
         def __init__(self, **kwargs):
-            """Khởi tạo bộ dự đoán giải phẫu giả."""
-            logger.warning("Sử dụng DeformableAnatomyPredictor giả")
-            self.patient = kwargs.get("patient")
-            self.reference_image = kwargs.get("reference_image")
+            """Khởi tạo đối tượng giả."""
+            logger.warning("Đang sử dụng lớp giả DeformableAnatomyPredictor")
+            self.name = "Mock DeformableAnatomyPredictor"
+            self.config = kwargs
+            self.validator = None
 
-        def predict_structure_changes(self, *args, **kwargs):
-            """Dự đoán thay đổi cấu trúc (giả)."""
+        def predict_multiple_timepoints(
+            self,
+            initial_images=None,
+            initial_structures=None,
+            time_points=None,
+            **kwargs,
+        ):
+            """Giả lập dự đoán nhiều thời điểm."""
             logger.warning(
-                "Phương thức dự đoán thay đổi cấu trúc được gọi trên lớp giả"
+                "Gọi phương thức giả predict_multiple_timepoints - không có chức năng thực"
             )
-            return None
+            return {}
 
         def set_validator(self, validator):
             """Thiết lập validator."""
+            logger.warning(f"Thiết lập validator giả: {validator}")
             self.validator = validator
-
-        def predict_image_at_date(self, date, *args, **kwargs):
-            """Dự đoán hình ảnh tại ngày xác định (giả)."""
-            logger.warning("Phương thức dự đoán hình ảnh được gọi trên lớp giả")
-            return None
 
     class DeformationModel:
         """Lớp giả cho DeformationModel."""
@@ -77,3 +79,5 @@ __all__ = [
     "DeformationModelType",
     "DeformationVectorAnalysis",
 ]
+
+__version__ = "0.7.5"
