@@ -9,137 +9,217 @@ sử dụng hệ số Dice và các phép đo khác. Các hàm này đặc biệ
 đánh giá kế hoạch thích ứng và so sánh các contour tự động với contour tham chiếu.
 """
 
+import logging
 import numpy as np
 from typing import Union, List, Dict, Tuple, Optional, Any, Set, Sequence
 
-from quangtps.core.types import Structure
+logger = logging.getLogger(__name__)
+
+try:
+    from quangtps.core.types import Structure
+except ImportError:
+    logger.warning("Không thể import Structure từ quangtps.core.types")
+
+    # Tạo lớp giả
+    class Structure:
+        """Lớp giả cho cấu trúc."""
+
+        pass
 
 
 def calculate_dice_coefficient(
-    structure_a: Union[Structure, np.ndarray],
-    structure_b: Union[Structure, np.ndarray],
-    mask: Optional[np.ndarray] = None,
-    tolerance: float = 1e-6,
+    structure1: Union[Structure, np.ndarray],
+    structure2: Union[Structure, np.ndarray],
+    mask_threshold: float = 0.5,
 ) -> float:
     """
-    Tính toán hệ số Dice giữa hai cấu trúc hoặc mặt nạ nhị phân.
+    Tính hệ số Dice giữa hai cấu trúc.
 
-    Hệ số Dice được tính theo công thức: 2*|A∩B|/(|A|+|B|)
-    Hệ số này có giá trị trong khoảng [0, 1], với 1 là trùng khớp hoàn toàn.
+    Hệ số Dice được tính theo công thức: 2*|X∩Y|/(|X|+|Y|)
 
     Parameters
     ----------
-    structure_a : Union[Structure, np.ndarray]
-        Cấu trúc đầu tiên hoặc mặt nạ nhị phân
-    structure_b : Union[Structure, np.ndarray]
-        Cấu trúc thứ hai hoặc mặt nạ nhị phân để so sánh
-    mask : Optional[np.ndarray], optional
-        Vùng cần so sánh (nếu không phải toàn bộ ảnh), mặc định là None
-    tolerance : float, optional
-        Giá trị dung sai để tránh lỗi chia cho 0, mặc định là 1e-6
+    structure1 : Union[Structure, np.ndarray]
+        Cấu trúc thứ nhất hoặc mặt nạ nhị phân
+    structure2 : Union[Structure, np.ndarray]
+        Cấu trúc thứ hai hoặc mặt nạ nhị phân
+    mask_threshold : float, optional
+        Ngưỡng để chuyển đổi mặt nạ xác suất thành nhị phân, mặc định là 0.5
 
     Returns
     -------
     float
         Hệ số Dice trong khoảng [0, 1]
-
-    Raises
-    ------
-    ValueError
-        Nếu cấu trúc đầu vào không tương thích
     """
-    # Chuyển đổi cấu trúc thành mảng nhị phân
-    if isinstance(structure_a, Structure):
-        mask_a = structure_a.get_binary_mask()
-    else:
-        mask_a = structure_a.astype(bool)
+    try:
+        # Lấy mặt nạ nhị phân từ cấu trúc
+        mask1 = _get_binary_mask(structure1, mask_threshold)
+        mask2 = _get_binary_mask(structure2, mask_threshold)
 
-    if isinstance(structure_b, Structure):
-        mask_b = structure_b.get_binary_mask()
-    else:
-        mask_b = structure_b.astype(bool)
+        if mask1 is None or mask2 is None:
+            logger.warning("Không thể lấy mặt nạ nhị phân từ cấu trúc")
+            return 0.0
 
-    # Kiểm tra kích thước
-    if mask_a.shape != mask_b.shape:
-        raise ValueError("Cấu trúc đầu vào phải có cùng kích thước")
+        # Kiểm tra kích thước mặt nạ
+        if mask1.shape != mask2.shape:
+            logger.warning(
+                f"Kích thước mặt nạ không khớp: {mask1.shape} vs {mask2.shape}"
+            )
+            return 0.0
 
-    # Áp dụng mask nếu có
-    if mask is not None:
-        if mask.shape != mask_a.shape:
-            raise ValueError("Mask phải có cùng kích thước với cấu trúc")
-        mask_a = np.logical_and(mask_a, mask)
-        mask_b = np.logical_and(mask_b, mask)
+        # Tính giao của hai mặt nạ
+        intersection = np.logical_and(mask1, mask2)
 
-    # Tính giao và tổng
-    intersection = np.logical_and(mask_a, mask_b).sum()
-    sum_masks = mask_a.sum() + mask_b.sum()
+        # Tính hệ số Dice
+        dice = 2.0 * np.sum(intersection) / (np.sum(mask1) + np.sum(mask2))
 
-    # Tính hệ số Dice
-    if sum_masks < tolerance:
-        return 0.0  # Trường hợp cả hai mặt nạ đều rỗng
+        return float(dice) if not np.isnan(dice) else 0.0
 
-    return 2.0 * intersection / (sum_masks + tolerance)
+    except Exception as e:
+        logger.error(f"Lỗi khi tính hệ số Dice: {str(e)}")
+        return 0.0
 
 
 def calculate_jaccard_index(
-    structure_a: Union[Structure, np.ndarray],
-    structure_b: Union[Structure, np.ndarray],
-    mask: Optional[np.ndarray] = None,
-    tolerance: float = 1e-6,
+    structure1: Union[Structure, np.ndarray],
+    structure2: Union[Structure, np.ndarray],
+    mask_threshold: float = 0.5,
 ) -> float:
     """
-    Tính toán chỉ số Jaccard (IoU - Intersection over Union) giữa hai cấu trúc.
+    Tính chỉ số Jaccard giữa hai cấu trúc.
 
-    Chỉ số Jaccard được tính theo công thức: |A∩B|/|A∪B|
-    Chỉ số này có giá trị trong khoảng [0, 1], với 1 là trùng khớp hoàn toàn.
+    Chỉ số Jaccard được tính theo công thức: |X∩Y|/|X∪Y|
 
     Parameters
     ----------
-    structure_a : Union[Structure, np.ndarray]
-        Cấu trúc đầu tiên hoặc mặt nạ nhị phân
-    structure_b : Union[Structure, np.ndarray]
-        Cấu trúc thứ hai hoặc mặt nạ nhị phân để so sánh
-    mask : Optional[np.ndarray], optional
-        Vùng cần so sánh (nếu không phải toàn bộ ảnh), mặc định là None
-    tolerance : float, optional
-        Giá trị dung sai để tránh lỗi chia cho 0, mặc định là 1e-6
+    structure1 : Union[Structure, np.ndarray]
+        Cấu trúc thứ nhất hoặc mặt nạ nhị phân
+    structure2 : Union[Structure, np.ndarray]
+        Cấu trúc thứ hai hoặc mặt nạ nhị phân
+    mask_threshold : float, optional
+        Ngưỡng để chuyển đổi mặt nạ xác suất thành nhị phân, mặc định là 0.5
 
     Returns
     -------
     float
         Chỉ số Jaccard trong khoảng [0, 1]
     """
-    # Chuyển đổi cấu trúc thành mảng nhị phân
-    if isinstance(structure_a, Structure):
-        mask_a = structure_a.get_binary_mask()
-    else:
-        mask_a = structure_a.astype(bool)
+    try:
+        # Lấy mặt nạ nhị phân từ cấu trúc
+        mask1 = _get_binary_mask(structure1, mask_threshold)
+        mask2 = _get_binary_mask(structure2, mask_threshold)
 
-    if isinstance(structure_b, Structure):
-        mask_b = structure_b.get_binary_mask()
-    else:
-        mask_b = structure_b.astype(bool)
+        if mask1 is None or mask2 is None:
+            logger.warning("Không thể lấy mặt nạ nhị phân từ cấu trúc")
+            return 0.0
 
-    # Kiểm tra kích thước
-    if mask_a.shape != mask_b.shape:
-        raise ValueError("Cấu trúc đầu vào phải có cùng kích thước")
+        # Kiểm tra kích thước mặt nạ
+        if mask1.shape != mask2.shape:
+            logger.warning(
+                f"Kích thước mặt nạ không khớp: {mask1.shape} vs {mask2.shape}"
+            )
+            return 0.0
 
-    # Áp dụng mask nếu có
-    if mask is not None:
-        if mask.shape != mask_a.shape:
-            raise ValueError("Mask phải có cùng kích thước với cấu trúc")
-        mask_a = np.logical_and(mask_a, mask)
-        mask_b = np.logical_and(mask_b, mask)
+        # Tính giao và hợp của hai mặt nạ
+        intersection = np.logical_and(mask1, mask2)
+        union = np.logical_or(mask1, mask2)
 
-    # Tính giao và hợp
-    intersection = np.logical_and(mask_a, mask_b).sum()
-    union = np.logical_or(mask_a, mask_b).sum()
+        # Tính chỉ số Jaccard
+        jaccard = np.sum(intersection) / np.sum(union)
 
-    # Tính chỉ số Jaccard
-    if union < tolerance:
-        return 0.0  # Trường hợp cả hai mặt nạ đều rỗng
+        return float(jaccard) if not np.isnan(jaccard) else 0.0
 
-    return intersection / (union + tolerance)
+    except Exception as e:
+        logger.error(f"Lỗi khi tính chỉ số Jaccard: {str(e)}")
+        return 0.0
+
+
+def calculate_volumetric_similarity(
+    structure1: Union[Structure, np.ndarray],
+    structure2: Union[Structure, np.ndarray],
+    mask_threshold: float = 0.5,
+) -> float:
+    """
+    Tính độ tương đồng thể tích giữa hai cấu trúc.
+
+    Độ tương đồng thể tích được tính theo công thức: 1 - |V1-V2|/(V1+V2)
+
+    Parameters
+    ----------
+    structure1 : Union[Structure, np.ndarray]
+        Cấu trúc thứ nhất hoặc mặt nạ nhị phân
+    structure2 : Union[Structure, np.ndarray]
+        Cấu trúc thứ hai hoặc mặt nạ nhị phân
+    mask_threshold : float, optional
+        Ngưỡng để chuyển đổi mặt nạ xác suất thành nhị phân, mặc định là 0.5
+
+    Returns
+    -------
+    float
+        Độ tương đồng thể tích trong khoảng [0, 1]
+    """
+    try:
+        # Lấy mặt nạ nhị phân từ cấu trúc
+        mask1 = _get_binary_mask(structure1, mask_threshold)
+        mask2 = _get_binary_mask(structure2, mask_threshold)
+
+        if mask1 is None or mask2 is None:
+            logger.warning("Không thể lấy mặt nạ nhị phân từ cấu trúc")
+            return 0.0
+
+        # Tính thể tích (số voxel)
+        v1 = np.sum(mask1)
+        v2 = np.sum(mask2)
+
+        if v1 + v2 == 0:
+            return 0.0
+
+        # Tính độ tương đồng thể tích
+        vs = 1.0 - abs(v1 - v2) / (v1 + v2)
+
+        return float(vs) if not np.isnan(vs) else 0.0
+
+    except Exception as e:
+        logger.error(f"Lỗi khi tính độ tương đồng thể tích: {str(e)}")
+        return 0.0
+
+
+def _get_binary_mask(
+    structure: Union[Structure, np.ndarray], threshold: float = 0.5
+) -> Optional[np.ndarray]:
+    """
+    Lấy mặt nạ nhị phân từ cấu trúc hoặc mảng.
+
+    Parameters
+    ----------
+    structure : Union[Structure, np.ndarray]
+        Cấu trúc hoặc mặt nạ
+    threshold : float, optional
+        Ngưỡng để chuyển đổi mặt nạ xác suất thành nhị phân, mặc định là 0.5
+
+    Returns
+    -------
+    Optional[np.ndarray]
+        Mặt nạ nhị phân hoặc None nếu không thể lấy
+    """
+    try:
+        if isinstance(structure, np.ndarray):
+            # Nếu đầu vào là mảng numpy, chuyển đổi thành mặt nạ nhị phân
+            return structure > threshold
+        elif hasattr(structure, "get_binary_mask"):
+            # Nếu đầu vào là cấu trúc có phương thức get_binary_mask
+            return structure.get_binary_mask()
+        elif hasattr(structure, "binary_mask"):
+            # Nếu đầu vào là cấu trúc có thuộc tính binary_mask
+            return structure.binary_mask
+        else:
+            logger.warning(
+                f"Không thể lấy mặt nạ nhị phân từ đối tượng kiểu {type(structure)}"
+            )
+            return None
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy mặt nạ nhị phân: {str(e)}")
+        return None
 
 
 def calculate_hausdorff_distance(

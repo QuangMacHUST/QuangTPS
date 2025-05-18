@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
-Contour Module for QuangTPS.
+Module xử lý contour trong QuangTPS.
 
-This module provides functionality for contour manipulation in radiotherapy treatment planning.
-It includes tools for contour creation, editing, boolean operations, margin generation,
-and format conversion.
+Module này cung cấp các công cụ để tạo, chỉnh sửa và xử lý contour
+cho các cấu trúc giải phẫu trong hệ thống lập kế hoạch xạ trị.
 """
 
 import logging
@@ -32,9 +31,8 @@ from quangtps.segmentation.contour.contour_utils import ContourUtils
 from quangtps.segmentation.contour.dice import (
     calculate_dice_coefficient,
     calculate_jaccard_index,
+    calculate_volumetric_similarity,
     calculate_hausdorff_distance,
-    calculate_volume_overlap_metrics,
-    batch_calculate_dice,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +53,13 @@ __all__ = [
     "ContourUtils",
     "calculate_dice_coefficient",
     "calculate_jaccard_index",
+    "calculate_volumetric_similarity",
     "calculate_hausdorff_distance",
-    "calculate_volume_overlap_metrics",
-    "batch_calculate_dice",
 ]
+
+try:
+    from quangtps.segmentation.contour.contour_data import ContourData, ContourSet
+
+    __all__.extend(["ContourData", "ContourSet"])
+except ImportError:
+    pass

@@ -393,3 +393,67 @@ class OperationTimeoutError(OperationError):
 
     def __init__(self, message="Operation timeout error"):
         super().__init__(message)
+
+
+class IntegrationError(QuangTPSError):
+    """
+    Lỗi xảy ra khi tích hợp giữa các thành phần hệ thống.
+
+    Lớp exception này được sử dụng khi có lỗi xảy ra trong quá trình kết nối
+    hoặc tích hợp giữa các module, hệ thống con hoặc dịch vụ khác nhau.
+    """
+
+    def __init__(
+        self,
+        message: str = "Lỗi khi tích hợp giữa các module",
+        module1: str = None,
+        module2: str = None,
+    ):
+        self.module1 = module1
+        self.module2 = module2
+
+        detailed_message = message
+        if module1 and module2:
+            detailed_message = f"{message}: tích hợp giữa '{module1}' và '{module2}'"
+        elif module1:
+            detailed_message = f"{message}: liên quan đến module '{module1}'"
+
+        super().__init__(detailed_message)
+
+
+class HardwareResourceError(QuangTPSError):
+    """
+    Lỗi xảy ra khi không đủ tài nguyên phần cứng hoặc thiết bị cần thiết.
+
+    Lớp exception này được sử dụng khi có vấn đề với tài nguyên phần cứng
+    như GPU không khả dụng, không đủ bộ nhớ, v.v.
+    """
+
+    def __init__(
+        self,
+        message: str = "Không đủ tài nguyên phần cứng",
+        resource_type: str = None,
+        required_spec: str = None,
+    ):
+        """
+        Khởi tạo đối tượng HardwareResourceError.
+
+        Parameters
+        ----------
+        message : str
+            Thông báo lỗi
+        resource_type : str, optional
+            Loại tài nguyên gặp vấn đề (GPU, RAM, CPU, v.v.)
+        required_spec : str, optional
+            Thông số kỹ thuật yêu cầu
+        """
+        self.resource_type = resource_type
+        self.required_spec = required_spec
+
+        detailed_message = message
+        if resource_type:
+            detailed_message = f"{message} - tài nguyên: {resource_type}"
+            if required_spec:
+                detailed_message += f" (yêu cầu: {required_spec})"
+
+        super().__init__(detailed_message)

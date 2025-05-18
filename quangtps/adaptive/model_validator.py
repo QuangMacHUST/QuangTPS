@@ -2,504 +2,423 @@
 # -*- coding: utf-8 -*-
 
 """
-Module kiểm tra và đánh giá độ chính xác của các mô hình dự đoán thay đổi giải phẫu.
+Module kiểm tra hiệu suất và tính hợp lệ của các mô hình dự đoán.
 
-Module này cung cấp các công cụ để đánh giá hiệu suất của các mô hình dự đoán
-thay đổi giải phẫu, so sánh với dữ liệu thực tế thu thập được trong quá trình điều trị.
+Module này cung cấp các lớp và hàm để đánh giá hiệu suất và tính hợp lệ
+của các mô hình dự đoán được sử dụng trong hệ thống lập kế hoạch thích ứng.
 """
 
-import os
 import logging
-import datetime
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from typing import List, Dict, Tuple, Optional, Union, Any
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
-from quangtps.adaptive.prediction.anatomy_prediction import (
-    AnatomyPredictor,
-    AnatomyPrediction,
-    PredictionMethod,
-)
-from quangtps.adaptive.prediction.deformable_anatomy_predictor import (
-    DeformableAnatomyPredictor,
-)
-from quangtps.core.types import Patient, Image, Structure, Dose
-from quangtps.core.exceptions import ValidationError
+from enum import Enum
+from datetime import datetime
+from typing import Dict, List, Any, Optional, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
 
-class PredictionMetrics:
-    """Lớp chứa các kết quả đánh giá độ chính xác của dự đoán."""
+class ValidationMetric(Enum):
+    """Các metric được hỗ trợ để đánh giá mô hình."""
+
+    MSE = "mean_squared_error"
+    MAE = "mean_absolute_error"
+    DICE = "dice_coefficient"
+    JACCARD = "jaccard_index"
+    HAUSDORFF = "hausdorff_distance"
+    SSIM = "structural_similarity"
+    CORRELATION = "correlation_coefficient"
+
+
+class ValidationResult:
+    """Kết quả của quá trình kiểm tra mô hình."""
 
     def __init__(self):
-        self.mae = {}  # Mean Absolute Error
-        self.rmse = {}  # Root Mean Squared Error
-        self.r2 = {}  # R-squared
-        self.volume_errors = {}  # % sai lệch thể tích
-        self.position_errors = {}  # Sai lệch vị trí (mm)
-        self.structure_metrics = {}  # Các chỉ số cho từng cấu trúc
-        self.dice_coefficients = {}  # Hệ số Dice cho từng cấu trúc
-        self.hausdorff_distances = {}  # Khoảng cách Hausdorff (mm)
+        """Khởi tạo đối tượng kết quả kiểm tra."""
+        self.is_valid = False
+        self.confidence = 0.0
+        self.metrics = {}
+        self.timestamp = datetime.now()
+        self.message = ""
 
-    def add_volume_error(self, structure_id: str, predicted: float, actual: float):
-        """Thêm sai lệch thể tích cho một cấu trúc cụ thể."""
-        if structure_id not in self.volume_errors:
-            self.volume_errors[structure_id] = []
-
-        error_percent = (
-            100.0 * abs(predicted - actual) / (actual if actual > 0 else 1.0)
-        )
-        self.volume_errors[structure_id].append(error_percent)
-
-    def add_position_error(self, structure_id: str, error_mm: float):
-        """Thêm sai lệch vị trí (mm) cho một cấu trúc cụ thể."""
-        if structure_id not in self.position_errors:
-            self.position_errors[structure_id] = []
-
-        self.position_errors[structure_id].append(error_mm)
-
-    def add_dice_coefficient(self, structure_id: str, dice: float):
-        """Thêm hệ số Dice cho một cấu trúc cụ thể."""
-        if structure_id not in self.dice_coefficients:
-            self.dice_coefficients[structure_id] = []
-
-        self.dice_coefficients[structure_id].append(dice)
-
-    def add_hausdorff_distance(self, structure_id: str, distance: float):
-        """Thêm khoảng cách Hausdorff cho một cấu trúc cụ thể."""
-        if structure_id not in self.hausdorff_distances:
-            self.hausdorff_distances[structure_id] = []
-
-        self.hausdorff_distances[structure_id].append(distance)
-
-    def calculate_average_metrics(self):
-        """Tính toán các chỉ số trung bình cho tất cả các cấu trúc."""
-        # Tính trung bình các chỉ số thể tích
-        for structure_id, errors in self.volume_errors.items():
-            if structure_id not in self.structure_metrics:
-                self.structure_metrics[structure_id] = {}
-            self.structure_metrics[structure_id]["avg_volume_error"] = np.mean(errors)
-
-        # Tính trung bình các chỉ số vị trí
-        for structure_id, errors in self.position_errors.items():
-            if structure_id not in self.structure_metrics:
-                self.structure_metrics[structure_id] = {}
-            self.structure_metrics[structure_id]["avg_position_error"] = np.mean(errors)
-
-        # Tính trung bình các hệ số Dice
-        for structure_id, dices in self.dice_coefficients.items():
-            if structure_id not in self.structure_metrics:
-                self.structure_metrics[structure_id] = {}
-            self.structure_metrics[structure_id]["avg_dice"] = np.mean(dices)
-
-        # Tính trung bình các khoảng cách Hausdorff
-        for structure_id, distances in self.hausdorff_distances.items():
-            if structure_id not in self.structure_metrics:
-                self.structure_metrics[structure_id] = {}
-            self.structure_metrics[structure_id]["avg_hausdorff"] = np.mean(distances)
-
-        # Tính các chỉ số tổng hợp cho tất cả các cấu trúc
-        all_volume_errors = []
-        for errors in self.volume_errors.values():
-            all_volume_errors.extend(errors)
-
-        all_position_errors = []
-        for errors in self.position_errors.values():
-            all_position_errors.extend(errors)
-
-        all_dice_coefficients = []
-        for dices in self.dice_coefficients.values():
-            all_dice_coefficients.extend(dices)
-
-        self.mae["volume"] = np.mean(all_volume_errors) if all_volume_errors else 0.0
-        self.mae["position"] = (
-            np.mean(all_position_errors) if all_position_errors else 0.0
-        )
-        self.mae["dice"] = (
-            1.0 - np.mean(all_dice_coefficients) if all_dice_coefficients else 1.0
-        )
-
-        self.rmse["volume"] = (
-            np.sqrt(np.mean(np.square(all_volume_errors))) if all_volume_errors else 0.0
-        )
-        self.rmse["position"] = (
-            np.sqrt(np.mean(np.square(all_position_errors)))
-            if all_position_errors
-            else 0.0
-        )
-
-    def to_dataframe(self) -> pd.DataFrame:
-        """Chuyển đổi kết quả đánh giá thành DataFrame."""
-        data = []
-
-        for structure_id, metrics in self.structure_metrics.items():
-            row = {"structure_id": structure_id}
-            row.update(metrics)
-            data.append(row)
-
-        return pd.DataFrame(data)
-
-    def plot_results(self, output_dir: Optional[str] = None):
-        """Tạo các biểu đồ kết quả đánh giá."""
-        if not self.structure_metrics:
-            logger.warning("Không có dữ liệu để vẽ biểu đồ")
-            return
-
-        # Tạo thư mục đầu ra nếu chưa tồn tại
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-
-        # Vẽ biểu đồ sai lệch thể tích
-        plt.figure(figsize=(12, 8))
-        structs = list(self.structure_metrics.keys())
-        volume_errors = [
-            self.structure_metrics[s].get("avg_volume_error", 0) for s in structs
-        ]
-
-        plt.bar(structs, volume_errors)
-        plt.title("Sai lệch thể tích trung bình theo cấu trúc")
-        plt.xlabel("Cấu trúc")
-        plt.ylabel("Sai lệch (%)")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-
-        if output_dir:
-            plt.savefig(os.path.join(output_dir, "volume_errors.png"))
-            plt.close()
-        else:
-            plt.show()
-
-        # Vẽ biểu đồ hệ số Dice
-        plt.figure(figsize=(12, 8))
-        dice_values = [self.structure_metrics[s].get("avg_dice", 0) for s in structs]
-
-        plt.bar(structs, dice_values)
-        plt.title("Hệ số Dice trung bình theo cấu trúc")
-        plt.xlabel("Cấu trúc")
-        plt.ylabel("Hệ số Dice")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-
-        if output_dir:
-            plt.savefig(os.path.join(output_dir, "dice_coefficients.png"))
-            plt.close()
-        else:
-            plt.show()
-
-
-class ModelValidator:
-    """Lớp kiểm tra và đánh giá mô hình dự đoán thay đổi giải phẫu."""
-
-    def __init__(self):
-        self.metrics = PredictionMetrics()
-
-    def validate_predictions(
-        self,
-        prediction: AnatomyPrediction,
-        actual_images: List[Image],
-        actual_structures: List[Dict[str, Structure]],
-        actual_dates: List[datetime.datetime],
-    ) -> PredictionMetrics:
+    def set_valid(self, is_valid: bool, confidence: float):
         """
-        Kiểm tra độ chính xác của các dự đoán thay đổi giải phẫu.
+        Thiết lập trạng thái hợp lệ và độ tin cậy.
 
         Parameters
         ----------
-        prediction : AnatomyPrediction
-            Kết quả dự đoán thay đổi giải phẫu
-        actual_images : List[Image]
-            Danh sách hình ảnh thực tế
-        actual_structures : List[Dict[str, Structure]]
-            Danh sách cấu trúc thực tế tương ứng với mỗi hình ảnh
-        actual_dates : List[datetime.datetime]
-            Danh sách ngày tương ứng với mỗi hình ảnh/cấu trúc
+        is_valid : bool
+            Biểu thị kết quả dự đoán có hợp lệ không.
+        confidence : float
+            Độ tin cậy của kết quả kiểm tra (0.0 - 1.0).
+        """
+        self.is_valid = is_valid
+        self.confidence = confidence
+
+    def add_metric(self, name: str, value: float):
+        """
+        Thêm một metric vào kết quả.
+
+        Parameters
+        ----------
+        name : str
+            Tên của metric.
+        value : float
+            Giá trị của metric.
+        """
+        self.metrics[name] = value
+
+    def set_message(self, message: str):
+        """
+        Thiết lập thông báo kết quả.
+
+        Parameters
+        ----------
+        message : str
+            Thông báo mô tả kết quả kiểm tra.
+        """
+        self.message = message
+
+    def get_summary(self) -> Dict[str, Any]:
+        """
+        Tạo tóm tắt kết quả kiểm tra.
 
         Returns
         -------
-        PredictionMetrics
-            Các chỉ số đánh giá độ chính xác
+        Dict[str, Any]
+            Từ điển chứa thông tin tóm tắt kết quả.
         """
-        logger.info("Bắt đầu đánh giá độ chính xác mô hình dự đoán thay đổi giải phẫu")
+        return {
+            "is_valid": self.is_valid,
+            "confidence": self.confidence,
+            "metrics": self.metrics,
+            "timestamp": self.timestamp.isoformat(),
+            "message": self.message,
+        }
 
-        # Khởi tạo đối tượng kết quả
-        self.metrics = PredictionMetrics()
 
-        # Kiểm tra tất cả các mốc thời gian dự đoán
-        for timepoint in prediction.prediction_timeline:
-            pred_date = timepoint["date"]
+class ModelValidator:
+    """
+    Lớp để kiểm tra hiệu suất và tính hợp lệ của các mô hình dự đoán.
+    """
 
-            # Tìm ngày thực tế gần nhất
-            closest_idx = self._find_closest_date_index(pred_date, actual_dates)
+    def __init__(self):
+        """Khởi tạo validator."""
+        self.default_metrics = [ValidationMetric.MSE, ValidationMetric.SSIM]
+        self.thresholds = {
+            ValidationMetric.MSE.value: 0.05,
+            ValidationMetric.MAE.value: 0.1,
+            ValidationMetric.DICE.value: 0.8,
+            ValidationMetric.JACCARD.value: 0.7,
+            ValidationMetric.HAUSDORFF.value: 10.0,
+            ValidationMetric.SSIM.value: 0.85,
+            ValidationMetric.CORRELATION.value: 0.9,
+        }
+        self.metric_weights = {
+            ValidationMetric.MSE.value: 1.0,
+            ValidationMetric.MAE.value: 1.0,
+            ValidationMetric.DICE.value: 2.0,
+            ValidationMetric.JACCARD.value: 1.5,
+            ValidationMetric.HAUSDORFF.value: 1.5,
+            ValidationMetric.SSIM.value: 2.0,
+            ValidationMetric.CORRELATION.value: 1.0,
+        }
+        self.validation_history = []
 
-            if closest_idx is None:
+    def set_threshold(self, metric: Union[ValidationMetric, str], threshold: float):
+        """
+        Thiết lập ngưỡng cho một metric cụ thể.
+
+        Parameters
+        ----------
+        metric : Union[ValidationMetric, str]
+            Metric cần thiết lập ngưỡng.
+        threshold : float
+            Giá trị ngưỡng mới.
+        """
+        if isinstance(metric, ValidationMetric):
+            metric = metric.value
+
+        self.thresholds[metric] = threshold
+        logger.debug(f"Đã thiết lập ngưỡng {threshold} cho metric {metric}")
+
+    def set_metric_weight(self, metric: Union[ValidationMetric, str], weight: float):
+        """
+        Thiết lập trọng số cho một metric cụ thể.
+
+        Parameters
+        ----------
+        metric : Union[ValidationMetric, str]
+            Metric cần thiết lập trọng số.
+        weight : float
+            Giá trị trọng số mới.
+        """
+        if isinstance(metric, ValidationMetric):
+            metric = metric.value
+
+        self.metric_weights[metric] = weight
+        logger.debug(f"Đã thiết lập trọng số {weight} cho metric {metric}")
+
+    def set_default_metrics(self, metrics: List[ValidationMetric]):
+        """
+        Thiết lập danh sách các metric mặc định.
+
+        Parameters
+        ----------
+        metrics : List[ValidationMetric]
+            Danh sách các metric mặc định.
+        """
+        self.default_metrics = metrics
+        logger.debug(f"Đã thiết lập {len(metrics)} metric mặc định")
+
+    def calculate_metric(self, metric: ValidationMetric, predicted, reference) -> float:
+        """
+        Tính giá trị của một metric cụ thể.
+
+        Parameters
+        ----------
+        metric : ValidationMetric
+            Metric cần tính.
+        predicted : array_like
+            Dữ liệu dự đoán.
+        reference : array_like
+            Dữ liệu tham chiếu.
+
+        Returns
+        -------
+        float
+            Giá trị của metric.
+        """
+        try:
+            # Chuyển đổi sang numpy array nếu cần
+            if not isinstance(predicted, np.ndarray):
+                predicted = np.array(predicted)
+            if not isinstance(reference, np.ndarray):
+                reference = np.array(reference)
+
+            # Kiểm tra kích thước
+            if predicted.shape != reference.shape:
                 logger.warning(
-                    f"Không tìm thấy dữ liệu thực tế gần với ngày dự đoán {pred_date}"
+                    f"Kích thước dự đoán {predicted.shape} và tham chiếu {reference.shape} không khớp nhau"
                 )
-                continue
+                return float("nan")
 
-            # Lấy dữ liệu thực tế tương ứng
-            actual_date = actual_dates[closest_idx]
-            actual_struct_dict = actual_structures[closest_idx]
+            # Tính metric dựa trên loại
+            if metric == ValidationMetric.MSE:
+                return float(np.mean((predicted - reference) ** 2))
 
-            # So sánh dữ liệu thực tế với dự đoán
-            if pred_date in prediction.predicted_structures:
-                pred_struct_dict = prediction.predicted_structures[pred_date]
+            elif metric == ValidationMetric.MAE:
+                return float(np.mean(np.abs(predicted - reference)))
 
-                for struct_id, pred_struct in pred_struct_dict.items():
-                    if struct_id in actual_struct_dict:
-                        actual_struct = actual_struct_dict[struct_id]
+            elif metric == ValidationMetric.DICE:
+                # Giả định dữ liệu là nhị phân (masks)
+                intersection = np.sum(predicted * reference)
+                union = np.sum(predicted) + np.sum(reference)
+                if union == 0:
+                    return 1.0  # Cả hai mask đều trống
+                return float(2.0 * intersection / union)
 
-                        # So sánh thể tích
-                        pred_volume = pred_struct.get_volume()
-                        actual_volume = actual_struct.get_volume()
-                        self.metrics.add_volume_error(
-                            struct_id, pred_volume, actual_volume
+            elif metric == ValidationMetric.JACCARD:
+                # Giả định dữ liệu là nhị phân (masks)
+                intersection = np.sum(predicted * reference)
+                union = np.sum(predicted) + np.sum(reference) - intersection
+                if union == 0:
+                    return 1.0  # Cả hai mask đều trống
+                return float(intersection / union)
+
+            elif metric == ValidationMetric.HAUSDORFF:
+                # Để triển khai hausdorff distance hoàn chỉnh, cần thư viện chuyên biệt
+                # Đây là mô phỏng đơn giản
+                return float(np.max(np.abs(predicted - reference)))
+
+            elif metric == ValidationMetric.SSIM:
+                try:
+                    # Thử import skimage để tính SSIM
+                    from skimage.metrics import structural_similarity as ssim
+
+                    return float(
+                        ssim(
+                            reference,
+                            predicted,
+                            data_range=reference.max() - reference.min(),
+                        )
+                    )
+                except ImportError:
+                    # Fallback nếu không có skimage
+                    mean_pred = np.mean(predicted)
+                    mean_ref = np.mean(reference)
+                    var_pred = np.var(predicted)
+                    var_ref = np.var(reference)
+                    cov = np.mean((predicted - mean_pred) * (reference - mean_ref))
+                    c1 = (0.01 * np.max(reference)) ** 2
+                    c2 = (0.03 * np.max(reference)) ** 2
+                    return float(
+                        (2 * mean_pred * mean_ref + c1)
+                        * (2 * cov + c2)
+                        / (
+                            (mean_pred**2 + mean_ref**2 + c1)
+                            * (var_pred + var_ref + c2)
+                        )
+                    )
+
+            elif metric == ValidationMetric.CORRELATION:
+                # Hệ số tương quan Pearson
+                pred_flat = predicted.flatten()
+                ref_flat = reference.flatten()
+                return float(np.corrcoef(pred_flat, ref_flat)[0, 1])
+
+            else:
+                logger.error(f"Không hỗ trợ metric {metric}")
+                return float("nan")
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính metric {metric.value}: {str(e)}")
+            return float("nan")
+
+    def validate_prediction(
+        self, predicted, reference=None, metrics=None
+    ) -> Tuple[bool, float]:
+        """
+        Kiểm tra tính hợp lệ của một dự đoán.
+
+        Parameters
+        ----------
+        predicted : array_like
+            Dữ liệu dự đoán.
+        reference : array_like, optional
+            Dữ liệu tham chiếu (nếu có).
+        metrics : List[ValidationMetric], optional
+            Danh sách các metric cần sử dụng.
+
+        Returns
+        -------
+        Tuple[bool, float]
+            Tuple chứa kết quả (hợp lệ hay không) và độ tin cậy.
+        """
+        # Tạo kết quả kiểm tra
+        result = ValidationResult()
+
+        # Sử dụng metrics mặc định nếu không cung cấp
+        if metrics is None:
+            metrics = self.default_metrics
+
+        try:
+            # Nếu không có tham chiếu, chỉ thực hiện các kiểm tra cơ bản
+            if reference is None:
+                # Kiểm tra giá trị NaN và Inf
+                has_nan = np.any(np.isnan(predicted))
+                has_inf = np.any(np.isinf(predicted))
+
+                if has_nan or has_inf:
+                    result.set_valid(False, 0.0)
+                    result.set_message(
+                        f"Dự đoán chứa giá trị không hợp lệ: NaN={has_nan}, Inf={has_inf}"
+                    )
+                else:
+                    # Kiểm tra phạm vi giá trị hợp lý
+                    min_val = np.min(predicted)
+                    max_val = np.max(predicted)
+                    is_reasonable_range = (
+                        -1000 <= min_val and max_val <= 5000
+                    )  # Giới hạn giả định cho dữ liệu Y tế
+
+                    result.add_metric("min_value", min_val)
+                    result.add_metric("max_value", max_val)
+
+                    if is_reasonable_range:
+                        result.set_valid(True, 0.8)
+                        result.set_message("Dự đoán có phạm vi giá trị hợp lý")
+                    else:
+                        result.set_valid(False, 0.5)
+                        result.set_message(
+                            f"Phạm vi giá trị bất thường: [{min_val}, {max_val}]"
+                        )
+            else:
+                # Thực hiện đánh giá đầy đủ với dữ liệu tham chiếu
+                confidence_scores = []
+
+                for metric in metrics:
+                    # Tính giá trị metric
+                    value = self.calculate_metric(metric, predicted, reference)
+                    result.add_metric(metric.value, value)
+
+                    # Xác định xem metric có vượt qua ngưỡng không
+                    threshold = self.thresholds.get(metric.value, 0.5)
+                    weight = self.metric_weights.get(metric.value, 1.0)
+
+                    # Ngược lại nếu metric càng nhỏ càng tốt
+                    if metric in [
+                        ValidationMetric.MSE,
+                        ValidationMetric.MAE,
+                        ValidationMetric.HAUSDORFF,
+                    ]:
+                        passes_threshold = value <= threshold
+                        # Tính điểm tin cậy (1.0 khi bằng 0, 0.0 khi bằng hoặc lớn hơn 2*threshold)
+                        confidence_score = (
+                            max(0.0, 1.0 - value / (2.0 * threshold)) * weight
+                        )
+                    else:
+                        passes_threshold = value >= threshold
+                        # Tính điểm tin cậy (1.0 khi bằng 1.0, 0.0 khi bằng hoặc nhỏ hơn threshold/2)
+                        confidence_score = (
+                            max(0.0, (value - threshold / 2) / (1.0 - threshold / 2))
+                            * weight
                         )
 
-                        # So sánh vị trí (trọng tâm)
-                        pred_center = pred_struct.get_center()
-                        actual_center = actual_struct.get_center()
-                        if pred_center is not None and actual_center is not None:
-                            distance = np.linalg.norm(
-                                np.array(pred_center) - np.array(actual_center)
-                            )
-                            self.metrics.add_position_error(struct_id, distance)
+                    confidence_scores.append(confidence_score)
 
-                        # Tính hệ số Dice
-                        dice = self._calculate_dice(pred_struct, actual_struct)
-                        self.metrics.add_dice_coefficient(struct_id, dice)
+                # Tính điểm tin cậy trung bình
+                if confidence_scores:
+                    avg_confidence = sum(confidence_scores) / sum(
+                        self.metric_weights.values()
+                    )
+                    result.set_valid(avg_confidence >= 0.7, avg_confidence)
 
-                        # Tính khoảng cách Hausdorff
-                        hausdorff = self._calculate_hausdorff(
-                            pred_struct, actual_struct
+                    if result.is_valid:
+                        result.set_message("Dự đoán đạt tiêu chí kiểm tra")
+                    else:
+                        result.set_message(
+                            f"Dự đoán không đạt tiêu chí kiểm tra, độ tin cậy = {avg_confidence:.4f}"
                         )
-                        self.metrics.add_hausdorff_distance(struct_id, hausdorff)
+                else:
+                    result.set_valid(False, 0.0)
+                    result.set_message("Không thể tính các metric kiểm tra")
 
-        # Tính toán các chỉ số trung bình
-        self.metrics.calculate_average_metrics()
+            # Lưu kết quả vào lịch sử
+            self.validation_history.append(result)
 
-        logger.info("Hoàn thành đánh giá độ chính xác mô hình dự đoán")
-        return self.metrics
+            # Trả về kết quả chính
+            return result.is_valid, result.confidence
 
-    def _find_closest_date_index(
-        self, target_date: datetime.datetime, date_list: List[datetime.datetime]
-    ) -> Optional[int]:
-        """Tìm chỉ số của ngày gần nhất với ngày mục tiêu."""
-        if not date_list:
-            return None
-
-        closest_idx = 0
-        min_diff = abs((target_date - date_list[0]).total_seconds())
-
-        for i, date in enumerate(date_list[1:], 1):
-            diff = abs((target_date - date).total_seconds())
-            if diff < min_diff:
-                min_diff = diff
-                closest_idx = i
-
-        # Nếu chênh lệch quá lớn (> 7 ngày), trả về None
-        if min_diff > 7 * 24 * 3600:
-            return None
-
-        return closest_idx
-
-    def _calculate_dice(self, struct1: Structure, struct2: Structure) -> float:
-        """Tính hệ số Dice giữa hai cấu trúc."""
-        try:
-            # Lấy các mặt nạ nhị phân
-            mask1 = struct1.get_binary_mask()
-            mask2 = struct2.get_binary_mask()
-
-            if mask1 is None or mask2 is None:
-                return 0.0
-
-            # Tính toán hệ số Dice
-            intersection = np.sum(np.logical_and(mask1, mask2))
-            dice = (2.0 * intersection) / (np.sum(mask1) + np.sum(mask2))
-
-            return float(dice)
         except Exception as e:
-            logger.error(f"Lỗi khi tính hệ số Dice: {str(e)}")
-            return 0.0
+            logger.error(f"Lỗi trong quá trình kiểm tra: {str(e)}")
+            result.set_valid(False, 0.0)
+            result.set_message(f"Lỗi kiểm tra: {str(e)}")
+            self.validation_history.append(result)
+            return False, 0.0
 
-    def _calculate_hausdorff(self, struct1: Structure, struct2: Structure) -> float:
-        """Tính khoảng cách Hausdorff giữa hai cấu trúc."""
-        try:
-            # Lấy các điểm bề mặt
-            surface1 = struct1.get_surface_points()
-            surface2 = struct2.get_surface_points()
+    def get_last_validation_result(self) -> Optional[ValidationResult]:
+        """
+        Lấy kết quả kiểm tra gần nhất.
 
-            if not surface1 or not surface2:
-                return 100.0  # Giá trị lớn nếu không thể tính toán
+        Returns
+        -------
+        Optional[ValidationResult]
+            Kết quả kiểm tra gần nhất hoặc None nếu không có.
+        """
+        if self.validation_history:
+            return self.validation_history[-1]
+        return None
 
-            # Tính toán khoảng cách Hausdorff
-            max_distance = 0.0
+    def get_validation_history(self) -> List[ValidationResult]:
+        """
+        Lấy lịch sử kiểm tra.
 
-            for point1 in surface1:
-                min_dist_to_surface2 = min(
-                    np.linalg.norm(np.array(point1) - np.array(point2))
-                    for point2 in surface2
-                )
-                max_distance = max(max_distance, min_dist_to_surface2)
-
-            for point2 in surface2:
-                min_dist_to_surface1 = min(
-                    np.linalg.norm(np.array(point2) - np.array(point1))
-                    for point1 in surface1
-                )
-                max_distance = max(max_distance, min_dist_to_surface1)
-
-            return float(max_distance)
-        except Exception as e:
-            logger.error(f"Lỗi khi tính khoảng cách Hausdorff: {str(e)}")
-            return 100.0
-
-    def plot_validation_results(self, output_dir: Optional[str] = None):
-        """Tạo các biểu đồ kết quả đánh giá."""
-        self.metrics.plot_results(output_dir)
-
-    def generate_validation_report(self, output_path: str) -> bool:
-        """Tạo báo cáo đánh giá độ chính xác mô hình dự đoán."""
-        try:
-            # Tạo thư mục chứa nếu chưa tồn tại
-            output_dir = os.path.dirname(output_path)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-
-            # Chuyển đổi kết quả thành DataFrame
-            df = self.metrics.to_dataframe()
-
-            # Ghi DataFrame ra file CSV
-            df.to_csv(output_path, index=False)
-
-            # Tạo các biểu đồ
-            self.plot_validation_results(output_dir)
-
-            logger.info(f"Đã tạo báo cáo đánh giá tại {output_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Lỗi khi tạo báo cáo đánh giá: {str(e)}")
-            return False
-
-    @staticmethod
-    def compute_prediction_accuracy(
-        predictions: List[float], actuals: List[float]
-    ) -> Dict[str, float]:
-        """Tính toán độ chính xác của dự đoán số."""
-        if len(predictions) != len(actuals):
-            raise ValidationError("Số lượng dự đoán và thực tế không khớp")
-
-        if not predictions:
-            return {"mae": 0.0, "rmse": 0.0, "r2": 0.0, "mean_error_pct": 0.0}
-
-        mae = mean_absolute_error(actuals, predictions)
-        rmse = np.sqrt(mean_squared_error(actuals, predictions))
-        r2 = r2_score(actuals, predictions)
-
-        # Tính sai số phần trăm trung bình
-        mean_error_pct = 0.0
-        count = 0
-        for a, p in zip(actuals, predictions):
-            if a != 0:
-                mean_error_pct += 100.0 * abs(p - a) / abs(a)
-                count += 1
-
-        if count > 0:
-            mean_error_pct /= count
-
-        return {"mae": mae, "rmse": rmse, "r2": r2, "mean_error_pct": mean_error_pct}
-
-
-def validate_anatomy_prediction_model(
-    predictor: AnatomyPredictor,
-    reference_date: datetime.datetime,
-    test_images: List[Image],
-    test_structures: List[Dict[str, Structure]],
-    test_dates: List[datetime.datetime],
-    output_dir: Optional[str] = None,
-) -> PredictionMetrics:
-    """
-    Xác thực mô hình dự đoán thay đổi giải phẫu.
-
-    Parameters
-    ----------
-    predictor : AnatomyPredictor
-        Bộ dự đoán cần đánh giá
-    reference_date : datetime.datetime
-        Ngày tham chiếu
-    test_images : List[Image]
-        Danh sách hình ảnh kiểm tra
-    test_structures : List[Dict[str, Structure]]
-        Danh sách cấu trúc kiểm tra tương ứng với mỗi hình ảnh
-    test_dates : List[datetime.datetime]
-        Danh sách ngày tương ứng với mỗi hình ảnh/cấu trúc
-    output_dir : Optional[str], optional
-        Thư mục đầu ra, mặc định là None
-
-    Returns
-    -------
-    PredictionMetrics
-        Các chỉ số đánh giá độ chính xác
-    """
-    if len(test_images) != len(test_structures) or len(test_images) != len(test_dates):
-        raise ValidationError("Số lượng hình ảnh, cấu trúc và ngày kiểm tra không khớp")
-
-    # Tạo dự đoán cho các ngày kiểm tra
-    patient = test_images[0].patient if test_images else None
-
-    # Lọc dữ liệu lịch sử
-    historical_indices = [
-        i for i, date in enumerate(test_dates) if date < reference_date
-    ]
-
-    if not historical_indices:
-        raise ValidationError("Không có dữ liệu lịch sử để huấn luyện mô hình dự đoán")
-
-    historical_images = [test_images[i] for i in historical_indices]
-    historical_structures = [test_structures[i] for i in historical_indices]
-    historical_dates = [test_dates[i] for i in historical_indices]
-
-    # Lọc dữ liệu kiểm tra
-    test_indices = [i for i, date in enumerate(test_dates) if date >= reference_date]
-
-    if not test_indices:
-        raise ValidationError("Không có dữ liệu kiểm tra để đánh giá mô hình dự đoán")
-
-    future_images = [test_images[i] for i in test_indices]
-    future_structures = [test_structures[i] for i in test_indices]
-    future_dates = [test_dates[i] for i in test_indices]
-
-    # Tạo dự đoán
-    prediction = predictor.predict_anatomy_changes(
-        patient=patient,
-        historical_images=historical_images,
-        historical_structures=historical_structures,
-        historical_dates=historical_dates,
-        prediction_dates=future_dates,
-        method=PredictionMethod.SPLINE,
-    )
-
-    # Đánh giá độ chính xác
-    validator = ModelValidator()
-    metrics = validator.validate_predictions(
-        prediction=prediction,
-        actual_images=future_images,
-        actual_structures=future_structures,
-        actual_dates=future_dates,
-    )
-
-    # Tạo báo cáo nếu cần
-    if output_dir:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-
-        report_path = os.path.join(output_dir, "validation_report.csv")
-        validator.generate_validation_report(report_path)
-
-    return metrics
+        Returns
+        -------
+        List[ValidationResult]
+            Danh sách các kết quả kiểm tra.
+        """
+        return self.validation_history
 
 
 if __name__ == "__main__":

@@ -107,17 +107,10 @@ class BEVCanvas(FigureCanvas):
         self.transform = None
         self.depth_map = None
         self.thickness_map = None
-        # Sử dụng cách an toàn để lấy colormap
-        try:
-            import matplotlib.cm as cm
 
-            self.depth_colormap = getattr(cm, "jet")
-            if self.depth_colormap is None:
-                self.depth_colormap = getattr(cm, "plasma")
-        except Exception as e:
-            import matplotlib.pyplot as plt
+        # Cải thiện cách lấy colormap với xử lý lỗi tốt hơn
+        self._setup_colormap()
 
-            self.depth_colormap = plt.cm.jet
         self.depth_range = (0, 30)  # Default depth range in cm
 
         # Default structure colors
@@ -188,6 +181,78 @@ class BEVCanvas(FigureCanvas):
 
         # Add grid
         self.axes.grid(True, linestyle="--", alpha=0.5)
+
+    def _setup_colormap(self):
+        """
+        Thiết lập colormap cho hiển thị độ sâu một cách an toàn.
+
+        Phương thức này thử lấy colormap từ matplotlib.cm, nếu không có sẽ
+        thử các colormap thay thế và cuối cùng tạo một colormap đơn giản.
+        """
+        # Danh sách colormap phổ biến để thử
+        colormap_names = [
+            "jet",
+            "viridis",
+            "plasma",
+            "rainbow",
+            "hot",
+            "coolwarm",
+            "RdBu",
+        ]
+
+        try:
+            # Thử import và lấy colormap từ matplotlib.cm
+            import matplotlib.cm as cm
+
+            # Thử từng colormap trong danh sách
+            for cmap_name in colormap_names:
+                self.depth_colormap = getattr(cm, cmap_name, None)
+                if self.depth_colormap is not None:
+                    logger.debug(f"Sử dụng colormap '{cmap_name}' từ matplotlib.cm")
+                    return
+
+            # Nếu vẫn không tìm thấy, thử từ plt.cm
+            import matplotlib.pyplot as plt
+
+            for cmap_name in colormap_names:
+                self.depth_colormap = getattr(plt.cm, cmap_name, None)
+                if self.depth_colormap is not None:
+                    logger.debug(f"Sử dụng colormap '{cmap_name}' từ plt.cm")
+                    return
+
+            # Nếu vẫn không có, tạo colormap đơn giản
+            self._create_simple_colormap()
+
+        except Exception as e:
+            logger.warning(f"Lỗi khi thiết lập colormap: {str(e)}")
+            # Tạo colormap đơn giản khi có lỗi
+            self._create_simple_colormap()
+
+    def _create_simple_colormap(self):
+        """
+        Tạo một colormap đơn giản khi không tìm thấy colormap nào từ matplotlib.
+        """
+        try:
+            from matplotlib.colors import LinearSegmentedColormap
+
+            # Tạo colormap đơn giản từ danh sách màu
+            logger.info("Tạo colormap đơn giản thay thế")
+            colors = [
+                (0, 0, 0.8),
+                (0, 0.5, 1),
+                (0, 1, 0),
+                (1, 1, 0),
+                (1, 0.5, 0),
+                (1, 0, 0),
+            ]
+            self.depth_colormap = LinearSegmentedColormap.from_list(
+                "simple_depth", colors, N=256
+            )
+
+        except Exception as e:
+            logger.error(f"Không thể tạo colormap đơn giản: {str(e)}")
+            # Nếu ngay cả việc tạo colormap cũng thất bại, đặt None để xử lý sau
+            self.depth_colormap = None
 
     def setup_figure(self):
         """Setup the figure appearance."""
@@ -516,9 +581,24 @@ class BEVCanvas(FigureCanvas):
         try:
             import matplotlib.cm as cm
 
-            self.depth_colormap = getattr(cm, colormap_name)
+            # Sử dụng getattr với giá trị mặc định để tránh AttributeError
+            self.depth_colormap = getattr(cm, colormap_name, None)
+
+            # Nếu không tìm thấy colormap, thử sử dụng plt.cm
             if self.depth_colormap is None:
-                self.depth_colormap = getattr(cm, "jet")
+                import matplotlib.pyplot as plt
+
+                # Sử dụng phương thức an toàn để lấy colormap
+                self.depth_colormap = getattr(plt.cm, colormap_name, None)
+
+                # Nếu vẫn không tìm thấy, thử các colormap phổ biến
+                if self.depth_colormap is None:
+                    for cmap_name in ["jet", "viridis", "plasma", "rainbow", "hot"]:
+                        self.depth_colormap = getattr(plt.cm, cmap_name, None)
+                        if self.depth_colormap is not None:
+                            logger.info(f"Sử dụng colormap thay thế: {cmap_name}")
+                            break
+
             logger.info(f"Đã thiết lập colormap: {colormap_name}")
 
             if self.show_depth_colorwash:
@@ -527,7 +607,24 @@ class BEVCanvas(FigureCanvas):
             logger.error(f"Lỗi khi thiết lập colormap {colormap_name}: {str(e)}")
             import matplotlib.pyplot as plt
 
-            self.depth_colormap = plt.cm.jet
+            # Sử dụng phương thức an toàn để lấy colormap
+            self.depth_colormap = getattr(plt.cm, "jet", None)
+            if self.depth_colormap is None:
+                # Nếu jet không có sẵn, thử các colormap phổ biến khác
+                for cmap_name in ["viridis", "plasma", "rainbow", "hot"]:
+                    self.depth_colormap = getattr(plt.cm, cmap_name, None)
+                    if self.depth_colormap is not None:
+                        logger.info(f"Sử dụng colormap thay thế: {cmap_name}")
+                        break
+
+                # Nếu vẫn không tìm thấy colormap nào, tạo một colormap đơn giản
+                if self.depth_colormap is None:
+                    logger.warning("Không tìm thấy colormap nào, tạo colormap đơn giản")
+                    from matplotlib.colors import LinearSegmentedColormap
+
+                    self.depth_colormap = LinearSegmentedColormap.from_list(
+                        "simple_cmap", ["blue", "green", "yellow", "red"], N=256
+                    )
 
     def set_depth_range(self, min_depth, max_depth):
         """

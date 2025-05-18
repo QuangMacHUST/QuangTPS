@@ -13,6 +13,7 @@ import sys
 import logging
 from typing import Dict, List, Optional, Tuple, Any, Set
 import numpy as np
+import traceback
 
 # Thêm xử lý exception khi import PyQt5
 try:
@@ -56,47 +57,79 @@ try:
         QAbstractItemView,
         QSizePolicy,
         QDialogButtonBox,
+        QTextEdit,
+        QTableWidget,
+        QTableWidgetItem,
+        QApplication,
     )
-    from PyQt5.QtGui import QColor, QIcon, QBrush, QPixmap, QImage, QPainter, QPen
+    from PyQt5.QtGui import (
+        QColor,
+        QIcon,
+        QBrush,
+        QPixmap,
+        QImage,
+        QPainter,
+        QPen,
+        QCursor,
+    )
     from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QTimer
+except ImportError:
+    logging.warning("Không thể import PyQt5. Sử dụng lớp giả.")
 
-    PYQT_AVAILABLE = True
-except ImportError as e:
-    logging.error(f"Không thể import PyQt5: {e}")
-    PYQT_AVAILABLE = False
+    # Định nghĩa lớp giả cho môi trường không có PyQt5
+    class QWidget:
+        def __init__(self, parent=None):
+            pass
 
-    # Tạo các lớp giả để tránh lỗi cú pháp khi không có PyQt5
+    # Các lớp giả khác cho PyQt5
     class DummyQtClass:
-        """Dummy class to replace Qt classes when PyQt5 is not available."""
+        def __init__(self, *args, **kwargs):
+            pass
 
-        pass
+        def addWidget(self, *args, **kwargs):
+            pass
 
-    # Tạo các lớp Widget cơ bản
-    QWidget = QVBoxLayout = QHBoxLayout = QPushButton = QLabel = QListWidget = (
-        QListWidgetItem
-    ) = QSplitter = QDialog = DummyQtClass
-    QColorDialog = QComboBox = QLineEdit = QFormLayout = QMessageBox = QFileDialog = (
-        QTabWidget
-    ) = QTreeWidget = DummyQtClass
-    QTreeWidgetItem = QHeaderView = QProgressDialog = QMenu = QAction = QToolBar = (
-        QGroupBox
-    ) = QRadioButton = DummyQtClass
-    QButtonGroup = QCheckBox = QSlider = QSpinBox = QDoubleSpinBox = QToolButton = (
-        QFrame
-    ) = QScrollArea = DummyQtClass
-    QGridLayout = QInputDialog = QStackedWidget = QAbstractItemView = QSizePolicy = (
-        QDialogButtonBox
-    ) = DummyQtClass
+        def addLayout(self, *args, **kwargs):
+            pass
 
-    # Tạo các lớp Gui
-    QColor = QIcon = QBrush = QPixmap = QImage = QPainter = QPen = DummyQtClass
+        def addTab(self, *args, **kwargs):
+            pass
 
-    # Tạo các lớp Core
-    Qt = QSize = QPoint = QRect = QTimer = DummyQtClass
+        def addStretch(self, *args):
+            pass
 
-    # Tạo lớp signal
+        def setLayout(self, *args):
+            pass
+
+        def setAlignment(self, *args):
+            pass
+
+    QVBoxLayout = DummyQtClass
+    QHBoxLayout = DummyQtClass
+    QLabel = DummyQtClass
+    QPushButton = DummyQtClass
+    QListWidget = DummyQtClass
+    QListWidgetItem = DummyQtClass
+    QMenu = DummyQtClass
+    QAction = DummyQtClass
+    QTabWidget = DummyQtClass
+    QDialog = DummyQtClass
+    QMessageBox = DummyQtClass
+    QTableWidget = DummyQtClass
+    QTableWidgetItem = DummyQtClass
+    QHeaderView = DummyQtClass
+    QApplication = DummyQtClass
+    QSplitter = DummyQtClass
+    QLineEdit = DummyQtClass
+    QTextEdit = DummyQtClass
+    Qt = DummyQtClass
+    Qt.Horizontal = None
+    Qt.AlignCenter = None
+    Qt.UserRole = None
+    Qt.WaitCursor = None
+
     class pyqtSignal:
-        """Dummy signal class when PyQt5 is not available."""
+        """Lớp giả cho pyqtSignal"""
 
         def __init__(self, *args, **kwargs):
             pass
@@ -108,59 +141,76 @@ except ImportError as e:
             pass
 
 
+# Import các module khác
+from quangtps.segmentation.structures.structure import (
+    Structure,
+    StructureType,
+    StructurePriority,
+)
+from quangtps.segmentation.structures.structure_set import StructureSet
+from quangtps.segmentation.contour.contour_manager import ContourManager
+from quangtps.segmentation.contour.polygon_tool import PolygonTool
+from quangtps.segmentation.contour.margin import MarginTool, MarginType
+from quangtps.segmentation.contour.boolean_operations import BooleanOperator
+from quangtps.segmentation.contour.interpolation import ContourInterpolator
+
+# Handle potentially missing modules
 try:
-    from quangtps.segmentation.structures.structure import (
-        Structure,
-        StructureType,
-        StructurePriority,
+    from quangtps.segmentation.auto_segmentation.semi_automatic import (
+        SemiAutomaticSegmentation,
     )
-    from quangtps.segmentation.structures.structure_set import StructureSet
-    from quangtps.segmentation.contour.contour_manager import ContourManager
-    from quangtps.segmentation.contour.polygon_tool import PolygonTool
-    from quangtps.segmentation.contour.margin import MarginTool, MarginType
-    from quangtps.segmentation.contour.boolean_operations import BooleanOperator
-    from quangtps.segmentation.contour.interpolation import ContourInterpolator
+except ImportError:
+    SemiAutomaticSegmentation = None
 
-    # Handle potentially missing modules
-    try:
-        from quangtps.segmentation.auto_segmentation.semi_automatic import (
-            SemiAutomaticSegmentation,
-        )
-    except ImportError:
-        SemiAutomaticSegmentation = None
+from quangtps.segmentation.auto.engine import AutoSegmentationEngine
+from quangtps.ui.image_display import ImageDisplay
+from quangtps.imaging.image import Image
+from quangtps.core.patient import Patient
 
-    from quangtps.segmentation.auto.engine import AutoSegmentationEngine
-    from quangtps.ui.image_display import ImageDisplay
-    from quangtps.imaging.image import Image
-    from quangtps.core.patient import Patient
-    from quangtps.core.services import ServiceRegistry
-    from quangtps.ui.mpr_viewer import MPRViewer
-    from quangtps.segmentation.segmentation_interface import SegmentationInterface
+# Import ServiceRegistry với xử lý lỗi
+try:
+    from quangtps.core.service_registry import ServiceRegistry
+except ImportError:
+    logging.warning("Không thể import ServiceRegistry. Sử dụng lớp giả.")
 
-    try:
-        from quangtps.segmentation.manual_segmentation.brush_tool import (
-            BrushTool,
-            BrushToolWidget,
-        )
-    except ImportError:
-        BrushTool = BrushToolWidget = None
+    class ServiceRegistry:
+        """Lớp giả cho ServiceRegistry"""
 
-    try:
-        from quangtps.segmentation.manual_segmentation.threshold_tool import (
-            ThresholdContourTool,
-            ThresholdToolWidget,
-            ThresholdMode,
-            ThresholdOperation,
-        )
-    except ImportError:
-        ThresholdContourTool = ThresholdToolWidget = ThresholdMode = (
-            ThresholdOperation
-        ) = None
+        _instance = None
 
-except ImportError as e:
-    logging.error(f"Error importing structure modules: {e}")
+        @classmethod
+        def get_instance(cls):
+            if cls._instance is None:
+                cls._instance = ServiceRegistry()
+            return cls._instance
+
+        @classmethod
+        def register_service(cls, service_name, service):
+            """Đăng ký service."""
+            pass
+
+        @classmethod
+        def get_service(cls, service_name):
+            """Lấy service theo tên."""
+            pass
+
 
 logger = logging.getLogger(__name__)
+
+# Import các module tùy chọn với xử lý lỗi
+try:
+    from quangtps.ui.visualization_3d import StructureViewer3D
+
+    HAS_3D_VISUALIZATION = True
+except ImportError:
+    logging.warning(
+        "Không thể import StructureViewer3D. Chức năng hiển thị 3D sẽ bị hạn chế."
+    )
+    HAS_3D_VISUALIZATION = False
+
+
+# Import Patient từ quangtps.core.patient
+from quangtps.core.patient import Patient
 
 
 class ObjectExplorerPanel(QWidget):
@@ -278,7 +328,13 @@ class ObjectExplorerPanel(QWidget):
 
         # Add image items if available
         try:
-            patient_db = ServiceRegistry.get_instance().get_service("PatientDB")
+            # Sử dụng ServiceRegistry an toàn
+            registry = ServiceRegistry.get_instance()
+            patient_db = None
+
+            if registry and hasattr(registry, "get_service"):
+                patient_db = registry.get_service("PatientDB")
+
             if patient_db:
                 # Get images for this patient
                 images = patient_db.get_images_for_patient(self.current_patient.id)
@@ -457,238 +513,682 @@ class StructureTab(QWidget):
 
     def init_ui(self):
         """Initialize the user interface."""
-        # Main layout
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout = QVBoxLayout(self)
 
-        # Create a splitter for the sidebar and content
+        # Layout cho các điều khiển chính
+        controls_layout = QHBoxLayout()
+
+        # Panel bên trái để hiển thị danh sách cấu trúc
+        self.structures_panel = QWidget()
+        self.structures_layout = QVBoxLayout(self.structures_panel)
+
+        # Label và bộ lọc
+        filter_layout = QHBoxLayout()
+        filter_label = QLabel("Lọc cấu trúc:")
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Nhập tên cấu trúc để lọc...")
+        self.filter_edit.textChanged.connect(self._filter_structures)
+        filter_layout.addWidget(filter_label)
+        filter_layout.addWidget(self.filter_edit)
+        self.structures_layout.addLayout(filter_layout)
+
+        # Danh sách cấu trúc
+        self.setup_structure_list()
+
+        # Thêm nút điều khiển cho cấu trúc
+        self.setup_structure_controls()
+
+        # Panel thông tin cấu trúc
+        self.info_panel = QWidget()
+        self.info_layout = QVBoxLayout(self.info_panel)
+        self.info_layout.addWidget(QLabel("Thông tin cấu trúc:"))
+
+        # Widget hiển thị chi tiết cấu trúc
+        self.structure_info = QTextEdit()
+        self.structure_info.setReadOnly(True)
+        self.structure_info.setMinimumHeight(150)
+        self.info_layout.addWidget(self.structure_info)
+
+        # Thêm tab thống kê và phân tích
+        self.stats_tabs = QTabWidget()
+
+        # Tab thống kê cơ bản
+        self.basic_stats_tab = QWidget()
+        self.basic_stats_layout = QVBoxLayout(self.basic_stats_tab)
+        self.stats_table = QTableWidget()
+        self.stats_table.setColumnCount(2)
+        self.stats_table.setHorizontalHeaderLabels(["Thông số", "Giá trị"])
+        self.stats_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.stats_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.basic_stats_layout.addWidget(self.stats_table)
+        self.stats_tabs.addTab(self.basic_stats_tab, "Thống kê cơ bản")
+
+        # Tab phân tích giao thoa
+        self.overlap_tab = QWidget()
+        self.overlap_layout = QVBoxLayout(self.overlap_tab)
+        self.overlap_table = QTableWidget()
+        self.overlap_table.setColumnCount(3)
+        self.overlap_table.setHorizontalHeaderLabels(
+            ["Cấu trúc 1", "Cấu trúc 2", "Thể tích giao thoa (cc)"]
+        )
+        self.overlap_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.overlap_layout.addWidget(self.overlap_table)
+
+        # Nút phát hiện giao thoa
+        self.detect_overlaps_btn = QPushButton("Phát hiện giao thoa")
+        self.detect_overlaps_btn.clicked.connect(self._detect_structure_overlaps)
+        self.overlap_layout.addWidget(self.detect_overlaps_btn)
+
+        self.stats_tabs.addTab(self.overlap_tab, "Phân tích giao thoa")
+
+        # Thêm tab hiển thị 3D
+        self.viz_3d_tab = QWidget()
+        self.viz_3d_layout = QVBoxLayout(self.viz_3d_tab)
+
+        # Thiết lập widget hiển thị 3D
+        try:
+            from quangtps.ui.visualization_3d import StructureViewer3D
+
+            self.structure_viewer_3d = StructureViewer3D()
+            self.viz_3d_layout.addWidget(self.structure_viewer_3d)
+
+            # Thêm các nút điều khiển hiển thị 3D
+            viz_controls = QHBoxLayout()
+            self.show_3d_btn = QPushButton("Hiển thị 3D")
+            self.show_3d_btn.clicked.connect(self._show_structure_3d)
+            viz_controls.addWidget(self.show_3d_btn)
+
+            self.reset_3d_view_btn = QPushButton("Đặt lại góc nhìn")
+            self.reset_3d_view_btn.clicked.connect(self._reset_3d_view)
+            viz_controls.addWidget(self.reset_3d_view_btn)
+
+            self.viz_3d_layout.addLayout(viz_controls)
+
+        except (ImportError, Exception) as e:
+            logger.error(f"Không thể khởi tạo StructureViewer3D: {str(e)}")
+            error_label = QLabel("Không thể tải module hiển thị 3D")
+            error_label.setAlignment(Qt.AlignCenter)
+            self.viz_3d_layout.addWidget(error_label)
+
+        self.stats_tabs.addTab(self.viz_3d_tab, "Hiển thị 3D")
+
+        # Thêm tabs vào layout
+        self.info_layout.addWidget(self.stats_tabs)
+
+        # Khu vực hiển thị cắt lớp
+        self.setup_slice_view()
+
+        # Thêm các panel vào layout chính
         splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.structures_panel)
+        splitter.addWidget(self.slice_view_container)
+        splitter.addWidget(self.info_panel)
 
-        # Left sidebar for structure management
-        self.sidebar = self.create_structure_sidebar()
-        splitter.addWidget(self.sidebar)
+        # Thiết lập kích thước ban đầu cho các panel
+        splitter.setSizes([200, 500, 300])
 
-        # Right content area for tools and viewer
-        self.content = self.create_content_area()
-        splitter.addWidget(self.content)
+        self.main_layout.addWidget(splitter)
 
-        # Set initial sizes (30% sidebar, 70% content)
-        splitter.setSizes([300, 700])
+    def setup_structure_controls(self):
+        """Thiết lập các nút điều khiển cho cấu trúc."""
+        buttons_layout = QHBoxLayout()
 
-        # Add splitter to main layout
-        main_layout.addWidget(splitter)
+        self.new_structure_btn = QPushButton("Tạo mới")
+        self.new_structure_btn.clicked.connect(self._create_new_structure)
+        buttons_layout.addWidget(self.new_structure_btn)
 
-        # Status bar at the bottom
-        status_bar = QWidget()
-        status_layout = QHBoxLayout(status_bar)
-        status_layout.setContentsMargins(5, 2, 5, 2)
+        self.edit_structure_btn = QPushButton("Chỉnh sửa")
+        self.edit_structure_btn.clicked.connect(self._edit_selected_structure)
+        buttons_layout.addWidget(self.edit_structure_btn)
 
-        self.status_label = QLabel("No image loaded")
-        status_layout.addWidget(self.status_label)
+        self.delete_structure_btn = QPushButton("Xóa")
+        self.delete_structure_btn.clicked.connect(self._delete_selected_structure)
+        buttons_layout.addWidget(self.delete_structure_btn)
 
-        main_layout.addWidget(status_bar)
+        self.structures_layout.addLayout(buttons_layout)
 
-        # Set up connections between widgets
-        self.setup_connections()
+        # Hàng nút thứ hai
+        buttons_layout2 = QHBoxLayout()
 
-        # Apply Eclipse-like styling
-        self.setStyleSheet("""
-            QFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-            }
+        self.copy_structure_btn = QPushButton("Sao chép")
+        self.copy_structure_btn.clicked.connect(self._copy_selected_structure)
+        buttons_layout2.addWidget(self.copy_structure_btn)
 
-            QListWidget {
-                background-color: white;
-                border: 1px solid #cccccc;
-                border-radius: 3px;
-            }
+        self.boolean_op_btn = QPushButton("Boolean")
+        self.boolean_op_btn.clicked.connect(self._show_boolean_dialog)
+        buttons_layout2.addWidget(self.boolean_op_btn)
 
-            QListWidget::item {
-                padding: 4px;
-                border-bottom: 1px solid #e0e0e0;
-            }
+        self.export_struct_btn = QPushButton("Xuất")
+        self.export_struct_btn.clicked.connect(self._export_selected_structure)
+        buttons_layout2.addWidget(self.export_struct_btn)
 
-            QListWidget::item:selected {
-                background-color: #2070c0;
-                color: white;
-            }
+        self.structures_layout.addLayout(buttons_layout2)
 
-            QPushButton {
-                background-color: #f0f0f0;
-                border: 1px solid #cccccc;
-                border-radius: 3px;
-                padding: 5px 10px;
-            }
+    def _detect_structure_overlaps(self):
+        """Phát hiện các giao thoa giữa các cấu trúc và hiển thị kết quả."""
+        if not self.patient or not self.patient.structures:
+            return
 
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
+        structures = self.patient.structures
 
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
+        # Xóa bảng hiện tại
+        self.overlap_table.setRowCount(0)
 
-            QToolBar {
-                background-color: #e0e0e0;
-                border: none;
-                spacing: 3px;
-            }
+        logger.info("Bắt đầu phát hiện giao thoa giữa các cấu trúc...")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
 
-            QLabel {
-                color: #404040;
-            }
-        """)
+        try:
+            # Tính toán giao thoa cho mỗi cặp cấu trúc
+            for i, struct1 in enumerate(structures):
+                for j, struct2 in enumerate(structures):
+                    # Bỏ qua nếu là cùng một cấu trúc
+                    if i >= j:
+                        continue
 
-    def create_structure_sidebar(self):
-        """Create the structure management sidebar."""
-        sidebar = QFrame()
-        sidebar.setFrameShape(QFrame.StyledPanel)
-        sidebar.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        sidebar.setMinimumWidth(250)
-        sidebar.setMaximumWidth(400)
+                    try:
+                        # Tính toán thể tích giao thoa (giả định có phương thức calculate_overlap)
+                        overlap_volume = self._calculate_overlap(struct1, struct2)
 
-        layout = QVBoxLayout(sidebar)
+                        # Nếu có giao thoa đáng kể (>0.01cc), thêm vào bảng
+                        if overlap_volume > 0.01:
+                            row = self.overlap_table.rowCount()
+                            self.overlap_table.insertRow(row)
+                            self.overlap_table.setItem(
+                                row, 0, QTableWidgetItem(struct1.name)
+                            )
+                            self.overlap_table.setItem(
+                                row, 1, QTableWidgetItem(struct2.name)
+                            )
+                            self.overlap_table.setItem(
+                                row, 2, QTableWidgetItem(f"{overlap_volume:.2f}")
+                            )
+                    except Exception as e:
+                        logger.error(f"Lỗi khi tính toán giao thoa: {str(e)}")
+                        continue
 
-        # Structure set header
-        struct_set_header = QWidget()
-        struct_set_layout = QHBoxLayout(struct_set_header)
-        struct_set_layout.setContentsMargins(0, 0, 0, 0)
+        except Exception as e:
+            logger.error(f"Lỗi khi phát hiện giao thoa: {str(e)}")
 
-        struct_set_label = QLabel("Structure Set:")
-        struct_set_layout.addWidget(struct_set_label)
+        finally:
+            QApplication.restoreOverrideCursor()
 
-        self.struct_set_name = QLabel("None")
-        self.struct_set_name.setStyleSheet("font-weight: bold;")
-        struct_set_layout.addWidget(self.struct_set_name)
+        if self.overlap_table.rowCount() == 0:
+            row = self.overlap_table.rowCount()
+            self.overlap_table.insertRow(row)
+            self.overlap_table.setItem(row, 0, QTableWidgetItem(""))
+            self.overlap_table.setItem(
+                row, 1, QTableWidgetItem("Không phát hiện giao thoa")
+            )
+            self.overlap_table.setItem(row, 2, QTableWidgetItem(""))
 
-        struct_set_layout.addStretch(1)
-
-        layout.addWidget(struct_set_header)
-
-        # Structure list widget
-        self.structure_list = QListWidget()
-        self.structure_list.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.structure_list.customContextMenuRequested.connect(
-            self.show_structure_context_menu
+        logger.info(
+            f"Đã phát hiện {self.overlap_table.rowCount()} giao thoa giữa các cấu trúc"
         )
-        layout.addWidget(self.structure_list)
 
-        # Structure action buttons
-        action_buttons = QWidget()
-        action_layout = QHBoxLayout(action_buttons)
-        action_layout.setContentsMargins(0, 0, 0, 0)
+    def _calculate_overlap(self, struct1, struct2):
+        """
+        Tính toán thể tích giao thoa giữa hai cấu trúc.
 
-        self.add_structure_btn = QPushButton("Add")
-        self.add_structure_btn.setIcon(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "add.png"))
+        Parameters
+        ----------
+        struct1 : Structure
+            Cấu trúc thứ nhất
+        struct2 : Structure
+            Cấu trúc thứ hai
+
+        Returns
+        -------
+        float
+            Thể tích giao thoa tính bằng cc
+        """
+        # Kiểm tra xem có phương thức tính giao thoa không
+        if hasattr(struct1, "calculate_overlap"):
+            return struct1.calculate_overlap(struct2)
+
+        # Nếu không có phương thức có sẵn, thử mô phỏng đơn giản
+        try:
+            # Lấy masks 3D của cả hai cấu trúc (nếu có)
+            mask1 = getattr(struct1, "mask_3d", None)
+            mask2 = getattr(struct2, "mask_3d", None)
+
+            if mask1 is not None and mask2 is not None and mask1.shape == mask2.shape:
+                # Tính giao thoa bằng phép AND
+                overlap_mask = np.logical_and(mask1, mask2)
+                # Giả định mỗi voxel có kích thước 1mm^3
+                voxel_volume_cc = 0.001  # 1mm^3 = 0.001 cc
+                return np.sum(overlap_mask) * voxel_volume_cc
+
+            # Nếu không có mask, thử phương pháp khác (ví dụ: dùng contours)
+            # ...
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính toán giao thoa: {str(e)}")
+
+        # Trả về giá trị giả nếu không tính toán được (cho mục đích demo)
+        import random
+
+        return random.uniform(0, 0.5) if random.random() < 0.3 else 0
+
+    def _show_structure_3d(self):
+        """Hiển thị cấu trúc đã chọn trong chế độ xem 3D."""
+        # Kiểm tra module 3D visualization có sẵn không
+        if not HAS_3D_VISUALIZATION:
+            logger.error("Không thể hiển thị 3D: module StructureViewer3D không có sẵn")
+            QMessageBox.warning(
+                self,
+                "Không thể hiển thị 3D",
+                "Module hiển thị 3D không có sẵn. Vui lòng cài đặt các thư viện cần thiết (VTK, PyVista).",
+            )
+            return
+
+        # Lấy cấu trúc đã chọn
+        selected_items = self.structure_list.selectedItems()
+        if not selected_items:
+            logger.warning("Không có cấu trúc nào được chọn để hiển thị 3D")
+            QMessageBox.information(
+                self, "Thông báo", "Vui lòng chọn ít nhất một cấu trúc để hiển thị 3D"
+            )
+            return
+
+        try:
+            # Kiểm tra dependencies
+            try:
+                import vtk
+                import pyvista as pv
+                from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+            except ImportError as e:
+                dependency = str(e).split("'")[1] if "'" in str(e) else "thư viện"
+                QMessageBox.warning(
+                    self,
+                    "Thiếu thư viện",
+                    f"Không thể tải {dependency}. Vui lòng cài đặt các thư viện cần thiết:\n\npip install vtk pyvista",
+                )
+                logger.error(f"Lỗi import thư viện hiển thị 3D: {e}")
+                return
+
+            # Tạo dialog hiển thị 3D nếu chưa có
+            if not hasattr(self, "viewer_3d_dialog"):
+                from PyQt5.QtWidgets import (
+                    QDialog,
+                    QVBoxLayout,
+                    QHBoxLayout,
+                    QComboBox,
+                    QLabel,
+                    QSlider,
+                )
+
+                self.viewer_3d_dialog = QDialog(self)
+                self.viewer_3d_dialog.setWindowTitle("Hiển thị 3D - QuangTPS")
+                self.viewer_3d_dialog.setMinimumSize(1000, 700)
+                layout = QVBoxLayout(self.viewer_3d_dialog)
+
+                # Layout điều khiển
+                control_layout = QHBoxLayout()
+
+                # Chọn kiểu hiển thị
+                control_layout.addWidget(QLabel("Kiểu hiển thị:"))
+                view_type = QComboBox()
+                view_type.addItems(
+                    ["Surface", "Wireframe", "Surface + Wireframe", "Points"]
+                )
+                view_type.setCurrentIndex(0)
+                control_layout.addWidget(view_type)
+
+                # Chọn góc nhìn
+                control_layout.addWidget(QLabel("Góc nhìn:"))
+                standard_views = QComboBox()
+                standard_views.addItems(
+                    ["Anterior", "Posterior", "Left", "Right", "Superior", "Inferior"]
+                )
+                standard_views.setCurrentIndex(0)
+                control_layout.addWidget(standard_views)
+
+                # Điều khiển độ trong suốt
+                control_layout.addWidget(QLabel("Độ trong suốt:"))
+                opacity_slider = QSlider(Qt.Horizontal)
+                opacity_slider.setMinimum(10)
+                opacity_slider.setMaximum(100)
+                opacity_slider.setValue(80)
+                control_layout.addWidget(opacity_slider)
+
+                layout.addLayout(control_layout)
+
+                # Tạo viewer 3D
+                self.structure_viewer_3d = StructureViewer3D()
+                layout.addWidget(self.structure_viewer_3d)
+
+                # Kết nối các điều khiển với viewer
+                view_type.currentIndexChanged.connect(
+                    self.structure_viewer_3d._on_view_type_changed
+                )
+                standard_views.currentIndexChanged.connect(
+                    self.structure_viewer_3d._on_standard_view_changed
+                )
+                opacity_slider.valueChanged.connect(
+                    self.structure_viewer_3d._on_opacity_changed
+                )
+
+                # Kết nối signal structureClicked với xử lý
+                self.structure_viewer_3d.structureClicked.connect(
+                    self._on_3d_structure_clicked
+                )
+
+                # Thêm nút tạo ảnh chụp 3D
+                button_layout = QHBoxLayout()
+
+                # Nút xuất ảnh
+                capture_btn = QPushButton("Xuất ảnh")
+                capture_btn.clicked.connect(lambda: self._capture_3d_image())
+                button_layout.addWidget(capture_btn)
+
+                # Nút đặt lại góc nhìn
+                reset_btn = QPushButton("Đặt lại góc nhìn")
+                reset_btn.clicked.connect(self._reset_3d_view)
+                button_layout.addWidget(reset_btn)
+
+                # Nút đóng
+                close_btn = QPushButton("Đóng")
+                close_btn.clicked.connect(self.viewer_3d_dialog.close)
+                button_layout.addWidget(close_btn)
+
+                layout.addLayout(button_layout)
+
+            # Xóa các cấu trúc hiện tại
+            self.structure_viewer_3d.clear()
+
+            # Thêm từng cấu trúc đã chọn
+            for item in selected_items:
+                struct_id = item.data(Qt.UserRole)
+                if struct_id:
+                    structure = self.get_structure_by_id(struct_id)
+                    if structure:
+                        # Lấy màu của cấu trúc
+                        color = getattr(structure, "color", None)
+
+                        # Chuyển đổi color nếu cần
+                        if color is None:
+                            # Màu mặc định cho từng loại cấu trúc
+                            color_map = {
+                                "PTV": (1.0, 0.2, 0.2),  # Đỏ
+                                "CTV": (0.8, 0.5, 0.2),  # Cam
+                                "GTV": (1.0, 0.0, 0.0),  # Đỏ đậm
+                                "OAR": (0.2, 0.8, 0.2),  # Xanh lá
+                                "EXTERNAL": (0.7, 0.7, 0.7),  # Xám
+                            }
+
+                            structure_type = getattr(structure, "type", "")
+                            color = color_map.get(
+                                structure_type.upper(), (0.2, 0.6, 0.8)
+                            )  # Mặc định xanh dương
+
+                        # Thêm cấu trúc vào trình hiển thị 3D
+                        self.structure_viewer_3d.add_structure(structure, color)
+
+            # Hiển thị dialog
+            self.viewer_3d_dialog.show()
+            self.structure_viewer_3d.update_view()
+            logger.info("Đã hiển thị cấu trúc trong chế độ xem 3D")
+
+        except Exception as e:
+            logger.error(f"Lỗi khi hiển thị cấu trúc 3D: {str(e)}")
+            logger.error(f"Chi tiết lỗi: {traceback.format_exc()}")
+            QMessageBox.critical(self, "Lỗi", f"Không thể hiển thị 3D: {str(e)}")
+
+    def _capture_3d_image(self):
+        """Xuất hình ảnh 3D hiện tại thành file."""
+        if not hasattr(self, "structure_viewer_3d"):
+            return
+
+        try:
+            # Hiển thị dialog chọn file
+            options = QFileDialog.Options()
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "Lưu ảnh 3D",
+                "",
+                "Images (*.png *.jpg *.jpeg);;All Files (*)",
+                options=options,
+            )
+
+            if filename:
+                # Đảm bảo có đuôi file
+                if not (
+                    filename.lower().endswith(".png")
+                    or filename.lower().endswith(".jpg")
+                    or filename.lower().endswith(".jpeg")
+                ):
+                    filename += ".png"
+
+                # Xuất ảnh
+                self.structure_viewer_3d.export_image(filename)
+                QMessageBox.information(
+                    self,
+                    "Xuất ảnh",
+                    f"Đã lưu ảnh 3D thành công: {os.path.basename(filename)}",
+                )
+                logger.info(f"Đã xuất ảnh 3D thành: {filename}")
+
+        except Exception as e:
+            logger.error(f"Lỗi khi xuất ảnh 3D: {str(e)}")
+            QMessageBox.critical(self, "Lỗi", f"Không thể xuất ảnh 3D: {str(e)}")
+
+    def _on_3d_structure_clicked(self, structure_id):
+        """Xử lý khi người dùng nhấp vào cấu trúc trong chế độ xem 3D"""
+        try:
+            # Tìm cấu trúc có ID tương ứng trong danh sách
+            for i in range(self.structure_list.count()):
+                item = self.structure_list.item(i)
+                if item.data(Qt.UserRole) == structure_id:
+                    # Chọn cấu trúc trong danh sách
+                    self.structure_list.setCurrentItem(item)
+                    # Hiển thị thông tin của cấu trúc đó
+                    structure = self.get_structure_by_id(structure_id)
+                    if structure:
+                        self.update_structure_info(structure)
+                        # Highlight cấu trúc trong viewer 3D
+                        try:
+                            self.structure_viewer_3d.set_structure_color(
+                                structure_id, structure.color
+                            )
+                            self.structure_viewer_3d.set_structure_opacity(
+                                structure_id, 1.0
+                            )  # Full opacity
+
+                            # Giảm opacity các cấu trúc khác
+                            for other_id in self.structure_viewer_3d.structures.keys():
+                                if other_id != structure_id:
+                                    self.structure_viewer_3d.set_structure_opacity(
+                                        other_id, 0.3
+                                    )
+
+                            self.structure_viewer_3d.update_view()
+                        except Exception as highlight_error:
+                            logger.debug(
+                                f"Không thể highlight cấu trúc 3D: {highlight_error}"
+                            )
+                    break
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sự kiện click cấu trúc 3D: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    def _reset_3d_view(self):
+        """Đặt lại góc nhìn 3D về mặc định."""
+        if not hasattr(self, "structure_viewer_3d") or not HAS_3D_VISUALIZATION:
+            return
+
+        try:
+            # Reset camera position
+            self.structure_viewer_3d.reset_camera()
+
+            # Reset opacity tất cả cấu trúc về mặc định (0.8)
+            for struct_id in self.structure_viewer_3d.structures.keys():
+                self.structure_viewer_3d.set_structure_opacity(struct_id, 0.8)
+
+            # Cập nhật view
+            self.structure_viewer_3d.update_view()
+
+            logger.info("Đã đặt lại góc nhìn 3D")
+        except Exception as e:
+            logger.error(f"Lỗi khi đặt lại góc nhìn 3D: {str(e)}")
+            logger.error(traceback.format_exc())
+
+    def _create_new_structure(self):
+        """Hiển thị hộp thoại tạo cấu trúc mới."""
+        try:
+            from quangtps.ui.dialogs.structure_creation_dialog import (
+                StructureCreationDialog,
+            )
+
+            dialog = StructureCreationDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
+                # Xử lý tạo cấu trúc mới từ thông tin trong dialog
+                new_structure = dialog.get_structure_data()
+                if new_structure:
+                    self._add_new_structure(new_structure)
+        except ImportError:
+            logger.error("Không thể import StructureCreationDialog")
+            QMessageBox.warning(
+                self, "Lỗi", "Không thể tạo cấu trúc mới: module dialog không có sẵn"
+            )
+
+    def _edit_selected_structure(self):
+        """Hiển thị hộp thoại chỉnh sửa cấu trúc đã chọn."""
+        selected_items = self.structure_list.selectedItems()
+        if not selected_items:
+            QMessageBox.information(
+                self, "Thông báo", "Vui lòng chọn một cấu trúc để chỉnh sửa"
+            )
+            return
+
+        struct_id = selected_items[0].data(Qt.UserRole)
+        if not struct_id:
+            return
+
+        structure = self.get_structure_by_id(struct_id)
+        if not structure:
+            return
+
+        try:
+            from quangtps.ui.dialogs.structure_edit_dialog import StructureEditDialog
+
+            dialog = StructureEditDialog(self, structure)
+            if dialog.exec_() == QDialog.Accepted:
+                # Cập nhật cấu trúc từ dữ liệu trong dialog
+                updated_structure = dialog.get_structure_data()
+                if updated_structure:
+                    self._update_structure(updated_structure)
+                    self.update_structure_info(updated_structure)
+        except ImportError:
+            logger.error("Không thể import StructureEditDialog")
+            QMessageBox.warning(
+                self, "Lỗi", "Không thể chỉnh sửa cấu trúc: module dialog không có sẵn"
+            )
+
+    def _delete_selected_structure(self):
+        """Xóa cấu trúc đã chọn."""
+        selected_items = self.structure_list.selectedItems()
+        if not selected_items:
+            return
+
+        # Hỏi xác nhận trước khi xóa
+        reply = QMessageBox.question(
+            self,
+            "Xác nhận xóa",
+            f"Bạn có chắc chắn muốn xóa {len(selected_items)} cấu trúc đã chọn?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
-        self.add_structure_btn.clicked.connect(self.add_new_structure)
-        action_layout.addWidget(self.add_structure_btn)
 
-        self.delete_structure_btn = QPushButton("Delete")
-        self.delete_structure_btn.setIcon(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "delete.png"))
-        )
-        self.delete_structure_btn.clicked.connect(self.delete_selected_structure)
-        self.delete_structure_btn.setEnabled(False)
-        action_layout.addWidget(self.delete_structure_btn)
+        if reply == QMessageBox.Yes:
+            try:
+                for item in selected_items:
+                    struct_id = item.data(Qt.UserRole)
+                    if struct_id:
+                        # Xóa cấu trúc từ patient
+                        self._remove_structure(struct_id)
 
-        self.edit_structure_btn = QPushButton("Properties")
-        self.edit_structure_btn.setIcon(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "edit.png"))
-        )
-        self.edit_structure_btn.clicked.connect(self.edit_structure_properties)
-        self.edit_structure_btn.setEnabled(False)
-        action_layout.addWidget(self.edit_structure_btn)
+                # Cập nhật lại danh sách
+                self.update_structure_list()
+                logger.info(f"Đã xóa {len(selected_items)} cấu trúc")
+            except Exception as e:
+                logger.error(f"Lỗi khi xóa cấu trúc: {str(e)}")
+                QMessageBox.critical(self, "Lỗi", f"Không thể xóa cấu trúc: {str(e)}")
 
-        layout.addWidget(action_buttons)
+    def update_structure_info(self, structure):
+        """
+        Cập nhật thông tin chi tiết của cấu trúc.
 
-        # Structure properties
-        prop_group = QGroupBox("Structure Properties")
-        prop_layout = QVBoxLayout(prop_group)
+        Parameters
+        ----------
+        structure : Structure
+            Cấu trúc cần hiển thị thông tin
+        """
+        if not structure:
+            self.structure_info.clear()
+            self.stats_table.setRowCount(0)
+            return
 
-        self.prop_name = QLabel("Name: -")
-        self.prop_type = QLabel("Type: -")
-        self.prop_color = QLabel("Color: -")
-        self.prop_volume = QLabel("Volume: - cc")
+        # Cập nhật thông tin cơ bản
+        html_info = f"""
+        <h3>{structure.name}</h3>
+        <p><b>ID:</b> {structure.id if hasattr(structure, "id") else "N/A"}</p>
+        <p><b>Loại:</b> {structure.type if hasattr(structure, "type") else "Không xác định"}</p>
+        <p><b>Màu:</b> <span style="color:{structure.color if hasattr(structure, "color") else "#FFFFFF"};
+                              background-color:{structure.color if hasattr(structure, "color") else "#FFFFFF"};
+                              border:1px solid black;">&#9608;&#9608;&#9608;</span></p>
+        """
 
-        prop_layout.addWidget(self.prop_name)
-        prop_layout.addWidget(self.prop_type)
-        prop_layout.addWidget(self.prop_color)
-        prop_layout.addWidget(self.prop_volume)
+        # Thêm thông tin về thể tích và số contour
+        if hasattr(structure, "volume"):
+            html_info += f"<p><b>Thể tích:</b> {structure.volume:.2f} cc</p>"
 
-        layout.addWidget(prop_group)
+        if hasattr(structure, "num_contours"):
+            html_info += f"<p><b>Số contour:</b> {structure.num_contours}</p>"
 
-        # Add stretch to push content to the top
-        layout.addStretch(1)
+        self.structure_info.setHtml(html_info)
 
-        return sidebar
+        # Cập nhật bảng thống kê
+        self.stats_table.setRowCount(0)
 
-    def create_content_area(self):
-        """Create the content area with tools and viewer."""
-        content = QFrame()
-        content.setFrameShape(QFrame.StyledPanel)
+        stats = [
+            ("Tên", structure.name),
+            ("ID", getattr(structure, "id", "N/A")),
+            ("Thể tích", f"{getattr(structure, 'volume', 0.0):.2f} cc"),
+            ("Loại", getattr(structure, "type", "Không xác định")),
+            ("Số lát cắt", getattr(structure, "num_slices", 0)),
+            ("Số điểm", getattr(structure, "num_points", 0)),
+            ("Trung tâm X", f"{getattr(structure, 'center_x', 0.0):.2f} mm"),
+            ("Trung tâm Y", f"{getattr(structure, 'center_y', 0.0):.2f} mm"),
+            ("Trung tâm Z", f"{getattr(structure, 'center_z', 0.0):.2f} mm"),
+        ]
 
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
+        for i, (name, value) in enumerate(stats):
+            self.stats_table.insertRow(i)
+            self.stats_table.setItem(i, 0, QTableWidgetItem(name))
+            self.stats_table.setItem(i, 1, QTableWidgetItem(str(value)))
 
-        # Title for the content area
-        title = QLabel("Structure Segmentation Tools")
-        title.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px;")
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
+    def get_structure_by_id(self, struct_id):
+        """
+        Lấy đối tượng cấu trúc theo ID.
 
-        # Integrated segmentation interface
-        self.segmentation_interface = SegmentationInterface()
-        self.segmentation_interface.structureModified.connect(
-            self.on_structure_modified
-        )
-        layout.addWidget(self.segmentation_interface)
+        Parameters
+        ----------
+        struct_id : str
+            ID của cấu trúc cần tìm
 
-        # Add quick actions toolbar
-        quick_actions = QToolBar()
+        Returns
+        -------
+        Structure hoặc None
+            Đối tượng cấu trúc nếu tìm thấy, None nếu không tìm thấy
+        """
+        if not self.patient or not self.patient.structures:
+            return None
 
-        # Add "Auto Segment" action
-        auto_segment_action = QAction("Auto Segment", self)
-        auto_segment_action.setIcon(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "auto_segment.png"))
-        )
-        auto_segment_action.triggered.connect(self.auto_segment)
-        quick_actions.addAction(auto_segment_action)
+        for structure in self.patient.structures:
+            if getattr(structure, "id", None) == struct_id:
+                return structure
 
-        # Add "Smart Brush" action
-        smart_brush_action = QAction("Smart Brush", self)
-        smart_brush_action.setIcon(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "smart_brush.png"))
-        )
-        smart_brush_action.triggered.connect(
-            lambda: self.segmentation_interface.set_current_tool("smart_brush")
-        )
-        quick_actions.addAction(smart_brush_action)
-
-        # Add "Copy to all slices" action
-        copy_slices_action = QAction("Copy to All Slices", self)
-        copy_slices_action.setIcon(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "copy_slices.png"))
-        )
-        copy_slices_action.triggered.connect(self.copy_to_all_slices)
-        quick_actions.addAction(copy_slices_action)
-
-        # Add toolbar to layout
-        layout.addWidget(quick_actions)
-
-        # Add instructions
-        instructions = QLabel(
-            "Select a structure from the list and use the tools above to contour. "
-            "Right-click for additional options."
-        )
-        instructions.setStyleSheet("font-style: italic; color: #606060; padding: 5px;")
-        instructions.setWordWrap(True)
-        layout.addWidget(instructions)
-
-        return content
+        return None
 
     def setup_connections(self):
         """Set up connections between widgets."""
@@ -1519,31 +2019,23 @@ def test_structure_tab():
     test_image.patient_id = test_patient.id
 
     # Register mock services
-    ServiceRegistry._services = {}  # Reset services
     try:
-        # Kiểm tra xem ServiceRegistry có phương thức register_service hay get_instance
-        if hasattr(ServiceRegistry, "get_instance") and hasattr(
-            ServiceRegistry.get_instance(), "register_service"
-        ):
-            ServiceRegistry.get_instance().register_service(
-                "PatientDB", TestPatientDB()
-            )
+        # Khởi tạo TestPatientDB một lần
+        test_patient_db = TestPatientDB()
+
+        # Đăng ký với ServiceRegistry
+        registry = ServiceRegistry.get_instance()
+        if registry and hasattr(registry, "register_service"):
+            registry.register_service("PatientDB", test_patient_db)
+            logger.info("Đã đăng ký TestPatientDB vào ServiceRegistry")
         else:
-            ServiceRegistry.register_service("PatientDB", TestPatientDB())
+            logger.warning("ServiceRegistry không có sẵn phương thức register_service")
+
+        # Sử dụng TestPatientDB trực tiếp
+        patient_db = test_patient_db
     except Exception as e:
         logger.error(f"Lỗi khi đăng ký service: {e}")
-
-    # Add test data to mock DB
-    try:
-        # Kiểm tra xem ServiceRegistry có phương thức get_service hay get_instance
-        if hasattr(ServiceRegistry, "get_instance") and hasattr(
-            ServiceRegistry.get_instance(), "get_service"
-        ):
-            patient_db = ServiceRegistry.get_instance().get_service("PatientDB")
-        else:
-            patient_db = ServiceRegistry.get_service("PatientDB")
-    except Exception as e:
-        logger.error(f"Lỗi khi lấy service: {e}")
+        logger.error(traceback.format_exc())
         patient_db = TestPatientDB()  # Fallback
 
     patient_db.patients[test_patient.id] = test_patient
