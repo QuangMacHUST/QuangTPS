@@ -174,6 +174,29 @@ try:
     )
     from quangtps.ui import get_colormap_for_display
 
+    # Import MCO modules
+    try:
+        # Import MCO Navigator widget
+        from quangtps.ui.mco_navigator_widget import (
+            MCONavigatorWidget,
+            create_mco_navigator_widget,
+        )
+        from quangtps.optimization.mco.mco_navigator import (
+            MCONavigator,
+            ParetoSolution,
+            ParetoSolutionType,
+        )
+        from quangtps.optimization.mco.mco_pareto_3d_widget import (
+            Pareto3DWidget,
+            create_pareto_3d_widget,
+        )
+
+        HAS_MCO_UI_MODULE = True
+    except ImportError as e:
+        HAS_MCO_UI_MODULE = False
+        logger.warning(f"Không thể import module MCO UI: {e}")
+        logger.warning("Chức năng MCO Navigator sẽ không khả dụng.")
+
     # Kiểm tra module MCO một cách riêng biệt
     try:
         # Import MCO-related modules
@@ -192,6 +215,7 @@ except ImportError as e:
     MODULES_AVAILABLE = False
     HAS_QUANGTPS_MODULES = False
     HAS_MCO_MODULE = False
+    HAS_MCO_UI_MODULE = False
     logger.error(f"Error importing QuangTPS modules: {e}")
 
 logger = logging.getLogger(__name__)
@@ -288,193 +312,311 @@ class ExternalBeamPlanningTab(QWidget):
         self._connect_signals()
 
     def _init_ui(self):
-        """Khởi tạo giao diện tab External Beam Planning."""
+        """
+        Khởi tạo giao diện người dùng cho tab External Beam Planning.
+        Tạo layout và các thành phần giao diện theo phong cách Eclipse.
+        """
+        if not HAS_PYQT:
+            logger.error("PyQt5 không khả dụng. Không thể khởi tạo UI.")
+            return
+
+        # Áp dụng phong cách Eclipse
+        try:
+            apply_eclipse_theme(self)
+        except Exception as e:
+            logger.warning(f"Không thể áp dụng phong cách Eclipse: {e}")
+
+        # Layout chính
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(2)
 
-        # Toolbar
-        toolbar = QToolBar("External Beam Planning Toolbar")
-        main_layout.addWidget(toolbar)
+        # Tạo toolbar
+        toolbar = QToolBar()
         self._setup_toolbar_actions(toolbar)
+        main_layout.addWidget(toolbar)
 
-        # Mode selection (Forward vs Inverse vs MCO)
-        mode_layout = QHBoxLayout()
-        mode_group = QGroupBox("Chế độ lập kế hoạch")
-        mode_layout.addWidget(mode_group)
-
-        mode_group_layout = QHBoxLayout(mode_group)
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(
-            ["Lập kế hoạch thuận", "Lập kế hoạch ngược", "Tối ưu hóa đa tiêu chí"]
-        )
-        self.mode_combo.setCurrentIndex(1)  # Inverse planning là mặc định
-        mode_group_layout.addWidget(self.mode_combo)
-
-        main_layout.addLayout(mode_layout)
-
-        # Main splitter (chia đôi màn hình)
+        # Tạo main splitter giữa panel trái và phải
         main_splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(main_splitter, 1)  # Stretch factor = 1
+        main_splitter.setChildrenCollapsible(False)
+        main_layout.addWidget(main_splitter, 1)  # stretch = 1
 
-        # Phần bên trái - Cấu hình kế hoạch
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
+        # Panel trái chứa danh sách chùm tia và bảng mục tiêu
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Beam configuration
-        beam_config_group = QGroupBox("Cấu hình chùm tia")
-        beam_config_layout = QVBoxLayout(beam_config_group)
+        # Combo chọn kế hoạch
+        plan_layout = QHBoxLayout()
+        plan_layout.addWidget(QLabel("Kế hoạch:"))
+        self.plan_combo = QComboBox()
+        self.plan_combo.setMinimumWidth(200)
+        plan_layout.addWidget(self.plan_combo)
+        plan_layout.addStretch()
+        left_layout.addLayout(plan_layout)
 
-        # Beam list
-        self.beam_table = QTableWidget()
-        self.beam_table.setColumnCount(4)
-        self.beam_table.setHorizontalHeaderLabels(
-            ["Chùm tia", "Góc", "Trọng số", "MLC"]
-        )
-        self.beam_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        beam_config_layout.addWidget(self.beam_table)
+        # Radio button chọn chế độ lập kế hoạch
+        mode_group = QGroupBox("Chế độ lập kế hoạch")
+        mode_layout = QHBoxLayout(mode_group)
+        self.mode_buttons = QButtonGroup()
 
-        # Beam action buttons
-        beam_actions = QHBoxLayout()
-        self.add_beam_btn = QPushButton("Thêm chùm")
-        self.edit_beam_btn = QPushButton("Sửa chùm")
-        self.remove_beam_btn = QPushButton("Xóa chùm")
+        # Chế độ Forward Planning
+        self.forward_radio = QRadioButton("Forward")
+        self.forward_radio.setChecked(True)
+        self.mode_buttons.addButton(self.forward_radio, 0)
+        mode_layout.addWidget(self.forward_radio)
 
-        beam_actions.addWidget(self.add_beam_btn)
-        beam_actions.addWidget(self.edit_beam_btn)
-        beam_actions.addWidget(self.remove_beam_btn)
-        beam_config_layout.addLayout(beam_actions)
+        # Chế độ Inverse Planning
+        self.inverse_radio = QRadioButton("Inverse")
+        self.mode_buttons.addButton(self.inverse_radio, 1)
+        mode_layout.addWidget(self.inverse_radio)
 
-        left_layout.addWidget(beam_config_group)
+        # Chế độ Multi-Criteria Optimization
+        self.mco_radio = QRadioButton("MCO")
+        self.mode_buttons.addButton(self.mco_radio, 2)
+        if not HAS_MCO_MODULE:
+            self.mco_radio.setEnabled(False)
+            self.mco_radio.setToolTip("Module MCO không khả dụng")
+        mode_layout.addWidget(self.mco_radio)
 
-        # Structure selection
-        structure_group = QGroupBox("Cấu trúc")
-        structure_layout = QVBoxLayout(structure_group)
+        left_layout.addWidget(mode_group)
 
-        self.structure_table = QTableWidget()
-        self.structure_table.setColumnCount(3)
-        self.structure_table.setHorizontalHeaderLabels(["Tên", "Loại", "Hiển thị"])
-        self.structure_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.Stretch
-        )
-        structure_layout.addWidget(self.structure_table)
+        # Tab widget chứa tab beam management và tab objectives
+        plan_tabs = QTabWidget()
+        plan_tabs.setDocumentMode(True)
 
-        left_layout.addWidget(structure_group)
+        # Tab quản lý chùm tia
+        beams_tab = QWidget()
+        beams_layout = QVBoxLayout(beams_tab)
+        beams_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Optimization objectives
-        objectives_group = QGroupBox("Mục tiêu tối ưu hóa")
-        objectives_layout = QVBoxLayout(objectives_group)
+        # Danh sách chùm tia
+        self.beams_list = QListWidget()
+        self.beams_list.setSelectionMode(QListWidget.SingleSelection)
+        self.beams_list.setMinimumHeight(150)
+        beams_layout.addWidget(QLabel("Chùm tia:"))
+        beams_layout.addWidget(self.beams_list)
 
+        # Nút thêm/xóa chùm tia
+        beams_button_layout = QHBoxLayout()
+        self.add_beam_button = QPushButton("Thêm")
+        self.remove_beam_button = QPushButton("Xóa")
+        self.edit_beam_button = QPushButton("Sửa")
+        beams_button_layout.addWidget(self.add_beam_button)
+        beams_button_layout.addWidget(self.edit_beam_button)
+        beams_button_layout.addWidget(self.remove_beam_button)
+        beams_layout.addLayout(beams_button_layout)
+
+        plan_tabs.addTab(beams_tab, "Chùm tia")
+
+        # Tab mục tiêu tối ưu hóa
+        objectives_tab = QWidget()
+        objectives_layout = QVBoxLayout(objectives_tab)
+        objectives_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Widget mục tiêu
         self.objectives_widget = self._create_objectives_widget()
         objectives_layout.addWidget(self.objectives_widget)
 
-        left_layout.addWidget(objectives_group)
+        plan_tabs.addTab(objectives_tab, "Mục tiêu")
+        left_layout.addWidget(plan_tabs, 1)  # stretch = 1
 
-        main_splitter.addWidget(left_widget)
+        # Thêm panel trái vào main splitter
+        main_splitter.addWidget(left_panel)
 
-        # Phần bên phải - Hiển thị 3D và DVH
-        right_widget = QTabWidget()
+        # Panel phải chứa hiển thị liều và DVH
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Tab 3D Visualization
-        self.vis3d_widget = None
+        # Tab widget chứa các tab hiển thị
+        display_tabs = QTabWidget()
+        display_tabs.setDocumentMode(True)
+
+        # Tab 3D
+        tab_3d = QWidget()
+        tab_3d_layout = QVBoxLayout(tab_3d)
+        tab_3d_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Tạo widget hiển thị liều 3D
         try:
-            # Sử dụng widget hiển thị liều 3D nâng cao
-            self.vis3d_widget = create_dose_visualization_widget()
-            if self.vis3d_widget:
-                right_widget.addTab(self.vis3d_widget, "3D")
-            else:
-                # Fallback nếu không tạo được widget
-                placeholder = QLabel("Không thể tạo widget hiển thị 3D")
-                placeholder.setAlignment(Qt.AlignCenter)
-                placeholder.setStyleSheet(
-                    "background-color: #f0f0f0; border: 1px solid #ccc;"
-                )
-                right_widget.addTab(placeholder, "3D")
+            # Sử dụng dose_visualization_3d.py
+            self.dose_3d_widget = DoseVisualization3D()
+            logger.info("Đã tạo thành công widget hiển thị liều 3D.")
         except Exception as e:
-            logger.error(f"Lỗi khi tạo widget hiển thị 3D: {str(e)}")
-            placeholder = QLabel("Lỗi khi tạo widget hiển thị 3D")
-            placeholder.setAlignment(Qt.AlignCenter)
-            placeholder.setStyleSheet(
-                "background-color: #f0f0f0; border: 1px solid #ccc;"
-            )
-            right_widget.addTab(placeholder, "3D")
+            logger.error(f"Không thể tạo widget hiển thị liều 3D: {e}")
+            # Fallback to placeholder
+            self.dose_3d_widget = QLabel("Hiển thị liều 3D (Không khả dụng)")
+            self.dose_3d_widget.setAlignment(Qt.AlignCenter)
+            self.dose_3d_widget.setStyleSheet("background-color: #f0f0f0; color: #888;")
+
+        tab_3d_layout.addWidget(self.dose_3d_widget)
+        display_tabs.addTab(tab_3d, "3D")
 
         # Tab DVH
-        self.dvh_widget = None
+        tab_dvh = QWidget()
+        tab_dvh_layout = QVBoxLayout(tab_dvh)
+        tab_dvh_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Tạo widget DVH
         try:
             self.dvh_widget = create_dvh_widget()
-            if self.dvh_widget:
-                right_widget.addTab(self.dvh_widget, "DVH")
+            logger.info("Đã tạo thành công widget DVH.")
         except Exception as e:
-            logger.error(f"Lỗi khi tạo widget DVH: {str(e)}")
-            self.dvh_widget = QLabel("Không thể hiển thị DVH")
-            right_widget.addTab(self.dvh_widget, "DVH")
+            logger.error(f"Không thể tạo widget DVH: {e}")
+            # Fallback to placeholder
+            self.dvh_widget = QLabel("Biểu đồ DVH (Không khả dụng)")
+            self.dvh_widget.setAlignment(Qt.AlignCenter)
+            self.dvh_widget.setStyleSheet("background-color: #f0f0f0; color: #888;")
 
-        # Tab 2D Views
-        slices_widget = QWidget()
-        slices_layout = QGridLayout(slices_widget)
+        tab_dvh_layout.addWidget(self.dvh_widget)
+        display_tabs.addTab(tab_dvh, "DVH")
 
-        # Placeholder cho slice views
-        axial_label = QLabel("Axial View (coming soon)")
-        axial_label.setAlignment(Qt.AlignCenter)
-        axial_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        # Tạo tab MCO (sẽ hiển thị nếu chọn chế độ MCO)
+        self.mco_tab = QWidget()
+        self.mco_tab_layout = QVBoxLayout(self.mco_tab)
+        self.mco_tab_layout.setContentsMargins(0, 0, 0, 0)
 
-        sagittal_label = QLabel("Sagittal View (coming soon)")
-        sagittal_label.setAlignment(Qt.AlignCenter)
-        sagittal_label.setStyleSheet(
-            "background-color: #f0f0f0; border: 1px solid #ccc;"
-        )
-
-        coronal_label = QLabel("Coronal View (coming soon)")
-        coronal_label.setAlignment(Qt.AlignCenter)
-        coronal_label.setStyleSheet(
-            "background-color: #f0f0f0; border: 1px solid #ccc;"
-        )
-
-        slices_layout.addWidget(axial_label, 0, 0)
-        slices_layout.addWidget(sagittal_label, 0, 1)
-        slices_layout.addWidget(coronal_label, 1, 0, 1, 2)
-
-        right_widget.addTab(slices_widget, "2D Views")
-
-        # Tab Plan Evaluation
-        evaluation_widget = QWidget()
-        evaluation_layout = QVBoxLayout(evaluation_widget)
-
-        # Placeholder cho plan evaluation
-        evaluation_label = QLabel("Plan Evaluation (coming soon)")
-        evaluation_label.setAlignment(Qt.AlignCenter)
-        evaluation_layout.addWidget(evaluation_label)
-
-        right_widget.addTab(evaluation_widget, "Đánh giá kế hoạch")
-
-        main_splitter.addWidget(right_widget)
-
-        # Thiết lập kích thước ban đầu
-        main_splitter.setSizes([400, 600])
-
-        # Status bar
-        status_bar = QFrame()
-        status_bar.setFrameStyle(QFrame.StyledPanel | QFrame.Sunken)
-        status_bar_layout = QHBoxLayout(status_bar)
-        status_bar_layout.setContentsMargins(5, 2, 5, 2)
-
-        self.status_label = QLabel("Sẵn sàng")
-        status_bar_layout.addWidget(self.status_label)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        status_bar_layout.addWidget(self.progress_bar)
-
-        main_layout.addWidget(status_bar)
-
-        # Áp dụng Eclipse style nếu có thể
-        if HAS_QUANGTPS_MODULES:
+        if HAS_MCO_UI_MODULE:
             try:
-                self.setStyleSheet(create_eclipse_widget_style("tab"))
-            except:
-                pass
+                # Tạo MCO Navigator widget
+                self.mco_navigator_widget = create_mco_navigator_widget()
+                self.mco_tab_layout.addWidget(self.mco_navigator_widget)
+                logger.info("Đã tạo thành công widget MCO Navigator.")
+            except Exception as e:
+                logger.error(f"Không thể tạo widget MCO Navigator: {e}")
+                # Fallback to placeholder
+                mco_placeholder = QLabel("MCO Navigator (Không khả dụng)")
+                mco_placeholder.setAlignment(Qt.AlignCenter)
+                mco_placeholder.setStyleSheet("background-color: #f0f0f0; color: #888;")
+                self.mco_tab_layout.addWidget(mco_placeholder)
+        else:
+            mco_placeholder = QLabel("MCO Navigator (Module không khả dụng)")
+            mco_placeholder.setAlignment(Qt.AlignCenter)
+            mco_placeholder.setStyleSheet("background-color: #f0f0f0; color: #888;")
+            self.mco_tab_layout.addWidget(mco_placeholder)
+
+        # Thêm tab MCO (ẩn ban đầu)
+        self.mco_tab_index = display_tabs.addTab(self.mco_tab, "MCO Navigator")
+        display_tabs.setTabVisible(self.mco_tab_index, False)
+
+        right_layout.addWidget(display_tabs, 1)  # stretch = 1
+        main_splitter.addWidget(right_panel)
+
+        # Thiết lập kích thước ban đầu của splitter
+        main_splitter.setSizes([300, 700])  # Tỷ lệ 3:7
+
+        # Kết nối các tín hiệu
+        self._connect_signals()
+
+        # Cập nhật giao diện theo chế độ mặc định (forward planning)
+        self.current_planning_mode = BeamPlanningMode.FORWARD
+        self._update_ui_for_mode()
+
+        # Thêm statusbar
+        self.status_bar = QStatusBar()
+        main_layout.addWidget(self.status_bar)
+        self.status_bar.showMessage("Sẵn sàng")
+
+        logger.info("Đã khởi tạo UI cho tab External Beam Planning")
+
+    def set_dose_grid(self, dose_grid, spacing=None, origin=None):
+        """
+        Đặt lưới liều cho hiển thị.
+
+        Parameters
+        ----------
+        dose_grid : np.ndarray hoặc DoseGrid
+            Lưới liều
+        spacing : tuple, optional
+            Khoảng cách voxel (mm)
+        origin : tuple, optional
+            Tọa độ gốc của lưới (mm)
+        """
+        self.dose_grid = dose_grid
+        self.dose_grid_spacing = spacing
+        self.dose_grid_origin = origin
+
+        # Cập nhật hiển thị DVH
+        self._update_dvh_display()
+
+        # Cập nhật hiển thị liều 3D
+        try:
+            if hasattr(self, "dose_3d_widget") and self.dose_3d_widget is not None:
+                # Nếu dose_grid là DoseGrid object, lấy ra array và metadata
+                if (
+                    hasattr(dose_grid, "grid")
+                    and hasattr(dose_grid, "spacing")
+                    and hasattr(dose_grid, "origin")
+                ):
+                    self.dose_3d_widget.set_dose_grid(
+                        dose_grid.grid,
+                        dose_grid.spacing if spacing is None else spacing,
+                        dose_grid.origin if origin is None else origin,
+                    )
+                else:
+                    # Nếu truyền vào là array trực tiếp
+                    self.dose_3d_widget.set_dose_grid(dose_grid, spacing, origin)
+
+                # Cập nhật hiển thị cấu trúc nếu có
+                if hasattr(self, "structures") and self.structures is not None:
+                    self.dose_3d_widget.set_structures(self.structures)
+
+                # Cập nhật visualization
+                self.dose_3d_widget.update_visualization()
+                logger.info("Đã cập nhật hiển thị liều 3D thành công")
+            else:
+                logger.warning("Widget hiển thị liều 3D không khả dụng")
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật hiển thị liều 3D: {e}")
+
+        # Phát tín hiệu
+        self.dose_calculated.emit(dose_grid)
+
+    def set_structures(self, structures):
+        """
+        Đặt cấu trúc cho hiển thị.
+
+        Parameters
+        ----------
+        structures : dict
+            Dictionary chứa các cấu trúc
+        """
+        self.structures = structures
+
+        # Cập nhật combobox trong widget mục tiêu
+        if hasattr(self, "structure_combo"):
+            try:
+                current_text = self.structure_combo.currentText()
+                self.structure_combo.clear()
+
+                for structure_id, structure in structures.items():
+                    if hasattr(structure, "name"):
+                        self.structure_combo.addItem(structure.name, structure_id)
+
+                # Khôi phục lựa chọn trước đó nếu có thể
+                index = self.structure_combo.findText(current_text)
+                if index >= 0:
+                    self.structure_combo.setCurrentIndex(index)
+            except Exception as e:
+                logger.error(f"Lỗi khi cập nhật structure_combo: {e}")
+
+        # Cập nhật hiển thị DVH
+        self._update_dvh_display()
+
+        # Cập nhật hiển thị 3D
+        try:
+            if hasattr(self, "dose_3d_widget") and self.dose_3d_widget is not None:
+                self.dose_3d_widget.set_structures(structures)
+                self.dose_3d_widget.update_visualization()
+                logger.info("Đã cập nhật cấu trúc trong hiển thị 3D")
+            else:
+                logger.warning("Widget hiển thị liều 3D không khả dụng")
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật cấu trúc trong hiển thị 3D: {e}")
+
+        # Phát tín hiệu
+        self.structure_changed.emit(structures)
 
     def _setup_toolbar_actions(self, toolbar):
         """Thiết lập các action cho toolbar."""
@@ -585,7 +727,7 @@ class ExternalBeamPlanningTab(QWidget):
     def _connect_signals(self):
         """Kết nối các tín hiệu và slots."""
         # Kết nối mode combo
-        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        self.mode_buttons.buttonClicked.connect(self._on_mode_changed)
 
         # Kết nối các tín hiệu tối ưu hóa với UI
         self.optimization_started.connect(lambda: self.progress_bar.setVisible(True))
@@ -644,10 +786,15 @@ class ExternalBeamPlanningTab(QWidget):
         # Cập nhật chế độ kế hoạch
         if index == 0:
             self.planning_mode = BeamPlanningMode.FORWARD
+            self.status_label.setText("Chế độ lập kế hoạch thuận đã được kích hoạt")
         elif index == 1:
             self.planning_mode = BeamPlanningMode.INVERSE
+            self.status_label.setText("Chế độ lập kế hoạch ngược đã được kích hoạt")
         elif index == 2:
             self.planning_mode = BeamPlanningMode.MULTI_CRITERIA
+            self.status_label.setText(
+                "Chế độ tối ưu hóa đa tiêu chí (MCO) đã được kích hoạt"
+            )
         else:
             return
 
@@ -665,10 +812,12 @@ class ExternalBeamPlanningTab(QWidget):
             if hasattr(self, "objectives_group"):
                 self.objectives_group.setVisible(True)
         elif self.planning_mode == BeamPlanningMode.MULTI_CRITERIA:
-            # Trong chế độ MCO, hiện bảng mục tiêu tối ưu hóa và nút MCO Navigator
+            # Trong chế độ MCO, hiện bảng mục tiêu tối ưu hóa và hiển thị MCO Navigator
             if hasattr(self, "objectives_group"):
                 self.objectives_group.setVisible(True)
-            # TODO: Hiển thị nút MCO Navigator
+
+            # Tự động hiển thị MCO Navigator
+            self._show_mco_navigator()
 
     def _update_optimization_progress(self, value, text):
         """
@@ -760,179 +909,323 @@ class ExternalBeamPlanningTab(QWidget):
         selected_row = selected_rows[0].row()
         self.objectives_table.removeRow(selected_row)
 
-    def set_plan(self, plan):
-        """
-        Thiết lập kế hoạch cho tab.
-
-        Parameters
-        ----------
-        plan : Plan
-            Đối tượng kế hoạch
-        """
-        self.current_plan = plan
-
-        # Cập nhật UI
-        if plan:
-            self.status_label.setText(f"Đã tải kế hoạch: {plan.name}")
-
-            # Cập nhật thông tin kế hoạch trong UI
-            self._update_plan_display()
-
-    def set_structures(self, structures):
-        """
-        Thiết lập danh sách cấu trúc.
-
-        Parameters
-        ----------
-        structures : Dict[str, Any]
-            Dict với khóa là ID cấu trúc và giá trị là đối tượng Structure
-        """
-        self.structures = structures
-
-        if not hasattr(self, "structure_table"):
-            return
-
-        # Xóa bảng cấu trúc hiện tại
-        self.structure_table.setRowCount(0)
-
-        # Thêm cấu trúc vào bảng
-        for structure_id, structure in structures.items():
-            row = self.structure_table.rowCount()
-            self.structure_table.insertRow(row)
-
-            # Tên
-            self.structure_table.setItem(row, 0, QTableWidgetItem(structure.name))
-
-            # Loại (Target, OAR...)
-            structure_type = (
-                "Target"
-                if "PTV" in structure.name
-                or "GTV" in structure.name
-                or "CTV" in structure.name
-                else "OAR"
+    def _show_mco_navigator(self):
+        """Hiển thị MCO Navigator khi chế độ MCO được chọn."""
+        # Kiểm tra xem MCO module có khả dụng không
+        if not HAS_MCO_UI_MODULE or not HAS_MCO_MODULE:
+            QMessageBox.warning(
+                self,
+                "MCO không khả dụng",
+                "Module tối ưu hóa đa tiêu chí (MCO) không khả dụng. Vui lòng cài đặt hoặc kích hoạt module MCO.",
             )
-            self.structure_table.setItem(row, 1, QTableWidgetItem(structure_type))
-
-            # Checkbox hiển thị
-            show_cb = QCheckBox()
-            show_cb.setChecked(True)
-            self.structure_table.setCellWidget(row, 2, show_cb)
-
-        # Cập nhật widget DVH nếu có
-        if hasattr(self, "dvh_widget") and self.dvh_widget:
-            self.dvh_widget.set_structures(structures)
-
-        # Cập nhật hiển thị 3D nếu có
-        if hasattr(self, "vis3d_widget") and self.vis3d_widget:
-            try:
-                self.vis3d_widget.set_structures(structures)
-            except Exception as e:
-                logger.error(f"Lỗi khi cập nhật cấu trúc trong hiển thị 3D: {str(e)}")
-
-    def set_dose_grid(self, dose_grid, spacing=None, origin=None):
-        """
-        Thiết lập lưới liều.
-
-        Parameters
-        ----------
-        dose_grid : np.ndarray
-            Mảng 3D chứa dữ liệu liều
-        spacing : tuple, optional
-            Khoảng cách voxel (mm)
-        origin : tuple, optional
-            Tọa độ gốc (mm)
-        """
-        self.dose_grid = dose_grid
-        self.dose_spacing = spacing
-        self.dose_origin = origin
-
-        # Phát tín hiệu liều đã được tính toán
-        self.dose_calculated.emit(dose_grid)
-
-        # Cập nhật hiển thị 3D
-        if hasattr(self, "vis3d_widget") and self.vis3d_widget:
-            try:
-                self.vis3d_widget.set_dose_grid(dose_grid, spacing, origin)
-            except Exception as e:
-                logger.error(f"Lỗi khi cập nhật hiển thị liều 3D: {str(e)}")
-
-        # Cập nhật DVH
-        self._update_dvh_display()
-
-    def _update_plan_display(self):
-        """Cập nhật hiển thị thông tin kế hoạch."""
-        if not self.current_plan:
+            # Chuyển về chế độ Inverse planning
+            self.mode_buttons.blockSignals(True)
+            self.mode_buttons.button(1).setChecked(True)
+            self.mode_buttons.blockSignals(False)
+            self._on_mode_changed(1)
             return
 
-        # Cập nhật bảng chùm tia
-        if hasattr(self, "beam_table"):
-            self.beam_table.setRowCount(0)
+        try:
+            # Kiểm tra xem tab MCO đã tồn tại chưa
+            mco_index = -1
+            right_widget = None
 
-            # Thêm thông tin các chùm tia
-            if hasattr(self.current_plan, "beams"):
-                for i, beam in enumerate(self.current_plan.beams):
-                    row = self.beam_table.rowCount()
-                    self.beam_table.insertRow(row)
+            # Tìm QTabWidget bên phải
+            for i in range(self.layout().count()):
+                item = self.layout().itemAt(i)
+                if item and item.widget() and isinstance(item.widget(), QSplitter):
+                    splitter = item.widget()
+                    if splitter.count() > 1:
+                        right_widget = splitter.widget(1)
+                        if isinstance(right_widget, QTabWidget):
+                            # Tìm tab MCO nếu đã tồn tại
+                            for j in range(right_widget.count()):
+                                if right_widget.tabText(j) == "MCO Navigator":
+                                    mco_index = j
+                                    break
+                        break
 
-                    self.beam_table.setItem(row, 0, QTableWidgetItem(f"Beam {i + 1}"))
-                    self.beam_table.setItem(
-                        row, 1, QTableWidgetItem(f"{beam.gantry_angle:.1f}°")
-                    )
-                    self.beam_table.setItem(
-                        row, 2, QTableWidgetItem(f"{beam.weight:.2f}")
-                    )
-                    self.beam_table.setItem(
-                        row,
-                        3,
-                        QTableWidgetItem("Yes" if hasattr(beam, "mlc") else "No"),
+            if mco_index >= 0 and right_widget:
+                # Tab đã tồn tại, chuyển đến tab đó
+                right_widget.setCurrentIndex(mco_index)
+                self.status_label.setText("MCO Navigator đã được kích hoạt")
+
+                # Cập nhật dữ liệu nếu đã có thay đổi mục tiêu
+                if hasattr(self, "mco_navigator_widget") and self.mco_navigator_widget:
+                    self._update_mco_objectives()
+            elif right_widget and isinstance(right_widget, QTabWidget):
+                # Tạo mới tab MCO Navigator
+                self.status_label.setText("Đang tạo MCO Navigator...")
+
+                if (
+                    not hasattr(self, "mco_navigator_widget")
+                    or self.mco_navigator_widget is None
+                ):
+                    # Thu thập các mục tiêu từ bảng objectives
+                    objectives = self._collect_current_objectives()
+
+                    # Tạo MCO Navigator widget
+                    self.mco_navigator_widget = create_mco_navigator_widget(
+                        objectives=objectives
                     )
 
-    def _update_dvh_display(self):
-        """Cập nhật hiển thị DVH sau khi tính liều hoặc tối ưu hóa."""
+                    if self.mco_navigator_widget:
+                        # Kết nối tín hiệu
+                        self.mco_navigator_widget.solution_selected_signal.connect(
+                            self._on_mco_solution_selected
+                        )
+
+                        # Thêm tab MCO Navigator
+                        right_widget.addTab(self.mco_navigator_widget, "MCO Navigator")
+                        mco_index = right_widget.count() - 1
+                        right_widget.setCurrentIndex(mco_index)
+
+                        # Tạo dữ liệu mẫu cho demo
+                        self._generate_mco_sample_data()
+                    else:
+                        self.status_label.setText("Không thể tạo MCO Navigator widget")
+                else:
+                    # MCO Navigator widget đã tồn tại nhưng tab chưa được thêm
+                    right_widget.addTab(self.mco_navigator_widget, "MCO Navigator")
+                    mco_index = right_widget.count() - 1
+                    right_widget.setCurrentIndex(mco_index)
+                    self.status_label.setText("MCO Navigator đã được kích hoạt")
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo MCO Navigator: {str(e)}")
+            self.status_label.setText(f"Lỗi MCO: {str(e)}")
+            QMessageBox.critical(
+                self, "Lỗi MCO", f"Không thể tạo MCO Navigator: {str(e)}"
+            )
+
+    def _collect_current_objectives(self):
+        """Thu thập các mục tiêu từ bảng objectives hiện tại.
+
+        Returns
+        -------
+        Dict[str, None]
+            Từ điển các mục tiêu để sử dụng cho MCO Navigator
+        """
+        objectives = {}
+
+        # Thu thập từ bảng objectives
+        for i in range(self.objectives_table.rowCount()):
+            structure_item = self.objectives_table.item(i, 0)
+            type_item = self.objectives_table.item(i, 1)
+            value_item = self.objectives_table.item(i, 3)
+
+            if structure_item and type_item and value_item:
+                structure_name = structure_item.text()
+                obj_type = type_item.text()
+                obj_value = value_item.text()
+
+                objective_name = f"{structure_name} {obj_type}"
+                objectives[objective_name] = None
+
+        # Nếu không có mục tiêu, tạo một số mục tiêu mẫu từ cấu trúc
+        if not objectives:
+            # Thu thập cấu trúc từ bảng structure
+            structure_names = []
+            for i in range(self.structure_table.rowCount()):
+                name_item = self.structure_table.item(i, 0)
+                if name_item:
+                    structure_names.append(name_item.text())
+
+            # Tạo các mục tiêu mẫu dựa trên cấu trúc
+            for name in structure_names:
+                if "PTV" in name or "CTV" in name or "GTV" in name:
+                    objectives[f"{name} Coverage"] = None
+                    objectives[f"{name} Homogeneity"] = None
+                    objectives[f"{name} Conformity"] = None
+                elif any(
+                    oar in name.lower()
+                    for oar in [
+                        "cord",
+                        "brain",
+                        "parotid",
+                        "heart",
+                        "lung",
+                        "liver",
+                        "kidney",
+                    ]
+                ):
+                    objectives[f"{name} Max Dose"] = None
+                    objectives[f"{name} Mean Dose"] = None
+
+        # Đảm bảo có ít nhất một mục tiêu
+        if not objectives:
+            objectives = {
+                "PTV Coverage": None,
+                "PTV Homogeneity": None,
+                "OAR Max Dose": None,
+                "OAR Mean Dose": None,
+                "Conformity": None,
+            }
+
+        return objectives
+
+    def _update_mco_objectives(self):
+        """Cập nhật mục tiêu trong MCO Navigator dựa trên mục tiêu hiện tại."""
         if (
-            not hasattr(self, "dvh_widget")
-            or not self.dvh_widget
-            or not self.dose_grid is not None
+            not hasattr(self, "mco_navigator_widget")
+            or self.mco_navigator_widget is None
         ):
             return
 
-        # Cập nhật DVH cho tất cả cấu trúc
-        self.dvh_widget.set_dose_grid(
-            self.dose_grid, self.dose_spacing, self.dose_origin
-        )
-        self.dvh_widget.calculate_and_display_dvh()
+        objectives = self._collect_current_objectives()
+        self.mco_navigator_widget.set_objectives(objectives)
 
-    def _fake_optimization_progress(self):
-        """Giả tiến độ tối ưu hóa cho mục đích demo."""
-        # Thông báo bắt đầu
-        self.optimization_started.emit()
+    def _generate_mco_sample_data(self):
+        """Tạo dữ liệu mẫu cho MCO Navigator với giao diện tiến trình."""
+        if (
+            not hasattr(self, "mco_navigator_widget")
+            or self.mco_navigator_widget is None
+        ):
+            return
 
-        # Cập nhật tiến độ
-        for i in range(101):
-            if i < 20:
-                message = "Đang khởi tạo tối ưu hóa..."
-            elif i < 40:
-                message = "Đang tính toán ma trận liều..."
-            elif i < 70:
-                message = "Đang tối ưu hóa trọng số chùm tia..."
-            elif i < 90:
-                message = "Đang tinh chỉnh kết quả..."
-            else:
-                message = "Đang hoàn tất tính toán..."
+        try:
+            self.status_label.setText("Đang tạo dữ liệu giải pháp Pareto mẫu...")
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(0)
 
-            self.optimization_progress.emit(i, message)
-            if QApplication is not None:
+            # Giả lập tiến trình tạo dữ liệu
+            for i in range(1, 41):
+                self.progress_bar.setValue(i)
+                self.status_label.setText(
+                    f"Đang tính toán điểm neo Pareto... {i * 2.5:.1f}%"
+                )
                 QApplication.processEvents()
-            time.sleep(0.05)  # Giả lập thời gian tính toán
+                time.sleep(0.05)
 
-        # Kết thúc tối ưu hóa
-        self.optimization_finished.emit(True, "Đã tối ưu hóa kế hoạch thành công")
+            # Tạo dữ liệu mẫu
+            self.mco_navigator_widget.create_sample_data()
 
-        # Tạo dữ liệu giả cho hiển thị kết quả
-        self._create_fake_dose_grid()
+            # Giả lập hoàn tất
+            for i in range(41, 101):
+                self.progress_bar.setValue(i)
+                self.status_label.setText(f"Đang tạo bề mặt Pareto... {i}%")
+                QApplication.processEvents()
+                time.sleep(0.01)
 
-    def _create_fake_dose_grid(self):
-        """Tạo dữ liệu phân bố liều giả cho mục đích demo."""
+            self.status_label.setText(
+                "MCO Navigator đã sẵn sàng với dữ liệu Pareto mẫu"
+            )
+            self.progress_bar.setVisible(False)
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo dữ liệu mẫu MCO: {str(e)}")
+            self.status_label.setText("MCO Navigator đã sẵn sàng")
+            self.progress_bar.setVisible(False)
+
+    def _on_mco_solution_selected(self, solution_id):
+        """
+        Xử lý khi một giải pháp MCO được chọn.
+
+        Parameters
+        ----------
+        solution_id : str
+            ID của giải pháp Pareto được chọn
+        """
+        if (
+            not hasattr(self, "mco_navigator_widget")
+            or self.mco_navigator_widget is None
+        ):
+            return
+
+        # Lấy đối tượng MCO Navigator
+        mco_navigator = self.mco_navigator_widget.mco_navigator
+
+        if solution_id in mco_navigator.solutions:
+            solution = mco_navigator.solutions[solution_id]
+
+            # Cập nhật UI thông báo
+            self.status_label.setText(f"Đang áp dụng giải pháp MCO: {solution_id}")
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(0)
+
+            # Cập nhật các mục tiêu và trọng số dựa trên giải pháp đã chọn
+            if hasattr(solution, "weights") and solution.weights:
+                # Cập nhật trọng số trong bảng mục tiêu
+                self._update_objectives_from_mco_solution(solution)
+
+            # Giả lập quá trình tính toán lại liều với trọng số mới
+            self._simulate_dose_calculation_progress(
+                f"Đang tính toán lại liều cho giải pháp {solution_id}"
+            )
+
+            # Tạo liều từ giải pháp
+            if hasattr(solution, "dose_data") and solution.dose_data is not None:
+                # Nếu giải pháp có dữ liệu liều đính kèm, sử dụng nó
+                self.set_dose_grid(solution.dose_data)
+            else:
+                # Tạo dữ liệu liều mẫu dựa trên giá trị mục tiêu giải pháp
+                fake_dose = self._create_solution_based_dose_grid(solution)
+                self.set_dose_grid(fake_dose)
+
+            # Cập nhật DVH dựa trên liều mới
+            self._update_dvh_display()
+
+            # Hiển thị thông tin về giải pháp đã chọn
+            solution_info = self._format_solution_info(solution)
+            self.progress_bar.setVisible(False)
+            self.status_label.setText(f"Giải pháp MCO {solution_id} đã được áp dụng")
+
+            # Cập nhật hiển thị 3D nếu có
+            if hasattr(self, "dose_3d_widget") and self.dose_3d_widget:
+                try:
+                    self.dose_3d_widget.update()
+                except:
+                    pass
+
+            # Chuyển đến tab DVH để người dùng xem kết quả
+            self._show_dvh_tab()
+
+    def _update_objectives_from_mco_solution(self, solution):
+        """
+        Cập nhật trọng số trong bảng mục tiêu từ giải pháp MCO được chọn.
+
+        Parameters
+        ----------
+        solution : ParetoSolution
+            Giải pháp Pareto được chọn
+        """
+        if not hasattr(solution, "weights"):
+            return
+
+        # Cập nhật trọng số trong bảng mục tiêu
+        for i in range(self.objectives_table.rowCount()):
+            structure_item = self.objectives_table.item(i, 0)
+            type_item = self.objectives_table.item(i, 1)
+            weight_item = self.objectives_table.item(i, 4)
+
+            if structure_item and type_item and weight_item:
+                structure_name = structure_item.text()
+                obj_type = type_item.text()
+                objective_name = f"{structure_name} {obj_type}"
+
+                # Nếu mục tiêu có trong giải pháp, cập nhật trọng số
+                if objective_name in solution.weights:
+                    weight_value = solution.weights[objective_name]
+                    weight_item.setText(f"{weight_value:.2f}")
+
+                    # Đánh dấu mục tiêu đã cập nhật với màu nền
+                    for col in range(self.objectives_table.columnCount()):
+                        item = self.objectives_table.item(i, col)
+                        if item:
+                            item.setBackground(QBrush(QColor(220, 240, 255)))
+
+    def _create_solution_based_dose_grid(self, solution):
+        """
+        Tạo dữ liệu liều dựa trên giải pháp Pareto được chọn.
+
+        Parameters
+        ----------
+        solution : ParetoSolution
+            Giải pháp Pareto được chọn
+
+        Returns
+        -------
+        np.ndarray
+            Dữ liệu liều giả lập
+        """
         # Tạo mảng 3D đơn giản (100x100x100)
         grid_size = 100
         dose_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float32)
@@ -944,19 +1237,176 @@ class ExternalBeamPlanningTab(QWidget):
 
         X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
 
-        # Tạo 2 chùm tia đối diện
-        # Chùm 1: Từ trục X dương
-        beam1 = np.exp(-(Y**2 + Z**2) / 0.5) * (X > -2)
+        # Tạo các thông số phân bố liều dựa trên giải pháp
+        try:
+            # Số lượng chùm
+            beam_count = min(4, len(solution.weights))
 
-        # Chùm 2: Từ trục X âm
-        beam2 = np.exp(-(Y**2 + Z**2) / 0.5) * (X < 2)
+            # Lấy đánh giá về độ đồng nhất và phủ từ mục tiêu
+            coverage_score = 0
+            homogeneity_score = 0
+            conformity_score = 0
+            max_dose_limit = 70  # Mặc định 70 Gy
 
-        # Kết hợp các chùm
-        dose_grid = (beam1 + beam2) * 70.0  # Liều tối đa 70Gy
+            if hasattr(solution, "objectives_values"):
+                for key, value in solution.objectives_values.items():
+                    if "Coverage" in key:
+                        coverage_score = value / 100  # Giả sử thang điểm 0-100
+                    elif "Homogeneity" in key:
+                        homogeneity_score = value / 100
+                    elif "Conformity" in key:
+                        conformity_score = value / 100
+
+            # Tạo phân bố liều dựa trên điểm số
+            # 1. PTV coverage: Mức độ phủ khối u (tốt = khối u nhận đủ liều)
+            # 2. Homogeneity: Độ đồng nhất liều trong khối u (tốt = liều đồng nhất)
+            # 3. Conformity: Độ phù hợp với hình dáng khối u (tốt = ít chiếu vào mô lành)
+
+            # Tạo khối u giả lập (hình cầu)
+            tumor_center = (grid_size // 2, grid_size // 2, grid_size // 2)
+            tumor_radius = grid_size // 6
+
+            # Mặt nạ khối u
+            tx, ty, tz = np.ogrid[:grid_size, :grid_size, :grid_size]
+            tumor_dist = np.sqrt(
+                (tx - tumor_center[0]) ** 2
+                + (ty - tumor_center[1]) ** 2
+                + (tz - tumor_center[2]) ** 2
+            )
+            tumor_mask = tumor_dist <= tumor_radius
+
+            # Mặt nạ vùng bên ngoài
+            outside_mask = tumor_dist > tumor_radius
+
+            # Tạo các chùm tia
+            angles = np.linspace(0, 360, beam_count, endpoint=False)
+
+            for i, angle in enumerate(angles):
+                # Tính hướng chùm tia
+                rad_angle = np.radians(angle)
+                beam_dir = (np.cos(rad_angle), np.sin(rad_angle), 0)
+
+                # Tạo gradient giảm dần dọc theo hướng chùm
+                beam_val = X * beam_dir[0] + Y * beam_dir[1] + Z * beam_dir[2]
+                beam_val = beam_val - beam_val.min()
+                beam_val = beam_val / beam_val.max()
+
+                # Thêm chùm vào lưới liều
+                dose_grid += beam_val * 20  # Liều tối đa cho mỗi chùm là 20 Gy
+
+            # Hiệu chỉnh độ đồng nhất
+            if homogeneity_score > 0.5:
+                # Liều đồng nhất hơn trong PTV
+                mean_ptv_dose = np.mean(dose_grid[tumor_mask])
+                dose_factor = 1 - (homogeneity_score - 0.5) * 0.5  # 0.75 to 1.0
+                dose_grid[tumor_mask] = mean_ptv_dose * dose_factor + dose_grid[
+                    tumor_mask
+                ] * (1 - dose_factor)
+
+            # Hiệu chỉnh độ phủ
+            if coverage_score > 0:
+                # Đảm bảo PTV nhận đủ liều theo độ phủ
+                dose_grid[tumor_mask] = np.maximum(
+                    dose_grid[tumor_mask], 60 * coverage_score
+                )
+
+            # Hiệu chỉnh độ phù hợp
+            if conformity_score > 0:
+                # Giảm liều ở ngoài PTV dựa trên độ phù hợp
+                outside_factor = 1 - conformity_score
+                dose_grid[outside_mask] *= outside_factor
+
+            # Đảm bảo liều nằm trong khoảng hợp lý
+            dose_grid = np.clip(dose_grid, 0, max_dose_limit)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo liều giả lập từ giải pháp: {str(e)}")
+
+            # Fallback đến phân bố liều đơn giản
+            beam1 = np.exp(-(Y**2 + Z**2) / 0.5) * (X > -2)
+            beam2 = np.exp(-(Y**2 + Z**2) / 0.5) * (X < 2)
+            dose_grid = (beam1 + beam2) * 70.0  # Liều tối đa 70Gy
 
         # Thiết lập thông tin không gian
         spacing = (2.0, 2.0, 2.0)  # mm
         origin = (-100.0, -100.0, -100.0)  # mm
 
-        # Cập nhật liều
-        self.set_dose_grid(dose_grid, spacing, origin)
+        # Lưu thông tin không gian
+        self.dose_spacing = spacing
+        self.dose_origin = origin
+
+        return dose_grid
+
+    def _format_solution_info(self, solution):
+        """
+        Định dạng thông tin về giải pháp để hiển thị.
+
+        Parameters
+        ----------
+        solution : ParetoSolution
+            Giải pháp Pareto được chọn
+
+        Returns
+        -------
+        str
+            Thông tin định dạng về giải pháp
+        """
+        info = []
+
+        if hasattr(solution, "solution_id"):
+            info.append(f"ID: {solution.solution_id}")
+
+        if hasattr(solution, "solution_type"):
+            info.append(f"Loại: {solution.solution_type.value}")
+
+        if hasattr(solution, "objectives_values") and solution.objectives_values:
+            for key, value in solution.objectives_values.items():
+                info.append(f"{key}: {value:.2f}")
+
+        return ", ".join(info)
+
+    def _show_dvh_tab(self):
+        """Chuyển đến tab DVH nếu có."""
+        # Tìm tab widget chứa tab DVH
+        tab_widget = None
+        for i in range(self.layout().count()):
+            item = self.layout().itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), QSplitter):
+                splitter = item.widget()
+                if splitter.count() > 1 and isinstance(splitter.widget(1), QTabWidget):
+                    tab_widget = splitter.widget(1)
+                    break
+
+        if tab_widget:
+            # Tìm tab DVH và chuyển đến đó
+            for i in range(tab_widget.count()):
+                if tab_widget.tabText(i) == "DVH":
+                    tab_widget.setCurrentIndex(i)
+                    break
+
+    def _simulate_dose_calculation_progress(self, message="Đang tính toán liều..."):
+        """
+        Giả lập tiến trình tính toán liều.
+
+        Parameters
+        ----------
+        message : str
+            Thông báo hiển thị trong quá trình tính toán
+        """
+        for i in range(101):
+            self.progress_bar.setValue(i)
+
+            if i < 30:
+                step_message = f"{message} - Đang khởi tạo..."
+            elif i < 60:
+                step_message = f"{message} - Đang tính kernel liều..."
+            elif i < 85:
+                step_message = f"{message} - Đang tích hợp phân phối liều..."
+            else:
+                step_message = f"{message} - Đang hoàn tất..."
+
+            self.status_label.setText(step_message)
+            QApplication.processEvents()
+
+            # Tạm dừng để giả lập tính toán
+            time.sleep(0.02)

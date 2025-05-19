@@ -11,7 +11,7 @@ của các mô hình dự đoán được sử dụng trong hệ thống lập k
 import logging
 import numpy as np
 from enum import Enum
-from datetime import datetime
+import datetime
 from typing import Dict, List, Any, Optional, Union, Tuple
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class ValidationResult:
         self.is_valid = False
         self.confidence = 0.0
         self.metrics = {}
-        self.timestamp = datetime.now()
+        self.timestamp = datetime.datetime.now()
         self.message = ""
 
     def set_valid(self, is_valid: bool, confidence: float):

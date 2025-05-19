@@ -2,1309 +2,721 @@
 # -*- coding: utf-8 -*-
 
 """
-Widget điều hướng Pareto cho tối ưu hóa đa tiêu chí.
+Widget MCO Navigator cho giao diện Eclipse-style.
 
-Module này cung cấp một giao diện người dùng đồ họa để khám phá và
-điều hướng không gian giải pháp Pareto trong quy trình tối ưu hóa
-đa tiêu chí (MCO).
+Module này cung cấp một wrapper cho MCONavigator để tích hợp vào giao diện
+Eclipse-style của QuangTPS. Widget này tích hợp cả bảng giải pháp và biểu đồ
+Pareto 3D trong một giao diện thống nhất, với phong cách thiết kế giống Eclipse.
 """
 
-import os
 import logging
-import numpy as np
-import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Any, Union, Set
 
-import matplotlib
+logger = logging.getLogger(__name__)
 
-matplotlib.use("Qt5Agg")
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-
-# Import PyQt5 using try/except pattern để xử lý lỗi khi không có PyQt5
 try:
-    from PyQt5.QtCore import Qt, pyqtSignal
     from PyQt5.QtWidgets import (
         QWidget,
         QVBoxLayout,
         QHBoxLayout,
-        QGridLayout,
         QLabel,
         QPushButton,
-        QSlider,
+        QSplitter,
         QGroupBox,
-        QComboBox,
-        QCheckBox,
         QTableWidget,
         QTableWidgetItem,
-        QTabWidget,
-        QFileDialog,
-        QMessageBox,
-        QSplitter,
         QFrame,
-        QDialog,
-        QDialogButtonBox,
-        QListWidget,
-        QListWidgetItem,
-        QApplication,
-        QSpacerItem,
-        QSizePolicy,
-        QTimer,
-        QRadioButton,
+        QComboBox,
+        QCheckBox,
+        QHeaderView,
     )
-    from PyQt5.QtGui import QColor
+    from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+    from PyQt5.QtGui import QColor, QBrush
 
-    PYQT_AVAILABLE = True
+    HAS_PYQT = True
 except ImportError:
-    # Fallback nếu PyQt5 không khả dụng
-    PYQT_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.error("PyQt5 không khả dụng. Chức năng MCO Navigator sẽ bị hạn chế.")
-
-    # Tạo các lớp giả để tránh lỗi import
-    class DummyFigureCanvasQTAgg:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    class QWidget:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    class pyqtSignal:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    class QVBoxLayout:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    class QColor:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    # Định nghĩa các hằng số giả cho Qt
-    class Qt:
-        Horizontal = 1
-        Vertical = 2
-        AlignCenter = 0
-        AlignVCenter = 0
-        AlignRight = 0
-
-    # Sử dụng lớp giả cho FigureCanvasQTAgg
-    FigureCanvasQTAgg = DummyFigureCanvasQTAgg
-
-
-# Import các module từ QuangTPS
-try:
-    from quangtps.optimization.mco.pareto_navigator import (
-        ParetoNavigator,
-        ParetoSolution,
-    )
-    from quangtps.core.patient import Plan
-
-    HAS_PARETO_MODULES = True
-except ImportError:
-    logger = logging.getLogger(__name__)
-    logger.error(
-        "Không thể import các module Pareto và Plan. Chức năng MCO Navigator sẽ bị hạn chế."
-    )
-    HAS_PARETO_MODULES = False
-
-    # Tạo lớp giả để tránh lỗi import
-    class ParetoNavigator:
-        pass
-
-    class ParetoSolution:
-        pass
-
-    class Plan:
-        pass
-
-
-logger = logging.getLogger(__name__)
-
-
-class ParetoFigureCanvas(FigureCanvasQTAgg):
-    """Canvas để hiển thị đồ thị Pareto."""
-
-    clicked_point = pyqtSignal(str)  # Phát tín hiệu ID của điểm được chọn
-
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        """Khởi tạo canvas cho đồ thị Pareto."""
-        self.figure = Figure(figsize=(width, height), dpi=dpi)
-        super().__init__(self.figure)
-        self.setParent(parent)
-
-        # Các thuộc tính dữ liệu
-        self.solutions = {}  # Dict ID điểm: dữ liệu điểm
-        self.objective_values = {}  # Dict ID điểm: Dict mục tiêu: giá trị
-        self.objective_names = []  # Danh sách tên mục tiêu
-        self.highlighted_solution = None  # ID của giải pháp được tô sáng
-        self.color_by_objective = None  # Tên của mục tiêu để tô màu theo
-
-        # Thuộc tính vẽ
-        self.is_3d = False  # Chế độ hiển thị 3D hay 2D
-        self.is_updating_ui = False  # Đang cập nhật UI hay không
-
-        # Biến theo dõi thời gian click để chống debounce
-        self.last_click_time = 0
-
-        # Tạo trục và kết nối sự kiện chuột
-        self._setup_axes()
-        self.mpl_connect("button_press_event", self._on_click)
-
-        # Lưu trữ phạm vi giá trị của các mục tiêu
-        self.objective_ranges = {}
-
-        # Danh sách để lưu trữ các animator cho hiệu ứng highlight
-        self._highlight_animation = []
-
-        # Đặt màu nền cho Eclipse-like style
-        self.figure.patch.set_facecolor("#f0f0f0")
-
-    def _setup_axes(self):
-        """Thiết lập trục tọa độ theo chế độ hiển thị."""
-        self.figure.clear()
-        if self.is_3d and len(self.objective_names) > 2:
-            self.axes = self.figure.add_subplot(111, projection="3d")
-        else:
-            self.axes = self.figure.add_subplot(111)
-
-        # Đặt style giống Eclipse
-        self.axes.set_facecolor("#ffffff")
-        self.axes.grid(True, linestyle="--", alpha=0.7)
-        self.axes.tick_params(labelsize=9)
-
-        for spine in self.axes.spines.values():
-            spine.set_linewidth(0.5)
-            spine.set_color("#999999")
-
-    def _on_click(self, event):
-        """
-        Xử lý sự kiện click chuột trên đồ thị.
-        Tìm điểm gần nhất và phát tín hiệu clicked_point.
-        """
-        if event.inaxes != self.axes or not self.solutions:
-            return
-
-        # Chống debounce (tránh xử lý nhiều click liên tiếp)
-        current_time = time.time()
-        if current_time - self.last_click_time < 0.3:
-            return
-        self.last_click_time = current_time
-
-        # Tìm điểm gần nhất
-        min_dist = float("inf")
-        closest_id = None
-
-        if len(self.objective_names) < 2:
-            return
-
-        x_obj, y_obj = self.objective_names[:2]
-        z_obj = self.objective_names[2] if len(self.objective_names) > 2 else None
-
-        for sol_id, sol in self.solutions.items():
-            if x_obj not in sol.objective_values or y_obj not in sol.objective_values:
-                continue
-
-            x = sol.objective_values[x_obj]
-            y = sol.objective_values[y_obj]
-
-            if self.is_3d and z_obj and z_obj in sol.objective_values:
-                z = sol.objective_values[z_obj]
-                dist = np.sqrt(
-                    (x - event.xdata) ** 2
-                    + (y - event.ydata) ** 2
-                    + (z - event.zdata if hasattr(event, "zdata") else 0) ** 2
-                )
-            else:
-                dist = np.sqrt((x - event.xdata) ** 2 + (y - event.ydata) ** 2)
-
-            if dist < min_dist:
-                min_dist = dist
-                closest_id = sol_id
-
-        # Sử dụng ngưỡng tự động tính toán từ kích thước dữ liệu
-        threshold = self._calculate_click_threshold()
-        if closest_id and min_dist < threshold:
-            self.clicked_point.emit(closest_id)
-
-    def _calculate_click_threshold(self):
-        """Tính toán ngưỡng khoảng cách click dựa trên phạm vi dữ liệu."""
-        if not self.objective_ranges or len(self.objective_names) < 2:
-            return 0.1  # Giá trị mặc định
-
-        # Tính trung bình phạm vi của các trục để có ngưỡng hợp lý
-        ranges = []
-        for obj in self.objective_names[:3]:  # Tối đa 3 trục
-            if obj in self.objective_ranges:
-                min_val, max_val = self.objective_ranges[obj]
-                ranges.append(max_val - min_val)
-
-        if not ranges:
-            return 0.1
-
-        # Ngưỡng là 2% của phạm vi trung bình
-        return np.mean(ranges) * 0.02
-
-    def highlight_solution(self, solution_id):
-        """
-        Tô sáng một giải pháp cụ thể trên đồ thị.
-        """
-        self.highlighted_solution = solution_id
-        self.update_plot(redraw=False, animation=True)
-
-    def set_color_by_objective(self, objective_name):
-        """
-        Thiết lập mục tiêu dùng để tô màu các điểm.
-
-        Args:
-            objective_name (str): Tên mục tiêu hoặc None để không tô màu
-        """
-        self.color_by_objective = objective_name
-        self.update_plot()
-
-    def set_display_mode(self, mode_3d=True):
-        """
-        Chuyển đổi giữa chế độ hiển thị 2D và 3D.
-        """
-        if self.is_3d != mode_3d:
-            self.is_3d = mode_3d
-            self._setup_axes()
-            self.update_plot(redraw=True, animation=False)
-
-    def update_plot(self, redraw=False, animation=False):
-        """
-        Cập nhật đồ thị Pareto với các cấu hình hiện tại.
-
-        Parameters:
-        -----------
-        redraw : bool, optional
-            Nếu True, xóa và vẽ lại toàn bộ đồ thị. Mặc định là False.
-        animation : bool, optional
-            Nếu True, thêm hiệu ứng animation cho highlight. Mặc định là False.
-        """
-        if not self.solutions or not self.objective_names:
-            return
-
-        try:
-            # Chuẩn bị dữ liệu cho đồ thị
-            x_obj, y_obj = self.objective_names[:2]
-            z_obj = (
-                self.objective_names[2]
-                if len(self.objective_names) > 2 and self.is_3d
-                else None
-            )
-
-            if redraw:
-                self._setup_axes()
-
-                # Tạo danh sách các điểm để vẽ
-                x_values, y_values, z_values = [], [], []
-                solution_ids = []
-                color_values = []
-
-                for sol_id, sol in self.solutions.items():
-                    if x_obj in sol.objective_values and y_obj in sol.objective_values:
-                        x_values.append(sol.objective_values[x_obj])
-                        y_values.append(sol.objective_values[y_obj])
-
-                        # Thêm giá trị z nếu cần
-                        if z_obj and z_obj in sol.objective_values:
-                            z_values.append(sol.objective_values[z_obj])
-                        else:
-                            z_values.append(0)
-
-                        solution_ids.append(sol_id)
-
-                        # Giá trị màu
-                        if (
-                            self.color_by_objective
-                            and self.color_by_objective in sol.objective_values
-                        ):
-                            color_values.append(
-                                sol.objective_values[self.color_by_objective]
-                            )
-                        else:
-                            color_values.append(0)
-
-                if not x_values:  # Không có dữ liệu
-                    return
-
-                # Cập nhật phạm vi cho các mục tiêu
-                self._update_objective_ranges()
-
-                # Vẽ điểm dựa trên chế độ hiển thị
-                if self.is_3d and z_obj:
-                    self.solution_points = self.axes.scatter(
-                        x_values,
-                        y_values,
-                        z_values,
-                        c=color_values if self.color_by_objective else "b",
-                        cmap="viridis",
-                        s=50,
-                        alpha=0.8,
-                        edgecolors="w",
-                        picker=5,
-                    )
-
-                    self.axes.set_xlabel(x_obj)
-                    self.axes.set_ylabel(y_obj)
-                    self.axes.set_zlabel(z_obj)
-                else:
-                    self.solution_points = self.axes.scatter(
-                        x_values,
-                        y_values,
-                        c=color_values if self.color_by_objective else "b",
-                        cmap="viridis",
-                        s=50,
-                        alpha=0.8,
-                        edgecolors="w",
-                        picker=5,
-                    )
-
-                    self.axes.set_xlabel(x_obj)
-                    self.axes.set_ylabel(y_obj)
-
-                # Thêm thanh màu nếu cần
-                if self.color_by_objective:
-                    if self.colorbar:
-                        self.colorbar.remove()
-                    self.colorbar = self.figure.colorbar(
-                        self.solution_points,
-                        ax=self.axes,
-                        pad=0.1,
-                        label=self.color_by_objective,
-                    )
-
-                # Lưu mối quan hệ giữa điểm và solution_id
-                self._point_to_solution_mapping = dict(enumerate(solution_ids))
-
-            # Tô sáng giải pháp được chọn
-            if (
-                self.highlighted_solution
-                and self.highlighted_solution in self.solutions
-            ):
-                sol = self.solutions[self.highlighted_solution]
-
-                if x_obj in sol.objective_values and y_obj in sol.objective_values:
-                    x = sol.objective_values[x_obj]
-                    y = sol.objective_values[y_obj]
-
-                    # Tìm và xóa điểm được tô sáng trước đó
-                    for artist in self.axes.artists:
-                        if artist != self.solution_points and not isinstance(
-                            artist, matplotlib.colorbar.ColorbarBase
-                        ):
-                            artist.remove()
-
-                    # Thêm điểm mới được tô sáng
-                    if self.is_3d and z_obj and z_obj in sol.objective_values:
-                        z = sol.objective_values[z_obj]
-                        self.axes.scatter(
-                            [x],
-                            [y],
-                            [z],
-                            color="red",
-                            s=100,
-                            edgecolors="k",
-                            linewidth=2,
-                            zorder=10,
-                        )
-                    else:
-                        self.axes.scatter(
-                            [x],
-                            [y],
-                            color="red",
-                            s=100,
-                            edgecolors="k",
-                            linewidth=2,
-                            zorder=10,
-                        )
-
-                    # Thêm animation nếu cần
-                    if animation:
-                        self._animate_highlight(
-                            x,
-                            y,
-                            z
-                            if (self.is_3d and z_obj and z_obj in sol.objective_values)
-                            else None,
-                        )
-
-            self.figure.tight_layout()
-            self.draw()
-
-        except Exception as e:
-            logger.error(f"Lỗi khi cập nhật đồ thị Pareto: {str(e)}")
-
-    def _animate_highlight(self, x, y, z=None):
-        """
-        Tạo hiệu ứng animation khi highlight một điểm.
-        """
-        # Khởi tạo danh sách nếu chưa có
-        self._highlight_animation = []
-
-        try:
-            # Tạo hiệu ứng động cho điểm được tô sáng
-            if hasattr(self, "_highlight_animation"):
-                for artist in self._highlight_animation:
-                    if artist in self.axes.artists:
-                        artist.remove()
-
-            self._highlight_animation = []
-
-            # Thêm các vòng tròn tập trung vào điểm được chọn
-            for size in [120, 140, 160]:
-                if self.is_3d and z is not None:
-                    circle = self.axes.scatter(
-                        [x],
-                        [y],
-                        [z],
-                        facecolors="none",
-                        edgecolors="r",
-                        alpha=0.5,
-                        s=size,
-                        linewidth=1,
-                        zorder=9,
-                    )
-                else:
-                    circle = self.axes.scatter(
-                        [x],
-                        [y],
-                        facecolors="none",
-                        edgecolors="r",
-                        alpha=0.5,
-                        s=size,
-                        linewidth=1,
-                        zorder=9,
-                    )
-                self._highlight_animation.append(circle)
-
-            self.draw()
-
-        except Exception as e:
-            logger.error(f"Lỗi khi tạo animation: {str(e)}")
-
-    def _update_objective_ranges(self):
-        """
-        Cập nhật phạm vi giá trị cho từng mục tiêu.
-        """
-        self.objective_ranges = {}
-
-        for obj_name in self.objective_names:
-            values = []
-            for sol in self.solutions.values():
-                if obj_name in sol.objective_values:
-                    values.append(sol.objective_values[obj_name])
-
-            if values:
-                self.objective_ranges[obj_name] = (min(values), max(values))
-
-    def clear_plot(self):
-        """Xóa đồ thị và đặt lại các tham số."""
-        self.axes.clear()
-        self.highlighted_solution = None
-        self.solutions = {}
-        self.objective_values = {}
-        self.objective_names = []
-        self.color_by_objective = None
-        self._setup_axes()
-        self.draw()
-
-
-class ObjectiveWeightEditor(QWidget):
-    """Widget để hiệu chỉnh trọng số cho các mục tiêu tối ưu hóa."""
-
-    weights_changed = pyqtSignal(dict)  # Phát tín hiệu khi trọng số thay đổi
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.objectives = []
-        self.sliders = {}
-        self.weight_labels = {}
-        self.is_updating = False
-
-        # Thiết lập giao diện
-        layout = QVBoxLayout(self)
-
-        # Nhãn tiêu đề
-        title = QLabel("Trọng số mục tiêu")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(title)
-
-        # Layout cho sliders
-        self.sliders_layout = QVBoxLayout()
-        layout.addLayout(self.sliders_layout)
-
-        # Nút reset
-        reset_btn = QPushButton("Đặt lại trọng số")
-        reset_btn.clicked.connect(self._reset_weights)
-        layout.addWidget(reset_btn)
-
-        layout.addStretch()
-
-    def set_objectives(
-        self, objectives: List[str], default_weights: Optional[Dict[str, float]] = None
-    ):
-        """Thiết lập danh sách mục tiêu và trọng số mặc định."""
-        self.is_updating = True
-        self.objectives = objectives
-
-        # Xóa sliders cũ
-        for slider in self.sliders.values():
-            slider.setParent(None)
-        self.sliders = {}
-        self.weight_labels = {}
-
-        # Xóa layout
-        while self.sliders_layout.count():
-            item = self.sliders_layout.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
-
-        # Trọng số mặc định bằng nhau
-        if default_weights is None:
-            weight = 1.0 / len(objectives) if objectives else 0.0
-            default_weights = {obj: weight for obj in objectives}
-
-        # Tạo sliders mới
-        for obj in objectives:
-            weight = default_weights.get(obj, 0.0)
-
-            # Container widget for each slider row
-            container = QWidget()
-            row_layout = QHBoxLayout(container)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-
-            # Label for objective name
-            label = QLabel(obj)
-            label.setMinimumWidth(100)
-            row_layout.addWidget(label)
-
-            # Slider
-            slider = QSlider(Qt.Horizontal)
-            slider.setRange(0, 100)
-            slider.setValue(int(weight * 100))
-            slider.valueChanged.connect(lambda v, o=obj: self._on_slider_changed(o, v))
-            row_layout.addWidget(slider)
-
-            # Weight label
-            weight_label = QLabel(f"{weight:.2f}")
-            weight_label.setMinimumWidth(40)
-            row_layout.addWidget(weight_label)
-
-            self.sliders_layout.addWidget(container)
-            self.sliders[obj] = slider
-            self.weight_labels[obj] = weight_label
-
-        self.is_updating = False
-        self._normalize_weights()
-
-    def _on_slider_changed(self, obj_name: str, value: int):
-        """Xử lý khi một slider thay đổi giá trị."""
-        if self.is_updating:
-            return
-
-        # Cập nhật nhãn
-        weight = value / 100.0
-        self.weight_labels[obj_name].setText(f"{weight:.2f}")
-
-        # Chuẩn hóa trọng số
-        self._normalize_weights()
-
-        # Phát tín hiệu trọng số đã thay đổi
-        weights = {obj: self.sliders[obj].value() / 100.0 for obj in self.sliders}
-        self.weights_changed.emit(weights)
-
-    def _reset_weights(self):
-        """Đặt lại tất cả trọng số về giá trị mặc định bằng nhau."""
-        if not self.objectives:
-            return
-
-        self.is_updating = True
-        weight = 1.0 / len(self.objectives)
-
-        for obj in self.objectives:
-            self.sliders[obj].setValue(int(weight * 100))
-            self.weight_labels[obj].setText(f"{weight:.2f}")
-
-        self.is_updating = False
-
-        # Phát tín hiệu trọng số đã thay đổi
-        weights = {obj: weight for obj in self.objectives}
-        self.weights_changed.emit(weights)
-
-    def _normalize_weights(self):
-        """Chuẩn hóa trọng số để tổng bằng 1."""
-        if self.is_updating or not self.sliders:
-            return
-
-        self.is_updating = True
-
-        # Lấy tổng trọng số hiện tại
-        total = sum(slider.value() for slider in self.sliders.values())
-
-        if total > 0:
-            # Chuẩn hóa
-            for obj, slider in self.sliders.items():
-                normalized = slider.value() / total
-                slider.setValue(int(normalized * 100))
-                self.weight_labels[obj].setText(f"{normalized:.2f}")
-
-        self.is_updating = False
-
-
-class SolutionDetailsPanel(QWidget):
-    """Panel hiển thị chi tiết về giải pháp Pareto đã chọn."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        layout = QVBoxLayout(self)
-
-        # Tiêu đề
-        title = QLabel("Chi tiết giải pháp")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(title)
-
-        # Bảng mục tiêu
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Mục tiêu", "Giá trị", "Trọng số"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        layout.addWidget(self.table)
-
-        # Thông tin tóm tắt
-        self.summary = QLabel()
-        layout.addWidget(self.summary)
-
-        # Nút áp dụng
-        self.apply_btn = QPushButton("Áp dụng giải pháp này")
-        layout.addWidget(self.apply_btn)
-
-    def display_solution(self, solution: Optional[ParetoSolution]):
-        """Hiển thị thông tin chi tiết về giải pháp đã chọn."""
-        # Xóa dữ liệu cũ
-        self.table.setRowCount(0)
-        self.summary.setText("")
-
-        if not solution:
-            self.apply_btn.setEnabled(False)
-            return
-
-        self.apply_btn.setEnabled(True)
-
-        # Hiển thị thông tin mục tiêu
-        self.table.setRowCount(len(solution.objective_values))
-
-        for i, (obj_name, value) in enumerate(solution.objective_values.items()):
-            # Tên mục tiêu
-            self.table.setItem(i, 0, QTableWidgetItem(obj_name))
-
-            # Giá trị
-            self.table.setItem(i, 1, QTableWidgetItem(f"{value:.4f}"))
-
-            # Trọng số
-            weight = solution.weights.get(obj_name, 0.0)
-            self.table.setItem(i, 2, QTableWidgetItem(f"{weight:.4f}"))
-
-        # Hiển thị tóm tắt
-        total_score = sum(
-            v * solution.weights.get(k, 0.0)
-            for k, v in solution.objective_values.items()
+    logger.warning("PyQt5 không khả dụng, MCO Navigator Widget sẽ bị tắt")
+    HAS_PYQT = False
+
+# Thử import PySide6 nếu PyQt5 không khả dụng
+if not HAS_PYQT:
+    try:
+        from PySide6.QtWidgets import (
+            QWidget,
+            QVBoxLayout,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+            QSplitter,
+            QGroupBox,
+            QTableWidget,
+            QTableWidgetItem,
+            QFrame,
+            QComboBox,
+            QCheckBox,
+            QHeaderView,
         )
-        self.summary.setText(f"Tổng điểm: {total_score:.4f}\nID: {solution.id}")
+        from PySide6.QtCore import Qt, Signal as pyqtSignal, Slot as pyqtSlot
+        from PySide6.QtGui import QColor, QBrush
+
+        HAS_PYQT = True
+        logger.info("Sử dụng PySide6 thay thế cho PyQt5")
+    except ImportError:
+        logger.warning("PySide6 cũng không khả dụng")
+
+try:
+    from quangtps.optimization.mco.mco_navigator import (
+        MCONavigator,
+        ParetoSolution,
+        ParetoSolutionType,
+    )
+    from quangtps.optimization.mco.mco_pareto_3d_widget import (
+        Pareto3DWidget,
+        create_pareto_3d_widget,
+    )
+
+    HAS_MCO_MODULES = True
+except ImportError:
+    logger.warning("Không thể import các module MCO, widget sẽ bị tắt")
+    HAS_MCO_MODULES = False
 
 
-class ParetoNavigatorWidget(QWidget):
+class MCONavigatorWidget(QWidget):
     """
-    Widget điều hướng Pareto cho tối ưu hóa đa tiêu chí (MCO).
+    Widget giao diện Eclipse-style cho MCO Navigator.
 
-    Widget này cung cấp giao diện người dùng để khám phá và điều hướng
-    không gian giải pháp Pareto, cho phép người dùng chọn giải pháp tối ưu
-    dựa trên sự đánh đổi giữa các mục tiêu lâm sàng khác nhau.
+    Một widget tích hợp cả bảng giải pháp và biểu đồ Pareto 3D trong một giao diện
+    thống nhất, với phong cách thiết kế giống Eclipse. Widget này sử dụng splitter
+    để cho phép người dùng điều chỉnh kích thước các phần khác nhau của giao diện.
+
+    Attributes
+    ----------
+    solution_selected_signal : pyqtSignal
+        Tín hiệu phát ra khi người dùng chọn một giải pháp
     """
 
-    plan_created = pyqtSignal(Plan)  # Phát tín hiệu khi tạo kế hoạch từ giải pháp
+    solution_selected_signal = pyqtSignal(str)  # Phát ra solution_id khi chọn
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, mco_navigator=None):
+        """
+        Khởi tạo widget MCO Navigator.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Widget cha, mặc định là None
+        mco_navigator : MCONavigator, optional
+            Đối tượng MCO Navigator, nếu None sẽ tạo mới
+        """
+        if not HAS_PYQT or not HAS_MCO_MODULES:
+            return
+
         super().__init__(parent)
-        self.navigator = None
-        self.current_solution = None
+
+        self.mco_navigator = mco_navigator or MCONavigator()
+        self.pareto_3d_widget = None
 
         self._setup_ui()
-
-    def set_navigator(self, navigator: ParetoNavigator):
-        """Thiết lập đối tượng ParetoNavigator để điều hướng không gian Pareto."""
-        self.navigator = navigator
-
-        if navigator:
-            # Lấy danh sách mục tiêu
-            objectives = []
-            if hasattr(navigator.pareto_surface, "objectives"):
-                objectives = list(navigator.pareto_surface.objectives.keys())
-
-            # Thiết lập danh sách mục tiêu cho các thành phần UI
-            self.weight_editor.set_objectives(objectives)
-            self.obj_x_combo.clear()
-            self.obj_x_combo.addItems(objectives)
-            self.obj_y_combo.clear()
-            self.obj_y_combo.addItems(objectives)
-            self.obj_z_combo.clear()
-            self.obj_z_combo.addItem("Không")
-            self.obj_z_combo.addItems(objectives)
-
-            # Thiết lập giá trị mặc định cho combos
-            if len(objectives) > 0:
-                self.obj_x_combo.setCurrentIndex(0)
-            if len(objectives) > 1:
-                self.obj_y_combo.setCurrentIndex(1)
-
-            # Vẽ bề mặt Pareto
-            self._draw_pareto_surface()
 
     def _setup_ui(self):
         """Thiết lập giao diện người dùng."""
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Tiêu đề
-        title = QLabel("Điều hướng Pareto")
-        title.setStyleSheet("font-weight: bold; font-size: 16px;")
-        main_layout.addWidget(title)
+        # Tạo splitter dọc chính
+        vertical_splitter = QSplitter(Qt.Vertical)
 
-        # Splitter chính
-        main_splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(main_splitter)
+        # Phần trên: Bảng giải pháp
+        top_widget = QWidget()
+        top_layout = QVBoxLayout(top_widget)
+        top_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Panel bên trái
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        # Tiêu đề và các nút điều khiển
+        header_layout = QHBoxLayout()
+        title_label = QLabel("<b>Pareto Solutions Explorer</b>")
+        title_label.setStyleSheet("font-size: 12px;")
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
 
-        # Widget chọn trọng số
-        self.weight_editor = ObjectiveWeightEditor()
-        left_layout.addWidget(self.weight_editor)
+        # Thêm nút điều khiển
+        self.compute_btn = QPushButton("Calculate Anchor Plans")
+        self.compute_btn.setToolTip("Calculate anchor plans for each objective")
+        self.compute_btn.clicked.connect(self.on_compute_anchor_points)
+        header_layout.addWidget(self.compute_btn)
 
-        # Nút chọn theo trọng số
-        select_btn = QPushButton("Chọn theo trọng số")
-        select_btn.clicked.connect(self._select_by_weights)
-        left_layout.addWidget(select_btn)
+        self.save_btn = QPushButton("Save Solution")
+        self.save_btn.setToolTip("Save current solution")
+        self.save_btn.clicked.connect(self.on_save_current_solution)
+        header_layout.addWidget(self.save_btn)
 
-        # Nút hiển thị giải pháp lân cận
-        neighbors_btn = QPushButton("Xem giải pháp lân cận")
-        neighbors_btn.clicked.connect(self._show_neighboring_solutions)
-        left_layout.addWidget(neighbors_btn)
+        top_layout.addLayout(header_layout)
 
-        # Nút tạo kế hoạch
-        create_plan_btn = QPushButton("Tạo kế hoạch")
-        create_plan_btn.clicked.connect(self._create_plan)
-        left_layout.addWidget(create_plan_btn)
-
-        # Nút lưu phiên điều hướng
-        save_btn = QPushButton("Lưu phiên điều hướng")
-        save_btn.clicked.connect(self._save_session)
-        left_layout.addWidget(save_btn)
-
-        main_splitter.addWidget(left_panel)
-
-        # Panel bên phải (trực quan hóa)
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Controls for visualization
-        viz_control = QWidget()
-        viz_layout = QHBoxLayout(viz_control)
-        viz_layout.setContentsMargins(0, 0, 0, 0)
-
-        # X-axis objective
-        viz_layout.addWidget(QLabel("Trục X:"))
-        self.obj_x_combo = QComboBox()
-        self.obj_x_combo.currentIndexChanged.connect(self._draw_pareto_surface)
-        viz_layout.addWidget(self.obj_x_combo)
-
-        # Y-axis objective
-        viz_layout.addWidget(QLabel("Trục Y:"))
-        self.obj_y_combo = QComboBox()
-        self.obj_y_combo.currentIndexChanged.connect(self._draw_pareto_surface)
-        viz_layout.addWidget(self.obj_y_combo)
-
-        # Z-axis objective (optional)
-        viz_layout.addWidget(QLabel("Trục Z:"))
-        self.obj_z_combo = QComboBox()
-        self.obj_z_combo.currentIndexChanged.connect(self._draw_pareto_surface)
-        viz_layout.addWidget(self.obj_z_combo)
-
-        right_layout.addWidget(viz_control)
-
-        # Pareto surface figure
-        self.figure_canvas = ParetoFigureCanvas(self)
-        right_layout.addWidget(self.figure_canvas)
-
-        main_splitter.addWidget(right_panel)
-
-        # Panel chi tiết giải pháp
-        self.details_panel = SolutionDetailsPanel()
-        self.details_panel.apply_btn.clicked.connect(self._create_plan)
-        main_splitter.addWidget(self.details_panel)
-
-        # Thiết lập kích thước tương đối
-        main_splitter.setSizes([200, 500, 300])
-
-        # Kết nối các tín hiệu
-        self._connect_signals()
-
-    def _connect_signals(self):
-        """Kết nối các tín hiệu và slots."""
-        self.weight_editor.weights_changed.connect(self._on_weights_changed)
-        self.figure_canvas.clicked_point.connect(self._on_solution_selected)
-
-    def _draw_pareto_surface(self):
-        """Vẽ bề mặt Pareto dựa trên các mục tiêu đã chọn."""
-        if not self.navigator:
-            return
-
-        # Xóa đồ thị
-        self.figure_canvas.clear()
-
-        # Lấy các mục tiêu đã chọn
-        if self.obj_x_combo.currentIndex() < 0 or self.obj_y_combo.currentIndex() < 0:
-            return
-
-        x_obj = self.obj_x_combo.currentText()
-        y_obj = self.obj_y_combo.currentText()
-
-        use_3d = self.obj_z_combo.currentIndex() > 0
-        z_obj = (
-            self.obj_z_combo.currentText()
-            if use_3d and self.obj_z_combo.currentText() != "Không"
-            else None
+        # Bảng giải pháp
+        self.solutions_table = QTableWidget()
+        self.solutions_table.setColumnCount(4)
+        self.solutions_table.setHorizontalHeaderLabels(
+            ["ID", "Type", "Score", "Details"]
+        )
+        self.solutions_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.solutions_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.solutions_table.itemSelectionChanged.connect(self.on_solution_selected)
+        # Tự động điều chỉnh kích thước cột
+        self.solutions_table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.Stretch
         )
 
-        # Lưu danh sách mục tiêu được chọn
-        selected_objectives = [x_obj, y_obj]
-        if z_obj:
-            selected_objectives.append(z_obj)
-        self.figure_canvas.objective_names = selected_objectives
+        top_layout.addWidget(self.solutions_table)
 
-        # Lấy tất cả giải pháp từ navigator
-        if not hasattr(self.navigator.pareto_surface, "solutions"):
-            return
+        # Khung tùy chọn hiển thị
+        options_layout = QHBoxLayout()
 
-        solutions = self.navigator.pareto_surface.solutions
-        self.figure_canvas.solutions = {sol.id: sol for sol in solutions}
+        self.show_pareto_only_checkbox = QCheckBox("Show Pareto optimal solutions only")
+        self.show_pareto_only_checkbox.setChecked(True)
+        self.show_pareto_only_checkbox.toggled.connect(self.update_solutions_table)
+        options_layout.addWidget(self.show_pareto_only_checkbox)
 
-        x_values = []
-        y_values = []
-        z_values = []
-        colors = []  # Giá trị màu dựa trên mục tiêu được chọn
+        self.show_history_checkbox = QCheckBox("Show exploration history")
+        self.show_history_checkbox.setChecked(True)
+        self.show_history_checkbox.toggled.connect(self.update_3d_view)
+        options_layout.addWidget(self.show_history_checkbox)
 
-        # Xác định mục tiêu để tô màu (mục tiêu thứ 3 hoặc đầu tiên nếu không có mục tiêu thứ 3)
-        color_objective = z_obj if z_obj else x_obj
-        self.figure_canvas.color_by_objective = color_objective
+        options_layout.addStretch()
 
-        for sol in solutions:
-            if x_obj in sol.objective_values and y_obj in sol.objective_values:
-                x_values.append(sol.objective_values[x_obj])
-                y_values.append(sol.objective_values[y_obj])
+        top_layout.addLayout(options_layout)
 
-                if z_obj and z_obj in sol.objective_values:
-                    z_values.append(sol.objective_values[z_obj])
-                else:
-                    z_values.append(0)
+        # Phần dưới: Biểu đồ Pareto 3D
+        bottom_widget = QWidget()
+        bottom_layout = QVBoxLayout(bottom_widget)
+        bottom_layout.setContentsMargins(5, 5, 5, 5)
 
-                # Thêm giá trị cho tô màu
-                if color_objective in sol.objective_values:
-                    colors.append(sol.objective_values[color_objective])
-                else:
-                    colors.append(0)
-
-        # Vẽ bề mặt Pareto
-        if not x_values:
-            return
-
-        if use_3d and z_obj:
-            # Mặt 3D
-            scatter = self.figure_canvas.axes.scatter(
-                x_values,
-                y_values,
-                z_values,
-                c=colors,
-                cmap="viridis",
-                marker="o",
-                alpha=0.7,
-            )
-            self.figure_canvas.axes.set_xlabel(x_obj)
-            self.figure_canvas.axes.set_ylabel(y_obj)
-            self.figure_canvas.axes.set_zlabel(z_obj)
-
-            # Cập nhật giới hạn trục
-            x_range = max(x_values) - min(x_values)
-            y_range = max(y_values) - min(y_values)
-            z_range = max(z_values) - min(z_values)
-
-            self.figure_canvas.axes.set_xlim(
-                [min(x_values) - 0.1 * x_range, max(x_values) + 0.1 * x_range]
-            )
-            self.figure_canvas.axes.set_ylim(
-                [min(y_values) - 0.1 * y_range, max(y_values) + 0.1 * y_range]
-            )
-            self.figure_canvas.axes.set_zlim(
-                [min(z_values) - 0.1 * z_range, max(z_values) + 0.1 * z_range]
-            )
-
-        else:
-            # Mặt 2D
-            scatter = self.figure_canvas.axes.scatter(
-                x_values, y_values, c=colors, cmap="viridis", marker="o", alpha=0.7
-            )
-            self.figure_canvas.axes.set_xlabel(x_obj)
-            self.figure_canvas.axes.set_ylabel(y_obj)
-
-            # Cập nhật giới hạn trục
-            x_range = max(x_values) - min(x_values)
-            y_range = max(y_values) - min(y_values)
-
-            self.figure_canvas.axes.set_xlim(
-                [min(x_values) - 0.1 * x_range, max(x_values) + 0.1 * x_range]
-            )
-            self.figure_canvas.axes.set_ylim(
-                [min(y_values) - 0.1 * y_range, max(y_values) + 0.1 * y_range]
-            )
-
-            # Ẩn trục Z trong chế độ 2D
-            self.figure_canvas.axes.set_zticks([])
-
-        # Thêm tiêu đề
-        self.figure_canvas.axes.set_title("Bề mặt Pareto")
-
-        # Lưu đối tượng scatter để cập nhật sau này
-        self.figure_canvas.solution_points = scatter
-
-        # Cập nhật thanh màu và tô sáng giải pháp được chọn
-        self.figure_canvas.colorbar = self.figure_canvas.figure.colorbar(
-            scatter, ax=self.figure_canvas.axes
-        )
-        self.figure_canvas.colorbar.set_label(color_objective)
-
-        # Nếu có giải pháp hiện tại, tô sáng nó
-        if self.current_solution:
-            self.figure_canvas.highlight_solution(self.current_solution.id)
-
-        # Thêm lưới và cải thiện hiển thị
-        self.figure_canvas.axes.grid(True, alpha=0.3)
-
-        # Vẽ lại canvas
-        self.figure_canvas.draw()
-
-    def _on_weights_changed(self, weights: Dict[str, float]):
-        """
-        Xử lý khi trọng số thay đổi.
-        """
-        if self.is_updating_ui:
-            return
-
+        # Thêm Pareto 3D widget nếu có
         try:
-            # Hiển thị thông tin trạng thái
-            status_msg = "Đang tìm giải pháp tối ưu với trọng số mới..."
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-
-            # Tìm giải pháp phù hợp nhất với các trọng số mới
-            solution = self.navigator.find_solution_by_weights(weights)
-
-            # Hiển thị giải pháp được tìm thấy
-            if solution:
-                self.current_solution = solution
-
-                # Cập nhật hiển thị giải pháp
-                self.details_panel.display_solution(solution)
-
-                # Tô sáng giải pháp trên đồ thị
-                self.figure_canvas.highlight_solution(solution.id)
-
-                status_msg = "Đã tìm thấy giải pháp phù hợp với trọng số được chọn."
+            self.pareto_3d_widget = create_pareto_3d_widget()
+            if self.pareto_3d_widget:
+                self.pareto_3d_widget.point_selected_signal.connect(
+                    self.on_pareto_point_selected
+                )
+                bottom_layout.addWidget(self.pareto_3d_widget)
             else:
-                status_msg = "Không tìm thấy giải pháp phù hợp với trọng số được chọn."
-
-            # Reset con trỏ chuột
-            QApplication.restoreOverrideCursor()
-
-            # Hiển thị thông báo trạng thái tạm thời ở góc phải dưới
-            if hasattr(self, "statusBar") and self.statusBar():
-                self.statusBar().showMessage(status_msg, 3000)
-
+                bottom_layout.addWidget(QLabel("Pareto 3D widget unavailable"))
         except Exception as e:
-            # Hiển thị thông báo lỗi
-            QMessageBox.warning(
-                self,
-                "Lỗi tìm kiếm giải pháp",
-                f"Không thể tìm giải pháp với trọng số đã chọn: {str(e)}",
-            )
-            logger.error(f"Error finding solution by weights: {str(e)}")
+            logger.error(f"Error creating Pareto 3D widget: {e}")
+            bottom_layout.addWidget(QLabel(f"Error: {str(e)}"))
 
-            # Reset con trỏ chuột
-            QApplication.restoreOverrideCursor()
+        # Thêm các widget vào splitter
+        vertical_splitter.addWidget(top_widget)
+        vertical_splitter.addWidget(bottom_widget)
+        vertical_splitter.setStretchFactor(0, 2)
+        vertical_splitter.setStretchFactor(1, 3)
 
-    def _select_by_weights(self):
-        """
-        Tìm và chọn giải pháp dựa trên trọng số hiện tại.
-        """
-        if not self.navigator:
-            QMessageBox.warning(self, "Lỗi", "Chưa khởi tạo ParetoNavigator.")
-            return
+        main_layout.addWidget(vertical_splitter)
+
+        # Thanh trạng thái
+        status_layout = QHBoxLayout()
+        self.status_label = QLabel("Ready")
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+
+        self.apply_btn = QPushButton("Apply Selected Solution")
+        self.apply_btn.clicked.connect(self.on_apply_selected_solution)
+        status_layout.addWidget(self.apply_btn)
+
+        main_layout.addLayout(status_layout)
+
+        # Thiết lập kích thước mặc định
+        self.setMinimumSize(800, 600)
+
+        # Cập nhật UI ban đầu
+        self.update_solutions_table()
+
+    def on_compute_anchor_points(self):
+        """Tính toán các điểm neo Pareto."""
+        self.status_label.setText("Calculating anchor points...")
 
         try:
-            # Lấy trọng số hiện tại từ widget điều chỉnh trọng số
-            weights = {}
-            for obj in self.navigator.pareto_surface.objectives.keys():
-                if obj in self.weight_editor.sliders:
-                    weights[obj] = self.weight_editor.sliders[obj].value() / 100.0
-
-            if not weights:
-                QMessageBox.warning(
-                    self, "Lỗi", "Không có mục tiêu nào được thiết lập."
-                )
-                return
-
-            # Hiển thị thông tin trạng thái
-            wait_dialog = QMessageBox(self)
-            wait_dialog.setWindowTitle("Đang xử lý")
-            wait_dialog.setText("Đang tìm giải pháp tối ưu với trọng số mới...")
-            wait_dialog.setStandardButtons(QMessageBox.NoButton)
-            QTimer.singleShot(
-                100, wait_dialog.close
-            )  # Chỉ hiển thị trong thời gian ngắn
-            wait_dialog.show()
-            QApplication.processEvents()
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-
-            # Tìm giải pháp phù hợp với trọng số hoặc nội suy một giải pháp mới
-            solution = self.navigator.navigate_to_weights(weights)
-
-            QApplication.restoreOverrideCursor()
-
-            if solution:
-                # Cập nhật giải pháp hiện tại
-                self.current_solution = solution
-
-                # Cập nhật hiển thị giải pháp
-                self.details_panel.display_solution(solution)
-
-                # Tô sáng giải pháp trên đồ thị
-                self.figure_canvas.highlight_solution(solution.id)
-
-                # Thông báo thành công
-                QMessageBox.information(
-                    self,
-                    "Thành công",
-                    "Đã tìm thấy giải pháp tối ưu với trọng số đã chọn.",
-                )
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Thông báo",
-                    "Không thể tìm thấy hoặc nội suy giải pháp với trọng số đã chọn.",
-                )
-
+            self.mco_navigator.compute_anchor_points()
+            self.update_solutions_table()
+            self.update_3d_view()
+            self.status_label.setText("Anchor points calculated successfully")
         except Exception as e:
-            QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, "Lỗi", f"Lỗi khi tìm kiếm giải pháp: {str(e)}")
-            logger.error(f"Error in _select_by_weights: {str(e)}", exc_info=True)
+            self.status_label.setText(f"Error: {str(e)}")
+            logger.error(f"Error computing anchor points: {e}")
 
-    def _show_neighboring_solutions(self):
-        """Hiển thị các giải pháp lân cận của giải pháp hiện tại."""
-        if not self.navigator or not self.current_solution:
-            QMessageBox.warning(self, "Lỗi", "Vui lòng chọn một giải pháp trước.")
+    def on_save_current_solution(self):
+        """Lưu giải pháp hiện tại."""
+        if not self.mco_navigator.current_solution:
+            self.status_label.setText("No current solution to save")
             return
 
-        # Lấy các giải pháp lân cận
-        neighbors = self.navigator.get_neighboring_solutions(num_neighbors=5)
-
-        if not neighbors:
-            QMessageBox.information(
-                self, "Thông báo", "Không tìm thấy giải pháp lân cận."
-            )
-            return
-
-        # Hiển thị dialog chọn giải pháp lân cận
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Giải pháp lân cận")
-        dialog.setMinimumWidth(500)
-
-        layout = QVBoxLayout(dialog)
-
-        # Hướng dẫn
-        layout.addWidget(QLabel("Chọn một giải pháp lân cận để điều hướng:"))
-
-        # Danh sách giải pháp
-        solution_list = QListWidget()
-        layout.addWidget(solution_list)
-
-        # Thêm giải pháp hiện tại
-        current_item = QListWidgetItem(
-            f"Giải pháp hiện tại (ID: {self.current_solution.id})"
-        )
-        current_item.setData(Qt.UserRole, self.current_solution.id)
-        solution_list.addItem(current_item)
-
-        # Thêm các giải pháp lân cận
-        for i, sol in enumerate(neighbors):
-            # Tính tổng điểm
-            score = sum(
-                v * sol.weights.get(k, 0.0) for k, v in sol.objective_values.items()
-            )
-
-            # Tạo mô tả
-            description = f"Lân cận {i + 1} (ID: {sol.id}) - Điểm: {score:.4f}"
-
-            item = QListWidgetItem(description)
-            item.setData(Qt.UserRole, sol.id)
-            solution_list.addItem(item)
-
-        # Nút điều khiển
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        # Hiển thị dialog
-        if dialog.exec() == QDialog.Accepted:
-            selected_items = solution_list.selectedItems()
-            if selected_items:
-                sol_id = selected_items[0].data(Qt.UserRole)
-                self._on_solution_selected(sol_id)
-
-    def _create_plan(self):
-        """Tạo kế hoạch xạ trị từ giải pháp hiện tại."""
-        if not self.navigator or not self.current_solution:
-            QMessageBox.warning(self, "Lỗi", "Vui lòng chọn một giải pháp trước.")
-            return
-
-        # Tạo kế hoạch
-        plan = self.navigator.create_plan_from_current_solution()
-
-        if plan:
-            # Phát tín hiệu với kế hoạch đã tạo
-            self.plan_created.emit(plan)
-            QMessageBox.information(
-                self, "Thành công", "Đã tạo kế hoạch từ giải pháp đã chọn."
-            )
+        solution_id = self.mco_navigator.current_solution.solution_id
+        if self.mco_navigator.save_solution(self.mco_navigator.current_solution):
+            self.update_solutions_table()
+            self.update_3d_view()
+            self.status_label.setText(f"Solution {solution_id} saved")
         else:
-            QMessageBox.warning(
-                self,
-                "Lỗi",
-                "Không thể tạo kế hoạch. Vui lòng kiểm tra xem generator đã được thiết lập chưa.",
-            )
+            self.status_label.setText("Failed to save solution")
 
-    def _save_session(self):
-        """Lưu phiên điều hướng hiện tại."""
-        if not self.navigator:
-            QMessageBox.warning(
-                self, "Lỗi", "Không có phiên điều hướng nào được thiết lập."
-            )
+    def on_apply_selected_solution(self):
+        """Áp dụng giải pháp đã chọn."""
+        selected_items = self.solutions_table.selectedItems()
+        if not selected_items:
+            self.status_label.setText("No solution selected")
             return
 
-        # Hiển thị dialog để chọn file
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, "Lưu phiên điều hướng", "", "JSON Files (*.json)"
-        )
+        row = selected_items[0].row()
+        solution_id = self.solutions_table.item(row, 0).text()
 
-        if not filepath:
-            return
-
-        # Thêm phần mở rộng .json nếu cần
-        if not filepath.endswith(".json"):
-            filepath += ".json"
-
-        # Lưu phiên
-        success = self.navigator.save_navigation_session(filepath)
-
-        if success:
-            QMessageBox.information(
-                self, "Thành công", f"Đã lưu phiên điều hướng vào {filepath}"
-            )
+        if self.mco_navigator.apply_solution(solution_id):
+            self.status_label.setText(f"Solution {solution_id} applied")
+            # Phát tín hiệu để cập nhật kế hoạch
+            self.solution_selected_signal.emit(solution_id)
         else:
-            QMessageBox.warning(
-                self, "Lỗi", "Không thể lưu phiên điều hướng. Vui lòng thử lại."
-            )
+            self.status_label.setText(f"Failed to apply solution {solution_id}")
 
-    def _on_solution_selected(self, solution_id: str):
-        """
-        Xử lý khi người dùng chọn một giải pháp từ đồ thị Pareto.
-        """
-        if not self.navigator:
+    def on_solution_selected(self):
+        """Xử lý khi người dùng chọn một giải pháp từ bảng."""
+        selected_items = self.solutions_table.selectedItems()
+        if not selected_items:
             return
 
-        try:
-            # Lấy giải pháp theo ID
-            solution = None
-            for sol in self.navigator.pareto_surface.solutions:
-                if sol.id == solution_id:
-                    solution = sol
-                    break
+        row = selected_items[0].row()
+        solution_id = self.solutions_table.item(row, 0).text()
 
-            if not solution:
-                logger.warning(f"Không tìm thấy giải pháp với ID: {solution_id}")
-                return
-
+        if solution_id in self.mco_navigator.solutions:
             # Cập nhật giải pháp hiện tại
-            self.current_solution = solution
+            self.mco_navigator.apply_solution(solution_id)
 
-            # Cập nhật hiển thị giải pháp
-            self.details_panel.display_solution(solution)
+            # Cập nhật hiển thị 3D
+            if self.pareto_3d_widget:
+                self.pareto_3d_widget.set_current_solution(solution_id)
 
-            # Tô sáng giải pháp trên đồ thị
-            self.figure_canvas.highlight_solution(solution.id)
+            self.status_label.setText(f"Solution {solution_id} selected")
 
-            # Cập nhật trọng số trong widget điều chỉnh trọng số
-            if hasattr(solution, "weights") and solution.weights:
-                # Tránh gọi lại hàm xử lý thay đổi trọng số
-                self.weight_editor.is_updating = True
+    def on_pareto_point_selected(self, solution_id):
+        """Xử lý khi một điểm trên biểu đồ Pareto 3D được chọn."""
+        # Cập nhật lựa chọn trong bảng
+        for row in range(self.solutions_table.rowCount()):
+            if self.solutions_table.item(row, 0).text() == solution_id:
+                self.solutions_table.selectRow(row)
+                break
 
-                for obj, weight in solution.weights.items():
-                    if obj in self.weight_editor.sliders:
-                        self.weight_editor.sliders[obj].setValue(int(weight * 100))
-                        self.weight_editor.weight_labels[obj].setText(f"{weight:.2f}")
+        # Áp dụng giải pháp
+        if solution_id in self.mco_navigator.solutions:
+            self.mco_navigator.apply_solution(solution_id)
+            self.status_label.setText(f"Pareto point {solution_id} selected")
 
-                self.weight_editor.is_updating = False
+    def update_solutions_table(self):
+        """Cập nhật bảng giải pháp với dữ liệu mới nhất."""
+        self.solutions_table.clearContents()
 
-            # Tạo hiệu ứng nhấp nháy nhẹ để thu hút sự chú ý
-            old_border = self.details_panel.styleSheet()
-            self.details_panel.setStyleSheet(
-                "border: 2px solid #3498db; border-radius: 5px;"
+        # Lọc các giải pháp hiển thị
+        solutions = self.mco_navigator.solutions
+        if self.show_pareto_only_checkbox.isChecked():
+            # TODO: Lọc thật sự các giải pháp Pareto tối ưu
+            # Hiện tại lọc đơn giản dựa trên loại giải pháp
+            solutions = {
+                k: v
+                for k, v in solutions.items()
+                if v.solution_type
+                in [ParetoSolutionType.ANCHOR, ParetoSolutionType.BALANCED]
+            }
+
+        # Cập nhật bảng
+        self.solutions_table.setRowCount(len(solutions))
+
+        for i, (solution_id, solution) in enumerate(solutions.items()):
+            # ID
+            id_item = QTableWidgetItem(solution_id)
+            self.solutions_table.setItem(i, 0, id_item)
+
+            # Loại
+            type_item = QTableWidgetItem(solution.solution_type.value)
+            self.solutions_table.setItem(i, 1, type_item)
+
+            # Điểm số tổng hợp (giả lập)
+            score = sum(solution.objectives_values.values()) / len(
+                solution.objectives_values
+            )
+            score_item = QTableWidgetItem(f"{score:.2f}")
+            self.solutions_table.setItem(i, 2, score_item)
+
+            # Chi tiết mục tiêu
+            details = "; ".join(
+                f"{k}: {v:.2f}" for k, v in solution.objectives_values.items()
+            )
+            details_item = QTableWidgetItem(details)
+            self.solutions_table.setItem(i, 3, details_item)
+
+            # Tô màu cho giải pháp hiện tại
+            if (
+                self.mco_navigator.current_solution
+                and solution_id == self.mco_navigator.current_solution.solution_id
+            ):
+                for col in range(self.solutions_table.columnCount()):
+                    cell_item = self.solutions_table.item(i, col)
+                    if cell_item:
+                        cell_item.setBackground(QBrush(QColor(200, 230, 250)))
+
+        self.solutions_table.resizeColumnsToContents()
+        # Đảm bảo cột chi tiết không quá rộng
+        self.solutions_table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.Stretch
+        )
+
+    def update_3d_view(self):
+        """Cập nhật hiển thị 3D Pareto."""
+        if not self.pareto_3d_widget:
+            return
+
+        # Cập nhật cài đặt hiển thị
+        self.pareto_3d_widget.show_history_checkbox.setChecked(
+            self.show_history_checkbox.isChecked()
+        )
+        self.pareto_3d_widget.show_pareto_only_checkbox.setChecked(
+            self.show_pareto_only_checkbox.isChecked()
+        )
+
+        # Cập nhật dữ liệu
+        solutions_dict = {}
+        pareto_optimal = {}
+
+        for solution_id, solution in self.mco_navigator.solutions.items():
+            solution_data = {
+                "objectives": solution.objectives_values,
+                "weights": solution.weights,
+                "type": solution.solution_type.value,
+            }
+
+            solutions_dict[solution_id] = solution_data
+
+            # Xác định giải pháp Pareto tối ưu
+            if solution.solution_type in [
+                ParetoSolutionType.ANCHOR,
+                ParetoSolutionType.BALANCED,
+            ]:
+                pareto_optimal[solution_id] = solution_data
+
+        self.pareto_3d_widget.set_data(solutions_dict, pareto_optimal)
+
+        # Đặt giải pháp hiện tại
+        if self.mco_navigator.current_solution:
+            self.pareto_3d_widget.set_current_solution(
+                self.mco_navigator.current_solution.solution_id
             )
 
-            # Sau 500ms, quay lại kiểu cũ
-            QTimer.singleShot(500, lambda: self.details_panel.setStyleSheet(old_border))
+    def set_mco_navigator(self, mco_navigator):
+        """Đặt đối tượng MCO Navigator mới.
 
-            # Hiển thị các mục tiêu chính của giải pháp này
-            if hasattr(solution, "objective_values") and solution.objective_values:
-                values_text = ", ".join(
-                    [f"{k}: {v:.4f}" for k, v in solution.objective_values.items()]
+        Parameters
+        ----------
+        mco_navigator : MCONavigator
+            Đối tượng MCO Navigator mới
+        """
+        self.mco_navigator = mco_navigator
+        self.update_solutions_table()
+        self.update_3d_view()
+
+    def set_objectives(self, objectives):
+        """Đặt danh sách mục tiêu mới.
+
+        Parameters
+        ----------
+        objectives : Dict[str, ObjectiveFunction]
+            Từ điển các hàm mục tiêu
+        """
+        self.mco_navigator.objectives = objectives
+        # Cập nhật trên Pareto 3D widget nếu có
+        if self.pareto_3d_widget:
+            self.pareto_3d_widget.objective_names = list(objectives.keys())
+            self.pareto_3d_widget._update_objective_combos()
+
+    def create_sample_data(self):
+        """
+        Tạo dữ liệu mẫu cho MCO Navigator khi module tính toán không khả dụng.
+
+        Phương thức này tạo ra các giải pháp Pareto mẫu với các giá trị mục tiêu đa dạng
+        để mô phỏng một bề mặt Pareto thực tế. Các giải pháp bao gồm:
+        - Các điểm neo (anchor points) tối ưu hóa cho từng mục tiêu riêng lẻ
+        - Các giải pháp Pareto tối ưu với sự cân bằng khác nhau
+        - Các giải pháp không tối ưu Pareto để minh họa quá trình khám phá
+        """
+        if not self.mco_navigator or not hasattr(self.mco_navigator, "objectives"):
+            self.status_label.setText(
+                "No objectives defined, cannot create sample data"
+            )
+            return
+
+        # Xóa dữ liệu hiện có
+        self.mco_navigator.solutions.clear()
+        self.mco_navigator.current_solution = None
+
+        # Lấy danh sách mục tiêu
+        objectives = list(self.mco_navigator.objectives.keys())
+
+        if not objectives:
+            self.status_label.setText(
+                "No objectives defined, cannot create sample data"
+            )
+            return
+
+        # Đảm bảo có ít nhất 3 mục tiêu để tạo bề mặt Pareto 3D
+        while len(objectives) < 3:
+            objectives.append(f"Objective {len(objectives) + 1}")
+
+        # Tạo các điểm neo (anchor points) - tối ưu cho từng mục tiêu riêng lẻ
+        for i, obj in enumerate(objectives[:3]):
+            solution_id = f"A{i + 1}"
+
+            # Giá trị mục tiêu: tối ưu cho mục tiêu hiện tại, kém cho các mục tiêu khác
+            obj_values = {}
+            weights = {}
+
+            for j, other_obj in enumerate(objectives[:3]):
+                if other_obj == obj:
+                    obj_values[other_obj] = 95.0  # Giá trị cao cho mục tiêu được tối ưu
+                    weights[other_obj] = 10.0  # Trọng số cao cho mục tiêu được tối ưu
+                else:
+                    # Giá trị thấp hơn cho các mục tiêu khác
+                    obj_values[other_obj] = 40.0 + (j * 5)
+                    weights[other_obj] = 1.0
+
+            # Thêm các mục tiêu khác nếu có
+            for other_obj in objectives[3:]:
+                obj_values[other_obj] = 50.0
+                weights[other_obj] = 1.0
+
+            # Tạo giải pháp
+            solution = ParetoSolution(
+                solution_id=solution_id,
+                solution_type=ParetoSolutionType.ANCHOR,
+                objectives_values=obj_values,
+                weights=weights,
+                is_pareto_optimal=True,
+                metadata={
+                    "description": f"Anchor point optimizing {obj}",
+                    "creation_time": "2023-08-05 10:00:00",
+                    "computation_time": "5.2 seconds",
+                },
+            )
+
+            # Thêm vào danh sách giải pháp
+            self.mco_navigator.solutions[solution_id] = solution
+
+        # Tạo các giải pháp Pareto tối ưu với sự cân bằng khác nhau
+        for i in range(15):
+            solution_id = f"P{i + 1}"
+
+            # Tạo giá trị mục tiêu và trọng số ngẫu nhiên nhưng vẫn đảm bảo tính Pareto
+            obj_values = {}
+            weights = {}
+
+            # Tạo một cân bằng khác nhau giữa các mục tiêu
+            balance_factor = i / 14.0  # 0.0 đến 1.0
+
+            # Tính giá trị cho 3 mục tiêu đầu tiên để tạo bề mặt Pareto
+            if len(objectives) >= 3:
+                # Mục tiêu 1: giảm dần từ 95 xuống 60
+                obj_values[objectives[0]] = 95.0 - (balance_factor * 35.0)
+                weights[objectives[0]] = 10.0 - (balance_factor * 8.0)
+
+                # Mục tiêu 2: tăng dần từ 60 lên 90
+                obj_values[objectives[1]] = 60.0 + (balance_factor * 30.0)
+                weights[objectives[1]] = 2.0 + (balance_factor * 8.0)
+
+                # Mục tiêu 3: hình parabol, cao ở giữa
+                parabola_factor = 4.0 * (balance_factor - 0.5) ** 2
+                obj_values[objectives[2]] = 85.0 - (parabola_factor * 25.0)
+                weights[objectives[2]] = 5.0
+
+            # Thêm các mục tiêu khác nếu có
+            for j, obj in enumerate(objectives[3:], start=3):
+                obj_values[obj] = 50.0 + (balance_factor * 20.0) + (j * 2.0)
+                weights[obj] = 3.0
+
+            # Tạo giải pháp
+            solution = ParetoSolution(
+                solution_id=solution_id,
+                solution_type=ParetoSolutionType.PARETO_OPTIMAL,
+                objectives_values=obj_values,
+                weights=weights,
+                is_pareto_optimal=True,
+                metadata={
+                    "description": f"Balanced solution {i + 1}",
+                    "creation_time": f"2023-08-05 {10 + i // 2}:{(i % 2) * 30:02d}:00",
+                    "computation_time": f"{2.0 + i / 5:.1f} seconds",
+                    "balance_factor": balance_factor,
+                },
+            )
+
+            # Thêm vào danh sách giải pháp
+            self.mco_navigator.solutions[solution_id] = solution
+
+        # Tạo một số giải pháp không tối ưu Pareto để minh họa quá trình khám phá
+        for i in range(8):
+            solution_id = f"N{i + 1}"
+
+            # Giá trị mục tiêu kém hơn các giải pháp Pareto
+            obj_values = {}
+            weights = {}
+
+            for j, obj in enumerate(objectives[:3]):
+                # Giá trị thấp hơn 10-20% so với giải pháp Pareto
+                obj_values[obj] = 50.0 + (i * 5.0) - (j * 3.0)
+                weights[obj] = 3.0 + (i % 3)
+
+            # Thêm các mục tiêu khác nếu có
+            for obj in objectives[3:]:
+                obj_values[obj] = 40.0 + (i * 3.0)
+                weights[obj] = 2.0
+
+            # Tạo giải pháp
+            solution = ParetoSolution(
+                solution_id=solution_id,
+                solution_type=ParetoSolutionType.INTERMEDIATE,
+                objectives_values=obj_values,
+                weights=weights,
+                is_pareto_optimal=False,
+                metadata={
+                    "description": f"Non-optimal solution {i + 1}",
+                    "creation_time": f"2023-08-05 09:{i * 5:02d}:00",
+                    "computation_time": f"{1.5 + i / 10:.1f} seconds",
+                },
+            )
+
+            # Thêm vào danh sách giải pháp
+            self.mco_navigator.solutions[solution_id] = solution
+
+        # Tạo giải pháp hiện tại (current solution)
+        if self.mco_navigator.solutions:
+            # Chọn một giải pháp Pareto làm giải pháp hiện tại
+            pareto_solutions = [
+                s
+                for s in self.mco_navigator.solutions.values()
+                if s.is_pareto_optimal
+                and s.solution_type == ParetoSolutionType.PARETO_OPTIMAL
+            ]
+            if pareto_solutions:
+                self.mco_navigator.current_solution = pareto_solutions[
+                    len(pareto_solutions) // 2
+                ]
+
+        # Cập nhật giao diện
+        self.update_solutions_table()
+
+        # Cập nhật biểu đồ Pareto 3D nếu có
+        if self.pareto_3d_widget:
+            try:
+                self.pareto_3d_widget.set_solutions(self.mco_navigator.solutions)
+                self.pareto_3d_widget.set_current_solution(
+                    self.mco_navigator.current_solution
                 )
-                if hasattr(self, "statusBar") and self.statusBar():
-                    self.statusBar().showMessage(
-                        f"Đã chọn giải pháp: {values_text}", 5000
-                    )
+                self.update_3d_view()
+            except Exception as e:
+                logger.error(f"Error updating Pareto 3D view: {e}")
 
-        except Exception as e:
-            logger.error(f"Lỗi khi chọn giải pháp: {str(e)}", exc_info=True)
-            if hasattr(self, "statusBar") and self.statusBar():
-                self.statusBar().showMessage(f"Lỗi khi chọn giải pháp: {str(e)}", 3000)
+        self.status_label.setText("Sample data created successfully")
 
 
-def create_pareto_navigator_widget(
-    navigator: ParetoNavigator = None,
-) -> ParetoNavigatorWidget:
-    """Tạo một widget điều hướng Pareto mới."""
-    widget = ParetoNavigatorWidget()
+# Hàm tiện ích để tạo widget
+def create_mco_navigator_widget(parent=None, **kwargs):
+    """
+    Tạo và trả về widget MCO Navigator.
 
-    if navigator:
-        widget.set_navigator(navigator)
+    Parameters
+    ----------
+    parent : QWidget, optional
+        Widget cha, mặc định là None
+    **kwargs :
+        Tham số truyền cho MCONavigator
 
-    return widget
+    Returns
+    -------
+    MCONavigatorWidget or None
+        Widget MCO Navigator hoặc None nếu không thể tạo
+    """
+    if not HAS_PYQT or not HAS_MCO_MODULES:
+        logger.error("Cannot create MCO Navigator Widget: missing dependencies")
+        return None
+
+    try:
+        from quangtps.optimization.mco.mco_navigator import MCONavigator
+
+        mco_navigator = MCONavigator(**kwargs)
+        widget = MCONavigatorWidget(parent=parent, mco_navigator=mco_navigator)
+        return widget
+    except Exception as e:
+        logger.error(f"Error creating MCO Navigator Widget: {e}")
+        return None
+
+
+# Test code khi chạy trực tiếp
+if __name__ == "__main__":
+    import sys
+    import numpy as np
+
+    if not HAS_PYQT or not HAS_MCO_MODULES:
+        print("Required modules not available. Test cannot run.")
+        sys.exit(1)
+
+    from PyQt5.QtWidgets import QApplication
+    from quangtps.optimization.mco.mco_navigator import (
+        MCONavigator,
+        ParetoSolution,
+        ParetoSolutionType,
+    )
+
+    app = QApplication(sys.argv)
+
+    # Tạo dữ liệu mẫu
+    objectives = {
+        "PTV Coverage": None,
+        "Brainstem Max": None,
+        "Parotid Mean": None,
+        "Spinal Cord Max": None,
+        "Conformity": None,
+    }
+
+    # Tạo MCO Navigator
+    mco_navigator = MCONavigator(objectives=objectives)
+
+    # Tạo điểm neo mẫu
+    for obj_name in objectives:
+        # Trọng số
+        weights = {o: 0.01 for o in objectives}
+        weights[obj_name] = 1.0
+
+        # Giá trị mục tiêu
+        obj_values = {o: np.random.random() * 100 for o in objectives}
+        obj_values[obj_name] = np.random.random() * 20  # Tốt hơn cho mục tiêu này
+
+        solution = ParetoSolution(
+            solution_id=f"anchor_{obj_name}",
+            objectives_values=obj_values,
+            weights=weights,
+            solution_type=ParetoSolutionType.ANCHOR,
+        )
+
+        mco_navigator.solutions[solution.solution_id] = solution
+
+    # Tạo điểm cân bằng mẫu
+    weights = {o: 1.0 / len(objectives) for o in objectives}
+    obj_values = {o: np.random.random() * 50 + 25 for o in objectives}
+
+    solution = ParetoSolution(
+        solution_id="balanced",
+        objectives_values=obj_values,
+        weights=weights,
+        solution_type=ParetoSolutionType.BALANCED,
+    )
+
+    mco_navigator.solutions[solution.solution_id] = solution
+    mco_navigator.current_solution = solution
+
+    # Tạo và hiển thị widget
+    widget = MCONavigatorWidget(mco_navigator=mco_navigator)
+    widget.show()
+
+    # Tạo dữ liệu mẫu
+    widget.create_sample_data()
+
+    sys.exit(app.exec_())

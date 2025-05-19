@@ -74,7 +74,7 @@ class RobustnessResult:
 
         return None
 
-    def get_dvh_for_structure(
+    def get_structure_dvhs(
         self, structure_name: str
     ) -> Dict[str, Dict[str, np.ndarray]]:
         """
@@ -101,139 +101,760 @@ class RobustnessResult:
 
         return result
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_target_coverage_data(self, metric_type: str = "D95") -> Dict[str, Any]:
         """
-        Get statistical summary of robustness analysis.
-
-        Returns:
-            Dict containing statistics about robustness analysis
-        """
-        stats = {
-            "target_coverage_range": self.target_coverage_range,
-            "oar_dose_range": self.oar_dose_range,
-            "num_scenarios": len(self.scenarios) + 1,  # Include nominal scenario
-            "scenario_names": [self.nominal_scenario.scenario_name]
-            + [s.scenario_name for s in self.scenarios],
-        }
-
-        # Calculate additional statistics
-        if self.target_coverage_range:
-            # Calculate coefficient of variation for target coverage
-            target_cv = {}
-            for target, (min_val, max_val) in self.target_coverage_range.items():
-                mean = (min_val + max_val) / 2
-                if mean > 0:
-                    std = (max_val - min_val) / (2 * 1.96)  # Assuming 95% CI
-                    target_cv[target] = std / mean
-                else:
-                    target_cv[target] = 0
-
-            stats["target_coverage_cv"] = target_cv
-
-        return stats
-
-    def plot_dvh_band(
-        self, structure_name, ax=None, color=None, alpha=0.3, nominal_linestyle="-"
-    ):
-        """
-        Plot DVH band showing the range of DVH curves across all scenarios.
+        Get target coverage data for visualization.
 
         Args:
-            structure_name: Name of the structure to plot
-            ax: Matplotlib axis to plot on, if None a new figure is created
-            color: Color for the DVH band
-            alpha: Alpha value for the band
-            nominal_linestyle: Line style for the nominal scenario
+            metric_type: Type of metric to return (D95, V95, etc.)
 
         Returns:
-            The matplotlib axis object
+            Dictionary with target coverage data
         """
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 6))
+        coverage_data = {
+            "target_names": [],
+            "nominal_values": [],
+            "min_values": [],
+            "max_values": [],
+            "all_values": {},
+            "metric_type": metric_type,
+        }
 
-        dvh_data = self.get_dvh_for_structure(structure_name)
+        # Only process targets with coverage data
+        for target, (min_val, max_val) in self.target_coverage_range.items():
+            coverage_data["target_names"].append(target)
 
-        if not dvh_data:
-            ax.text(
-                0.5,
-                0.5,
-                f"No DVH data for {structure_name}",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-        return ax
-
-        # Set default color if not provided
-        if color is None:
-            color = "blue"
-
-        # Get all volume and dose arrays
-        all_volumes = []
-        all_doses = []
-
-        for scenario_name, data in dvh_data.items():
-            if "volume" in data and "dose" in data:
-                all_volumes.append(data["volume"])
-                all_doses.append(data["dose"])
-
-        # Create common dose axis for interpolation
-        if all_doses:
-            # Find min and max dose values across all scenarios
-            min_dose = min([d.min() for d in all_doses if len(d) > 0])
-            max_dose = max([d.max() for d in all_doses if len(d) > 0])
-
-            # Create common dose axis
-            common_dose = np.linspace(min_dose, max_dose, 100)
-
-            # Interpolate volumes for each scenario
-            interpolated_volumes = []
-
-            for volumes, doses in zip(all_volumes, all_doses):
-                if len(doses) > 1:  # Need at least 2 points for interpolation
+            # Get nominal value for this target
+            nominal_value = 0.0
+            if metric_type == "D95":
+                nominal_dvh = self.nominal_scenario.dvh_data.get(target, {})
+                if nominal_dvh:
                     try:
-                        interp_vol = np.interp(
-                            common_dose,
-                            doses,
-                            volumes,
-                            left=volumes[0],
-                            right=volumes[-1],
-                        )
-                        interpolated_volumes.append(interp_vol)
+                        # Calculate D95 from DVH
+                        volume = nominal_dvh.get("volume", [])
+                        dose = nominal_dvh.get("dose", [])
+                        if len(volume) > 0 and len(dose) > 0:
+                            # Find dose at 95% volume
+                            nominal_value = np.interp(95, volume[::-1], dose[::-1])
                     except Exception as e:
                         logger.warning(
-                            f"Error interpolating DVH for {structure_name}: {e}"
+                            f"Error calculating {metric_type} for {target}: {e}"
                         )
 
-            # Calculate min and max volumes at each dose point
-            if interpolated_volumes:
-                min_volumes = np.min(interpolated_volumes, axis=0)
-                max_volumes = np.max(interpolated_volumes, axis=0)
+            coverage_data["nominal_values"].append(nominal_value)
+            coverage_data["min_values"].append(min_val)
+            coverage_data["max_values"].append(max_val)
 
-                # Plot the band
-                ax.fill_between(
-                    common_dose, min_volumes, max_volumes, color=color, alpha=alpha
+            # Collect values from all scenarios
+            all_scenario_values = []
+            for scenario in [self.nominal_scenario] + self.scenarios:
+                scenario_dvh = scenario.dvh_data.get(target, {})
+                if scenario_dvh:
+                    try:
+                        # Calculate metric from DVH
+                        volume = scenario_dvh.get("volume", [])
+                        dose = scenario_dvh.get("dose", [])
+                        if len(volume) > 0 and len(dose) > 0:
+                            # Find dose at 95% volume for D95
+                            if metric_type == "D95":
+                                value = np.interp(95, volume[::-1], dose[::-1])
+                            # Add other metrics as needed
+                            all_scenario_values.append(value)
+                    except Exception as e:
+                        logger.warning(
+                            f"Error calculating {metric_type} for {target} in scenario {scenario.scenario_name}: {e}"
+                        )
+
+            coverage_data["all_values"][target] = all_scenario_values
+
+        return coverage_data
+
+    def get_evaluation_metrics(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """
+        Get comprehensive evaluation metrics for targets and OARs.
+
+        Returns:
+            Dictionary with metrics for each structure
+        """
+        metrics = {"targets": {}, "oars": {}}
+
+        # Target metrics
+        for target, (min_val, max_val) in self.target_coverage_range.items():
+            # Calculate nominal value (from nominal scenario)
+            nominal_dvh = self.nominal_scenario.dvh_data.get(target, {})
+            d95 = 0.0
+            if nominal_dvh:
+                try:
+                    # Calculate D95 from DVH
+                    volume = nominal_dvh.get("volume", [])
+                    dose = nominal_dvh.get("dose", [])
+                    if len(volume) > 0 and len(dose) > 0:
+                        # Find dose at 95% volume
+                        d95 = np.interp(95, volume[::-1], dose[::-1])
+                except Exception:
+                    pass
+
+            # Get all D95 values for variation calculation
+            all_d95 = []
+            for scenario in [self.nominal_scenario] + self.scenarios:
+                scenario_dvh = scenario.dvh_data.get(target, {})
+                if scenario_dvh:
+                    try:
+                        volume = scenario_dvh.get("volume", [])
+                        dose = scenario_dvh.get("dose", [])
+                        if len(volume) > 0 and len(dose) > 0:
+                            # Calculate D95
+                            value = np.interp(95, volume[::-1], dose[::-1])
+                            all_d95.append(value)
+                    except Exception:
+                        pass
+
+            # Calculate statistics
+            metrics["targets"][target] = {
+                "D95": {
+                    "nominal": d95,
+                    "min": min_val,
+                    "max": max_val,
+                    "variation": max_val - min_val
+                    if min_val is not None and max_val is not None
+                    else None,
+                    "variation_percent": ((max_val - min_val) / d95 * 100)
+                    if d95 > 0 and min_val is not None and max_val is not None
+                    else None,
+                    "values": all_d95,
+                }
+            }
+
+            # Add more metrics like conformity index, homogeneity index, etc.
+
+        # OAR metrics
+        for oar, (min_val, max_val) in self.oar_dose_range.items():
+            # Calculate nominal Dmax
+            nominal_dvh = self.nominal_scenario.dvh_data.get(oar, {})
+            dmax = 0.0
+            if nominal_dvh:
+                try:
+                    dose = nominal_dvh.get("dose", [])
+                    if len(dose) > 0:
+                        dmax = np.max(dose)
+                except Exception:
+                    pass
+
+            # Get all Dmax values
+            all_dmax = []
+            for scenario in [self.nominal_scenario] + self.scenarios:
+                scenario_dvh = scenario.dvh_data.get(oar, {})
+                if scenario_dvh:
+                    try:
+                        dose = scenario_dvh.get("dose", [])
+                        if len(dose) > 0:
+                            value = np.max(dose)
+                            all_dmax.append(value)
+                    except Exception:
+                        pass
+
+            # Calculate statistics
+            metrics["oars"][oar] = {
+                "Dmax": {
+                    "nominal": dmax,
+                    "min": min_val,
+                    "max": max_val,
+                    "variation": max_val - min_val
+                    if min_val is not None and max_val is not None
+                    else None,
+                    "variation_percent": ((max_val - min_val) / dmax * 100)
+                    if dmax > 0 and min_val is not None and max_val is not None
+                    else None,
+                    "values": all_dmax,
+                }
+            }
+
+            # Add more metrics like mean dose, D1cc, etc.
+
+        return metrics
+
+    def get_spatial_analysis_data(
+        self, display_type: str = "dose_difference"
+    ) -> Dict[str, Any]:
+        """
+        Get spatial analysis data for visualization.
+
+        Args:
+            display_type: Type of data to display:
+                        - "dose_difference": Difference between scenarios
+                        - "uncertainty_map": Uncertainty map
+                        - "worst_case": Worst case scenario
+
+        Returns:
+            Dictionary with spatial analysis data
+        """
+        # Initialize result
+        result = {
+            "type": display_type,
+            "data": None,
+            "colormap": "RdBu_r",  # Default colormap
+            "title": "",
+            "contours": {},
+        }
+
+        try:
+            # Get reference dose grid
+            nominal_dose = self.nominal_scenario.dose_grid
+
+            if display_type == "dose_difference":
+                # Find maximum difference at each voxel
+                max_diff = np.zeros_like(nominal_dose)
+                min_diff = np.zeros_like(nominal_dose)
+
+                for scenario in self.scenarios:
+                    diff = scenario.dose_grid - nominal_dose
+                    max_diff = np.maximum(max_diff, diff)
+                    min_diff = np.minimum(min_diff, diff)
+
+                # Use the larger of min or max difference (absolute)
+                abs_max_diff = np.maximum(np.abs(min_diff), np.abs(max_diff))
+
+                # Create a 2D slice for display (middle slice)
+                slice_idx = abs_max_diff.shape[2] // 2
+                result["data"] = abs_max_diff[:, :, slice_idx]
+                result["title"] = "Maximum Dose Difference (Gy)"
+
+            elif display_type == "uncertainty_map":
+                # Calculate standard deviation at each voxel
+                all_doses = np.zeros((len(self.scenarios) + 1,) + nominal_dose.shape)
+                all_doses[0] = nominal_dose
+
+                for i, scenario in enumerate(self.scenarios):
+                    all_doses[i + 1] = scenario.dose_grid
+
+                # Calculate standard deviation
+                std_dev = np.std(all_doses, axis=0)
+
+                # Create a 2D slice for display
+                slice_idx = std_dev.shape[2] // 2
+                result["data"] = std_dev[:, :, slice_idx]
+                result["title"] = "Dose Uncertainty (Gy)"
+                result["colormap"] = "viridis"
+
+            elif display_type == "worst_case":
+                # Find the minimum dose at each voxel for targets
+                # and maximum dose for OARs
+                worst_case = np.copy(nominal_dose)
+
+                # TODO: This would be more sophisticated with actual
+                # structure masks to differentiate targets from OARs
+
+                # For now, just show the minimum dose at each voxel
+                for scenario in self.scenarios:
+                    worst_case = np.minimum(worst_case, scenario.dose_grid)
+
+                # Create a 2D slice for display
+                slice_idx = worst_case.shape[2] // 2
+                result["data"] = worst_case[:, :, slice_idx]
+                result["title"] = "Worst Case Dose (Gy)"
+                result["colormap"] = "jet"
+
+            # Add structure contours for context if available
+            # (This is a placeholder - actual implementation would depend on how structures are stored)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error generating spatial analysis data: {e}")
+            return {"type": display_type, "error": str(e), "data": None}
+
+    def export_to_csv(self, filename: str) -> bool:
+        """
+        Export robustness analysis results to CSV file.
+
+        Args:
+            filename: Path to the output CSV file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import csv
+
+            with open(filename, "w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+
+                # Write header
+                writer.writerow(["QuangTPS Robustness Analysis Results"])
+                writer.writerow([])
+
+                # Write analysis parameters
+                writer.writerow(["Number of scenarios", len(self.scenarios) + 1])
+                writer.writerow([])
+
+                # Write target coverage results
+                writer.writerow(["Target Coverage Results"])
+                writer.writerow(
+                    [
+                        "Target",
+                        "D95 (Nominal)",
+                        "D95 (Min)",
+                        "D95 (Max)",
+                        "Variation",
+                        "Variation (%)",
+                    ]
                 )
 
-                # Plot nominal scenario
-                nominal_data = dvh_data.get(self.nominal_scenario.scenario_name)
-                if nominal_data and "volume" in nominal_data and "dose" in nominal_data:
-                    ax.plot(
-                        nominal_data["dose"],
-                        nominal_data["volume"],
-                        color=color,
-                        linestyle=nominal_linestyle,
-                        label=f"{structure_name} (nominal)",
+                metrics = self.get_evaluation_metrics()
+                for target, metric_data in metrics["targets"].items():
+                    d95_data = metric_data.get("D95", {})
+                    writer.writerow(
+                        [
+                            target,
+                            f"{d95_data.get('nominal', 0):.2f}",
+                            f"{d95_data.get('min', 0):.2f}",
+                            f"{d95_data.get('max', 0):.2f}",
+                            f"{d95_data.get('variation', 0):.2f}",
+                            f"{d95_data.get('variation_percent', 0):.2f}%",
+                        ]
                     )
 
-                # Configure axis
-                ax.set_xlabel("Dose (Gy)")
-                ax.set_ylabel("Volume (%)")
-                ax.set_title(f"DVH Band for {structure_name}")
-        ax.grid(True)
-        ax.legend()
+                writer.writerow([])
 
-        return ax
+                # Write OAR results
+                writer.writerow(["OAR Dose Results"])
+                writer.writerow(
+                    [
+                        "OAR",
+                        "Dmax (Nominal)",
+                        "Dmax (Min)",
+                        "Dmax (Max)",
+                        "Variation",
+                        "Variation (%)",
+                    ]
+                )
+
+                for oar, metric_data in metrics["oars"].items():
+                    dmax_data = metric_data.get("Dmax", {})
+                    writer.writerow(
+                        [
+                            oar,
+                            f"{dmax_data.get('nominal', 0):.2f}",
+                            f"{dmax_data.get('min', 0):.2f}",
+                            f"{dmax_data.get('max', 0):.2f}",
+                            f"{dmax_data.get('variation', 0):.2f}",
+                            f"{dmax_data.get('variation_percent', 0):.2f}%",
+                        ]
+                    )
+
+            logger.info(
+                f"Successfully exported robustness analysis results to {filename}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Error exporting to CSV: {e}")
+            return False
+
+    def export_to_excel(self, filename: str) -> bool:
+        """
+        Export robustness analysis results to Excel file.
+
+        Args:
+            filename: Path to the output Excel file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import pandas as pd
+
+            # Create a Pandas Excel writer using XlsxWriter as the engine
+            with pd.ExcelWriter(filename, engine="xlsxwriter") as writer:
+                # Get metrics
+                metrics = self.get_evaluation_metrics()
+
+                # Create summary sheet
+                summary_data = {
+                    "Parameter": [
+                        "Number of Scenarios",
+                        "Setup Uncertainty",
+                        "Range Uncertainty",
+                    ],
+                    "Value": [
+                        len(self.scenarios) + 1,
+                        "N/A",
+                        "N/A",
+                    ],  # Placeholder values
+                }
+                summary_df = pd.DataFrame(summary_data)
+                summary_df.to_excel(writer, sheet_name="Summary", index=False)
+
+                # Create target metrics sheet
+                target_data = []
+                for target, metrics_dict in metrics["targets"].items():
+                    d95 = metrics_dict.get("D95", {})
+                    target_data.append(
+                        {
+                            "Target": target,
+                            "D95 (Nominal)": d95.get("nominal", 0),
+                            "D95 (Min)": d95.get("min", 0),
+                            "D95 (Max)": d95.get("max", 0),
+                            "Variation": d95.get("variation", 0),
+                            "Variation (%)": d95.get("variation_percent", 0),
+                        }
+                    )
+
+                if target_data:
+                    target_df = pd.DataFrame(target_data)
+                    target_df.to_excel(
+                        writer, sheet_name="Target Coverage", index=False
+                    )
+
+                # Create OAR metrics sheet
+                oar_data = []
+                for oar, metrics_dict in metrics["oars"].items():
+                    dmax = metrics_dict.get("Dmax", {})
+                    oar_data.append(
+                        {
+                            "OAR": oar,
+                            "Dmax (Nominal)": dmax.get("nominal", 0),
+                            "Dmax (Min)": dmax.get("min", 0),
+                            "Dmax (Max)": dmax.get("max", 0),
+                            "Variation": dmax.get("variation", 0),
+                            "Variation (%)": dmax.get("variation_percent", 0),
+                        }
+                    )
+
+                if oar_data:
+                    oar_df = pd.DataFrame(oar_data)
+                    oar_df.to_excel(writer, sheet_name="OAR Doses", index=False)
+
+                # Create scenario details sheet
+                scenario_data = []
+                for scenario in [self.nominal_scenario] + self.scenarios:
+                    row = {"Scenario": scenario.scenario_name}
+                    # Add parameters
+                    for param, value in scenario.uncertainty_parameters.items():
+                        row[param] = value
+                    scenario_data.append(row)
+
+                if scenario_data:
+                    scenario_df = pd.DataFrame(scenario_data)
+                    scenario_df.to_excel(writer, sheet_name="Scenarios", index=False)
+
+            logger.info(
+                f"Successfully exported robustness analysis results to {filename}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Error exporting to Excel: {e}")
+            return False
+
+    def create_pdf_report(self, filename: str, plan: Optional[Plan] = None) -> bool:
+        """
+        Create a PDF report of the robustness analysis.
+
+        Args:
+            filename: Path to the output PDF file
+            plan: Optional plan info to include in the report
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from fpdf import FPDF
+            import matplotlib.pyplot as plt
+            import tempfile
+            import os
+
+            # Create PDF object
+            pdf = FPDF()
+            pdf.add_page()
+
+            # Add header
+            pdf.set_font("Arial", "B", 16)
+            pdf.cell(0, 10, "QuangTPS Robustness Analysis Report", 0, 1, "C")
+            pdf.ln(4)
+
+            # Add plan info if available
+            if plan:
+                pdf.set_font("Arial", "B", 12)
+                pdf.cell(0, 10, "Plan Information", 0, 1, "L")
+
+                pdf.set_font("Arial", "", 10)
+                pdf.cell(
+                    0,
+                    6,
+                    f"Plan Name: {plan.name if hasattr(plan, 'name') else 'N/A'}",
+                    0,
+                    1,
+                )
+                pdf.cell(
+                    0,
+                    6,
+                    f"Patient ID: {plan.patient_id if hasattr(plan, 'patient_id') else 'N/A'}",
+                    0,
+                    1,
+                )
+                pdf.cell(
+                    0,
+                    6,
+                    f"Number of Beams: {len(plan.beams) if hasattr(plan, 'beams') else 'N/A'}",
+                    0,
+                    1,
+                )
+                pdf.ln(4)
+
+            # Add robustness parameters
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, "Robustness Analysis Parameters", 0, 1, "L")
+
+            pdf.set_font("Arial", "", 10)
+            pdf.cell(0, 6, f"Number of Scenarios: {len(self.scenarios) + 1}", 0, 1)
+            # Add more parameters here
+            pdf.ln(4)
+
+            # Add target coverage results
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, "Target Coverage Results", 0, 1, "L")
+
+            metrics = self.get_evaluation_metrics()
+
+            # Create a table
+            pdf.set_font("Arial", "B", 9)
+            col_width = 30
+            pdf.cell(col_width, 7, "Target", 1, 0, "C")
+            pdf.cell(col_width, 7, "D95 (Nominal)", 1, 0, "C")
+            pdf.cell(col_width, 7, "D95 (Min)", 1, 0, "C")
+            pdf.cell(col_width, 7, "D95 (Max)", 1, 0, "C")
+            pdf.cell(col_width, 7, "Variation (%)", 1, 1, "C")
+
+            pdf.set_font("Arial", "", 9)
+            for target, metric_data in metrics["targets"].items():
+                d95_data = metric_data.get("D95", {})
+                pdf.cell(col_width, 7, target, 1, 0)
+                pdf.cell(col_width, 7, f"{d95_data.get('nominal', 0):.2f}", 1, 0, "C")
+                pdf.cell(col_width, 7, f"{d95_data.get('min', 0):.2f}", 1, 0, "C")
+                pdf.cell(col_width, 7, f"{d95_data.get('max', 0):.2f}", 1, 0, "C")
+                pdf.cell(
+                    col_width,
+                    7,
+                    f"{d95_data.get('variation_percent', 0):.2f}%",
+                    1,
+                    1,
+                    "C",
+                )
+
+            pdf.ln(4)
+
+            # Add OAR results
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, "OAR Dose Results", 0, 1, "L")
+
+            # Create a table
+            pdf.set_font("Arial", "B", 9)
+            pdf.cell(col_width, 7, "OAR", 1, 0, "C")
+            pdf.cell(col_width, 7, "Dmax (Nominal)", 1, 0, "C")
+            pdf.cell(col_width, 7, "Dmax (Min)", 1, 0, "C")
+            pdf.cell(col_width, 7, "Dmax (Max)", 1, 0, "C")
+            pdf.cell(col_width, 7, "Variation (%)", 1, 1, "C")
+
+            pdf.set_font("Arial", "", 9)
+            for oar, metric_data in metrics["oars"].items():
+                dmax_data = metric_data.get("Dmax", {})
+                pdf.cell(col_width, 7, oar, 1, 0)
+                pdf.cell(col_width, 7, f"{dmax_data.get('nominal', 0):.2f}", 1, 0, "C")
+                pdf.cell(col_width, 7, f"{dmax_data.get('min', 0):.2f}", 1, 0, "C")
+                pdf.cell(col_width, 7, f"{dmax_data.get('max', 0):.2f}", 1, 0, "C")
+                pdf.cell(
+                    col_width,
+                    7,
+                    f"{dmax_data.get('variation_percent', 0):.2f}%",
+                    1,
+                    1,
+                    "C",
+                )
+
+            # Add DVH plots
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # Create and save DVH plots
+                for target in metrics["targets"]:
+                    plt.figure(figsize=(8, 6))
+                    self.plot_dvh_band(target)
+                    plot_path = os.path.join(tmpdirname, f"{target}_dvh.png")
+                    plt.savefig(plot_path)
+                    plt.close()
+
+                    # Add new page for each plot
+                    pdf.add_page()
+                    pdf.set_font("Arial", "B", 12)
+                    pdf.cell(0, 10, f"DVH Band for {target}", 0, 1, "C")
+                    pdf.image(plot_path, x=10, y=30, w=180)
+
+            # Save PDF
+            pdf.output(filename)
+
+            logger.info(f"Successfully created PDF report at {filename}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error creating PDF report: {e}")
+            return False
+
+    def create_html_report(self, filename: str, plan: Optional[Plan] = None) -> bool:
+        """
+        Create an HTML report of the robustness analysis.
+
+        Args:
+            filename: Path to the output HTML file
+            plan: Optional plan info to include in the report
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import base64
+            import io
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
+            metrics = self.get_evaluation_metrics()
+
+            # Create HTML content
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>QuangTPS Robustness Analysis Report</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    h1, h2 {{ color: #2c3e50; }}
+                    table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+                    th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
+                    th {{ background-color: #f2f2f2; }}
+                    .plot-container {{ margin: 20px 0; }}
+                    .summary {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+                </style>
+            </head>
+            <body>
+                <h1>QuangTPS Robustness Analysis Report</h1>
+            """
+
+            # Add plan info if available
+            if plan:
+                html_content += f"""
+                <div class="summary">
+                    <h2>Plan Information</h2>
+                    <p><strong>Plan Name:</strong> {plan.name if hasattr(plan, "name") else "N/A"}</p>
+                    <p><strong>Patient ID:</strong> {plan.patient_id if hasattr(plan, "patient_id") else "N/A"}</p>
+                    <p><strong>Number of Beams:</strong> {len(plan.beams) if hasattr(plan, "beams") else "N/A"}</p>
+                </div>
+                """
+
+            # Add robustness parameters
+            html_content += f"""
+            <div class="summary">
+                <h2>Robustness Analysis Parameters</h2>
+                <p><strong>Number of Scenarios:</strong> {len(self.scenarios) + 1}</p>
+                <!-- Add more parameters here -->
+            </div>
+            """
+
+            # Add target coverage results
+            html_content += """
+            <h2>Target Coverage Results</h2>
+            <table>
+                <tr>
+                    <th>Target</th>
+                    <th>D95 (Nominal)</th>
+                    <th>D95 (Min)</th>
+                    <th>D95 (Max)</th>
+                    <th>Variation</th>
+                    <th>Variation (%)</th>
+                </tr>
+            """
+
+            for target, metric_data in metrics["targets"].items():
+                d95_data = metric_data.get("D95", {})
+                html_content += f"""
+                <tr>
+                    <td>{target}</td>
+                    <td>{d95_data.get("nominal", 0):.2f}</td>
+                    <td>{d95_data.get("min", 0):.2f}</td>
+                    <td>{d95_data.get("max", 0):.2f}</td>
+                    <td>{d95_data.get("variation", 0):.2f}</td>
+                    <td>{d95_data.get("variation_percent", 0):.2f}%</td>
+                </tr>
+                """
+
+            html_content += """
+            </table>
+            """
+
+            # Add OAR results
+            html_content += """
+            <h2>OAR Dose Results</h2>
+            <table>
+                <tr>
+                    <th>OAR</th>
+                    <th>Dmax (Nominal)</th>
+                    <th>Dmax (Min)</th>
+                    <th>Dmax (Max)</th>
+                    <th>Variation</th>
+                    <th>Variation (%)</th>
+                </tr>
+            """
+
+            for oar, metric_data in metrics["oars"].items():
+                dmax_data = metric_data.get("Dmax", {})
+                html_content += f"""
+                <tr>
+                    <td>{oar}</td>
+                    <td>{dmax_data.get("nominal", 0):.2f}</td>
+                    <td>{dmax_data.get("min", 0):.2f}</td>
+                    <td>{dmax_data.get("max", 0):.2f}</td>
+                    <td>{dmax_data.get("variation", 0):.2f}</td>
+                    <td>{dmax_data.get("variation_percent", 0):.2f}%</td>
+                </tr>
+                """
+
+            html_content += """
+            </table>
+            """
+
+            # Add DVH plots
+            html_content += "<h2>DVH Bands</h2>"
+
+            for target in metrics["targets"]:
+                # Create plot and convert to base64 for embedding
+                fig = plt.figure(figsize=(10, 6))
+                self.plot_dvh_band(target)
+
+                buf = io.BytesIO()
+                FigureCanvas(fig).print_png(buf)
+                img_data = base64.b64encode(buf.getvalue()).decode("utf-8")
+                plt.close(fig)
+
+                html_content += f"""
+                <div class="plot-container">
+                    <h3>DVH Band for {target}</h3>
+                    <img src="data:image/png;base64,{img_data}" alt="DVH Band for {target}" width="800">
+                </div>
+                """
+
+            # Close HTML document
+            html_content += """
+            </body>
+            </html>
+            """
+
+            # Write to file
+            with open(filename, "w") as f:
+                f.write(html_content)
+
+            logger.info(f"Successfully created HTML report at {filename}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error creating HTML report: {e}")
+            return False
 
 
 class RobustnessAnalyzer:
@@ -245,24 +866,36 @@ class RobustnessAnalyzer:
     """
 
     def __init__(
-        self, plan: Plan, structures: Dict[str, Structure], dose_grid: DoseGrid
+        self,
+        plan: Plan,
+        structures: Dict[str, Structure],
+        dose_grid: Optional[DoseGrid] = None,
+        setup_uncertainty: float = 3.0,
+        range_uncertainty: float = 3.5,
+        num_scenarios: int = 7,
     ):
         """
         Initialize robustness analyzer.
 
-        Parameters
-        ----------
-        plan : Plan
-            Treatment plan to analyze
-        structures : Dict[str, Structure]
-            Dictionary of structures
-        dose_grid : DoseGrid
-            Dose grid of the plan
+        Args:
+            plan: The treatment plan to analyze
+            structures: Dictionary of structures (name -> Structure object)
+            dose_grid: Optional dose grid for the plan (will be calculated if not provided)
+            setup_uncertainty: Setup uncertainty in mm
+            range_uncertainty: Range uncertainty in percent
+            num_scenarios: Number of scenarios to generate
         """
         self.plan = plan
         self.structures = structures
         self.dose_grid = dose_grid
-        self.dose_calculator = DoseCalculator()
+        self.setup_uncertainty = setup_uncertainty
+        self.range_uncertainty = range_uncertainty
+        self.num_scenarios = num_scenarios
+
+        # Initialize target and OAR lists
+        self.target_names = []
+        self.oar_names = []
+        self._initialize_structure_lists()
 
         # Setup and range uncertainty parameters
         self.setup_uncertainty = 3.0  # mm
@@ -277,6 +910,8 @@ class RobustnessAnalyzer:
 
         # Scenario name format
         self.scenario_name_format = "{type}_{direction}_{magnitude}"
+
+        self.dose_calculator = DoseCalculator()
 
     def _initialize_structure_lists(self):
         """Initialize target and OAR lists based on structure types."""

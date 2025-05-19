@@ -25,6 +25,23 @@ except ImportError as e:
     has_anatomy_predictor = False
     logger.warning(f"Không thể import DeformableAnatomyPredictor: {str(e)}")
 
+    # Tạo lớp giả cho DeformableAnatomyPredictor
+    class DeformableAnatomyPredictor:
+        """Lớp giả cho DeformableAnatomyPredictor khi module thực không khả dụng."""
+
+        def __init__(self, **kwargs):
+            logger.warning("Sử dụng lớp giả DeformableAnatomyPredictor")
+            self.is_dummy = True
+
+        def predict_multiple_timepoints(self, **kwargs):
+            logger.warning("Gọi phương thức giả predict_multiple_timepoints")
+            return {}
+
+        def set_validator(self, validator):
+            logger.warning("Gọi phương thức giả set_validator")
+            pass
+
+
 try:
     from quangtps.adaptive.robust_adaptive_planning import RobustAdaptivePlanner
 
@@ -34,6 +51,27 @@ except ImportError as e:
     has_adaptive_planner = False
     logger.warning(f"Không thể import RobustAdaptivePlanner: {str(e)}")
 
+    # Tạo lớp giả cho RobustAdaptivePlanner
+    class RobustAdaptivePlanner:
+        """Lớp giả cho RobustAdaptivePlanner khi module thực không khả dụng."""
+
+        def __init__(self, **kwargs):
+            logger.warning("Sử dụng lớp giả RobustAdaptivePlanner")
+            self.is_dummy = True
+
+        def set_anatomy_predictor(self, predictor):
+            logger.warning("Gọi phương thức giả set_anatomy_predictor")
+            pass
+
+        def generate_adaptive_plans(self, **kwargs):
+            logger.warning("Gọi phương thức giả generate_adaptive_plans")
+            return {}
+
+        def set_validator(self, validator):
+            logger.warning("Gọi phương thức giả set_validator")
+            pass
+
+
 try:
     from quangtps.adaptive.model_validator import ModelValidator
 
@@ -42,6 +80,18 @@ try:
 except ImportError as e:
     has_model_validator = False
     logger.warning(f"Không thể import ModelValidator: {str(e)}")
+
+    # Tạo lớp giả cho ModelValidator
+    class ModelValidator:
+        """Lớp giả cho ModelValidator khi module thực không khả dụng."""
+
+        def __init__(self, **kwargs):
+            logger.warning("Sử dụng lớp giả ModelValidator")
+            self.is_dummy = True
+
+        def validate_predictions(self, **kwargs):
+            logger.warning("Gọi phương thức giả validate_predictions")
+            return {}
 
 
 class AnatomyPredictionIntegrator:
@@ -82,46 +132,31 @@ class AnatomyPredictionIntegrator:
         success = True
 
         # Khởi tạo anatomy predictor nếu có
-        if has_anatomy_predictor:
-            try:
-                predictor_config = config.get("predictor", {})
-                self.anatomy_predictor = DeformableAnatomyPredictor(**predictor_config)
-                logger.info("Đã khởi tạo DeformableAnatomyPredictor thành công")
-            except Exception as e:
-                logger.error(f"Lỗi khi khởi tạo DeformableAnatomyPredictor: {str(e)}")
-                success = False
-        else:
-            logger.warning(
-                "DeformableAnatomyPredictor không khả dụng, một số tính năng sẽ bị hạn chế"
-            )
+        try:
+            predictor_config = config.get("predictor", {})
+            self.anatomy_predictor = DeformableAnatomyPredictor(**predictor_config)
+            logger.info("Đã khởi tạo DeformableAnatomyPredictor thành công")
+        except Exception as e:
+            logger.error(f"Lỗi khi khởi tạo DeformableAnatomyPredictor: {str(e)}")
+            success = False
 
         # Khởi tạo adaptive planner nếu có
-        if has_adaptive_planner:
-            try:
-                planner_config = config.get("planner", {})
-                self.adaptive_planner = RobustAdaptivePlanner(**planner_config)
-                logger.info("Đã khởi tạo RobustAdaptivePlanner thành công")
-            except Exception as e:
-                logger.error(f"Lỗi khi khởi tạo RobustAdaptivePlanner: {str(e)}")
-                success = False
-        else:
-            logger.warning(
-                "RobustAdaptivePlanner không khả dụng, một số tính năng sẽ bị hạn chế"
-            )
+        try:
+            planner_config = config.get("planner", {})
+            self.adaptive_planner = RobustAdaptivePlanner(**planner_config)
+            logger.info("Đã khởi tạo RobustAdaptivePlanner thành công")
+        except Exception as e:
+            logger.error(f"Lỗi khi khởi tạo RobustAdaptivePlanner: {str(e)}")
+            success = False
 
         # Khởi tạo model validator nếu có
-        if has_model_validator:
-            try:
-                validator_config = config.get("validator", {})
-                self.model_validator = ModelValidator(**validator_config)
-                logger.info("Đã khởi tạo ModelValidator thành công")
-            except Exception as e:
-                logger.error(f"Lỗi khi khởi tạo ModelValidator: {str(e)}")
-                # Đây không phải là thành phần quan trọng, nên không đánh dấu là thất bại
-        else:
-            logger.warning(
-                "ModelValidator không khả dụng, một số tính năng sẽ bị hạn chế"
-            )
+        try:
+            validator_config = config.get("validator", {})
+            self.model_validator = ModelValidator(**validator_config)
+            logger.info("Đã khởi tạo ModelValidator thành công")
+        except Exception as e:
+            logger.error(f"Lỗi khi khởi tạo ModelValidator: {str(e)}")
+            # Đây không phải là thành phần quan trọng, nên không đánh dấu là thất bại
 
         # Thiết lập liên kết giữa các thành phần nếu chúng đều tồn tại
         if success and self.anatomy_predictor and self.adaptive_planner:

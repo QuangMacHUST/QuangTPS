@@ -5,207 +5,132 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - 2023-07-20
+## [0.8.9] - 2023-09-05
 
 ### Thêm mới
-- Tạo module hiển thị liều 3D nâng cao trong `quangtps/ui/dose_visualization_widget.py`:
-  - Hiển thị 3D phân phối liều với đồ họa VTK hiệu suất cao
-  - Hỗ trợ nhiều chế độ hiển thị: surface, volume rendering, MIP, X-Ray
-  - Tương tác với isodose levels với khả năng tùy chỉnh màu sắc
-  - Hiển thị cấu trúc giải phẫu 3D với các tùy chọn độ trong suốt
-  - Nhiều góc nhìn tiêu chuẩn (anterior, posterior, left, right, superior, inferior)
-  - Hỗ trợ dự phòng với matplotlib khi VTK không khả dụng
+- Tạo module báo cáo đánh giá kế hoạch trong `quangtps/reporting/plan_report_generator.py`:
+  - Hỗ trợ tạo báo cáo đánh giá kế hoạch xạ trị với nhiều định dạng xuất (PDF, HTML, CSV)
+  - Báo cáo chứa thông tin kế hoạch, DVH, kết quả đánh giá mục tiêu và chỉ số nâng cao
+  - Hỗ trợ so sánh nhiều kế hoạch trong cùng báo cáo
+
+- Định nghĩa chuẩn cho các loại mục tiêu lâm sàng trong `quangtps/evaluation/protocols/goal_type.py`:
+  - Các loại mục tiêu cơ bản như DOSE_VOLUME, VOLUME_DOSE
+  - Chỉ số thống kê liều như MEAN_DOSE, MAX_DOSE, MIN_DOSE
+  - Chỉ số đánh giá nâng cao như HOMOGENEITY_INDEX, CONFORMITY_INDEX, GRADIENT_INDEX
+  - Chỉ số đánh giá sinh học như TCP, NTCP, EUD
+
+- Tạo hệ thống điểm đánh giá kế hoạch trong `quangtps/evaluation/plan_quality/plan_quality_score.py`:
+  - Các mức đánh giá EXCELLENT, GOOD, ACCEPTABLE, MARGINAL, POOR
+  - Phương thức chuyển đổi từ phần trăm đạt mục tiêu sang mức đánh giá
+  - Ánh xạ màu sắc trực quan cho từng mức đánh giá
 
 ### Cải tiến
-- Tích hợp hiển thị liều 3D với tab External Beam Planning:
-  - Kết nối widget liều 3D với dữ liệu liều và cấu trúc
-  - Đồng bộ hoá chuyển đổi giữa DVH và hiển thị 3D
-  - Cải thiện bố cục giao diện để tối đa hóa không gian hiển thị
+- Phát triển bộ đánh giá kế hoạch xạ trị toàn diện:
+  - Lớp PlanQualityEvaluator đánh giá kế hoạch theo protocol lâm sàng
+  - Tính toán các chỉ số đánh giá cho mục tiêu và cơ quan nguy cấp riêng biệt
+  - Hỗ trợ xuất kết quả đánh giá sang nhiều định dạng để phân tích
+  - Tính toán chỉ số đồng nhất và phù hợp cho đánh giá nâng cao
 
-- Tối ưu hiệu suất hiển thị 3D:
-  - Cải thiện chuyển đổi dữ liệu giữa numpy và VTK
-  - Thêm subsampling thông minh cho voxel data lớn
-  - Giảm sử dụng bộ nhớ với kỹ thuật lazy loading
-  - Tối ưu hóa hiển thị đối tượng với occlusion culling
-
-### Sửa lỗi
-- Khắc phục định nghĩa lớp trùng lặp trong `dvh_widget.py`
-- Sửa tham số không hợp lệ trong lời gọi hàm `calculate_dvh`
-- Cải thiện xử lý lỗi import và khả năng tương thích
-- Bổ sung cơ chế dự phòng khi PyQt5 hoặc VTK không khả dụng
-- Khắc phục hiển thị màu không chính xác trong widget DVH
-
-## [0.7.13] - 2026-05-20
-
-### Thay đổi
-
-- Nâng cấp module tối ưu hóa đa tiêu chí (MCO) với hiển thị bề mặt Pareto nâng cao
-- Cải thiện giao diện người dùng điều hướng Pareto tương tự Eclipse của Varian
-- Thêm tính năng đồ thị màu nhiệt theo giá trị mục tiêu
-- Tối ưu hóa tương tác người dùng với thông tin phản hồi trực quan
-- Tăng cường xử lý lỗi và đồng bộ hóa giữa trọng số và các giải pháp
+- Tăng cường xử lý ngoại lệ và tính ổn định:
+  - Cơ chế dự phòng khi các module không khả dụng
+  - Xử lý lỗi import thông minh với cơ chế fallback
+  - Báo cáo lỗi chi tiết để dễ dàng gỡ lỗi
+  - Tăng cường khả năng phục hồi khi thiếu các thư viện bên ngoài
 
 ### Sửa lỗi
+- Khắc phục các lỗi trong module đánh giá kế hoạch:
+  - Sửa lỗi tham chiếu đến các thành viên enum không tồn tại
+  - Sửa lỗi import module báo cáo kế hoạch
+  - Cải thiện xử lý khi không có DVHAnalyzer
 
-- Khắc phục vấn đề hiển thị khi không có giải pháp Pareto
-- Sửa lỗi đồng bộ hóa trọng số khi chọn giải pháp mới
-- Cải thiện xử lý ngoại lệ khi tìm kiếm giải pháp theo trọng số
-
-## [0.7.12] - 2026-05-15
-
-### Thay đổi
-
-- Cải thiện phân tích độ bền vững với tính toán song song và xử lý lỗi toàn diện
-- Nâng cấp hiển thị 3D phân phối liều với chuyển đổi dữ liệu tối ưu hơn
-- Tăng cường lập kế hoạch thích ứng với đánh giá cấu trúc chuẩn xác hơn
-
-### Sửa lỗi
-
-- Khắc phục vấn đề trong phân tích độ bền vững khi xử lý nhiều kịch bản
-- Sửa lỗi định dạng dữ liệu khi chuyển đổi phân phối liều sang VTK
-- Cải thiện tính toán hệ số Dice để đánh giá sự khác biệt giữa các cấu trúc
-
-## [Chưa phát hành]
+## [0.8.8] - 2023-08-30
 
 ### Thêm mới
-- Cải thiện tài liệu hướng dẫn người dùng và API
-
-## [0.7.9] - 2026-04-25
-
-### Thêm mới
-- Tạo file `CHANGELOG.md` chuẩn format Keep a Changelog:
-  - Cải tiến quản lý nhật ký thay đổi với định dạng chuẩn
-  - Tách biệt các thay đổi theo loại (Added, Changed, Fixed)
-  - Liên kết các phiên bản với tag GitHub
-  - Hỗ trợ tiếng Việt đầy đủ với khả năng hiển thị trên GitHub
-
-- Cập nhật module phân tích gamma trong `quangtps/evaluation/metrics/gamma_analysis.py`:
-  - Thêm phương thức `calculate_gamma_3d_gpu` sử dụng CUDA thông qua CuPy
-  - Tăng tốc độ tính toán phân tích gamma lên 20-50 lần trên GPU
-  - Hỗ trợ dự phòng CPU tự động khi GPU không khả dụng
-  - Tối ưu hóa thuật toán để giảm sử dụng bộ nhớ GPU
-  - Triển khai các kernel CuPy tùy chỉnh để tăng hiệu suất tính toán khoảng cách
-  - Thêm phương thức `plot_gamma_results` để hiển thị kết quả
-
-- Tích hợp phân tích gamma và Monte Carlo GPU:
-  - Cải thiện phương thức `compare_with_dose_grid` trong `MonteCarloGPU` để sử dụng GPU
-  - Bổ sung khả năng phân tích gamma theo vùng liều với tính toán song song
-  - Thêm tính năng xuất báo cáo so sánh chi tiết với biểu đồ
+- Tạo module đánh giá kế hoạch xạ trị toàn diện trong `quangtps/ui/plan_evaluation_report_tab.py`:
+  - Giao diện phong cách Eclipse cho đánh giá kế hoạch xạ trị chuyên nghiệp
+  - Báo cáo đánh giá kế hoạch với khả năng xuất PDF, HTML và CSV
+  - Hiển thị tích hợp của DVH, đánh giá mục tiêu lâm sàng và thống kê liều
+  - Tính năng so sánh kế hoạch để phân tích nhiều kế hoạch cùng lúc
 
 ### Cải tiến
-- Nâng cao hiệu suất tính toán gamma:
-  - Tối ưu hóa thuật toán tìm kiếm khoảng cách tối thiểu
-  - Giảm yêu cầu bộ nhớ cho tính toán gamma 3D quy mô lớn
-  - Hỗ trợ tính toán tối ưu trên CPU đa nhân khi không có GPU
+- Nâng cao trải nghiệm đánh giá kế hoạch:
+  - Hiển thị điểm đánh giá tổng thể, PTV và OAR với mã màu trực quan
+  - Quản lý và chỉnh sửa protocol lâm sàng ngay trong giao diện
+  - Đánh giá kế hoạch tự động với kết quả màu sắc trực quan
+  - Tích hợp chọn cấu trúc từ bảng mục tiêu với hiển thị DVH
+  - Bố cục thông minh với splitter có thể tùy chỉnh giữa các panel
 
-- Cải thiện trực quan hóa kết quả gamma:
-  - Hỗ trợ hiển thị bản đồ nhiệt với các mức đạt/không đạt
-  - Tạo biểu đồ histograms tương tác cho phân bố giá trị gamma
-  - Hỗ trợ xuất kết quả phân tích dưới dạng PDF và HTML
+- Tích hợp với các module hiện có:
+  - Kết nối liền mạch với DVHWidget, ProtocolManager và Clinical Goals
+  - Tận dụng chức năng của PlanQualityWidget với giao diện mới
+  - Đảm bảo tương thích với cả hệ thống Eclipse-style theme
+  - Xử lý ngoại lệ toàn diện khi các thành phần không khả dụng
 
-- Cập nhật requirements.txt với các thư viện mới:
-  - Thêm CuPy và PyCUDA với cấu hình theo nền tảng
-  - Bổ sung các thư viện hiển thị và phân tích dữ liệu
-  - Cải thiện quản lý phụ thuộc cho các môi trường khác nhau
-
-### Sửa lỗi
-- Khắc phục vấn đề tràn bộ nhớ GPU khi tính toán gamma với kích thước lớn
-- Sửa lỗi index trong phân tích gamma ở vùng biên
-- Đảm bảo hoạt động ổn định trên các phiên bản CuPy và CUDA khác nhau
-- Cải thiện khả năng tương thích với nhiều loại thiết bị GPU khác nhau
-- Cải thiện xử lý ngoại lệ và ghi log chi tiết
-
-## [0.7.8] - 2026-04-20
+## [0.8.7] - 2023-08-25
 
 ### Thêm mới
-- Tạo lớp `Image3DWidget` trong `quangtps/ui/image_3d_widget.py`:
-  - Hỗ trợ hiển thị 3D với nhiều công nghệ (PyVista, VTK) và tự động chuyển đổi
-  - Cung cấp nhiều chế độ hiển thị: bề mặt (surface), thể tích (volume), MIP, X-ray
-  - Giao diện người dùng hiện đại với thanh công cụ tích hợp và tùy chọn tùy chỉnh
-
-- Cải thiện `MonteCarloGPU` trong `quangtps/dose/algorithms/improvements/monte_carlo_gpu.py`:
-  - Thêm phương thức `_setup_cpu_fallback` xử lý khi không có GPU khả dụng
-  - Tối ưu hóa tự động dựa trên tài nguyên hệ thống (bộ nhớ, số lõi CPU)
-  - Triển khai `_setup_gpu_cupy` và `_setup_gpu_pycuda` để hỗ trợ nhiều backend khác nhau
-  - Thêm phương thức `compare_with_dose_grid` sử dụng phân tích gamma
-
-- Module phân tích gamma đầy đủ trong `quangtps/evaluation/metrics/gamma_analysis.py`:
-  - Triển khai phân tích gamma 3D và 2D với nhiều tùy chọn linh hoạt
-  - Hỗ trợ nội suy SciPy cho kết quả chính xác cao
-  - Phương pháp dự phòng không phụ thuộc SciPy cho môi trường thiếu thư viện
-  - Hỗ trợ phân tích theo vùng liều và thống kê chi tiết
+- Tích hợp hoàn chỉnh hiển thị liều 3D vào External Beam Planning tab:
+  - Kết nối tự động giữa dữ liệu liều, cấu trúc giải phẫu và hiển thị 3D
+  - Cơ chế tự động chuyển đổi dữ liệu liều từ nhiều định dạng khác nhau
+  - Hiển thị đồng bộ liều 3D và cấu trúc giải phẫu trong một khung nhìn thống nhất
 
 ### Cải tiến
-- Tích hợp `quangtps/ui/image_viewer.py` với lớp `Image3DWidget`:
-  - Thêm lớp `ImageSliceWidget` để hiển thị lát cắt hình ảnh với nhiều tính năng
-  - Hỗ trợ nhiều chế độ hiển thị 3D (surface, volume, MIP, X-ray)
-  - Cải thiện bố cục và tính năng tương tác với hình ảnh
+- Thiết kế lại giao diện External Beam Planning theo phong cách Eclipse:
+  - Layout tối ưu với splitter có thể điều chỉnh giữa các panel
+  - Chuyển đổi từ combo box sang radio button cho chọn chế độ lập kế hoạch
+  - Tổ chức các tính năng thành các tab con logic và trực quan hơn
+  - Thêm status bar cung cấp thông tin trạng thái và tiến trình
 
-- Đăng ký module gamma_analysis.py trong `quangtps/evaluation/metrics/__init__.py`
-- Tạo tài liệu API cho gamma_analysis trong `docs/api/gamma_analysis.md`
-- Tối ưu hóa hiệu suất hiển thị 3D bằng cách giảm số lượng mesh được hiển thị
-- Nâng cao tính mô-đun hóa của mã nguồn để dễ dàng mở rộng và bảo trì
+- Cải thiện tích hợp hiển thị liều 3D:
+  - Thay thế placeholder bằng DoseVisualization3D đầy đủ chức năng
+  - Tối ưu hóa hiển thị isodose surface với các mức liều có thể tùy chỉnh
+  - Hiển thị cấu trúc 3D với độ trong suốt và màu sắc có thể tùy chỉnh
+  - Đồng bộ hóa hiển thị khi dữ liệu liều hoặc cấu trúc thay đổi
 
-### Sửa lỗi
-- Sửa lỗi khi truy cập thuộc tính GPU không tồn tại trong môi trường không có CUDA
-- Khắc phục sự cố khi hiển thị cấu trúc 3D với các mask không hợp lệ
-- Sửa lỗi import không tìm thấy trong các module phụ thuộc
-- Cải thiện độ ổn định khi tính toán liều trong môi trường có tài nguyên hạn chế
+- Nâng cao độ tin cậy của hệ thống:
+  - Xử lý lỗi toàn diện khi các thư viện bên ngoài không khả dụng
+  - Placeholder thông minh cho các thành phần gặp lỗi
+  - Chế độ dự phòng cho các tính năng khi thiếu VTK hoặc PyQt5
+  - Logging chi tiết để hỗ trợ gỡ lỗi và theo dõi
 
-## [0.7.7] - 2026-04-15
+## [0.8.6] - 2023-08-20
 
 ### Thêm mới
-- Cải thiện tính năng thông qua script `isolated_plan_comparison_demo.py`:
-  - Demo ứng dụng phân tích liều độc lập sử dụng QuangTPS
-  - Hỗ trợ các trường hợp sử dụng quan trọng như so sánh kế hoạch và phân tích cấu trúc
-  - Kêt nối nhiều thành phần riêng lẻ của hệ thống
-
-- Thêm cải tiến cho tính năng hiển thị ROI/VOI 3D:
-  - Cho phép nhấp chuột vào ROI trong cây cấu trúc để hiển thị/ẩn
-  - Tùy chỉnh độ mờ đục cho từng cấu trúc riêng lẻ
-  - Thêm tùy chọn hiển thị tất cả cấu trúc đồng thời
+- Hoàn thiện module phân tích độ bền vững trong `quangtps/evaluation/robustness`:
+  - Cập nhật constructor của `RobustnessAnalyzer` với các tham số đầy đủ:
+    - `setup_uncertainty` - độ không chắc chắn vị trí bệnh nhân (mm)
+    - `range_uncertainty` - độ không chắc chắn phạm vi (%)
+    - `num_scenarios` - số lượng kịch bản phân tích
+  - Bổ sung các phương thức cốt lõi cho `RobustnessResult`:
+    - `get_structure_dvhs()` - lấy dữ liệu DVH cho từng cấu trúc
+    - `get_target_coverage_data()` - lấy dữ liệu độ phủ mục tiêu
+    - `get_evaluation_metrics()` - lấy chỉ số đánh giá toàn diện
+    - `get_spatial_analysis_data()` - lấy dữ liệu phân tích không gian
 
 ### Cải tiến
-- Cập nhật hàm hiển thị trong `quangtps/ui/widgets/dose_display.py`:
-  - Hỗ trợ colormap trong suốt cho hiển thị liều tốt hơn
-  - Thêm kiểm soát chất lượng hiển thị
-  - Hỗ trợ điều chỉnh wuadow-level tự động dựa trên histogram
+- Thêm các tính năng xuất kết quả phân tích độ bền vững:
+  - Xuất báo cáo định dạng CSV và Excel với các sheet phân tích riêng biệt
+  - Tạo báo cáo PDF và HTML tương tác với biểu đồ và bảng phân tích
+  - Tạo DVH bands trực quan với độ dao động giữa các kịch bản khác nhau
+- Cải thiện phân tích dữ liệu cho mục tiêu và OAR:
+  - Tính toán các thông số D95, Dmax và biến thiên theo kịch bản
+  - Đánh giá tự động các chỉ số biến thiên và độ phù hợp lâm sàng
+  - Phân tích không gian với bản đồ nhiệt sự khác biệt liều
+- Tích hợp phong cách Eclipse vào module phân tích độ bền vững:
+  - Thiết kế giao diện theo phong cách Eclipse hiện đại
+  - Đảm bảo tương thích giữa UI và module phân tích cốt lõi
+  - Kết nối các thành phần: `robust_analysis_tab.py`, `robust_analysis_widget.py` và `robustness_visualization.py`
 
-- Cải thiện quy trình lập kế hoạch thích ứng:
-  - Nâng cấp module registration.py với các thuật toán mới
-  - Thêm hỗ trợ cho cấu trúc tự động và deformation fields
-  - Tối ưu hóa độ chính xác và tốc độ của thuật toán
+## [0.8.5] - 2023-08-15
 
-- Tái cấu trúc nhiều thành phần chính:
-  - Nâng cấp cấu trúc code để tuân theo PEP 8
-  - Cải thiện ghi log và xử lý ngoại lệ
-  - Đảm bảo khả năng hoạt động trên các hệ thống không có GPU
+### Cải tiến
+- Sửa lỗi indent trong module phân tích gamma (quangtps/evaluation/metrics/gamma_analysis.py)
+- Tạo module phân tích độ bền vững (Robustness Analysis) phong cách Eclipse
+- Cải thiện trải nghiệm phân tích độ bền vững
+- Bổ sung tính năng tương thích
 
-[0.7.9]: https://github.com/username/QuangTPS/compare/v0.7.8...v0.7.9
-[0.7.8]: https://github.com/username/QuangTPS/compare/v0.7.7...v0.7.8
-[0.7.7]: https://github.com/username/QuangTPS/compare/v0.7.6...v0.7.7
-
-## [0.7.11] - 2026-05-10
-
-### Thay đổi
-
-- Nâng cấp hiển thị 3D với colormap VTK tùy chỉnh và Eclipse-style
-- Cải thiện xử lý colormap trong BEV với cơ chế dự phòng nhiều lớp
-- Tăng cường module thuật toán tính liều với hệ thống kiểm tra GPU tích hợp
-- Nâng cao hệ thống thích ứng với xử lý lỗi toàn diện
-
-### Sửa lỗi
-
-- Khắc phục vấn đề "không tìm thấy colormap" trong hiển thị 3D và BEV
-- Cải thiện xử lý tình huống không có GPU với dự phòng CPU tự động
-- Sửa lỗi khi các thành phần trong hệ thống thích ứng không thể kết nối
-- Đảm bảo tính ổn định khi GPU không đủ bộ nhớ cho tính toán Monte Carlo
-
-## [0.7.10] - 2026-05-01
-
-### Thay đổi
-
-- Cải thiện đáng kể module hiển thị 3D với xử lý lỗi tốt hơn
-- Tăng cường hiệu suất hiển thị 3D và tối ưu hóa tạo mesh
-- Nâng cao trải nghiệm người dùng với nhiều chế độ hiển thị 3D
-- Tích hợp tốt hơn giữa `StructureViewer3D` và `structure_tab.py`
+[0.8.9]: https://github.com/username/QuangTPS/compare/v0.8.8...v0.8.9
+[0.8.8]: https://github.com/username/QuangTPS/compare/v0.8.7...v0.8.8
+[0.8.7]: https://github.com/username/QuangTPS/compare/v0.8.6...v0.8.7
+[0.8.6]: https://github.com/username/QuangTPS/compare/v0.8.5...v0.8.6
+[0.8.5]: https://github.com/username/QuangTPS/compare/v0.8.4...v0.8.5

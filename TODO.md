@@ -31,20 +31,30 @@
 - [x] Enhanced Monte Carlo GPU integration with automatic hardware detection
 - [x] Fixed adaptive planning module component integration
 - [x] Improved BEV visualization with robust colormap fallback mechanisms
+- [x] Implemented comprehensive robustness analysis module with Eclipse-like UI
+- [x] Created robustness visualization with DVH bands and spatial analysis
+- [x] Integrate 3D dose visualization in External Beam Planning tab
+- [x] Enhance DVH visualization with interpolation and clinical goal markers
+- [x] Implement comprehensive plan evaluation and reporting system
 
 ## Current Tasks
-- [ ] Integrate 3D dose visualization in External Beam Planning tab
 - [ ] Enhance MPR viewer in Structure tab with real image data display
 - [ ] Improve object explorer panel with comprehensive structure and plan management
 - [ ] Implement better integration between Structure tab and External Beam Planning tab
 - [ ] Add multi-criteria optimization to Eclipse-like interface
 - [ ] Implement inverse planning algorithms for IMRT/VMAT optimization
 - [ ] Enhance image registration for multi-modality image fusion
-- [ ] Extend robust optimization for respiratory motion
+- [ ] Extend robust optimization based on robustness analysis results
 - [ ] Add comprehensive GPU memory management for large Monte Carlo calculations
 - [ ] Implement real-time adaptive planning with anatomy prediction
-- [ ] Enhance DVH visualization with interpolation and clinical goal markers
 - [ ] Add export functionality for 3D visualizations and BEV snapshots
+- [ ] Enhance robustness analysis with machine-specific uncertainty models
+- [ ] Implement probabilistic robustness analysis framework
+- [ ] Create scenario-based planning optimization derived from robustness results
+- [ ] Develop advanced biological metrics for treatment plan evaluation
+- [ ] Implement automated protocol selection based on treatment site
+- [ ] Create knowledge-based quality metrics using historical plan data
+- [ ] Implement radiobiology modeling for TCP/NTCP in plan evaluation
 
 ## Future Tasks
 - [ ] Further enhance Eclipse-like UI with ribbon interface
@@ -81,6 +91,7 @@
 - [ ] Create better integration with record-and-verify systems
 - [ ] Expand GPU acceleration to support multiple vendors (NVIDIA, AMD, Intel)
 - [ ] Improve error handling for all critical algorithms in production mode
+- [ ] Extend robustness analysis to support respiratory motion and anatomical deformations
 
 ## Medium Priority
 
@@ -97,6 +108,7 @@
 - [ ] Improve the GUI performance for large datasets
 - [ ] Implement auto-contouring for common structures using ML models
 - [ ] Add comprehensive user preference system
+- [ ] Enhance robustness analysis by incorporating auto-segmentation uncertainty
 
 ## Low Priority
 
@@ -112,3 +124,5 @@
 - [ ] Implement multi-threaded optimization
 - [ ] Add support for additional treatment delivery systems
 - [ ] Implement integration with commercial PACS systems
+- [ ] Create web-based robustness analysis viewer for remote plan evaluation
+- [ ] Add machine-specific robustness models based on QA measurement data

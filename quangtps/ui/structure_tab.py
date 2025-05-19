@@ -61,6 +61,7 @@ try:
         QTableWidget,
         QTableWidgetItem,
         QApplication,
+        QProgressBar,
     )
     from PyQt5.QtGui import (
         QColor,
@@ -140,8 +141,7 @@ except ImportError:
         def emit(self, *args, **kwargs):
             pass
 
-
-# Import các module khác
+    # Import các module khác
     from quangtps.segmentation.structures.structure import (
         Structure,
         StructureType,
@@ -168,9 +168,9 @@ except ImportError:
     from quangtps.core.patient import Patient
 
 # Import ServiceRegistry với xử lý lỗi
-    try:
+try:
     from quangtps.core.service_registry import ServiceRegistry
-    except ImportError:
+except ImportError:
     logging.warning("Không thể import ServiceRegistry. Sử dụng lớp giả.")
 
     class ServiceRegistry:
@@ -202,7 +202,7 @@ try:
     from quangtps.ui.visualization_3d import StructureViewer3D
 
     HAS_3D_VISUALIZATION = True
-    except ImportError:
+except ImportError:
     logging.warning(
         "Không thể import StructureViewer3D. Chức năng hiển thị 3D sẽ bị hạn chế."
     )
@@ -1592,15 +1592,173 @@ class StructureTab(QWidget):
     def auto_segment(self):
         """Perform auto-segmentation for the selected structure."""
         if not self.selected_structure or not self.image:
+            QMessageBox.warning(
+                self,
+                "Không thể phân đoạn",
+                "Vui lòng chọn cấu trúc và đảm bảo đã tải hình ảnh.",
+            )
             return
 
-        # This would be implemented to perform automatic segmentation
-        # for the selected structure using image data
-        QMessageBox.information(
-            self,
-            "Feature Not Implemented",
-            "Auto-segmentation feature is not yet implemented.",
-        )
+        try:
+            # Kiểm tra xem có thể import AutoSegmentationEngine
+            from quangtps.segmentation.auto.engine import AutoSegmentationEngine
+
+            # Hiển thị dialog chọn cấu trúc để phân đoạn
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Phân đoạn tự động")
+            layout = QVBoxLayout(dialog)
+
+            # Tạo engine phân đoạn
+            auto_seg_engine = AutoSegmentationEngine()
+
+            # Lấy danh sách cấu trúc có thể phân đoạn
+            available_structures = auto_seg_engine.get_available_structures()
+            if not available_structures:
+                QMessageBox.warning(
+                    self,
+                    "Không có mô hình",
+                    "Không tìm thấy mô hình phân đoạn tự động nào. Vui lòng cài đặt mô hình trước.",
+                )
+                return
+
+            # Tạo form layout cho các tùy chọn
+            form_layout = QFormLayout()
+
+            # Combobox chọn cấu trúc để phân đoạn
+            structure_combo = QComboBox()
+            for structure_name in available_structures:
+                structure_combo.addItem(structure_name)
+            form_layout.addRow("Cấu trúc:", structure_combo)
+
+            # Tùy chọn sử dụng GPU
+            use_gpu_checkbox = QCheckBox("Sử dụng GPU (nếu có)")
+            use_gpu_checkbox.setChecked(True)
+            form_layout.addRow("", use_gpu_checkbox)
+
+            # Threshold cho phân đoạn nhị phân
+            threshold_spinner = QDoubleSpinBox()
+            threshold_spinner.setRange(0.1, 0.9)
+            threshold_spinner.setSingleStep(0.05)
+            threshold_spinner.setValue(0.5)
+            form_layout.addRow("Ngưỡng:", threshold_spinner)
+
+            layout.addLayout(form_layout)
+
+            # Progress bar
+            progress_label = QLabel("Chuẩn bị...")
+            layout.addWidget(progress_label)
+            progress_bar = QProgressBar()
+            progress_bar.setRange(0, 100)
+            progress_bar.setValue(0)
+            layout.addWidget(progress_bar)
+
+            # Buttons
+            button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            button_box.accepted.connect(dialog.accept)
+            button_box.rejected.connect(dialog.reject)
+            layout.addWidget(button_box)
+
+            # Hiển thị dialog
+            if dialog.exec_() != QDialog.Accepted:
+                return
+
+            # Lấy các lựa chọn từ form
+            selected_structure_name = structure_combo.currentText()
+            use_gpu = use_gpu_checkbox.isChecked()
+            threshold = threshold_spinner.value()
+
+            # Hiển thị progress dialog
+            progress = QProgressDialog("Đang phân đoạn tự động...", "Hủy", 0, 100, self)
+            progress.setWindowTitle("Phân đoạn tự động")
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setValue(10)
+
+            # Chuẩn bị dữ liệu ảnh
+            try:
+                # Lấy volume data từ image
+                image_data = self.image.data
+
+                # Cập nhật progress
+                progress.setValue(20)
+
+                # Thực hiện phân đoạn
+                result = auto_seg_engine.segment_volume(
+                    volume=image_data,
+                    structure=selected_structure_name,
+                    use_gpu=use_gpu,
+                    threshold=threshold,
+                )
+
+                progress.setValue(80)
+
+                # Kiểm tra kết quả
+                if not result.get("success", False):
+                    error_message = result.get("error", "Lỗi không xác định")
+                    QMessageBox.critical(
+                        self,
+                        "Lỗi phân đoạn",
+                        f"Không thể phân đoạn cấu trúc: {error_message}",
+                    )
+                    return
+
+                # Lấy mask từ kết quả
+                mask = result.get("mask")
+                if mask is None:
+                    QMessageBox.critical(
+                        self,
+                        "Lỗi phân đoạn",
+                        "Không nhận được kết quả phân đoạn từ mô hình.",
+                    )
+                    return
+
+                # Tạo contour từ mask
+                if hasattr(self.segmentation_interface, "set_contours_from_mask"):
+                    self.segmentation_interface.set_contours_from_mask(
+                        self.selected_structure, mask
+                    )
+
+                    # Cập nhật hiển thị
+                    self.structureModified.emit(self.selected_structure)
+
+                    # Thông báo thành công
+                    QMessageBox.information(
+                        self,
+                        "Hoàn tất",
+                        f"Phân đoạn tự động của {selected_structure_name} hoàn tất.",
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Không hỗ trợ",
+                        "Giao diện phân đoạn không hỗ trợ tạo contour từ mask.",
+                    )
+
+                progress.setValue(100)
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Lỗi phân đoạn",
+                    f"Lỗi trong quá trình phân đoạn tự động: {str(e)}",
+                )
+                logger.error(f"Auto-segmentation error: {str(e)}", exc_info=True)
+
+        except ImportError as e:
+            QMessageBox.warning(
+                self,
+                "Module không khả dụng",
+                "Module phân đoạn tự động không khả dụng. Chi tiết lỗi: " + str(e),
+            )
+            logger.error(f"Auto-segmentation module import error: {str(e)}")
+            return
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Lỗi",
+                f"Lỗi không xác định trong quá trình phân đoạn tự động: {str(e)}",
+            )
+            logger.error(f"Unexpected auto-segmentation error: {str(e)}", exc_info=True)
+            return
 
     def on_structure_modified(self):
         """Handle structure modification from the segmentation interface."""

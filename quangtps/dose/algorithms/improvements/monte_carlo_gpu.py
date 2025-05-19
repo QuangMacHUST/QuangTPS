@@ -460,14 +460,14 @@ class MonteCarloGPU:
             )
 
             # Tính pass rate và thêm vào kết quả
-            pass_rate_value = gamma_pass_rate(
-                gamma_result, mask=mask, pass_criteria=1.0
-            )
+            # Chuyển đổi gamma_result sang numpy array nếu nó không phải là numpy array
+            gamma_array = np.array(gamma_result)
+            pass_rate_value = gamma_pass_rate(gamma_array, mask=mask, pass_criteria=1.0)
 
             metrics["gamma_analysis"] = {
                 "pass_rate": pass_rate_value,
-                "mean_gamma": np.mean(gamma_result[mask]) if np.sum(mask) > 0 else 0.0,
-                "max_gamma": np.max(gamma_result[mask]) if np.sum(mask) > 0 else 0.0,
+                "mean_gamma": np.mean(gamma_array[mask]) if np.sum(mask) > 0 else 0.0,
+                "max_gamma": np.max(gamma_array[mask]) if np.sum(mask) > 0 else 0.0,
                 "criteria_string": f"{distance_criterion_mm}mm/{dose_difference_percent}%",
             }
 
@@ -485,7 +485,11 @@ class MonteCarloGPU:
                         max_gamma=5.0,
                         local_normalization=False,
                     )
-                    pass_rate_2 = gamma_pass_rate(gamma_2, mask=mask, pass_criteria=1.0)
+                    # Chuyển đổi gamma_2 sang numpy array nếu cần
+                    gamma_2_array = np.array(gamma_2)
+                    pass_rate_2 = gamma_pass_rate(
+                        gamma_2_array, mask=mask, pass_criteria=1.0
+                    )
                     metrics["gamma_analysis"][gamma_key] = {
                         "pass_rate": pass_rate_2,
                         "criteria_string": f"{dta}mm/{dd}%",
