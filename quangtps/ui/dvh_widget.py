@@ -61,11 +61,8 @@ except ImportError:
     class QHBoxLayout:
         pass
 
-    class Figure:
-        pass
-
-    class FigureCanvasQTAgg:
-        pass
+    # Không cần định nghĩa lại Figure và FigureCanvasQTAgg vì đã import ở trên
+    # Nếu matplotlib không khả dụng, các class đó sẽ không được sử dụng
 
 
 # Import từ quangtps
@@ -450,10 +447,13 @@ class DVHWidget(QWidget):
         try:
             # Gọi hàm tính DVH từ module evaluation
             if hasattr(calculate_dvh, "__call__"):
+                # Cập nhật tham số cho phù hợp với API của hàm calculate_dvh
                 dvh_result = calculate_dvh(
-                    structure=structure,
+                    structure_mask=structure.mask
+                    if hasattr(structure, "mask")
+                    else None,
                     dose_grid=self.dose_grid,
-                    spacing=self.dose_spacing,
+                    grid_spacing=self.dose_spacing,
                     origin=self.dose_origin,
                 )
 

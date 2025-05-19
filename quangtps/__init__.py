@@ -8,7 +8,7 @@ Hệ thống lập kế hoạch xạ trị cung cấp đầy đủ các công c�
 tối ưu hóa và đánh giá kế hoạch điều trị xạ trị cho bệnh nhân.
 """
 
-__version__ = "0.7.9"
+__version__ = "0.8.0"
 __author__ = "QuangTPS Team"
 __license__ = "MIT"
 __description__ = "Hệ thống Lập kế hoạch Xạ trị Mã nguồn Mở"
@@ -95,7 +95,7 @@ try:
 
         if _main_window is None:
             try:
-                from quangtps.ui.main_window import MainWindow
+        from quangtps.ui.main_window import MainWindow
 
                 _main_window = MainWindow(*args, **kwargs)
             except Exception as e:
@@ -338,19 +338,19 @@ def start_quangtps(apply_theme=True):
 def show_banner():
     """Hiển thị banner khởi động QuangTPS trên terminal."""
     banner = f"""
-    ╔═════════════════════════════════════════════════╗
-    ║                                                 ║
-    ║   ██████╗ ████████╗██████╗ ███████╗             ║
-    ║  ██╔═══██╗╚══██╔══╝██╔══██╗██╔════╝             ║
-    ║  ██║   ██║   ██║   ██████╔╝███████╗             ║
-    ║  ██║▄▄ ██║   ██║   ██╔═══╝ ╚════██║             ║
-    ║  ╚██████╔╝   ██║   ██║     ███████║             ║
-    ║   ╚══▀▀═╝    ╚═╝   ╚═╝     ╚══════╝             ║
-    ║                                                 ║
-    ║       Radiation Treatment Planning System       ║
-    ║                  v{__version__}                     ║
-    ║                                                 ║
-    ╚═════════════════════════════════════════════════╝
+    ╔═════════════════════════════════════════════════════════╗
+    ║                                                         ║
+    ║   ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗ ██████╗          ║
+    ║  ██╔═══██╗██║   ██║██╔══██╗████╗  ██║██╔════╝          ║
+    ║  ██║   ██║██║   ██║███████║██╔██╗ ██║██║  ███╗         ║
+    ║  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║██║   ██║         ║
+    ║  ╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║╚██████╔╝         ║
+    ║   ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝          ║
+    ║                                                         ║
+    ║        Radiation Treatment Planning System              ║
+    ║                   v{__version__}                            ║
+    ║                                                         ║
+    ╚═════════════════════════════════════════════════════════╝
     """
 
     # Hiệu ứng vẽ banner

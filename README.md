@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.7.6-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.8.1-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -36,25 +36,60 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
   - QA cho kế hoạch xạ trị
   - Báo cáo QA tự động
 
-### Cải tiến trong phiên bản 0.7.6
+### Cải tiến trong phiên bản 0.8.1
+
+- **Tối ưu hóa đa tiêu chí (MCO) nâng cao**:
+  - Biểu đồ Pareto 3D tương tác với việc tùy chọn trục và màu sắc
+  - Giao diện khám phá Pareto surface hiện đại tương tự Eclipse của Varian
+  - Chức năng lịch sử di chuyển trong không gian Pareto
+  - Tương tác trực tiếp với bề mặt Pareto để chọn kế hoạch tối ưu
+
+- **Nâng cao đánh giá kế hoạch**:
+  - Các chỉ số đánh giá lâm sàng tự động: HI, CI, EUD, gBED
+  - Đánh giá tự động theo protocol lâm sàng
+  - So sánh kế hoạch theo nhiều chỉ số sinh học
+  - Báo cáo đánh giá chi tiết với xuất PDF/HTML
+
+- **Báo cáo lâm sàng chuyên nghiệp**:
+  - Hệ thống mẫu báo cáo phong cách Eclipse
+  - Tích hợp DVH, hình ảnh và phân phối liều
+  - Nhiều định dạng xuất: PDF, HTML, DICOM SR
+  - Quản lý và lưu trữ báo cáo
+
+- **Giao diện người dùng nâng cao**:
+  - Chia màn hình linh hoạt để so sánh nhiều kế hoạch
+  - Widget đánh giá kế hoạch tự động
+  - Tương tác trực quan với đối tượng 3D
+  - Tối ưu hóa hiệu suất cho dữ liệu lớn
+
+### Cải tiến trong phiên bản 0.8.0
+
+- **Hiển thị liều 3D nâng cao**:
+  - Hiển thị 3D phân phối liều với đồ họa VTK hiệu suất cao
+  - Nhiều chế độ hiển thị: surface, volume rendering, MIP, X-Ray
+  - Hiển thị cấu trúc 3D với tùy chọn độ trong suốt
+  - Tích hợp với tab External Beam Planning
+
+### Cải tiến trong phiên bản 0.7.4
 
 - **Cải thiện tương thích và ổn định**:
-  - Cải thiện giao diện MCO Navigator với xử lý sự kiện tốt hơn
+  - Sửa lỗi "Module matplotlib.cm has no viridis member" trong hiển thị BEV
+  - Cải thiện xử lý colormap với cơ chế dự phòng nhiều lớp
   - Nâng cao khả năng tích hợp giữa các module thích ứng
-  - Cải thiện hệ thống dự đoán thay đổi giải phẫu với API tiêu chuẩn
-  - Tăng cường độ tin cậy với cơ chế dự phòng và xử lý ngoại lệ toàn diện
+  - Thêm xử lý ngoại lệ khi import các thuật toán tính liều
+  - Tạo cơ chế tự động đăng ký thuật toán với xử lý khi module không khả dụng
 
-- **Trải nghiệm người dùng tốt hơn**:
-  - Nâng cao animation và hiệu ứng trực quan trong giao diện
-  - Cải thiện hiệu suất hiển thị với cơ chế cập nhật thông minh
-  - Tối ưu hóa xử lý sự kiện người dùng với debounce và thời gian phản hồi nhanh
-  - Đồng bộ hóa tốt hơn giữa các thành phần UI trong tương tác
+- **Tích hợp Monte Carlo GPU**:
+  - Tạo lớp MonteCarloGPUAlgorithm kế thừa từ MonteCarloGPU
+  - Tích hợp với hệ thống thuật toán tính liều chuẩn của QuangTPS
+  - Chuyển đổi đúng định dạng beam_arrangement sang định dạng cấu hình
+  - Thêm tính năng so sánh kết quả với lưới liều tham chiếu
 
-- **Sửa lỗi quan trọng**:
-  - Khắc phục các lỗi lint trong module MCO Navigator
-  - Cải thiện xử lý lỗi trong tích hợp hệ thống thích ứng
-  - Tăng cường độ tin cậy khi module không khả dụng
-  - Chuẩn hóa API để dễ dàng mở rộng trong tương lai
+- **Nâng cao hệ thống lập kế hoạch thích ứng**:
+  - Tái cấu trúc hàm create_integrated_adaptive_system với tham số tùy chọn
+  - Thêm cơ chế dự phòng với các lựa chọn backup_predictor, backup_planner, backup_validator
+  - Cải thiện xử lý ngoại lệ khi thiết lập liên kết giữa các thành phần
+  - Export lớp DeformableAnatomyPredictor với cơ chế giả mạch khi module thực không khả dụng
 
 ## Cài đặt
 

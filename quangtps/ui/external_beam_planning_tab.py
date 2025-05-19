@@ -19,50 +19,86 @@ from typing import Dict, List, Optional, Tuple, Any, Set, Union
 import time
 from enum import Enum
 
-from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QSplitter,
-    QDialog,
-    QColorDialog,
-    QComboBox,
-    QLineEdit,
-    QFormLayout,
-    QMessageBox,
-    QFileDialog,
-    QTabWidget,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QHeaderView,
-    QProgressDialog,
-    QMenu,
-    QAction,
-    QToolBar,
-    QGroupBox,
-    QRadioButton,
-    QButtonGroup,
-    QCheckBox,
-    QSlider,
-    QSpinBox,
-    QDoubleSpinBox,
-    QToolButton,
-    QFrame,
-    QScrollArea,
-    QStatusBar,
-    QTableWidget,
-    QTableWidgetItem,
-    QDateEdit,
-    QInputDialog,
-    QSizePolicy,
-    QProgressBar,
-)
-from PyQt5.QtGui import QColor, QIcon, QBrush, QPixmap, QImage, QPainter, QPen, QCursor
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QDate
+# Khởi tạo logger
+logger = logging.getLogger(__name__)
+
+# Import với try-except để xử lý lỗi import
+try:
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QListWidget,
+        QListWidgetItem,
+        QSplitter,
+        QDialog,
+        QColorDialog,
+        QComboBox,
+        QLineEdit,
+        QFormLayout,
+        QMessageBox,
+        QFileDialog,
+        QTabWidget,
+        QTreeWidget,
+        QTreeWidgetItem,
+        QHeaderView,
+        QProgressDialog,
+        QMenu,
+        QAction,
+        QToolBar,
+        QGroupBox,
+        QRadioButton,
+        QButtonGroup,
+        QCheckBox,
+        QSlider,
+        QSpinBox,
+        QDoubleSpinBox,
+        QToolButton,
+        QFrame,
+        QScrollArea,
+        QStatusBar,
+        QTableWidget,
+        QTableWidgetItem,
+        QDateEdit,
+        QInputDialog,
+        QSizePolicy,
+        QProgressBar,
+        QGridLayout,
+        QApplication,
+    )
+    from PyQt5.QtGui import (
+        QColor,
+        QIcon,
+        QBrush,
+        QPixmap,
+        QImage,
+        QPainter,
+        QPen,
+        QCursor,
+    )
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QDate
+
+    HAS_PYQT = True
+except ImportError:
+    HAS_PYQT = False
+    logger.error("PyQt5 không khả dụng. Tab External Beam Planning sẽ không hoạt động.")
+
+    # Tạo các lớp giả để tránh lỗi khi import
+    class DummyWidget:
+        pass
+
+    class DummySignal:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def emit(self, *args, **kwargs):
+            pass
+
+    QWidget = DummyWidget
+    pyqtSignal = DummySignal
+    QApplication = None
 
 # Import matplotlib for visualization if available
 try:
@@ -124,9 +160,6 @@ try:
     from quangtps.ui.beam_visualization_panel import BeamVisualizationPanel
     from quangtps.ui.dose_visualization_3d import DoseVisualization3D
 
-    # Import MCO-related modules
-    from quangtps.optimization.mco.mco_engine import MCOEngine
-
     # Import additional modules
     from quangtps.ui.visualization_3d import (
         create_3d_visualization_widget,
@@ -134,16 +167,32 @@ try:
         ViewOrientation,
     )
     from quangtps.ui.dvh_widget import create_dvh_widget
+    from quangtps.ui.dose_visualization_widget import create_dose_visualization_widget
     from quangtps.ui.eclipse_style_theme import (
         apply_eclipse_theme,
         create_eclipse_widget_style,
     )
     from quangtps.ui import get_colormap_for_display
 
+    # Kiểm tra module MCO một cách riêng biệt
+    try:
+        # Import MCO-related modules
+        from quangtps.optimization.mco.mco_engine import MCOEngine
+
+        HAS_MCO_MODULE = True
+    except ImportError:
+        HAS_MCO_MODULE = False
+        logger.warning(
+            "Module MCO không khả dụng. Chức năng tối ưu hóa đa tiêu chí sẽ bị hạn chế."
+        )
+
     MODULES_AVAILABLE = True
+    HAS_QUANGTPS_MODULES = True
 except ImportError as e:
     MODULES_AVAILABLE = False
-    logging.error(f"Error importing QuangTPS modules: {e}")
+    HAS_QUANGTPS_MODULES = False
+    HAS_MCO_MODULE = False
+    logger.error(f"Error importing QuangTPS modules: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -327,13 +376,26 @@ class ExternalBeamPlanningTab(QWidget):
         # Tab 3D Visualization
         self.vis3d_widget = None
         try:
-            self.vis3d_widget = create_3d_visualization_widget()
+            # Sử dụng widget hiển thị liều 3D nâng cao
+            self.vis3d_widget = create_dose_visualization_widget()
             if self.vis3d_widget:
                 right_widget.addTab(self.vis3d_widget, "3D")
+            else:
+                # Fallback nếu không tạo được widget
+                placeholder = QLabel("Không thể tạo widget hiển thị 3D")
+                placeholder.setAlignment(Qt.AlignCenter)
+                placeholder.setStyleSheet(
+                    "background-color: #f0f0f0; border: 1px solid #ccc;"
+                )
+                right_widget.addTab(placeholder, "3D")
         except Exception as e:
             logger.error(f"Lỗi khi tạo widget hiển thị 3D: {str(e)}")
-            self.vis3d_widget = QLabel("Không thể hiển thị 3D")
-            right_widget.addTab(self.vis3d_widget, "3D")
+            placeholder = QLabel("Lỗi khi tạo widget hiển thị 3D")
+            placeholder.setAlignment(Qt.AlignCenter)
+            placeholder.setStyleSheet(
+                "background-color: #f0f0f0; border: 1px solid #ccc;"
+            )
+            right_widget.addTab(placeholder, "3D")
 
         # Tab DVH
         self.dvh_widget = None
@@ -622,7 +684,8 @@ class ExternalBeamPlanningTab(QWidget):
         self.progress_bar.setValue(value)
         self.progress_bar.setFormat(f"{value}% - {text}")
         self.status_label.setText(text)
-        QApplication.processEvents()  # Cập nhật UI ngay lập tức
+        if QApplication is not None:
+            QApplication.processEvents()  # Cập nhật UI ngay lập tức
 
     def _on_optimization_finished(self, success, message):
         """
@@ -760,7 +823,11 @@ class ExternalBeamPlanningTab(QWidget):
             self.dvh_widget.set_structures(structures)
 
         # Cập nhật hiển thị 3D nếu có
-        # TODO: Add structures to 3D view
+        if hasattr(self, "vis3d_widget") and self.vis3d_widget:
+            try:
+                self.vis3d_widget.set_structures(structures)
+            except Exception as e:
+                logger.error(f"Lỗi khi cập nhật cấu trúc trong hiển thị 3D: {str(e)}")
 
     def set_dose_grid(self, dose_grid, spacing=None, origin=None):
         """
@@ -784,7 +851,10 @@ class ExternalBeamPlanningTab(QWidget):
 
         # Cập nhật hiển thị 3D
         if hasattr(self, "vis3d_widget") and self.vis3d_widget:
-            self.vis3d_widget.set_dose_data(dose_grid, spacing, origin)
+            try:
+                self.vis3d_widget.set_dose_grid(dose_grid, spacing, origin)
+            except Exception as e:
+                logger.error(f"Lỗi khi cập nhật hiển thị liều 3D: {str(e)}")
 
         # Cập nhật DVH
         self._update_dvh_display()
@@ -851,7 +921,8 @@ class ExternalBeamPlanningTab(QWidget):
                 message = "Đang hoàn tất tính toán..."
 
             self.optimization_progress.emit(i, message)
-            QApplication.processEvents()
+            if QApplication is not None:
+                QApplication.processEvents()
             time.sleep(0.05)  # Giả lập thời gian tính toán
 
         # Kết thúc tối ưu hóa

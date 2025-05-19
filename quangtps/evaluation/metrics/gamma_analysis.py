@@ -42,8 +42,8 @@ def calculate_gamma_3d(
     Chỉ số gamma là công cụ đánh giá định lượng sự khác biệt giữa hai phân phối liều,
     kết hợp cả tiêu chí sai khác khoảng cách không gian (DTA) và sai khác liều (DD).
 
-    Parameters
-    ----------
+        Parameters
+        ----------
     reference : np.ndarray
         Mảng 3D phân phối liều tham chiếu
     evaluation : np.ndarray
@@ -52,17 +52,17 @@ def calculate_gamma_3d(
         Tiêu chí khoảng cách đến sự tương đồng, tính bằng mm, mặc định là 3.0
     dd_percent : float, optional
         Tiêu chí sai khác liều, tính bằng phần trăm liều tối đa, mặc định là 3.0
-    threshold : float, optional
+        threshold : float, optional
         Ngưỡng liều tương đối (so với max) để tính gamma, mặc định là 0.1 (10%)
     voxel_size : Tuple[float, float, float], optional
         Kích thước voxel theo mm, mặc định là (1.0, 1.0, 1.0)
-    max_gamma : float, optional
+        max_gamma : float, optional
         Giá trị gamma tối đa, các giá trị cao hơn sẽ được gán bằng giá trị này
     local_normalization : bool, optional
         Nếu True, sử dụng chuẩn hóa cục bộ (liều tham chiếu tại mỗi điểm)
 
-    Returns
-    -------
+        Returns
+        -------
     np.ndarray
         Mảng 3D chứa giá trị gamma tại mỗi voxel
     """
@@ -73,7 +73,7 @@ def calculate_gamma_3d(
         )
 
     logger.info(f"Bắt đầu tính toán gamma 3D với tiêu chí {dta_mm}mm/{dd_percent}%")
-    start_time = time.time()
+        start_time = time.time()
 
     # Chuẩn bị dữ liệu
     reference = reference.astype(np.float32)
@@ -100,8 +100,8 @@ def calculate_gamma_3d(
     total_voxels = np.prod(shape)
     use_gpu = HAS_CUPY and total_voxels > 1e6  # Sử dụng GPU cho dữ liệu lớn
 
-    if use_gpu:
-        try:
+        if use_gpu:
+            try:
             gamma = _calculate_gamma_3d_gpu(
                 reference,
                 evaluation,
@@ -148,7 +148,7 @@ def _calculate_gamma_3d_cpu(
     dd: float,
     dta_mm: float,
     voxel_size: Tuple[float, float, float],
-    max_gamma: float,
+        max_gamma: float,
     local_normalization: bool,
 ) -> np.ndarray:
     """Phiên bản CPU của phân tích gamma 3D."""
@@ -178,7 +178,7 @@ def _calculate_gamma_3d_cpu(
                 k_max = min(shape[2] - 1, k + search_range[2])
 
                 # Tìm giá trị gamma nhỏ nhất trong vùng tìm kiếm
-                min_gamma = np.inf
+                    min_gamma = np.inf
 
                 for ni in range(i_min, i_max + 1):
                     for nj in range(j_min, j_max + 1):
@@ -222,7 +222,7 @@ def _calculate_gamma_3d_gpu(
     dd: float,
     dta_mm: float,
     voxel_size: Tuple[float, float, float],
-    max_gamma: float,
+        max_gamma: float,
     local_normalization: bool,
 ) -> np.ndarray:
     """Phiên bản GPU của phân tích gamma 3D sử dụng CuPy."""
@@ -330,10 +330,10 @@ def _calculate_gamma_3d_gpu(
                 int(search_range[1]),
                 int(search_range[2]),
                 local_normalization,
-            ),
-        )
+                    ),
+                )
 
-        # Chuyển kết quả về CPU
+                # Chuyển kết quả về CPU
         gamma = cp.asnumpy(gamma_gpu)
 
         # Giải phóng bộ nhớ GPU
@@ -441,8 +441,8 @@ def plot_gamma_results(
     """
     Tạo hình ảnh của kết quả phân tích gamma.
 
-    Parameters
-    ----------
+        Parameters
+        ----------
     gamma : np.ndarray
         Mảng giá trị gamma
     mask : np.ndarray, optional
@@ -456,8 +456,8 @@ def plot_gamma_results(
     colormap : str, optional
         Bảng màu, mặc định là 'RdYlGn_r' (đỏ = không đạt, xanh = đạt)
 
-    Returns
-    -------
+        Returns
+        -------
     Any
         Đồ thị matplotlib được tạo
     """
@@ -530,8 +530,8 @@ def compare_dose_distributions(
     """
     So sánh hai phân phối liều với nhiều tiêu chí khác nhau.
 
-    Parameters
-    ----------
+        Parameters
+        ----------
     reference : np.ndarray
         Phân phối liều tham chiếu
     evaluation : np.ndarray
@@ -545,8 +545,8 @@ def compare_dose_distributions(
     global_normalization : bool, optional
         Nếu True, sử dụng chuẩn hóa toàn cục, ngược lại sử dụng chuẩn hóa cục bộ
 
-    Returns
-    -------
+        Returns
+        -------
     Dict[str, Any]
         Kết quả so sánh với các chỉ số khác nhau
     """

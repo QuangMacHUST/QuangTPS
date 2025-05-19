@@ -142,35 +142,35 @@ except ImportError:
 
 
 # Import các module khác
-from quangtps.segmentation.structures.structure import (
-    Structure,
-    StructureType,
-    StructurePriority,
-)
-from quangtps.segmentation.structures.structure_set import StructureSet
-from quangtps.segmentation.contour.contour_manager import ContourManager
-from quangtps.segmentation.contour.polygon_tool import PolygonTool
-from quangtps.segmentation.contour.margin import MarginTool, MarginType
-from quangtps.segmentation.contour.boolean_operations import BooleanOperator
-from quangtps.segmentation.contour.interpolation import ContourInterpolator
-
-# Handle potentially missing modules
-try:
-    from quangtps.segmentation.auto_segmentation.semi_automatic import (
-        SemiAutomaticSegmentation,
+    from quangtps.segmentation.structures.structure import (
+        Structure,
+        StructureType,
+        StructurePriority,
     )
-except ImportError:
-    SemiAutomaticSegmentation = None
+    from quangtps.segmentation.structures.structure_set import StructureSet
+    from quangtps.segmentation.contour.contour_manager import ContourManager
+    from quangtps.segmentation.contour.polygon_tool import PolygonTool
+    from quangtps.segmentation.contour.margin import MarginTool, MarginType
+    from quangtps.segmentation.contour.boolean_operations import BooleanOperator
+    from quangtps.segmentation.contour.interpolation import ContourInterpolator
 
-from quangtps.segmentation.auto.engine import AutoSegmentationEngine
-from quangtps.ui.image_display import ImageDisplay
-from quangtps.imaging.image import Image
-from quangtps.core.patient import Patient
+    # Handle potentially missing modules
+    try:
+        from quangtps.segmentation.auto_segmentation.semi_automatic import (
+            SemiAutomaticSegmentation,
+        )
+    except ImportError:
+        SemiAutomaticSegmentation = None
+
+    from quangtps.segmentation.auto.engine import AutoSegmentationEngine
+    from quangtps.ui.image_display import ImageDisplay
+    from quangtps.imaging.image import Image
+    from quangtps.core.patient import Patient
 
 # Import ServiceRegistry với xử lý lỗi
-try:
+    try:
     from quangtps.core.service_registry import ServiceRegistry
-except ImportError:
+    except ImportError:
     logging.warning("Không thể import ServiceRegistry. Sử dụng lớp giả.")
 
     class ServiceRegistry:
@@ -202,7 +202,7 @@ try:
     from quangtps.ui.visualization_3d import StructureViewer3D
 
     HAS_3D_VISUALIZATION = True
-except ImportError:
+    except ImportError:
     logging.warning(
         "Không thể import StructureViewer3D. Chức năng hiển thị 3D sẽ bị hạn chế."
     )

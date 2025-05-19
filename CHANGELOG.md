@@ -5,6 +5,36 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2023-07-20
+
+### Thêm mới
+- Tạo module hiển thị liều 3D nâng cao trong `quangtps/ui/dose_visualization_widget.py`:
+  - Hiển thị 3D phân phối liều với đồ họa VTK hiệu suất cao
+  - Hỗ trợ nhiều chế độ hiển thị: surface, volume rendering, MIP, X-Ray
+  - Tương tác với isodose levels với khả năng tùy chỉnh màu sắc
+  - Hiển thị cấu trúc giải phẫu 3D với các tùy chọn độ trong suốt
+  - Nhiều góc nhìn tiêu chuẩn (anterior, posterior, left, right, superior, inferior)
+  - Hỗ trợ dự phòng với matplotlib khi VTK không khả dụng
+
+### Cải tiến
+- Tích hợp hiển thị liều 3D với tab External Beam Planning:
+  - Kết nối widget liều 3D với dữ liệu liều và cấu trúc
+  - Đồng bộ hoá chuyển đổi giữa DVH và hiển thị 3D
+  - Cải thiện bố cục giao diện để tối đa hóa không gian hiển thị
+
+- Tối ưu hiệu suất hiển thị 3D:
+  - Cải thiện chuyển đổi dữ liệu giữa numpy và VTK
+  - Thêm subsampling thông minh cho voxel data lớn
+  - Giảm sử dụng bộ nhớ với kỹ thuật lazy loading
+  - Tối ưu hóa hiển thị đối tượng với occlusion culling
+
+### Sửa lỗi
+- Khắc phục định nghĩa lớp trùng lặp trong `dvh_widget.py`
+- Sửa tham số không hợp lệ trong lời gọi hàm `calculate_dvh`
+- Cải thiện xử lý lỗi import và khả năng tương thích
+- Bổ sung cơ chế dự phòng khi PyQt5 hoặc VTK không khả dụng
+- Khắc phục hiển thị màu không chính xác trong widget DVH
+
 ## [0.7.13] - 2026-05-20
 
 ### Thay đổi

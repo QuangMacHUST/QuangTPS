@@ -257,28 +257,34 @@ def create_integrated_adaptive_system(
     predictor_class: Optional[Type] = None,
     planner_class: Optional[Type] = None,
     validator_class: Optional[Type] = None,
+    backup_predictor: bool = True,
+    backup_planner: bool = True,
+    backup_validator: bool = True,
 ) -> Optional[AnatomyPredictionIntegrator]:
     """
-    Tạo và khởi tạo hệ thống tích hợp lập kế hoạch thích ứng.
-
-    Hàm này tạo một đối tượng AnatomyPredictionIntegrator và khởi tạo nó
-    với các thành phần được cung cấp hoặc mặc định nếu có thể.
+    Tạo hệ thống tích hợp lập kế hoạch thích ứng.
 
     Parameters
     ----------
     config : Dict[str, Any], optional
-        Cấu hình cho các thành phần, bao gồm cài đặt cho predictor và planner.
-    predictor_class : Type, optional
-        Lớp dự đoán thay đổi giải phẫu tùy chỉnh.
-    planner_class : Type, optional
-        Lớp lập kế hoạch thích ứng tùy chỉnh.
-    validator_class : Type, optional
-        Lớp xác thực mô hình tùy chỉnh.
+        Cấu hình cho hệ thống tích hợp, mặc định là None
+    predictor_class : Optional[Type], optional
+        Lớp dự đoán thay đổi giải phẫu tùy chỉnh, mặc định là None
+    planner_class : Optional[Type], optional
+        Lớp lập kế hoạch thích ứng tùy chỉnh, mặc định là None
+    validator_class : Optional[Type], optional
+        Lớp validator tùy chỉnh, mặc định là None
+    backup_predictor : bool, optional
+        Cho phép sử dụng predictor dự phòng nếu predictor chính không khả dụng, mặc định là True
+    backup_planner : bool, optional
+        Cho phép sử dụng planner dự phòng nếu planner chính không khả dụng, mặc định là True
+    backup_validator : bool, optional
+        Cho phép sử dụng validator dự phòng nếu validator chính không khả dụng, mặc định là True
 
     Returns
     -------
-    AnatomyPredictionIntegrator or None
-        Hệ thống tích hợp đã được khởi tạo, hoặc None nếu khởi tạo thất bại.
+    Optional[AnatomyPredictionIntegrator]
+        Đối tượng tích hợp đã được khởi tạo hoặc None nếu không thể tạo
     """
     try:
         # Tạo integrator
@@ -295,6 +301,13 @@ def create_integrated_adaptive_system(
             config["planner_class"] = planner_class
         if validator_class:
             config["validator_class"] = validator_class
+
+        # Thêm cấu hình dự phòng
+        config["backup_options"] = {
+            "backup_predictor": backup_predictor,
+            "backup_planner": backup_planner,
+            "backup_validator": backup_validator,
+        }
 
         # Khởi tạo hệ thống
         success = integrator.initialize(config)
