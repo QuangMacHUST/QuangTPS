@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.7.5-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.7.6-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -36,25 +36,25 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
   - QA cho kế hoạch xạ trị
   - Báo cáo QA tự động
 
-### Cải tiến trong phiên bản 0.7.14
+### Cải tiến trong phiên bản 0.7.6
 
-- **Nâng cao tương thích với Eclipse của Varian**:
-  - Cải thiện giao diện điều hướng MCO để tương đương Eclipse
-  - Tối ưu hóa cơ chế xử lý colormap với nhiều cơ chế dự phòng
-  - Tái cấu trúc module lập kế hoạch thích ứng với thiết kế component-based
-  - Cải thiện xử lý lỗi và tăng độ ổn định hệ thống
+- **Cải thiện tương thích và ổn định**:
+  - Cải thiện giao diện MCO Navigator với xử lý sự kiện tốt hơn
+  - Nâng cao khả năng tích hợp giữa các module thích ứng
+  - Cải thiện hệ thống dự đoán thay đổi giải phẫu với API tiêu chuẩn
+  - Tăng cường độ tin cậy với cơ chế dự phòng và xử lý ngoại lệ toàn diện
 
-- **Tính năng mới**:
-  - Nâng cấp module tích hợp lập kế hoạch thích ứng
-  - Cải thiện hệ thống phát hiện GPU và tính toán liều Monte Carlo
-  - Thêm module dự đoán thay đổi giải phẫu
-  - Tích hợp giữa dự đoán giải phẫu và lập kế hoạch
+- **Trải nghiệm người dùng tốt hơn**:
+  - Nâng cao animation và hiệu ứng trực quan trong giao diện
+  - Cải thiện hiệu suất hiển thị với cơ chế cập nhật thông minh
+  - Tối ưu hóa xử lý sự kiện người dùng với debounce và thời gian phản hồi nhanh
+  - Đồng bộ hóa tốt hơn giữa các thành phần UI trong tương tác
 
-- **Sửa lỗi**:
-  - Khắc phục vấn đề colormap trong hiển thị BEV và 3D
-  - Sửa lỗi linter trong nhiều module
-  - Cải thiện xử lý ngoại lệ trong module thích ứng
-  - Tăng cường tích hợp giữa các module
+- **Sửa lỗi quan trọng**:
+  - Khắc phục các lỗi lint trong module MCO Navigator
+  - Cải thiện xử lý lỗi trong tích hợp hệ thống thích ứng
+  - Tăng cường độ tin cậy khi module không khả dụng
+  - Chuẩn hóa API để dễ dàng mở rộng trong tương lai
 
 ## Cài đặt
 

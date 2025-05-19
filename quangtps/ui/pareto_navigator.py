@@ -735,8 +735,14 @@ def show_pareto_navigator(pareto_points, objective_names=None, parent=None):
     ParetoNavigator
         Đối tượng điều hướng Pareto đã tạo.
     """
-    from PyQt5.QtWidgets import QDialog, QVBoxLayout
+    # Import các lớp cần thiết cho dialog
+    try:
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout
+    except ImportError:
+        logger.error("Không thể import QDialog và QVBoxLayout từ PyQt5.QtWidgets")
+        return None
 
+    # Tạo dialog
     dialog = QDialog(parent)
     dialog.setWindowTitle("Eclipse-style Pareto Navigator")
     dialog.resize(1000, 700)

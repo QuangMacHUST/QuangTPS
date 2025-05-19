@@ -16,6 +16,8 @@ import logging
 import datetime
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any, Set, Union
+import time
+from enum import Enum
 
 from PyQt5.QtWidgets import (
     QWidget,
@@ -57,6 +59,7 @@ from PyQt5.QtWidgets import (
     QDateEdit,
     QInputDialog,
     QSizePolicy,
+    QProgressBar,
 )
 from PyQt5.QtGui import QColor, QIcon, QBrush, QPixmap, QImage, QPainter, QPen, QCursor
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QDate
@@ -124,12 +127,33 @@ try:
     # Import MCO-related modules
     from quangtps.optimization.mco.mco_engine import MCOEngine
 
+    # Import additional modules
+    from quangtps.ui.visualization_3d import (
+        create_3d_visualization_widget,
+        DisplayMode,
+        ViewOrientation,
+    )
+    from quangtps.ui.dvh_widget import create_dvh_widget
+    from quangtps.ui.eclipse_style_theme import (
+        apply_eclipse_theme,
+        create_eclipse_widget_style,
+    )
+    from quangtps.ui import get_colormap_for_display
+
     MODULES_AVAILABLE = True
 except ImportError as e:
     MODULES_AVAILABLE = False
     logging.error(f"Error importing QuangTPS modules: {e}")
 
 logger = logging.getLogger(__name__)
+
+
+class BeamPlanningMode(Enum):
+    """Enum cho các chế độ lập kế hoạch chùm tia."""
+
+    FORWARD = "forward"  # Lập kế hoạch thuận
+    INVERSE = "inverse"  # Lập kế hoạch ngược
+    MULTI_CRITERIA = "mco"  # Tối ưu hóa đa tiêu chí
 
 
 class ExternalBeamPlanningTab(QWidget):
@@ -152,6 +176,11 @@ class ExternalBeamPlanningTab(QWidget):
     patient_loaded = pyqtSignal(object)
     calculation_started = pyqtSignal()
     calculation_finished = pyqtSignal()
+    plan_changed = pyqtSignal(object)  # Phát khi kế hoạch thay đổi
+    dose_calculated = pyqtSignal(np.ndarray)  # Phát khi phân bố liều được tính toán
+    optimization_started = pyqtSignal()  # Phát khi bắt đầu tối ưu hóa
+    optimization_progress = pyqtSignal(int, str)  # Phát khi tiến độ tối ưu hóa thay đổi
+    optimization_finished = pyqtSignal(bool, str)  # Phát khi tối ưu hóa kết thúc
 
     def __init__(self, parent=None):
         """
@@ -162,6 +191,12 @@ class ExternalBeamPlanningTab(QWidget):
         parent : QWidget, optional
             Widget cha
         """
+        if not HAS_PYQT:
+            logger.error(
+                "PyQt5 không khả dụng. Không thể khởi tạo ExternalBeamPlanningTab."
+            )
+            return
+
         super().__init__(parent)
 
         # Khởi tạo trạng thái
@@ -171,6 +206,11 @@ class ExternalBeamPlanningTab(QWidget):
         self.current_image = None
         self.current_structure_set = None
         self.current_dose_grid = None
+        self.structures = {}
+        self.dose_grid = None
+        self.dose_spacing = None
+        self.dose_origin = None
+        self.planning_mode = BeamPlanningMode.INVERSE  # Chế độ mặc định
 
         # Initialize services
         self.service_registry = ServiceRegistry()
@@ -188,1010 +228,664 @@ class ExternalBeamPlanningTab(QWidget):
         # Khởi tạo các managers
         self.crt_manager = CRTManager() if MODULES_AVAILABLE else None
 
-        # Thiết lập giao diện
+        # Thuật toán tính liều và tối ưu hóa
+        self.dose_algorithm = None
+        self.optimizer = None
+
+        # Thiết lập UI
         self._init_ui()
+
+        # Kết nối tín hiệu
+        self._connect_signals()
 
     def _init_ui(self):
         """Khởi tạo giao diện tab External Beam Planning."""
-        # Main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Toolbar chính
-        self.main_toolbar = QToolBar("Planning Tools")
+        # Toolbar
+        toolbar = QToolBar("External Beam Planning Toolbar")
+        main_layout.addWidget(toolbar)
+        self._setup_toolbar_actions(toolbar)
 
-        # Patient & Plan selection controls
-        patient_label = QLabel("Patient:")
-        self.main_toolbar.addWidget(patient_label)
+        # Mode selection (Forward vs Inverse vs MCO)
+        mode_layout = QHBoxLayout()
+        mode_group = QGroupBox("Chế độ lập kế hoạch")
+        mode_layout.addWidget(mode_group)
 
-        self.patient_combo = QComboBox()
-        self.patient_combo.setMinimumWidth(200)
-        self.main_toolbar.addWidget(self.patient_combo)
-        self.main_toolbar.addSeparator()
-
-        plan_label = QLabel("Plan:")
-        self.main_toolbar.addWidget(plan_label)
-
-        self.plan_combo = QComboBox()
-        self.plan_combo.setMinimumWidth(150)
-        self.main_toolbar.addWidget(self.plan_combo)
-
-        # Add plan management buttons
-        new_plan_btn = QPushButton("New Plan")
-        new_plan_btn.setIcon(QIcon.fromTheme("document-new"))
-        self.main_toolbar.addWidget(new_plan_btn)
-
-        save_plan_btn = QPushButton("Save Plan")
-        save_plan_btn.setIcon(QIcon.fromTheme("document-save"))
-        self.main_toolbar.addWidget(save_plan_btn)
-
-        self.main_toolbar.addSeparator()
-
-        # Calculation buttons
-        calc_btn = QPushButton("Calculate Dose")
-        calc_btn.setIcon(QIcon.fromTheme("system-run"))
-        self.main_toolbar.addWidget(calc_btn)
-
-        optimize_btn = QPushButton("Optimize")
-        optimize_btn.setIcon(QIcon.fromTheme("preferences-system"))
-        self.main_toolbar.addWidget(optimize_btn)
-
-        main_layout.addWidget(self.main_toolbar)
-
-        # Main splitter (Eclipse-like layout)
-        self.main_splitter = QSplitter(Qt.Horizontal)
-
-        # Left panel: Plan Explorer
-        self.plan_explorer = QWidget()
-        plan_explorer_layout = QVBoxLayout(self.plan_explorer)
-        plan_explorer_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Create Object Explorer (Eclipse-like)
-        self.object_explorer = QTreeWidget()
-        self.object_explorer.setHeaderLabels(["Objects"])
-        self.object_explorer.setMinimumWidth(250)
-        self.object_explorer.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.object_explorer.customContextMenuRequested.connect(
-            self._show_object_explorer_menu
+        mode_group_layout = QHBoxLayout(mode_group)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(
+            ["Lập kế hoạch thuận", "Lập kế hoạch ngược", "Tối ưu hóa đa tiêu chí"]
         )
-        plan_explorer_layout.addWidget(self.object_explorer)
+        self.mode_combo.setCurrentIndex(1)  # Inverse planning là mặc định
+        mode_group_layout.addWidget(self.mode_combo)
 
-        # Create beam management panel
-        self.beams_table = QTableWidget()
-        self.beams_table.setColumnCount(5)
-        self.beams_table.setHorizontalHeaderLabels(
-            ["ID", "Name", "Technique", "Energy", "MU"]
+        main_layout.addLayout(mode_layout)
+
+        # Main splitter (chia đôi màn hình)
+        main_splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(main_splitter, 1)  # Stretch factor = 1
+
+        # Phần bên trái - Cấu hình kế hoạch
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+
+        # Beam configuration
+        beam_config_group = QGroupBox("Cấu hình chùm tia")
+        beam_config_layout = QVBoxLayout(beam_config_group)
+
+        # Beam list
+        self.beam_table = QTableWidget()
+        self.beam_table.setColumnCount(4)
+        self.beam_table.setHorizontalHeaderLabels(
+            ["Chùm tia", "Góc", "Trọng số", "MLC"]
         )
-        self.beams_table.setMinimumHeight(200)
-        plan_explorer_layout.addWidget(QLabel("Beams:"))
-        plan_explorer_layout.addWidget(self.beams_table)
+        self.beam_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        beam_config_layout.addWidget(self.beam_table)
 
-        # Beam control buttons
-        beam_buttons_layout = QHBoxLayout()
-        self.add_beam_btn = QPushButton("Add")
-        self.add_beam_btn.clicked.connect(self._add_beam)
+        # Beam action buttons
+        beam_actions = QHBoxLayout()
+        self.add_beam_btn = QPushButton("Thêm chùm")
+        self.edit_beam_btn = QPushButton("Sửa chùm")
+        self.remove_beam_btn = QPushButton("Xóa chùm")
 
-        self.edit_beam_btn = QPushButton("Edit")
-        self.edit_beam_btn.clicked.connect(self._edit_beam)
+        beam_actions.addWidget(self.add_beam_btn)
+        beam_actions.addWidget(self.edit_beam_btn)
+        beam_actions.addWidget(self.remove_beam_btn)
+        beam_config_layout.addLayout(beam_actions)
 
-        self.delete_beam_btn = QPushButton("Delete")
-        self.delete_beam_btn.clicked.connect(self._delete_beam)
+        left_layout.addWidget(beam_config_group)
 
-        beam_buttons_layout.addWidget(self.add_beam_btn)
-        beam_buttons_layout.addWidget(self.edit_beam_btn)
-        beam_buttons_layout.addWidget(self.delete_beam_btn)
-        plan_explorer_layout.addLayout(beam_buttons_layout)
+        # Structure selection
+        structure_group = QGroupBox("Cấu trúc")
+        structure_layout = QVBoxLayout(structure_group)
 
-        # Add to main splitter
-        self.main_splitter.addWidget(self.plan_explorer)
-
-        # Middle: Treatment visualization area with tabs (Eclipse-like)
-        self.treatment_view = QTabWidget()
-
-        # MPR View
-        from quangtps.ui.mpr_viewer import MPRViewer
-
-        self.mpr_viewer = MPRViewer()
-        self.mpr_viewer.setMinimumWidth(600)
-        self.treatment_view.addTab(self.mpr_viewer, "MPR")
-
-        # Connect MPR viewer signals
-        self.mpr_viewer.sliceChanged.connect(self._on_slice_changed)
-        self.mpr_viewer.mousePressed.connect(self._on_mpr_mouse_pressed)
-        self.mpr_viewer.mouseMoved.connect(self._on_mpr_mouse_moved)
-        self.mpr_viewer.mouseReleased.connect(self._on_mpr_mouse_released)
-
-        # 3D View with dose visualization
-        self.dose_3d_view = DoseVisualization3D()
-        self.treatment_view.addTab(self.dose_3d_view, "3D")
-
-        # Beam's Eye View
-        self.bev_view = QWidget()
-        self.treatment_view.addTab(self.bev_view, "BEV")
-
-        # Add treatment view to splitter
-        self.main_splitter.addWidget(self.treatment_view)
-
-        # Right: Planning Controls
-        self.planning_controls = QTabWidget()
-        self.planning_controls.setMinimumWidth(250)
-
-        # Prescription panel
-        self.prescription_panel = QWidget()
-        prescription_layout = QVBoxLayout(self.prescription_panel)
-
-        # Prescription form
-        prescription_form = QFormLayout()
-
-        self.target_combo = QComboBox()
-        prescription_form.addRow("Target:", self.target_combo)
-
-        self.technique_combo = QComboBox()
-        self.technique_combo.addItems(["3D CRT", "IMRT", "VMAT"])
-        prescription_form.addRow("Technique:", self.technique_combo)
-
-        self.dose_input = QDoubleSpinBox()
-        self.dose_input.setRange(0.1, 100.0)
-        self.dose_input.setValue(2.0)
-        self.dose_input.setSuffix(" Gy")
-        prescription_form.addRow("Dose:", self.dose_input)
-
-        self.fractions_input = QSpinBox()
-        self.fractions_input.setRange(1, 50)
-        self.fractions_input.setValue(1)
-        prescription_form.addRow("Fractions:", self.fractions_input)
-
-        prescription_layout.addLayout(prescription_form)
-
-        # Apply prescription button
-        self.apply_prescription_btn = QPushButton("Apply Prescription")
-        prescription_layout.addWidget(self.apply_prescription_btn)
-
-        prescription_layout.addStretch()
-
-        # Add to planning controls
-        self.planning_controls.addTab(self.prescription_panel, "Prescription")
-
-        # Optimization panel
-        self.optimization_panel = QWidget()
-        optimization_layout = QVBoxLayout(self.optimization_panel)
-
-        # Add optimization controls here
-        self.normal_optimization_btn = QPushButton("Standard Optimization")
-        self.normal_optimization_btn.clicked.connect(self._optimize_plan)
-
-        self.mco_btn = QPushButton("Multi-Criteria Optimization")
-        self.mco_btn.clicked.connect(self._open_mco_navigator)
-
-        optimization_layout.addWidget(self.normal_optimization_btn)
-        optimization_layout.addWidget(self.mco_btn)
-        optimization_layout.addStretch()
-
-        # Add to planning controls
-        self.planning_controls.addTab(self.optimization_panel, "Optimization")
-
-        # Dose calculation panel
-        self.dose_panel = QWidget()
-        dose_layout = QVBoxLayout(self.dose_panel)
-
-        # Algorithm selection
-        algorithm_form = QFormLayout()
-        self.algorithm_combo = QComboBox()
-        self.algorithm_combo.addItems(
-            ["Pencil Beam", "AAA", "Acuros XB", "Monte Carlo"]
+        self.structure_table = QTableWidget()
+        self.structure_table.setColumnCount(3)
+        self.structure_table.setHorizontalHeaderLabels(["Tên", "Loại", "Hiển thị"])
+        self.structure_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
         )
-        algorithm_form.addRow("Algorithm:", self.algorithm_combo)
+        structure_layout.addWidget(self.structure_table)
 
-        self.resolution_combo = QComboBox()
-        self.resolution_combo.addItems(["2.5 mm", "2.0 mm", "1.5 mm", "1.0 mm"])
-        algorithm_form.addRow("Resolution:", self.resolution_combo)
+        left_layout.addWidget(structure_group)
 
-        dose_layout.addLayout(algorithm_form)
+        # Optimization objectives
+        objectives_group = QGroupBox("Mục tiêu tối ưu hóa")
+        objectives_layout = QVBoxLayout(objectives_group)
 
-        # Calculation button
-        self.calculate_dose_btn = QPushButton("Calculate Dose")
-        self.calculate_dose_btn.clicked.connect(self._calculate_dose)
-        dose_layout.addWidget(self.calculate_dose_btn)
+        self.objectives_widget = self._create_objectives_widget()
+        objectives_layout.addWidget(self.objectives_widget)
 
-        # Dose display options
-        dose_layout.addWidget(QLabel("Dose Display:"))
+        left_layout.addWidget(objectives_group)
 
-        # Colorwash slider
-        colorwash_layout = QHBoxLayout()
-        colorwash_layout.addWidget(QLabel("Colorwash:"))
-        self.dose_slider = QSlider(Qt.Horizontal)
-        self.dose_slider.setRange(0, 100)
-        self.dose_slider.setValue(50)
-        self.dose_slider.valueChanged.connect(self._update_dose_display)
-        colorwash_layout.addWidget(self.dose_slider)
-        self.dose_value_label = QLabel("50%")
-        colorwash_layout.addWidget(self.dose_value_label)
-        dose_layout.addLayout(colorwash_layout)
+        main_splitter.addWidget(left_widget)
 
-        dose_layout.addStretch()
+        # Phần bên phải - Hiển thị 3D và DVH
+        right_widget = QTabWidget()
 
-        # Add to planning controls
-        self.planning_controls.addTab(self.dose_panel, "Dose")
+        # Tab 3D Visualization
+        self.vis3d_widget = None
+        try:
+            self.vis3d_widget = create_3d_visualization_widget()
+            if self.vis3d_widget:
+                right_widget.addTab(self.vis3d_widget, "3D")
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo widget hiển thị 3D: {str(e)}")
+            self.vis3d_widget = QLabel("Không thể hiển thị 3D")
+            right_widget.addTab(self.vis3d_widget, "3D")
 
-        # Evaluation panel
-        self.evaluation_panel = QWidget()
-        evaluation_layout = QVBoxLayout(self.evaluation_panel)
+        # Tab DVH
+        self.dvh_widget = None
+        try:
+            self.dvh_widget = create_dvh_widget()
+            if self.dvh_widget:
+                right_widget.addTab(self.dvh_widget, "DVH")
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo widget DVH: {str(e)}")
+            self.dvh_widget = QLabel("Không thể hiển thị DVH")
+            right_widget.addTab(self.dvh_widget, "DVH")
 
-        # DVH button
-        self.show_dvh_btn = QPushButton("Show DVH")
-        self.show_dvh_btn.clicked.connect(self._show_dvh)
-        evaluation_layout.addWidget(self.show_dvh_btn)
+        # Tab 2D Views
+        slices_widget = QWidget()
+        slices_layout = QGridLayout(slices_widget)
 
-        # Plan evaluation button
-        self.evaluate_plan_btn = QPushButton("Evaluate Plan")
-        self.evaluate_plan_btn.clicked.connect(self._evaluate_plan)
-        evaluation_layout.addWidget(self.evaluate_plan_btn)
+        # Placeholder cho slice views
+        axial_label = QLabel("Axial View (coming soon)")
+        axial_label.setAlignment(Qt.AlignCenter)
+        axial_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
 
-        # Initialize matplotlib for DVH visualization
-        if MATPLOTLIB_AVAILABLE:
-            self.dvh_figure = Figure(figsize=(4, 4), dpi=100)
-            self.dvh_ax = self.dvh_figure.add_subplot(111)
-            self.dvh_canvas = FigureCanvas(self.dvh_figure)
-            self.dvh_canvas.setMinimumHeight(200)
-            evaluation_layout.addWidget(self.dvh_canvas)
+        sagittal_label = QLabel("Sagittal View (coming soon)")
+        sagittal_label.setAlignment(Qt.AlignCenter)
+        sagittal_label.setStyleSheet(
+            "background-color: #f0f0f0; border: 1px solid #ccc;"
+        )
 
-            # DVH metrics table
-            self.metrics_table = QTableWidget(0, 6)
-            self.metrics_table.setHorizontalHeaderLabels(
-                ["Structure", "Min", "Max", "Mean", "D95", "V95"]
-            )
-            self.metrics_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.Stretch
-            )
-            self.metrics_table.setMinimumHeight(100)
-            evaluation_layout.addWidget(self.metrics_table)
+        coronal_label = QLabel("Coronal View (coming soon)")
+        coronal_label.setAlignment(Qt.AlignCenter)
+        coronal_label.setStyleSheet(
+            "background-color: #f0f0f0; border: 1px solid #ccc;"
+        )
 
-        evaluation_layout.addStretch()
+        slices_layout.addWidget(axial_label, 0, 0)
+        slices_layout.addWidget(sagittal_label, 0, 1)
+        slices_layout.addWidget(coronal_label, 1, 0, 1, 2)
 
-        # Add to planning controls
-        self.planning_controls.addTab(self.evaluation_panel, "Evaluation")
+        right_widget.addTab(slices_widget, "2D Views")
 
-        # Add planning controls to splitter
-        self.main_splitter.addWidget(self.planning_controls)
+        # Tab Plan Evaluation
+        evaluation_widget = QWidget()
+        evaluation_layout = QVBoxLayout(evaluation_widget)
 
-        # Set initial splitter sizes
-        self.main_splitter.setSizes([250, 600, 250])
+        # Placeholder cho plan evaluation
+        evaluation_label = QLabel("Plan Evaluation (coming soon)")
+        evaluation_label.setAlignment(Qt.AlignCenter)
+        evaluation_layout.addWidget(evaluation_label)
 
-        # Add splitter to main layout
-        main_layout.addWidget(self.main_splitter)
+        right_widget.addTab(evaluation_widget, "Đánh giá kế hoạch")
+
+        main_splitter.addWidget(right_widget)
+
+        # Thiết lập kích thước ban đầu
+        main_splitter.setSizes([400, 600])
 
         # Status bar
-        self.status_bar = QStatusBar()
-        self.status_bar.showMessage("Ready")
-        main_layout.addWidget(self.status_bar)
+        status_bar = QFrame()
+        status_bar.setFrameStyle(QFrame.StyledPanel | QFrame.Sunken)
+        status_bar_layout = QHBoxLayout(status_bar)
+        status_bar_layout.setContentsMargins(5, 2, 5, 2)
 
-        # Connect signals
-        self.patient_combo.currentIndexChanged.connect(self._on_patient_changed)
-        self.plan_combo.currentIndexChanged.connect(self._on_plan_changed)
-        new_plan_btn.clicked.connect(self._create_new_plan)
-        save_plan_btn.clicked.connect(self._save_current_plan)
-        calc_btn.clicked.connect(self._calculate_dose)
-        optimize_btn.clicked.connect(self._optimize_plan)
-        self.treatment_view.currentChanged.connect(self._on_view_tab_changed)
-        self.apply_prescription_btn.clicked.connect(self._apply_prescription)
-        self.dose_slider.valueChanged.connect(self._update_dose_display)
+        self.status_label = QLabel("Sẵn sàng")
+        status_bar_layout.addWidget(self.status_label)
 
-        # Set up plan name/date edit fields
-        self.plan_name_edit = QLineEdit()
-        self.plan_date_edit = QDateEdit()
-        self.plan_date_edit.setCalendarPopup(True)
-        self.plan_status_combo = QComboBox()
-        self.plan_status_combo.addItems(["PLANNING", "APPROVED", "DELIVERED"])
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        status_bar_layout.addWidget(self.progress_bar)
 
-    # Add MPR viewer event handlers
-    def _on_slice_changed(self, slice_idx, orientation):
-        """Handle slice change in MPR viewer."""
-        # Update the corresponding view
-        if hasattr(self, "current_dose_grid") and self.current_dose_grid:
-            self._update_dose_overlay()
+        main_layout.addWidget(status_bar)
 
-        # Update status bar with slice position
-        from quangtps.ui.mpr_viewer import ViewOrientation
-
-        orientation_str = "Axial"
-        if orientation == ViewOrientation.SAGITTAL:
-            orientation_str = "Sagittal"
-        elif orientation == ViewOrientation.CORONAL:
-            orientation_str = "Coronal"
-
-        self.status_bar.showMessage(f"{orientation_str} Slice: {slice_idx}")
-
-    def _on_mpr_mouse_pressed(self, view_id, view_pos, image_pos):
-        """Handle mouse press event in MPR viewer."""
-        # Can be used for various interactions (contouring, beam positioning, etc.)
-        pass
-
-    def _on_mpr_mouse_moved(self, view_id, view_pos, image_pos):
-        """Handle mouse move event in MPR viewer."""
-        # Can be used for various interactions and to show current position/dose value
-        if hasattr(self, "current_dose_grid") and self.current_dose_grid:
+        # Áp dụng Eclipse style nếu có thể
+        if HAS_QUANGTPS_MODULES:
             try:
-                # Get the dose at the current position
-                x, y, z = (
-                    image_pos.x(),
-                    image_pos.y(),
-                    self.mpr_viewer.get_current_slice_index(),
-                )
-                dose_value = self.current_dose_grid.get_dose_at_point(x, y, z)
-
-                # Display in status bar
-                self.status_bar.showMessage(
-                    f"Position: ({x}, {y}, {z}), Dose: {dose_value:.2f} Gy"
-                )
+                self.setStyleSheet(create_eclipse_widget_style("tab"))
             except:
-                # In case of errors (out of bounds, etc.)
-                self.status_bar.showMessage(
-                    f"Position: ({image_pos.x()}, {image_pos.y()})"
+                pass
+
+    def _setup_toolbar_actions(self, toolbar):
+        """Thiết lập các action cho toolbar."""
+        # New Plan
+        new_plan_action = QAction("Kế hoạch mới", self)
+        new_plan_action.triggered.connect(self._on_new_plan)
+        toolbar.addAction(new_plan_action)
+
+        # Save Plan
+        save_plan_action = QAction("Lưu kế hoạch", self)
+        save_plan_action.triggered.connect(self._on_save_plan)
+        toolbar.addAction(save_plan_action)
+
+        toolbar.addSeparator()
+
+        # Calculate Dose
+        calc_dose_action = QAction("Tính toán liều", self)
+        calc_dose_action.triggered.connect(self._on_calculate_dose)
+        toolbar.addAction(calc_dose_action)
+
+        # Optimize
+        optimize_action = QAction("Tối ưu hóa", self)
+        optimize_action.triggered.connect(self._on_optimize)
+        toolbar.addAction(optimize_action)
+
+        toolbar.addSeparator()
+
+        # Algorithm selection
+        self.algorithm_combo = QComboBox()
+        if HAS_QUANGTPS_MODULES:
+            try:
+                from quangtps.dose.algorithms import get_algorithm_display_names
+
+                self.algorithm_combo.addItems(get_algorithm_display_names())
+            except:
+                self.algorithm_combo.addItems(
+                    ["Monte Carlo", "Pencil Beam", "Collapsed Cone"]
                 )
         else:
-            # Just show position if no dose grid
-            self.status_bar.showMessage(f"Position: ({image_pos.x()}, {image_pos.y()})")
-
-    def _on_mpr_mouse_released(self, view_id, view_pos, image_pos):
-        """Handle mouse release event in MPR viewer."""
-        # Can be used for various interactions (contouring, beam positioning, etc.)
-        pass
-
-    def _on_view_tab_changed(self, index):
-        """Handle tab change in treatment view."""
-        view_type = self.treatment_view.tabText(index)
-        self.status_bar.showMessage(f"Switched to {view_type} view")
-
-    def _apply_prescription(self):
-        """
-        Apply the prescription to the current plan.
-
-        This method retrieves the values from the prescription input fields
-        and applies them to the current treatment plan.
-        """
-        try:
-            # Get prescription values from input fields
-            target_name = self.target_combo.currentText()
-            # Find target ID if available
-            target_id = None
-            if self.current_plan and hasattr(self.current_plan, "structure_set"):
-                for structure in self.current_plan.structure_set.structures:
-                    if structure.name == target_name:
-                        target_id = structure.id
-                        break
-
-            dose = self.dose_input.value()
-            fractions = self.fractions_input.value()
-            technique = self.technique_combo.currentText()
-
-            # Create prescription
-            if (
-                hasattr(self.current_plan, "prescription")
-                and self.current_plan.prescription is not None
-            ):
-                if hasattr(self.current_plan.prescription, "targets"):
-                    # Update existing prescription
-                    self.current_plan.prescription.dose = dose
-                    self.current_plan.prescription.fractions = fractions
-                    self.current_plan.prescription.technique = technique
-                    # Update target if we have the ID
-                    if target_id and target_name:
-                        self.current_plan.prescription.add_target(
-                            name=target_name, dose=dose
-                        )
-            else:
-                # Create new prescription
-                from quangtps.planning.prescription import Prescription
-
-                prescription = Prescription(
-                    dose=dose, fractions=fractions, technique=technique
-                )
-                # Add target if we have the ID and name
-                if target_id and target_name:
-                    prescription.add_target(name=target_name, dose=dose)
-                self.current_plan.prescription = prescription
-
-            # Update UI
-            self.status_bar.showMessage(
-                f"Prescription: {dose} Gy in {fractions} fractions to {target_name}"
+            self.algorithm_combo.addItems(
+                ["Monte Carlo", "Pencil Beam", "Collapsed Cone"]
             )
 
-            # Update dose visualization
-            if hasattr(self.dose_3d_view, "prescription_spinbox"):
-                self.dose_3d_view.prescription_spinbox.setValue(dose)
+        toolbar.addWidget(QLabel("Thuật toán: "))
+        toolbar.addWidget(self.algorithm_combo)
 
-            # Save the plan
-            self._save_current_plan()
+        toolbar.addSeparator()
 
-        except Exception as e:
-            logger.error(f"Error applying prescription: {e}")
-            QMessageBox.critical(
-                self, "Error", f"Failed to apply prescription: {str(e)}"
-            )
+        # Export Report
+        export_report_action = QAction("Xuất báo cáo", self)
+        export_report_action.triggered.connect(self._on_export_report)
+        toolbar.addAction(export_report_action)
 
-    def _update_dose_overlay(self):
-        """Update dose overlay on MPR images."""
-        if not hasattr(self, "current_dose_grid") or not self.current_dose_grid:
+    def _create_objectives_widget(self):
+        """
+        Tạo widget chứa danh sách và chỉnh sửa mục tiêu tối ưu hóa.
+
+        Returns
+        -------
+        QWidget
+            Widget chứa bảng mục tiêu và các nút điều khiển
+        """
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Bảng mục tiêu
+        self.objectives_table = QTableWidget()
+        self.objectives_table.setColumnCount(5)
+        self.objectives_table.setHorizontalHeaderLabels(
+            ["Cấu trúc", "Loại", "Liều/Thể tích", "Giá trị", "Trọng số"]
+        )
+        self.objectives_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+        layout.addWidget(self.objectives_table)
+
+        # Nút điều khiển
+        controls_layout = QHBoxLayout()
+
+        self.add_objective_btn = QPushButton("Thêm")
+        self.add_objective_btn.clicked.connect(self._on_add_objective)
+        controls_layout.addWidget(self.add_objective_btn)
+
+        self.edit_objective_btn = QPushButton("Sửa")
+        controls_layout.addWidget(self.edit_objective_btn)
+
+        self.remove_objective_btn = QPushButton("Xóa")
+        self.remove_objective_btn.clicked.connect(self._on_remove_objective)
+        controls_layout.addWidget(self.remove_objective_btn)
+
+        layout.addLayout(controls_layout)
+
+        # Trạng thái tối ưu hóa
+        status_layout = QHBoxLayout()
+
+        self.clear_objectives_btn = QPushButton("Xóa tất cả")
+        status_layout.addWidget(self.clear_objectives_btn)
+
+        status_layout.addStretch()
+
+        self.load_protocol_btn = QPushButton("Tải protocol")
+        status_layout.addWidget(self.load_protocol_btn)
+
+        layout.addLayout(status_layout)
+
+        return widget
+
+    def _connect_signals(self):
+        """Kết nối các tín hiệu và slots."""
+        # Kết nối mode combo
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+
+        # Kết nối các tín hiệu tối ưu hóa với UI
+        self.optimization_started.connect(lambda: self.progress_bar.setVisible(True))
+        self.optimization_progress.connect(
+            lambda value, text: self._update_optimization_progress(value, text)
+        )
+        self.optimization_finished.connect(
+            lambda success, msg: self._on_optimization_finished(success, msg)
+        )
+
+        # Kết nối với DVH widget nếu có
+        if hasattr(self, "dvh_widget") and self.dvh_widget:
+            self.dose_calculated.connect(lambda: self._update_dvh_display())
+
+    def _on_new_plan(self):
+        """Xử lý khi người dùng tạo kế hoạch mới."""
+        # TODO: Implement new plan dialog
+        QMessageBox.information(
+            self, "Thông báo", "Chức năng tạo kế hoạch mới sẽ được bổ sung sau."
+        )
+
+    def _on_calculate_dose(self):
+        """Xử lý khi người dùng tính toán phân bố liều."""
+        if not self.current_plan:
+            QMessageBox.warning(self, "Cảnh báo", "Chưa có kế hoạch nào được tạo.")
             return
 
-        try:
-            # Convert dose grid to overlay format expected by MPR viewer
-            # This will depend on how your MPR viewer handles overlays
-            logger.debug("Updating dose overlay on MPR viewer")
+        # TODO: Implement dose calculation
+        QMessageBox.information(
+            self, "Thông báo", "Chức năng tính toán liều đang được phát triển."
+        )
 
-            # Example implementation (actual implementation depends on your MPR viewer API)
-            if hasattr(self.mpr_viewer, "add_dose_overlay"):
-                # Get colormap and opacity from dose slider
-                opacity = self.dose_slider.value() / 100.0
-
-                # Get prescription dose for normalization
-                prescription_dose = 2.0  # Default
-                if hasattr(self.current_plan, "prescription") and hasattr(
-                    self.current_plan.prescription, "dose"
-                ):
-                    prescription_dose = self.current_plan.prescription.dose
-
-                # Add dose overlay to MPR viewer
-                self.mpr_viewer.add_dose_overlay(
-                    self.current_dose_grid,
-                    prescription_dose=prescription_dose,
-                    opacity=opacity,
-                )
-
-                # Force refresh
-                self.mpr_viewer.update_all_views()
-
-        except Exception as e:
-            logger.error(f"Error updating dose overlay: {e}")
-
-    def _show_dvh(self):
-        """Show DVH for the current plan."""
-        if not hasattr(self, "current_dose_grid") or not self.current_dose_grid:
-            QMessageBox.warning(self, "Warning", "Please calculate dose first")
+    def _on_optimize(self):
+        """Xử lý khi người dùng tối ưu hóa kế hoạch."""
+        if not self.current_plan:
+            QMessageBox.warning(self, "Cảnh báo", "Chưa có kế hoạch nào được tạo.")
             return
 
-        # Switch to the evaluation tab
-        self.planning_controls.setCurrentIndex(3)  # Index of Evaluation tab
+        # TODO: Implement optimization
+        QMessageBox.information(
+            self, "Thông báo", "Chức năng tối ưu hóa đang được phát triển."
+        )
 
-        try:
-            # Calculate DVH
-            self._update_evaluation()
+        # Hiển thị giả tiến độ tối ưu hóa (cho demo)
+        self._fake_optimization_progress()
 
-            # Can also show a standalone DVH dialog
-            from quangtps.ui.dvh_view import DVHView
+    def _on_mode_changed(self, index):
+        """
+        Xử lý khi chế độ lập kế hoạch thay đổi.
 
-            dvh_dialog = QDialog(self)
-            dvh_dialog.setWindowTitle("Dose Volume Histogram")
-            dvh_dialog.setMinimumSize(800, 600)
-
-            dvh_layout = QVBoxLayout(dvh_dialog)
-            dvh_view = DVHView()
-            dvh_view.set_treatment_plan(self.current_plan)
-            dvh_layout.addWidget(dvh_view)
-
-            dvh_dialog.exec_()
-
-        except Exception as e:
-            logger.error(f"Error showing DVH: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to show DVH: {str(e)}")
-
-    def _evaluate_plan(self):
-        """Open plan evaluation dialog."""
-        if not hasattr(self, "current_plan") or not self.current_plan:
-            QMessageBox.warning(self, "Warning", "Please select a plan first")
+        Parameters
+        ----------
+        index : int
+            Chỉ mục của chế độ mới trong combo box
+        """
+        # Cập nhật chế độ kế hoạch
+        if index == 0:
+            self.planning_mode = BeamPlanningMode.FORWARD
+        elif index == 1:
+            self.planning_mode = BeamPlanningMode.INVERSE
+        elif index == 2:
+            self.planning_mode = BeamPlanningMode.MULTI_CRITERIA
+        else:
             return
 
-        try:
-            # Placeholder - in a full implementation, this would open the plan evaluation dialog
+        # Cập nhật UI dựa trên chế độ mới
+        self._update_ui_for_mode()
+
+    def _update_ui_for_mode(self):
+        """Cập nhật UI dựa trên chế độ lập kế hoạch hiện tại."""
+        if self.planning_mode == BeamPlanningMode.FORWARD:
+            # Trong chế độ forward planning, ẩn bảng mục tiêu tối ưu hóa
+            if hasattr(self, "objectives_group"):
+                self.objectives_group.setVisible(False)
+        elif self.planning_mode == BeamPlanningMode.INVERSE:
+            # Trong chế độ inverse planning, hiện bảng mục tiêu tối ưu hóa
+            if hasattr(self, "objectives_group"):
+                self.objectives_group.setVisible(True)
+        elif self.planning_mode == BeamPlanningMode.MULTI_CRITERIA:
+            # Trong chế độ MCO, hiện bảng mục tiêu tối ưu hóa và nút MCO Navigator
+            if hasattr(self, "objectives_group"):
+                self.objectives_group.setVisible(True)
+            # TODO: Hiển thị nút MCO Navigator
+
+    def _update_optimization_progress(self, value, text):
+        """
+        Cập nhật hiển thị tiến độ tối ưu hóa.
+
+        Parameters
+        ----------
+        value : int
+            Giá trị tiến độ (0-100)
+        text : str
+            Mô tả trạng thái
+        """
+        self.progress_bar.setValue(value)
+        self.progress_bar.setFormat(f"{value}% - {text}")
+        self.status_label.setText(text)
+        QApplication.processEvents()  # Cập nhật UI ngay lập tức
+
+    def _on_optimization_finished(self, success, message):
+        """
+        Xử lý khi tối ưu hóa kết thúc.
+
+        Parameters
+        ----------
+        success : bool
+            True nếu tối ưu hóa thành công, False nếu thất bại
+        message : str
+            Thông báo kết quả
+        """
+        self.progress_bar.setVisible(False)
+
+        if success:
+            self.status_label.setText(f"Tối ưu hóa thành công: {message}")
+
+            # Cập nhật hiển thị DVH và 3D
+            self._update_dvh_display()
+
             QMessageBox.information(
-                self,
-                "Plan Evaluation",
-                "This is a placeholder for plan evaluation.\n"
-                "In a full implementation, this would open the plan evaluation dialog.",
+                self, "Tối ưu hóa", f"Đã hoàn tất tối ưu hóa: {message}"
             )
-        except Exception as e:
-            logger.error(f"Error evaluating plan: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to evaluate plan: {str(e)}")
+        else:
+            self.status_label.setText(f"Tối ưu hóa thất bại: {message}")
+            QMessageBox.warning(self, "Tối ưu hóa", f"Lỗi khi tối ưu hóa: {message}")
 
-    def _show_object_explorer_menu(self, position):
-        """Show context menu for the object explorer."""
-        # Get selected item
-        selected_items = self.object_explorer.selectedItems()
-        if not selected_items:
+    def _on_save_plan(self):
+        """Xử lý khi người dùng lưu kế hoạch hiện tại."""
+        # TODO: Implement save plan functionality
+        QMessageBox.information(
+            self, "Thông báo", "Chức năng lưu kế hoạch sẽ được bổ sung sau."
+        )
+
+    def _on_export_report(self):
+        """Xử lý khi người dùng xuất báo cáo kế hoạch."""
+        # TODO: Implement export report functionality
+        QMessageBox.information(
+            self, "Thông báo", "Chức năng xuất báo cáo đang được phát triển."
+        )
+
+    def _on_add_objective(self):
+        """Xử lý khi người dùng thêm mục tiêu tối ưu hóa mới."""
+        # Đảm bảo có cấu trúc
+        if not self.structures:
+            QMessageBox.warning(
+                self, "Cảnh báo", "Cần tải cấu trúc trước khi thêm mục tiêu tối ưu."
+            )
             return
 
-        # Create context menu
-        context_menu = QMenu(self)
+        # Demo: Thêm một mục tiêu mẫu
+        row_count = self.objectives_table.rowCount()
+        self.objectives_table.insertRow(row_count)
 
-        # Add actions based on the type of selected item
-        selected_item = selected_items[0]
-        item_type = selected_item.text(1)
+        # Giả sử có ít nhất 1 cấu trúc
+        structure_names = list(self.structures.keys())
+        first_structure = structure_names[0] if structure_names else "PTV"
 
-        if item_type == "Patient":
-            context_menu.addAction("View Patient Details")
-        elif item_type == "Structure":
-            context_menu.addAction("Hide Structure")
-            context_menu.addAction("Show Structure")
-            context_menu.addSeparator()
-            context_menu.addAction("Change Color")
-        elif item_type == "Plan":
-            context_menu.addAction("Delete Plan")
+        self.objectives_table.setItem(row_count, 0, QTableWidgetItem(first_structure))
+        self.objectives_table.setItem(row_count, 1, QTableWidgetItem("Min Dose"))
+        self.objectives_table.setItem(row_count, 2, QTableWidgetItem("Dose"))
+        self.objectives_table.setItem(row_count, 3, QTableWidgetItem("50 Gy"))
+        self.objectives_table.setItem(row_count, 4, QTableWidgetItem("100"))
 
-        # Show the menu
-        context_menu.exec_(self.object_explorer.mapToGlobal(position))
-
-    def set_patient(self, patient):
-        """Set the current patient."""
-        if not patient:
+    def _on_remove_objective(self):
+        """Xử lý khi người dùng xóa mục tiêu tối ưu hóa."""
+        # Lấy hàng được chọn
+        selected_rows = self.objectives_table.selectedItems()
+        if not selected_rows:
             return
 
-        self.current_patient = patient
+        selected_row = selected_rows[0].row()
+        self.objectives_table.removeRow(selected_row)
 
-        # Update patient combo
-        current_text = self.patient_combo.currentText()
-        if current_text != patient.name:
-            index = self.patient_combo.findText(patient.name)
-            if index >= 0:
-                self.patient_combo.setCurrentIndex(index)
-            else:
-                self.patient_combo.addItem(patient.name)
-                self.patient_combo.setCurrentIndex(self.patient_combo.count() - 1)
-
-        # Load patient data
-        self.current_image = None
-        if hasattr(patient, "images") and patient.images:
-            self.current_image = patient.images[0]  # Use first image for now
-
-            # Set image in 3D view
-            if hasattr(self.dose_3d_view, "set_image_data"):
-                # Get image data, spacing, and origin
-                image_data = getattr(self.current_image, "data", None)
-                spacing = getattr(self.current_image, "spacing", None)
-                origin = getattr(self.current_image, "origin", None)
-
-                if image_data is not None:
-                    self.dose_3d_view.set_image_data(image_data, spacing, origin)
-
-            # Set image in MPR viewer
-            if hasattr(self.mpr_viewer, "set_image"):
-                self.mpr_viewer.set_image(self.current_image)
-
-        self.current_structure_set = None
-        if hasattr(patient, "structure_set") and patient.structure_set:
-            self.current_structure_set = patient.structure_set
-
-            # Add structures to 3D view
-            if (
-                hasattr(self.dose_3d_view, "add_structure")
-                and self.current_structure_set
-            ):
-                for structure in self.current_structure_set.structures:
-                    # Get structure data
-                    structure_id = getattr(structure, "id", f"struct_{id(structure)}")
-                    mask = getattr(structure, "mask", None)
-                    color = getattr(structure, "color", (1.0, 0.0, 0.0))
-                    name = getattr(structure, "name", structure_id)
-
-                    if mask is not None:
-                        self.dose_3d_view.add_structure(
-                            structure_id, mask, color, 0.5, name
-                        )
-
-            # Add structures to MPR viewer
-            if (
-                hasattr(self.mpr_viewer, "add_structure_overlay")
-                and self.current_structure_set
-            ):
-                for structure in self.current_structure_set.structures:
-                    # Get structure data
-                    structure_id = getattr(structure, "id", f"struct_{id(structure)}")
-                    mask = getattr(structure, "mask", None)
-                    color = getattr(structure, "color", (1.0, 0.0, 0.0))
-
-                    if mask is not None:
-                        self.mpr_viewer.add_structure_overlay(
-                            structure_id, structure, color
-                        )
-
-        # Load patient plans
-        self._load_patient_plans()
-
-        # Update target structures dropdown
-        self.target_combo.clear()
-        if self.current_structure_set:
-            for structure in self.current_structure_set.structures:
-                if hasattr(structure, "type") and structure.type == "PTV":
-                    self.target_combo.addItem(structure.name, structure.id)
-
-        # Update object explorer
-        self._update_object_explorer()
-
-        # Emit signal
-        self.patient_loaded.emit(patient)
-
-        # Update status
-        self.status_bar.showMessage(f"Patient {patient.name} loaded.")
-
-    def _load_patient_plans(self):
+    def set_plan(self, plan):
         """
-        Load all plans for the current patient
-        """
-        self.plan_combo.clear()
+        Thiết lập kế hoạch cho tab.
 
-        if not self.current_patient:
+        Parameters
+        ----------
+        plan : Plan
+            Đối tượng kế hoạch
+        """
+        self.current_plan = plan
+
+        # Cập nhật UI
+        if plan:
+            self.status_label.setText(f"Đã tải kế hoạch: {plan.name}")
+
+            # Cập nhật thông tin kế hoạch trong UI
+            self._update_plan_display()
+
+    def set_structures(self, structures):
+        """
+        Thiết lập danh sách cấu trúc.
+
+        Parameters
+        ----------
+        structures : Dict[str, Any]
+            Dict với khóa là ID cấu trúc và giá trị là đối tượng Structure
+        """
+        self.structures = structures
+
+        if not hasattr(self, "structure_table"):
             return
 
-        try:
-            plans = self.plan_db.get_plans_by_patient_id(self.current_patient.id)
+        # Xóa bảng cấu trúc hiện tại
+        self.structure_table.setRowCount(0)
 
-            for plan in plans:
-                self.plan_combo.addItem(plan.name, plan.id)
+        # Thêm cấu trúc vào bảng
+        for structure_id, structure in structures.items():
+            row = self.structure_table.rowCount()
+            self.structure_table.insertRow(row)
 
-        except Exception as e:
-            logger.error(f"Error loading patient plans: {e}")
-            QMessageBox.critical(self, "Error", f"Could not load plans: {str(e)}")
+            # Tên
+            self.structure_table.setItem(row, 0, QTableWidgetItem(structure.name))
 
-    def _update_object_explorer(self):
-        """Update the object explorer with patient data."""
-        self.object_explorer.clear()
+            # Loại (Target, OAR...)
+            structure_type = (
+                "Target"
+                if "PTV" in structure.name
+                or "GTV" in structure.name
+                or "CTV" in structure.name
+                else "OAR"
+            )
+            self.structure_table.setItem(row, 1, QTableWidgetItem(structure_type))
 
-        if not self.current_patient:
-            return
+            # Checkbox hiển thị
+            show_cb = QCheckBox()
+            show_cb.setChecked(True)
+            self.structure_table.setCellWidget(row, 2, show_cb)
 
-        # Add patient root item
-        patient_item = QTreeWidgetItem(self.object_explorer)
-        patient_item.setText(0, self.current_patient.name)
-        patient_item.setText(1, "Patient")
+        # Cập nhật widget DVH nếu có
+        if hasattr(self, "dvh_widget") and self.dvh_widget:
+            self.dvh_widget.set_structures(structures)
 
-        # Add studies, images, etc.
-        # This would be expanded in a full implementation
+        # Cập nhật hiển thị 3D nếu có
+        # TODO: Add structures to 3D view
 
-    def _update_evaluation(self):
+    def set_dose_grid(self, dose_grid, spacing=None, origin=None):
         """
-        Update the evaluation tab with DVH data from the current treatment plan.
-        Uses the DVHCalculator from evaluation module to calculate and display DVH data.
+        Thiết lập lưới liều.
+
+        Parameters
+        ----------
+        dose_grid : np.ndarray
+            Mảng 3D chứa dữ liệu liều
+        spacing : tuple, optional
+            Khoảng cách voxel (mm)
+        origin : tuple, optional
+            Tọa độ gốc (mm)
         """
-        import logging
-        import numpy as np
-        import matplotlib.cm as cm
-        from PyQt5.QtWidgets import QTableWidgetItem
-        import SimpleITK as sitk
-        from quangtps.evaluation.dvh.dvh_calculator import DVHCalculator
+        self.dose_grid = dose_grid
+        self.dose_spacing = spacing
+        self.dose_origin = origin
 
-        logging.info("Updating evaluation tab")
+        # Phát tín hiệu liều đã được tính toán
+        self.dose_calculated.emit(dose_grid)
 
-        # Clear previous data
-        self.dvh_ax.clear()
+        # Cập nhật hiển thị 3D
+        if hasattr(self, "vis3d_widget") and self.vis3d_widget:
+            self.vis3d_widget.set_dose_data(dose_grid, spacing, origin)
 
-        # Set up the plot
-        self.dvh_ax.set_xlabel("Dose (Gy)")
-        self.dvh_ax.set_ylabel("Volume (%)")
-        self.dvh_ax.set_title("Dose Volume Histogram")
-        self.dvh_ax.grid(True)
+        # Cập nhật DVH
+        self._update_dvh_display()
 
-        # Check if we have a treatment plan loaded
+    def _update_plan_display(self):
+        """Cập nhật hiển thị thông tin kế hoạch."""
         if not self.current_plan:
-            logging.warning("No treatment plan loaded, showing placeholder DVH")
-            self._show_placeholder_dvh()
             return
 
-        # Check if plan has structure set and dose
+        # Cập nhật bảng chùm tia
+        if hasattr(self, "beam_table"):
+            self.beam_table.setRowCount(0)
+
+            # Thêm thông tin các chùm tia
+            if hasattr(self.current_plan, "beams"):
+                for i, beam in enumerate(self.current_plan.beams):
+                    row = self.beam_table.rowCount()
+                    self.beam_table.insertRow(row)
+
+                    self.beam_table.setItem(row, 0, QTableWidgetItem(f"Beam {i + 1}"))
+                    self.beam_table.setItem(
+                        row, 1, QTableWidgetItem(f"{beam.gantry_angle:.1f}°")
+                    )
+                    self.beam_table.setItem(
+                        row, 2, QTableWidgetItem(f"{beam.weight:.2f}")
+                    )
+                    self.beam_table.setItem(
+                        row,
+                        3,
+                        QTableWidgetItem("Yes" if hasattr(beam, "mlc") else "No"),
+                    )
+
+    def _update_dvh_display(self):
+        """Cập nhật hiển thị DVH sau khi tính liều hoặc tối ưu hóa."""
         if (
-            not hasattr(self.current_plan, "structure_set")
-            or self.current_plan.structure_set is None
+            not hasattr(self, "dvh_widget")
+            or not self.dvh_widget
+            or not self.dose_grid is not None
         ):
-            logging.warning("No structure set available in the current plan")
-            self._show_placeholder_dvh()
             return
 
-        if not hasattr(self.current_plan, "dose") or self.current_plan.dose is None:
-            logging.warning("No dose grid available in the current plan")
-            self._show_placeholder_dvh()
-            return
+        # Cập nhật DVH cho tất cả cấu trúc
+        self.dvh_widget.set_dose_grid(
+            self.dose_grid, self.dose_spacing, self.dose_origin
+        )
+        self.dvh_widget.calculate_and_display_dvh()
 
-        # Get dose grid data
-        dose_array = self.current_plan.dose.dose_grid
+    def _fake_optimization_progress(self):
+        """Giả tiến độ tối ưu hóa cho mục đích demo."""
+        # Thông báo bắt đầu
+        self.optimization_started.emit()
 
-        # Convert dose array to SimpleITK image for DVHCalculator
-        if hasattr(self.current_plan.dose, "spacing") and hasattr(
-            self.current_plan.dose, "origin"
-        ):
-            spacing = self.current_plan.dose.spacing
-            origin = self.current_plan.dose.origin
-        else:
-            # Default values if not available
-            spacing = (1.0, 1.0, 1.0)
-            origin = (0.0, 0.0, 0.0)
-
-        # Create SimpleITK dose image
-        dose_sitk = sitk.GetImageFromArray(dose_array)
-        dose_sitk.SetSpacing(spacing)
-        dose_sitk.SetOrigin(origin)
-
-        # Prepare metrics table
-        self.metrics_table.setRowCount(0)
-
-        # Define colors for different structure types
-        structure_colors = {
-            "PTV": "red",
-            "CTV": "orange",
-            "GTV": "yellow",
-            "OAR": "blue",
-            "ORGAN": "green",
-            "OTHER": "gray",
-        }
-
-        # Create DVH Calculator with 1000 bins for smooth curves
-        dvh_calculator = DVHCalculator(num_bins=1000)
-
-        # Track if we have plotted any data
-        has_data = False
-
-        try:
-            # Process each structure
-            for i, structure in enumerate(self.current_plan.structure_set.structures):
-                # Skip empty structures or those flagged as not for calculation
-                if (
-                    not hasattr(structure, "mask")
-                    or not structure.mask.any()
-                    or getattr(structure, "skip_calc", False)
-                ):
-                    continue
-
-                # Determine structure type and color
-                structure_type = "OTHER"
-                for type_key in structure_colors.keys():
-                    if type_key in structure.name.upper():
-                        structure_type = type_key
-                        break
-
-                color = structure_colors.get(structure_type, structure_colors["OTHER"])
-
-                # Convert structure mask to SimpleITK image
-                mask_sitk = sitk.GetImageFromArray(structure.mask.astype(np.uint8))
-                mask_sitk.SetSpacing(spacing)
-                mask_sitk.SetOrigin(origin)
-
-                try:
-                    # Calculate DVH data using DVHCalculator
-                    dvh_data = dvh_calculator.calculate_dvh_data(
-                        dose_sitk, mask_sitk, structure.name, cumulative=True
-                    )
-
-                    # Plot DVH
-                    self.dvh_ax.plot(
-                        dvh_data.dose_bins,
-                        dvh_data.volume_bins,
-                        color=color,
-                        label=structure.name,
-                        linewidth=2,
-                    )
-
-                    # Add row to metrics table
-                    row = self.metrics_table.rowCount()
-                    self.metrics_table.insertRow(row)
-
-                    # Structure name
-                    self.metrics_table.setItem(row, 0, QTableWidgetItem(structure.name))
-
-                    # Metrics: Min, Max, Mean, D95, V95%
-                    self.metrics_table.setItem(
-                        row, 1, QTableWidgetItem(f"{dvh_data.min_dose:.1f} Gy")
-                    )
-                    self.metrics_table.setItem(
-                        row, 2, QTableWidgetItem(f"{dvh_data.max_dose:.1f} Gy")
-                    )
-                    self.metrics_table.setItem(
-                        row, 3, QTableWidgetItem(f"{dvh_data.mean_dose:.1f} Gy")
-                    )
-
-                    # D95 (dose to 95% of the volume)
-                    d95 = dvh_data.get_dx(95.0)
-                    self.metrics_table.setItem(
-                        row, 4, QTableWidgetItem(f"{d95:.1f} Gy")
-                    )
-
-                    # V95% (volume receiving 95% of prescription dose)
-                    if (
-                        hasattr(self.current_plan, "prescription")
-                        and self.current_plan.prescription
-                        and hasattr(self.current_plan.prescription, "dose")
-                    ):
-                        prescription_dose = self.current_plan.prescription.dose
-                        v95 = dvh_data.get_vx(0.95 * prescription_dose, percent=True)
-                        self.metrics_table.setItem(
-                            row, 5, QTableWidgetItem(f"{v95:.1f}%")
-                        )
-                    else:
-                        # If no prescription, use 95% of max dose for this structure
-                        v95 = dvh_data.get_vx(0.95 * dvh_data.max_dose, percent=True)
-                        self.metrics_table.setItem(
-                            row, 5, QTableWidgetItem(f"{v95:.1f}%")
-                        )
-
-                    has_data = True
-
-                except Exception as e:
-                    logging.error(
-                        f"Error calculating DVH for structure {structure.name}: {str(e)}"
-                    )
-                    continue
-
-        except Exception as e:
-            logging.error(f"Error updating evaluation: {str(e)}")
-            self._show_placeholder_dvh()
-            return
-
-        # Add legend if we have data
-        if has_data:
-            self.dvh_ax.legend(loc="upper right")
-        else:
-            self._show_placeholder_dvh()
-            return
-
-        # Draw the canvas
-        self.dvh_canvas.draw()
-
-    def _calculate_dose(self):
-        """Calculate dose for the current plan."""
-        if not self.current_plan:
-            QMessageBox.warning(
-                self, "No Plan", "Please create or select a plan first."
-            )
-            return
-
-        if not self.current_plan.beams:
-            QMessageBox.warning(
-                self, "No Beams", "Please add at least one beam to the plan."
-            )
-            return
-
-        # Use the selected algorithm and resolution
-        algorithm = self.algorithm_combo.currentText()
-        resolution = self.resolution_combo.currentText()
-
-        # Show progress dialog
-        progress = QProgressDialog("Calculating dose...", "Cancel", 0, 100, self)
-        progress.setWindowTitle("Dose Calculation")
-        progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
-
-        try:
-            # Update status
-            self.status_bar.showMessage(f"Calculating dose using {algorithm}...")
-            self.calculation_started.emit()
-
-            # Calculate dose
-            if self.dose_calculator:
-                # Convert resolution string to value
-                resolution_value = float(resolution.split()[0])
-
-                # Set algorithm and resolution
-                self.dose_calculator.set_algorithm(algorithm)
-                self.dose_calculator.set_resolution(resolution_value)
-
-                # Calculate dose
-                progress.setValue(10)
-                self.current_dose_grid = self.dose_calculator.calculate_dose(
-                    self.current_plan
-                )
-                progress.setValue(90)
-
-                # Update the dose display
-                if self.current_dose_grid:
-                    # Set dose grid in 3D view
-                    self.dose_3d_view.set_dose_grid(self.current_dose_grid)
-
-                    # Set prescription dose
-                    prescription = float(self.dose_input.value())
-                    if hasattr(self.dose_3d_view, "prescription_spinbox"):
-                        self.dose_3d_view.prescription_spinbox.setValue(prescription)
-
-                    # Update MPR view with dose overlay
-                    self._update_dose_overlay()
-
-                    # Update dose display
-                    self._update_dose_display(self.dose_slider.value())
-
-                    # Update evaluation
-                    self._update_evaluation()
-
-                    self.status_bar.showMessage(
-                        "Dose calculation completed successfully."
-                    )
-                else:
-                    self.status_bar.showMessage("Dose calculation failed.")
+        # Cập nhật tiến độ
+        for i in range(101):
+            if i < 20:
+                message = "Đang khởi tạo tối ưu hóa..."
+            elif i < 40:
+                message = "Đang tính toán ma trận liều..."
+            elif i < 70:
+                message = "Đang tối ưu hóa trọng số chùm tia..."
+            elif i < 90:
+                message = "Đang tinh chỉnh kết quả..."
             else:
-                self.status_bar.showMessage("Dose calculator not available.")
+                message = "Đang hoàn tất tính toán..."
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Dose calculation failed: {str(e)}")
-            self.status_bar.showMessage("Dose calculation failed with error.")
-            logging.error(f"Dose calculation error: {str(e)}")
-        finally:
-            progress.setValue(100)
-            self.calculation_finished.emit()
+            self.optimization_progress.emit(i, message)
+            QApplication.processEvents()
+            time.sleep(0.05)  # Giả lập thời gian tính toán
 
-            # Ensure we're showing the correct view for dose visualization
-            if self.current_dose_grid:
-                # Switch to the view that best shows the dose
-                current_tab = self.treatment_view.currentIndex()
-                if current_tab == 0:  # If we're on MPR view, update it
-                    self._update_dose_overlay()
-                elif current_tab != 1:  # If not on 3D view, switch to it
-                    self.treatment_view.setCurrentIndex(1)  # Switch to 3D view
+        # Kết thúc tối ưu hóa
+        self.optimization_finished.emit(True, "Đã tối ưu hóa kế hoạch thành công")
 
-    def _show_placeholder_dvh(self):
-        """
-        Show placeholder DVH data for demonstration when no real data is available.
-        Creates sample DVH curves and metrics for educational purposes.
-        """
-        import numpy as np
-        from PyQt5.QtWidgets import QTableWidgetItem
+        # Tạo dữ liệu giả cho hiển thị kết quả
+        self._create_fake_dose_grid()
 
-        # Clear and set up plot
-        self.dvh_ax.clear()
-        self.dvh_ax.set_xlabel("Dose (Gy)")
-        self.dvh_ax.set_ylabel("Volume (%)")
-        self.dvh_ax.set_title("Dose Volume Histogram (Demo)")
-        self.dvh_ax.grid(True)
+    def _create_fake_dose_grid(self):
+        """Tạo dữ liệu phân bố liều giả cho mục đích demo."""
+        # Tạo mảng 3D đơn giản (100x100x100)
+        grid_size = 100
+        dose_grid = np.zeros((grid_size, grid_size, grid_size), dtype=np.float32)
 
-        # Sample data for demonstration
-        # Create sample dose points (0 to 80 Gy)
-        dose_points = np.linspace(0, 80, 100)
+        # Tạo phân bố liều giả dạng Gaussian
+        x = np.linspace(-3, 3, grid_size)
+        y = np.linspace(-3, 3, grid_size)
+        z = np.linspace(-3, 3, grid_size)
 
-        # PTV curve (ideal sharp falloff at prescription dose)
-        prescription = 60  # Gy
-        ptv_volumes = 100 * np.ones_like(dose_points)
-        ptv_volumes[dose_points > prescription * 0.95] = 100 * np.exp(
-            -(dose_points[dose_points > prescription * 0.95] - prescription * 0.95) / 2
-        )
+        X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
 
-        # OAR curve (gradual falloff)
-        oar_volumes = 100 * np.exp(-dose_points / 20)
+        # Tạo 2 chùm tia đối diện
+        # Chùm 1: Từ trục X dương
+        beam1 = np.exp(-(Y**2 + Z**2) / 0.5) * (X > -2)
 
-        # Plot curves
-        self.dvh_ax.plot(dose_points, ptv_volumes, "r-", label="PTV (Demo)")
-        self.dvh_ax.plot(dose_points, oar_volumes, "b-", label="OAR (Demo)")
+        # Chùm 2: Từ trục X âm
+        beam2 = np.exp(-(Y**2 + Z**2) / 0.5) * (X < 2)
 
-        # Set axis limits
-        self.dvh_ax.set_xlim(0, 80)
-        self.dvh_ax.set_ylim(0, 100)
+        # Kết hợp các chùm
+        dose_grid = (beam1 + beam2) * 70.0  # Liều tối đa 70Gy
 
-        # Add legend
-        self.dvh_ax.legend(loc="upper right")
+        # Thiết lập thông tin không gian
+        spacing = (2.0, 2.0, 2.0)  # mm
+        origin = (-100.0, -100.0, -100.0)  # mm
 
-        # Draw the canvas
-        self.dvh_canvas.draw()
-
-        # Add placeholder metrics to table
-        self.metrics_table.setRowCount(0)
-
-        # Add PTV row
-        self.metrics_table.insertRow(0)
-        self.metrics_table.setItem(0, 0, QTableWidgetItem("PTV (Demo)"))
-        self.metrics_table.setItem(
-            0, 1, QTableWidgetItem(f"{prescription * 0.9:.1f} Gy")
-        )
-        self.metrics_table.setItem(
-            0, 2, QTableWidgetItem(f"{prescription * 1.1:.1f} Gy")
-        )
-        self.metrics_table.setItem(0, 3, QTableWidgetItem(f"{prescription:.1f} Gy"))
-        self.metrics_table.setItem(
-            0, 4, QTableWidgetItem(f"{prescription * 0.98:.1f} Gy")
-        )
-        self.metrics_table.setItem(0, 5, QTableWidgetItem("95.0%"))
-
-        # Add OAR row
-        self.metrics_table.insertRow(1)
-        self.metrics_table.setItem(1, 0, QTableWidgetItem("OAR (Demo)"))
-        self.metrics_table.setItem(1, 1, QTableWidgetItem("0.0 Gy"))
-        self.metrics_table.setItem(
-            1, 2, QTableWidgetItem(f"{prescription * 0.8:.1f} Gy")
-        )
-        self.metrics_table.setItem(
-            1, 3, QTableWidgetItem(f"{prescription * 0.3:.1f} Gy")
-        )
-        self.metrics_table.setItem(1, 4, QTableWidgetItem("0.0 Gy"))
-        self.metrics_table.setItem(1, 5, QTableWidgetItem("15.0%"))
+        # Cập nhật liều
+        self.set_dose_grid(dose_grid, spacing, origin)

@@ -2,698 +2,397 @@
 # -*- coding: utf-8 -*-
 
 """
-Module phân tích gamma cho hệ thống lập kế hoạch xạ trị QuangTPS.
+Module phân tích gamma (Gamma Analysis) cho so sánh phân phối liều.
 
-Module này cung cấp các hàm phân tích gamma để so sánh phân phối liều trong
-không gian 3D hoặc 2D. Phân tích gamma là phương pháp định lượng phổ biến
-để so sánh hai phân phối liều, kết hợp sự khác biệt liều và khoảng cách.
+Module này cung cấp các công cụ để thực hiện phân tích gamma 2D và 3D,
+một phương pháp định lượng để so sánh hai phân phối liều.
 """
 
 import logging
 import numpy as np
-from typing import List, Tuple, Union, Optional, Dict, Any
+import time
+from typing import Dict, List, Optional, Tuple, Union, Any
 
+logger = logging.getLogger(__name__)
+
+# Thử nhập các module tăng tốc GPU
 try:
-    from scipy.ndimage import map_coordinates
-    from scipy.interpolate import RegularGridInterpolator
+    import cupy as cp
 
-    HAS_SCIPY = True
+    HAS_CUPY = True
+    logger.info("CuPy đã được nhập thành công cho phân tích gamma GPU")
 except ImportError:
-    HAS_SCIPY = False
-    logging.warning(
-        "Không thể import scipy. Một số tính năng phân tích gamma sẽ bị giới hạn."
-    )
-
-from quangtps.core.logging import get_logger
-
-logger = get_logger(__name__)
+    HAS_CUPY = False
+    logger.warning("CuPy không khả dụng. Phân tích gamma GPU sẽ không thể sử dụng.")
 
 
 def calculate_gamma_3d(
-    reference_dose: np.ndarray,
-    evaluation_dose: np.ndarray,
-    voxel_size: List[float] = [1.0, 1.0, 1.0],
-    dose_threshold: float = 3.0,
-    distance_threshold: float = 3.0,
-    max_gamma: float = 2.0,
-    mask: Optional[np.ndarray] = None,
-    lower_dose_cutoff: float = 10.0,
-    local_gamma: bool = False,
-    interp_method: str = "linear",
-    num_threads: int = 1,
+    reference: np.ndarray,
+    evaluation: np.ndarray,
+    dta_mm: float = 3.0,
+    dd_percent: float = 3.0,
+    threshold: float = 0.1,
+    voxel_size: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    max_gamma: float = 5.0,
+    local_normalization: bool = False,
 ) -> np.ndarray:
     """
-    Tính toán chỉ số gamma 3D giữa hai phân phối liều.
+    Tính chỉ số gamma 3D giữa hai phân phối liều 3D.
+
+    Chỉ số gamma là công cụ đánh giá định lượng sự khác biệt giữa hai phân phối liều,
+    kết hợp cả tiêu chí sai khác khoảng cách không gian (DTA) và sai khác liều (DD).
 
     Parameters
     ----------
-    reference_dose : np.ndarray
-        Phân phối liều tham chiếu, 3D numpy array
-    evaluation_dose : np.ndarray
-        Phân phối liều cần đánh giá, 3D numpy array
-    voxel_size : List[float], optional
-        Kích thước voxel theo mm cho mỗi chiều [x, y, z], mặc định [1.0, 1.0, 1.0]
-    dose_threshold : float, optional
-        Tiêu chí sai khác liều (%), mặc định 3.0%
-    distance_threshold : float, optional
-        Tiêu chí khoảng cách (mm), mặc định 3.0mm
+    reference : np.ndarray
+        Mảng 3D phân phối liều tham chiếu
+    evaluation : np.ndarray
+        Mảng 3D phân phối liều cần đánh giá
+    dta_mm : float, optional
+        Tiêu chí khoảng cách đến sự tương đồng, tính bằng mm, mặc định là 3.0
+    dd_percent : float, optional
+        Tiêu chí sai khác liều, tính bằng phần trăm liều tối đa, mặc định là 3.0
+    threshold : float, optional
+        Ngưỡng liều tương đối (so với max) để tính gamma, mặc định là 0.1 (10%)
+    voxel_size : Tuple[float, float, float], optional
+        Kích thước voxel theo mm, mặc định là (1.0, 1.0, 1.0)
     max_gamma : float, optional
-        Giá trị gamma tối đa được tính, các vùng vượt quá sẽ bị cắt ở giá trị này, mặc định 2.0
-    mask : np.ndarray, optional
-        Mặt nạ nhị phân xác định vùng cần tính gamma, mặc định None (tất cả)
-    lower_dose_cutoff : float, optional
-        Ngưỡng liều dưới (% so với max) để loại trừ vùng liều thấp, mặc định 10.0%
-    local_gamma : bool, optional
-        Sử dụng phân tích gamma chuẩn hóa cục bộ thay vì toàn cục, mặc định False
-    interp_method : str, optional
-        Phương pháp nội suy ('linear', 'nearest'), mặc định 'linear'
-    num_threads : int, optional
-        Số luồng sử dụng cho tính toán song song, mặc định 1
+        Giá trị gamma tối đa, các giá trị cao hơn sẽ được gán bằng giá trị này
+    local_normalization : bool, optional
+        Nếu True, sử dụng chuẩn hóa cục bộ (liều tham chiếu tại mỗi điểm)
 
     Returns
     -------
     np.ndarray
         Mảng 3D chứa giá trị gamma tại mỗi voxel
-
-    Notes
-    -----
-    Giá trị gamma <= 1.0 được coi là đạt tiêu chí.
-    Tiêu chí đánh giá gamma thường được viết dưới dạng X%/Ymm (ví dụ: 3%/3mm).
     """
-    # Kiểm tra đầu vào
-    if reference_dose.shape != evaluation_dose.shape:
+    # Kiểm tra kích thước mảng đầu vào
+    if reference.shape != evaluation.shape:
         raise ValueError(
-            f"Kích thước mảng không khớp: {reference_dose.shape} vs {evaluation_dose.shape}"
+            f"Kích thước mảng không khớp: reference {reference.shape}, evaluation {evaluation.shape}"
         )
 
-    # Tạo mặt nạ nếu không được cung cấp
-    if mask is None:
-        mask = np.ones_like(reference_dose, dtype=bool)
+    logger.info(f"Bắt đầu tính toán gamma 3D với tiêu chí {dta_mm}mm/{dd_percent}%")
+    start_time = time.time()
 
-    # Mặt nạ liều thấp
-    ref_dose_max = np.max(reference_dose)
-    low_dose_mask = reference_dose < (ref_dose_max * lower_dose_cutoff / 100.0)
-    mask = mask & ~low_dose_mask
+    # Chuẩn bị dữ liệu
+    reference = reference.astype(np.float32)
+    evaluation = evaluation.astype(np.float32)
 
-    # Tính gamma dựa trên SciPy nếu có sẵn, ngược lại sử dụng phương pháp tìm kiếm đơn giản
-    if HAS_SCIPY:
-        return _calculate_gamma_3d_scipy(
-            reference_dose,
-            evaluation_dose,
-            voxel_size,
-            dose_threshold,
-            distance_threshold,
-            max_gamma,
-            mask,
-            local_gamma,
-            interp_method,
-            num_threads,
-        )
-    else:
-        return _calculate_gamma_3d_simple(
-            reference_dose,
-            evaluation_dose,
-            voxel_size,
-            dose_threshold,
-            distance_threshold,
-            max_gamma,
-            mask,
-            local_gamma,
-        )
+    ref_max = np.max(reference)
 
+    # Áp dụng ngưỡng
+    mask = reference >= (threshold * ref_max)
 
-def _calculate_gamma_3d_scipy(
-    reference_dose: np.ndarray,
-    evaluation_dose: np.ndarray,
-    voxel_size: List[float],
-    dose_threshold: float,
-    distance_threshold: float,
-    max_gamma: float,
-    mask: np.ndarray,
-    local_gamma: bool,
-    interp_method: str,
-    num_threads: int,
-) -> np.ndarray:
-    """
-    Tính gamma 3D sử dụng SciPy để nội suy.
-    """
+    # Khởi tạo mảng kết quả gamma
+    gamma = np.ones_like(reference) * np.inf
+
+    # Chuyển đổi dd_percent thành giá trị tuyệt đối
+    dd = dd_percent * ref_max / 100.0
+
     # Tạo lưới tọa độ
-    shape = reference_dose.shape
+    shape = reference.shape
     x = np.arange(0, shape[0]) * voxel_size[0]
     y = np.arange(0, shape[1]) * voxel_size[1]
     z = np.arange(0, shape[2]) * voxel_size[2]
 
-    # Tạo lưới hoàn chỉnh
-    points = (x, y, z)
+    # Kiểm tra kích thước dữ liệu để quyết định phương pháp tính
+    total_voxels = np.prod(shape)
+    use_gpu = HAS_CUPY and total_voxels > 1e6  # Sử dụng GPU cho dữ liệu lớn
 
-    # Tạo bộ nội suy cho liều đánh giá
-    interp_func = RegularGridInterpolator(
-        points, evaluation_dose, method=interp_method, bounds_error=False, fill_value=0
+    if use_gpu:
+        try:
+            gamma = _calculate_gamma_3d_gpu(
+                reference,
+                evaluation,
+                mask,
+                dd,
+                dta_mm,
+                voxel_size,
+                max_gamma,
+                local_normalization,
+            )
+        except Exception as e:
+            logger.error(f"Lỗi khi tính gamma trên GPU: {str(e)}. Chuyển sang CPU.")
+            use_gpu = False
+
+    if not use_gpu:
+        gamma = _calculate_gamma_3d_cpu(
+            reference,
+            evaluation,
+            mask,
+            dd,
+            dta_mm,
+            voxel_size,
+            max_gamma,
+            local_normalization,
+        )
+
+    end_time = time.time()
+    elapsed = end_time - start_time
+
+    # Thống kê
+    gamma_pass_rate = np.sum(gamma <= 1.0) / np.sum(mask) * 100
+    logger.info(
+        f"Hoàn tất phân tích gamma trong {elapsed:.2f} giây. "
+        f"Tỉ lệ đạt: {gamma_pass_rate:.2f}% ({dta_mm}mm/{dd_percent}%)"
     )
 
-    # Giá trị chuẩn hóa
-    dose_norm = dose_threshold / 100.0
-    if not local_gamma:
-        ref_dose_max = np.max(reference_dose)
-        dose_norm *= ref_dose_max
+    return gamma
 
-    # Khởi tạo mảng kết quả
-    gamma = np.ones_like(reference_dose) * max_gamma
 
-    # Tìm kiếm bán kính tối đa
-    r_max = distance_threshold
+def _calculate_gamma_3d_cpu(
+    reference: np.ndarray,
+    evaluation: np.ndarray,
+    mask: np.ndarray,
+    dd: float,
+    dta_mm: float,
+    voxel_size: Tuple[float, float, float],
+    max_gamma: float,
+    local_normalization: bool,
+) -> np.ndarray:
+    """Phiên bản CPU của phân tích gamma 3D."""
+    logger.info("Thực hiện phân tích gamma trên CPU")
 
-    # Tạo các điểm làm việc trong bán kính r_max
-    # Sử dụng lưới (grid) đặc hơn để độ chính xác cao hơn
-    density_factor = 3  # Số điểm mỗi mm
-    r_x = np.arange(
-        -r_max, r_max + voxel_size[0] / density_factor, voxel_size[0] / density_factor
-    )
-    r_y = np.arange(
-        -r_max, r_max + voxel_size[1] / density_factor, voxel_size[1] / density_factor
-    )
-    r_z = np.arange(
-        -r_max, r_max + voxel_size[2] / density_factor, voxel_size[2] / density_factor
-    )
+    gamma = np.ones_like(reference) * np.inf
+    shape = reference.shape
 
-    # Tính toán gamma tại các điểm trong mặt nạ
+    # Tìm phạm vi tìm kiếm tối đa theo voxel
+    search_range = [int(np.ceil(dta_mm / vs)) for vs in voxel_size]
+
+    # Tính toán gamma cho mỗi voxel trong mask
     for i in range(shape[0]):
         for j in range(shape[1]):
             for k in range(shape[2]):
                 if not mask[i, j, k]:
                     continue
 
-                # Lấy liều tham chiếu tại vị trí hiện tại
-                ref_dose = reference_dose[i, j, k]
+                ref_dose = reference[i, j, k]
 
-                # Xác định ngưỡng liều cục bộ nếu cần
-                local_dose_threshold = dose_norm
-                if local_gamma and ref_dose > 0:
-                    local_dose_threshold = dose_norm * ref_dose
+                # Xác định giới hạn tìm kiếm cục bộ
+                i_min = max(0, i - search_range[0])
+                i_max = min(shape[0] - 1, i + search_range[0])
+                j_min = max(0, j - search_range[1])
+                j_max = min(shape[1] - 1, j + search_range[1])
+                k_min = max(0, k - search_range[2])
+                k_max = min(shape[2] - 1, k + search_range[2])
 
-                # Tính gamma tại điểm này
-                min_gamma_squared = max_gamma**2
+                # Tìm giá trị gamma nhỏ nhất trong vùng tìm kiếm
+                min_gamma = np.inf
 
-                # Vị trí trong không gian vật lý
-                x_pos = i * voxel_size[0]
-                y_pos = j * voxel_size[1]
-                z_pos = k * voxel_size[2]
-
-                # Tìm kiếm trong bán kính r_max
-                for di in r_x:
-                    for dj in r_y:
-                        for dk in r_z:
-                            # Tính khoảng cách hình học
-                            dist_squared = di**2 + dj**2 + dk**2
-
-                            # Bỏ qua nếu vượt quá khoảng cách tối đa
-                            if dist_squared > r_max**2:
-                                continue
-
-                            # Vị trí trong không gian vật lý
-                            eval_x = x_pos + di
-                            eval_y = y_pos + dj
-                            eval_z = z_pos + dk
-
-                            # Kiểm tra có trong ranh giới
-                            if (
-                                eval_x < 0
-                                or eval_x > (shape[0] - 1) * voxel_size[0]
-                                or eval_y < 0
-                                or eval_y > (shape[1] - 1) * voxel_size[1]
-                                or eval_z < 0
-                                or eval_z > (shape[2] - 1) * voxel_size[2]
-                            ):
-                                continue
-
-                            # Lấy liều tại vị trí nội suy
-                            eval_dose = interp_func([eval_x, eval_y, eval_z])[0]
-
-                            # Tính sai khác liều
-                            dose_diff = abs(eval_dose - ref_dose)
-
-                            # Tính giá trị gamma cục bộ
-                            if local_dose_threshold > 0:
-                                gamma_squared = (
-                                    dist_squared / distance_threshold**2
-                                    + (dose_diff / local_dose_threshold) ** 2
-                                )
-
-                                # Cập nhật gamma tối thiểu
-                                if gamma_squared < min_gamma_squared:
-                                    min_gamma_squared = gamma_squared
-
-                # Lưu giá trị gamma tối thiểu
-                gamma[i, j, k] = min(max_gamma, np.sqrt(min_gamma_squared))
-
-    return gamma
-
-
-def _calculate_gamma_3d_simple(
-    reference_dose: np.ndarray,
-    evaluation_dose: np.ndarray,
-    voxel_size: List[float],
-    dose_threshold: float,
-    distance_threshold: float,
-    max_gamma: float,
-    mask: np.ndarray,
-    local_gamma: bool,
-) -> np.ndarray:
-    """
-    Tính gamma 3D sử dụng phương pháp tìm kiếm đơn giản (không cần scipy).
-    Lưu ý: Phương pháp này ít chính xác hơn phiên bản SciPy nhưng hoạt động mà không cần thư viện bổ sung.
-    """
-    # Giá trị chuẩn hóa
-    dose_norm = dose_threshold / 100.0
-    if not local_gamma:
-        ref_dose_max = np.max(reference_dose)
-        dose_norm *= ref_dose_max
-
-    # Khởi tạo mảng gamma
-    gamma = np.ones_like(reference_dose) * max_gamma
-
-    # Tính toán tối đa các voxel có thể di chuyển (dựa trên khoảng cách)
-    max_voxel_distance = [
-        int(np.ceil(distance_threshold / voxel_size[i])) for i in range(3)
-    ]
-
-    # Lặp qua các voxel trong mặt nạ
-    for i in range(reference_dose.shape[0]):
-        for j in range(reference_dose.shape[1]):
-            for k in range(reference_dose.shape[2]):
-                if not mask[i, j, k]:
-                    continue
-
-                # Lấy liều tham chiếu
-                ref_dose = reference_dose[i, j, k]
-
-                # Xác định ngưỡng liều cục bộ nếu cần
-                local_dose_threshold = dose_norm
-                if local_gamma and ref_dose > 0:
-                    local_dose_threshold = dose_norm * ref_dose
-
-                # Khởi tạo gamma tối thiểu
-                min_gamma_squared = max_gamma**2
-
-                # Tìm kiếm trong vùng lân cận
-                for di in range(-max_voxel_distance[0], max_voxel_distance[0] + 1):
-                    i_pos = i + di
-                    if i_pos < 0 or i_pos >= reference_dose.shape[0]:
-                        continue
-
-                    for dj in range(-max_voxel_distance[1], max_voxel_distance[1] + 1):
-                        j_pos = j + dj
-                        if j_pos < 0 or j_pos >= reference_dose.shape[1]:
-                            continue
-
-                        for dk in range(
-                            -max_voxel_distance[2], max_voxel_distance[2] + 1
-                        ):
-                            k_pos = k + dk
-                            if k_pos < 0 or k_pos >= reference_dose.shape[2]:
-                                continue
-
-                            # Tính khoảng cách hình học (mm)
-                            dist_squared = (
-                                (di * voxel_size[0]) ** 2
-                                + (dj * voxel_size[1]) ** 2
-                                + (dk * voxel_size[2]) ** 2
+                for ni in range(i_min, i_max + 1):
+                    for nj in range(j_min, j_max + 1):
+                        for nk in range(k_min, k_max + 1):
+                            # Tính khoảng cách không gian
+                            dist_sq = (
+                                ((i - ni) * voxel_size[0]) ** 2
+                                + ((j - nj) * voxel_size[1]) ** 2
+                                + ((k - nk) * voxel_size[2]) ** 2
                             )
 
-                            # Bỏ qua nếu vượt quá khoảng cách tối đa
-                            if dist_squared > distance_threshold**2:
-                                continue
-
-                            # Lấy liều đánh giá tại vị trí này
-                            eval_dose = evaluation_dose[i_pos, j_pos, k_pos]
-
                             # Tính sai khác liều
-                            dose_diff = abs(eval_dose - ref_dose)
+                            eval_dose = evaluation[ni, nj, nk]
 
-                            # Tính giá trị gamma cục bộ
-                            if local_dose_threshold > 0:
-                                gamma_squared = (
-                                    dist_squared / distance_threshold**2
-                                    + (dose_diff / local_dose_threshold) ** 2
+                            if local_normalization:
+                                dose_diff = (
+                                    abs(ref_dose - eval_dose) / ref_dose
+                                    if ref_dose > 0
+                                    else 0
                                 )
+                                dose_diff = dose_diff * 100  # Chuyển sang phần trăm
+                            else:
+                                dose_diff = abs(ref_dose - eval_dose)
 
-                                # Cập nhật gamma tối thiểu
-                                if gamma_squared < min_gamma_squared:
-                                    min_gamma_squared = gamma_squared
+                            # Tính chỉ số gamma
+                            gamma_sq = dist_sq / (dta_mm**2) + (dose_diff / dd) ** 2
 
-                # Lưu giá trị gamma tối thiểu
-                gamma[i, j, k] = min(max_gamma, np.sqrt(min_gamma_squared))
+                            if gamma_sq < min_gamma:
+                                min_gamma = gamma_sq
+
+                # Lưu giá trị gamma
+                gamma[i, j, k] = min(np.sqrt(min_gamma), max_gamma)
 
     return gamma
 
 
-def calculate_gamma_3d_gpu(
-    reference_dose: np.ndarray,
-    evaluation_dose: np.ndarray,
-    voxel_size: List[float] = [1.0, 1.0, 1.0],
-    dose_threshold: float = 3.0,
-    distance_threshold: float = 3.0,
-    max_gamma: float = 2.0,
-    mask: Optional[np.ndarray] = None,
-    lower_dose_cutoff: float = 10.0,
-    local_gamma: bool = False,
-    interp_method: str = "linear",
+def _calculate_gamma_3d_gpu(
+    reference: np.ndarray,
+    evaluation: np.ndarray,
+    mask: np.ndarray,
+    dd: float,
+    dta_mm: float,
+    voxel_size: Tuple[float, float, float],
+    max_gamma: float,
+    local_normalization: bool,
 ) -> np.ndarray:
-    """
-    Tính toán chỉ số gamma 3D giữa hai phân phối liều sử dụng GPU thông qua CuPy.
+    """Phiên bản GPU của phân tích gamma 3D sử dụng CuPy."""
+    logger.info("Thực hiện phân tích gamma trên GPU với CuPy")
 
-    Phương thức này tận dụng sức mạnh của GPU để tăng tốc đáng kể việc tính toán phân tích gamma,
-    với mức tăng tốc từ 20-50 lần so với phiên bản CPU.
+    # Chuyển dữ liệu lên GPU
+    reference_gpu = cp.asarray(reference)
+    evaluation_gpu = cp.asarray(evaluation)
+    mask_gpu = cp.asarray(mask)
 
-    Parameters
-    ----------
-    reference_dose : np.ndarray
-        Phân phối liều tham chiếu, 3D numpy array
-    evaluation_dose : np.ndarray
-        Phân phối liều cần đánh giá, 3D numpy array
-    voxel_size : List[float], optional
-        Kích thước voxel theo mm cho mỗi chiều [x, y, z], mặc định [1.0, 1.0, 1.0]
-    dose_threshold : float, optional
-        Tiêu chí sai khác liều (%), mặc định 3.0%
-    distance_threshold : float, optional
-        Tiêu chí khoảng cách (mm), mặc định 3.0mm
-    max_gamma : float, optional
-        Giá trị gamma tối đa được tính, các vùng vượt quá sẽ bị cắt ở giá trị này, mặc định 2.0
-    mask : np.ndarray, optional
-        Mặt nạ nhị phân xác định vùng cần tính gamma, mặc định None (tất cả)
-    lower_dose_cutoff : float, optional
-        Ngưỡng liều dưới (% so với max) để loại trừ vùng liều thấp, mặc định 10.0%
-    local_gamma : bool, optional
-        Sử dụng phân tích gamma chuẩn hóa cục bộ thay vì toàn cục, mặc định False
-    interp_method : str, optional
-        Phương pháp nội suy ('linear', 'nearest'), mặc định 'linear'
+    # Kích thước dữ liệu
+    shape = reference.shape
 
-    Returns
-    -------
-    np.ndarray
-        Mảng 3D chứa giá trị gamma tại mỗi voxel
+    # Tạo mảng kết quả
+    gamma_gpu = cp.ones_like(reference_gpu) * cp.inf
 
-    Notes
-    -----
-    Yêu cầu CuPy được cài đặt và có GPU tương thích CUDA. Nếu không, tự động chuyển về cài đặt CPU.
-    """
-    # Kiểm tra và tải CuPy
-    try:
-        import cupy as cp
+    # Tìm phạm vi tìm kiếm tối đa theo voxel
+    search_range = [int(np.ceil(dta_mm / vs)) for vs in voxel_size]
 
-        has_cupy = True
-        logger.info("Sử dụng GPU qua CuPy cho phân tích gamma")
+    # Kernel code cho CuPy
+    kernel_code = """
+    extern "C" __global__ void calculate_gamma3d(
+        const float* reference, const float* evaluation, const bool* mask,
+        float* gamma, const int nx, const int ny, const int nz,
+        const float dd, const float dta_mm, const float dx, const float dy, const float dz,
+        const float max_gamma, const int search_x, const int search_y, const int search_z,
+        const bool local_normalization)
+    {
+        int x = blockIdx.x * blockDim.x + threadIdx.x;
+        int y = blockIdx.y * blockDim.y + threadIdx.y;
+        int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-        # Kiểm tra thông tin GPU
-        device_info = cp.cuda.runtime.getDeviceProperties(0)
-        logger.debug(f"Đang sử dụng GPU: {cp.cuda.runtime.getDeviceName(0)}")
-        logger.debug(
-            f"Tổng bộ nhớ GPU: {device_info['totalGlobalMem'] / (1024 * 1024 * 1024):.2f} GB"
-        )
+        if (x >= nx || y >= ny || z >= nz) return;
 
-    except (ImportError, ModuleNotFoundError):
-        logger.warning("CuPy không khả dụng, chuyển về tính toán CPU")
-        return calculate_gamma_3d(
-            reference_dose,
-            evaluation_dose,
-            voxel_size,
-            dose_threshold,
-            distance_threshold,
-            max_gamma,
-            mask,
-            lower_dose_cutoff,
-            local_gamma,
-            interp_method,
-        )
-    except Exception as e:
-        logger.warning(f"Lỗi khi khởi tạo GPU: {e}, chuyển về tính toán CPU")
-        return calculate_gamma_3d(
-            reference_dose,
-            evaluation_dose,
-            voxel_size,
-            dose_threshold,
-            distance_threshold,
-            max_gamma,
-            mask,
-            lower_dose_cutoff,
-            local_gamma,
-            interp_method,
-        )
+        int idx = x + y*nx + z*nx*ny;
 
-    # Kiểm tra kích thước phân phối liều
-    if reference_dose.shape != evaluation_dose.shape:
-        raise ValueError("Hai phân phối liều phải có cùng kích thước")
+        if (!mask[idx]) return;
 
-    # Tạo mặt nạ nếu không được cung cấp
-    if mask is None:
-        mask = np.ones_like(reference_dose, dtype=bool)
+        float ref_dose = reference[idx];
+        float min_gamma_sq = 1.0e10f;
 
-    # Tính giá trị tham chiếu tối đa và áp dụng ngưỡng liều thấp
-    ref_max = np.max(reference_dose)
-    if ref_max <= 0:
-        logger.warning(
-            "Phân phối liều tham chiếu không có giá trị dương, trả về gamma = inf"
-        )
-        return np.full_like(reference_dose, np.inf, dtype=np.float32)
+        for (int i = max(0, x - search_x); i <= min(nx-1, x + search_x); i++) {
+            for (int j = max(0, y - search_y); j <= min(ny-1, y + search_y); j++) {
+                for (int k = max(0, z - search_z); k <= min(nz-1, z + search_z); k++) {
+                    int idx2 = i + j*nx + k*nx*ny;
 
-    # Ngưỡng liều tuyệt đối
-    dose_cutoff = ref_max * lower_dose_cutoff / 100.0
+                    // Khoảng cách không gian bình phương
+                    float dist_sq = powf((x-i)*dx, 2) + powf((y-j)*dy, 2) + powf((z-k)*dz, 2);
 
-    # Tạo mặt nạ tính toán từ mặt nạ đầu vào và ngưỡng liều
-    compute_mask = mask & (reference_dose >= dose_cutoff)
+                    // Sai khác liều
+                    float eval_dose = evaluation[idx2];
+                    float dose_diff;
 
-    # Nếu không có điểm nào để tính toán, trả về inf
-    if not np.any(compute_mask):
-        logger.warning("Không có điểm nào thỏa mãn điều kiện mặt nạ và ngưỡng liều")
-        return np.full_like(reference_dose, np.inf, dtype=np.float32)
+                    if (local_normalization) {
+                        dose_diff = ref_dose > 0 ? fabsf(ref_dose - eval_dose) / ref_dose * 100 : 0;
+                    } else {
+                        dose_diff = fabsf(ref_dose - eval_dose);
+                    }
 
-    # Chuyển dữ liệu sang GPU
-    reference_dose_gpu = cp.asarray(reference_dose)
-    evaluation_dose_gpu = cp.asarray(evaluation_dose)
-    compute_mask_gpu = cp.asarray(compute_mask)
+                    // Chỉ số gamma
+                    float gamma_sq = dist_sq / (dta_mm * dta_mm) + (dose_diff * dose_diff) / (dd * dd);
 
-    # Tính toán hệ số liều dựa trên loại gamma (cục bộ/toàn cục)
-    if local_gamma:
-        # Gamma cục bộ: hệ số từ giá trị liều tại mỗi điểm
-        dose_factor_gpu = dose_threshold / 100.0 * reference_dose_gpu
-        # Tránh chia cho 0
-        dose_factor_gpu = cp.where(reference_dose_gpu > 0, dose_factor_gpu, 1.0)
-    else:
-        # Gamma toàn cục: hệ số từ liều tối đa
-        dose_factor_gpu = cp.full_like(
-            reference_dose_gpu, dose_threshold / 100.0 * ref_max
-        )
-
-    # Tạo mảng kết quả gamma
-    gamma_gpu = cp.full_like(reference_dose_gpu, max_gamma, dtype=cp.float32)
-
-    # Chuẩn bị các thông số cho tính toán khoảng cách
-    shape = reference_dose.shape
-    indices = cp.indices(shape, dtype=cp.float32)
-
-    # Điều chỉnh theo kích thước voxel
-    indices[0] *= voxel_size[0]
-    indices[1] *= voxel_size[1]
-    indices[2] *= voxel_size[2]
-
-    # Tạo kernel CUDA để tính toán gamma
-    gamma_kernel = cp.ElementwiseKernel(
-        "float32 ref_dose, float32 dose_factor, raw float32 eval_dose, raw float32 indx, raw float32 indy, raw float32 indz, float32 dist_threshold, int32 nx, int32 ny, int32 nz, float32 max_gamma",
-        "float32 gamma",
-        """
-        if (gamma < max_gamma) {
-            return gamma;
-        }
-
-        // Vị trí hiện tại
-        int i = i % nx;
-        int j = (i / nx) % ny;
-        int k = i / (nx * ny);
-
-        float curr_x = indx[i + j*nx + k*nx*ny];
-        float curr_y = indy[i + j*nx + k*nx*ny];
-        float curr_z = indz[i + j*nx + k*nx*ny];
-
-        // Tìm gamma nhỏ nhất
-        float min_gamma = max_gamma;
-        float ref_val = ref_dose;
-
-        // Tính toán phạm vi tìm kiếm (giả định 3 lần distance_threshold là đủ)
-        int search_radius = int(3 * dist_threshold + 1);
-        int i_start = max(0, i - search_radius);
-        int i_end = min(nx - 1, i + search_radius);
-        int j_start = max(0, j - search_radius);
-        int j_end = min(ny - 1, j + search_radius);
-        int k_start = max(0, k - search_radius);
-        int k_end = min(nz - 1, k + search_radius);
-
-        // Tìm kiếm trong phạm vi
-        for (int ki = k_start; ki <= k_end; ki++) {
-            for (int ji = j_start; ji <= j_end; ji++) {
-                for (int ii = i_start; ii <= i_end; ii++) {
-                    int idx = ii + ji*nx + ki*nx*ny;
-
-                    // Tính khoảng cách không gian
-                    float dx = curr_x - indx[idx];
-                    float dy = curr_y - indy[idx];
-                    float dz = curr_z - indz[idx];
-                    float dist_sq = (dx*dx + dy*dy + dz*dz) / (dist_threshold*dist_threshold);
-
-                    // Tính sai khác liều
-                    float dose_diff = abs(ref_val - eval_dose[idx]) / dose_factor;
-                    float dose_sq = dose_diff * dose_diff;
-
-                    // Tính gamma
-                    float gamma_val = sqrt(dist_sq + dose_sq);
-
-                    // Cập nhật gamma nhỏ nhất
-                    if (gamma_val < min_gamma) {
-                        min_gamma = gamma_val;
-                        // Tối ưu: dừng sớm nếu gamma đã nhỏ hơn 1
-                        if (min_gamma < 1.0) {
-                            break;
-                        }
+                    if (gamma_sq < min_gamma_sq) {
+                        min_gamma_sq = gamma_sq;
                     }
                 }
-                if (min_gamma < 1.0) break;
             }
-            if (min_gamma < 1.0) break;
         }
 
-        return min_gamma;
-        """,
-        "gamma_kernel",
-    )
+        gamma[idx] = fminf(sqrtf(min_gamma_sq), max_gamma);
+    }
+    """
 
-    # Xử lý dữ liệu theo từng batch để tránh tràn bộ nhớ GPU
-    batch_size = 1000000  # Điều chỉnh tùy theo bộ nhớ GPU
-    total_points = int(cp.sum(compute_mask_gpu))
-    points_to_compute = cp.where(compute_mask_gpu.ravel())[0]
-
+    # Biên dịch kernel
     try:
-        # Chuẩn bị thông số cho kernel
-        nx, ny, nz = shape
+        calculate_gamma3d = cp.RawKernel(kernel_code, "calculate_gamma3d")
 
-        for start_idx in range(0, total_points, batch_size):
-            end_idx = min(start_idx + batch_size, total_points)
-            current_batch = points_to_compute[start_idx:end_idx]
-
-            # Chuyển từ chỉ số phẳng sang tọa độ 3D
-            zi, yi, xi = np.unravel_index(current_batch.get(), shape)
-
-            # Lấy chỉ số phẳng trên GPU
-            flat_indices = cp.ravel_multi_index((zi, yi, xi), shape)
-
-            # Tính gamma cho batch hiện tại
-            batch_gamma = gamma_kernel(
-                reference_dose_gpu.ravel()[flat_indices],
-                dose_factor_gpu.ravel()[flat_indices],
-                evaluation_dose_gpu.ravel(),
-                indices[0].ravel(),
-                indices[1].ravel(),
-                indices[2].ravel(),
-                distance_threshold,
-                nx,
-                ny,
-                nz,
-                max_gamma,
-            )
-
-            # Cập nhật kết quả gamma
-            gamma_gpu.ravel()[flat_indices] = batch_gamma
-
-            # Giải phóng bộ nhớ
-            del batch_gamma
-            del flat_indices
-            cp.get_default_memory_pool().free_all_blocks()
-
-    except Exception as e:
-        logger.error(f"Lỗi khi tính toán gamma trên GPU: {e}")
-        logger.warning("Chuyển về tính toán trên CPU")
-        # Giải phóng bộ nhớ GPU
-        del reference_dose_gpu, evaluation_dose_gpu, compute_mask_gpu, dose_factor_gpu
-        if "gamma_gpu" in locals():
-            del gamma_gpu
-        cp.get_default_memory_pool().free_all_blocks()
-
-        # Quay lại phương pháp CPU
-        return calculate_gamma_3d(
-            reference_dose,
-            evaluation_dose,
-            voxel_size,
-            dose_threshold,
-            distance_threshold,
-            max_gamma,
-            mask,
-            lower_dose_cutoff,
-            local_gamma,
-            interp_method,
+        # Cấu hình block size
+        block_size = (8, 8, 8)
+        grid_size = (
+            (shape[0] + block_size[0] - 1) // block_size[0],
+            (shape[1] + block_size[1] - 1) // block_size[1],
+            (shape[2] + block_size[2] - 1) // block_size[2],
         )
 
-    # Chuyển kết quả về CPU
-    gamma_result = gamma_gpu.get()
+        # Thực thi kernel
+        calculate_gamma3d(
+            grid_size,
+            block_size,
+            (
+                reference_gpu,
+                evaluation_gpu,
+                mask_gpu,
+                gamma_gpu,
+                shape[0],
+                shape[1],
+                shape[2],
+                float(dd),
+                float(dta_mm),
+                float(voxel_size[0]),
+                float(voxel_size[1]),
+                float(voxel_size[2]),
+                float(max_gamma),
+                int(search_range[0]),
+                int(search_range[1]),
+                int(search_range[2]),
+                local_normalization,
+            ),
+        )
 
-    # Đặt giá trị gamma = max_gamma cho các vùng ngoài mặt nạ tính toán
-    gamma_result[~compute_mask] = max_gamma
+        # Chuyển kết quả về CPU
+        gamma = cp.asnumpy(gamma_gpu)
 
-    # Giải phóng bộ nhớ GPU
-    del reference_dose_gpu, evaluation_dose_gpu, compute_mask_gpu, gamma_gpu
-    cp.get_default_memory_pool().free_all_blocks()
+        # Giải phóng bộ nhớ GPU
+        del reference_gpu, evaluation_gpu, mask_gpu, gamma_gpu
+        cp.get_default_memory_pool().free_all_blocks()
 
-    return gamma_result
+    except Exception as e:
+        logger.error(f"Lỗi khi thực thi kernel GPU: {str(e)}")
+        # Fallback về CPU
+        gamma = _calculate_gamma_3d_cpu(
+            reference,
+            evaluation,
+            mask,
+            dd,
+            dta_mm,
+            voxel_size,
+            max_gamma,
+            local_normalization,
+        )
+
+    return gamma
 
 
 def calculate_gamma_2d(
-    reference_dose: np.ndarray,
-    evaluation_dose: np.ndarray,
-    pixel_size: List[float] = [1.0, 1.0],
-    dose_threshold: float = 3.0,
-    distance_threshold: float = 3.0,
-    **kwargs,
+    reference_2d: np.ndarray,
+    evaluation_2d: np.ndarray,
+    dta_mm: float = 3.0,
+    dd_percent: float = 3.0,
+    threshold: float = 0.1,
+    pixel_size: Tuple[float, float] = (1.0, 1.0),
+    max_gamma: float = 5.0,
+    local_normalization: bool = False,
 ) -> np.ndarray:
     """
-    Tính toán chỉ số gamma 2D giữa hai phân phối liều.
+    Tính chỉ số gamma 2D giữa hai phân phối liều 2D.
 
-    Parameters
-    ----------
-    reference_dose : np.ndarray
-        Phân phối liều tham chiếu, 2D numpy array
-    evaluation_dose : np.ndarray
-        Phân phối liều cần đánh giá, 2D numpy array
-    pixel_size : List[float], optional
-        Kích thước pixel theo mm, mặc định [1.0, 1.0]
-    dose_threshold : float, optional
-        Tiêu chí sai khác liều (%), mặc định 3.0%
-    distance_threshold : float, optional
-        Tiêu chí khoảng cách (mm), mặc định 3.0mm
-    **kwargs
-        Các tham số bổ sung được chuyển đến hàm tính gamma 3D
-
-    Returns
-    -------
-    np.ndarray
-        Mảng 2D chứa giá trị gamma tại mỗi pixel
+    Parameters tương tự với phiên bản 3D, nhưng cho dữ liệu 2D.
     """
-    # Mở rộng sang 3D với kích thước z = 1 để tái sử dụng code
-    ref_dose_3d = reference_dose.reshape(reference_dose.shape + (1,))
-    eval_dose_3d = evaluation_dose.reshape(evaluation_dose.shape + (1,))
+    # Kiểm tra kích thước mảng đầu vào
+    if reference_2d.shape != evaluation_2d.shape:
+        raise ValueError(
+            f"Kích thước mảng không khớp: reference {reference_2d.shape}, evaluation {evaluation_2d.shape}"
+        )
 
-    # Tính toán gamma 3D với z_voxel_size lớn để chỉ xem xét các vị trí trong mặt phẳng
-    voxel_size = pixel_size + [1000.0]  # Kích thước z lớn để tránh tìm kiếm trên trục z
-
-    mask = None
-    if "mask" in kwargs and kwargs["mask"] is not None:
-        mask = kwargs["mask"].reshape(kwargs["mask"].shape + (1,))
+    # Chuyển đổi thành mảng 3D với chiều thứ 3 là 1
+    reference_3d = np.expand_dims(reference_2d, axis=2)
+    evaluation_3d = np.expand_dims(evaluation_2d, axis=2)
+    voxel_size = (pixel_size[0], pixel_size[1], 1.0)
 
     # Gọi hàm gamma 3D
     gamma_3d = calculate_gamma_3d(
-        reference_dose=ref_dose_3d,
-        evaluation_dose=eval_dose_3d,
-        voxel_size=voxel_size,
-        dose_threshold=dose_threshold,
-        distance_threshold=distance_threshold,
-        mask=mask,
-        **{k: v for k, v in kwargs.items() if k != "mask"},
+        reference_3d,
+        evaluation_3d,
+        dta_mm,
+        dd_percent,
+        threshold,
+        voxel_size,
+        max_gamma,
+        local_normalization,
     )
 
     # Trả về kết quả 2D
@@ -701,271 +400,218 @@ def calculate_gamma_2d(
 
 
 def gamma_pass_rate(
-    gamma: np.ndarray, threshold: float = 1.0, mask: Optional[np.ndarray] = None
+    gamma: np.ndarray, mask: Optional[np.ndarray] = None, pass_criteria: float = 1.0
 ) -> float:
     """
-    Tính tỷ lệ điểm vượt qua tiêu chí gamma.
+    Tính tỉ lệ đạt tiêu chí gamma.
 
     Parameters
     ----------
     gamma : np.ndarray
-        Mảng chứa giá trị gamma
-    threshold : float, optional
-        Ngưỡng để coi như vượt qua, mặc định 1.0
+        Mảng giá trị gamma
     mask : np.ndarray, optional
-        Mặt nạ xác định vùng cần tính, mặc định None (tất cả)
+        Mặt nạ chỉ ra các vùng cần tính pass rate, mặc định là None (tất cả các điểm)
+    pass_criteria : float, optional
+        Ngưỡng để xem là đạt, mặc định là 1.0
 
     Returns
     -------
     float
-        Tỷ lệ điểm có gamma <= threshold (%)
+        Tỉ lệ phần trăm điểm đạt tiêu chí
     """
     if mask is None:
         mask = np.ones_like(gamma, dtype=bool)
 
-    # Đếm các điểm vượt qua ngưỡng
-    passing_points = np.sum((gamma <= threshold) & mask)
-    total_points = np.sum(mask)
-
-    if total_points == 0:
+    num_points = np.sum(mask)
+    if num_points == 0:
         return 0.0
 
-    return (passing_points / total_points) * 100.0
-
-
-def get_gamma_statistics(
-    gamma: np.ndarray, mask: Optional[np.ndarray] = None
-) -> Dict[str, float]:
-    """
-    Tính các thống kê từ mảng gamma.
-
-    Parameters
-    ----------
-    gamma : np.ndarray
-        Mảng chứa giá trị gamma
-    mask : np.ndarray, optional
-        Mặt nạ xác định vùng cần tính, mặc định None (tất cả)
-
-    Returns
-    -------
-    Dict[str, float]
-        Dictionary chứa các chỉ số thống kê:
-        - 'pass_rate': tỷ lệ điểm có gamma <= 1.0 (%)
-        - 'mean': giá trị gamma trung bình
-        - 'median': giá trị gamma trung vị
-        - 'max': giá trị gamma tối đa
-        - 'std': độ lệch chuẩn của gamma
-    """
-    if mask is None:
-        mask = np.ones_like(gamma, dtype=bool)
-
-    if not np.any(mask):
-        return {"pass_rate": 0.0, "mean": 0.0, "median": 0.0, "max": 0.0, "std": 0.0}
-
-    # Lấy các điểm trong mặt nạ
-    gamma_roi = gamma[mask]
-
-    return {
-        "pass_rate": gamma_pass_rate(gamma, 1.0, mask),
-        "mean": np.mean(gamma_roi),
-        "median": np.median(gamma_roi),
-        "max": np.max(gamma_roi),
-        "std": np.std(gamma_roi),
-    }
-
-
-def analyze_gamma_by_dose_regions(
-    gamma: np.ndarray,
-    dose: np.ndarray,
-    dose_regions: List[Tuple[float, float]] = [
-        (0, 10),
-        (10, 20),
-        (20, 50),
-        (50, 80),
-        (80, 100),
-    ],
-    mask: Optional[np.ndarray] = None,
-) -> Dict[str, Dict[str, float]]:
-    """
-    Phân tích gamma theo vùng liều.
-
-    Parameters
-    ----------
-    gamma : np.ndarray
-        Mảng chứa giá trị gamma
-    dose : np.ndarray
-        Mảng chứa giá trị liều (%) mà gamma được tính dựa trên
-    dose_regions : List[Tuple[float, float]], optional
-        Danh sách các vùng liều (min%, max%)
-    mask : np.ndarray, optional
-        Mặt nạ vùng phân tích chung, mặc định None
-
-    Returns
-    -------
-    Dict[str, Dict[str, float]]
-        Dictionary chứa các thống kê gamma theo vùng liều
-    """
-    if mask is None:
-        mask = np.ones_like(gamma, dtype=bool)
-
-    results = {}
-
-    for min_dose, max_dose in dose_regions:
-        region_name = f"{min_dose}%-{max_dose}%"
-        region_mask = (dose >= min_dose) & (dose < max_dose) & mask
-
-        if not np.any(region_mask):
-            continue
-
-        stats = get_gamma_statistics(gamma, region_mask)
-        stats["volume"] = np.sum(region_mask)
-
-        results[region_name] = stats
-
-    return results
+    num_pass = np.sum((gamma <= pass_criteria) & mask)
+    return (num_pass / num_points) * 100.0
 
 
 def plot_gamma_results(
     gamma: np.ndarray,
     mask: Optional[np.ndarray] = None,
-    threshold: float = 1.0,
-    output_file: Optional[str] = None,
-    show_histogram: bool = True,
-    show_heatmap: bool = True,
-    slice_indices: Optional[List[int]] = None,
-    title: Optional[str] = None,
-) -> Dict[str, Any]:
+    slice_idx: Optional[int] = None,
+    axis: int = 2,
+    figure_size: Tuple[int, int] = (10, 8),
+    colormap: str = "RdYlGn_r",
+) -> Any:
     """
-    Vẽ và phân tích kết quả gamma.
+    Tạo hình ảnh của kết quả phân tích gamma.
 
     Parameters
     ----------
     gamma : np.ndarray
-        Mảng 3D chứa kết quả phân tích gamma
+        Mảng giá trị gamma
     mask : np.ndarray, optional
-        Mặt nạ chỉ ra vùng cần phân tích, mặc định None
+        Mặt nạ các vùng quan tâm, mặc định là None
+    slice_idx : int, optional
+        Chỉ số lát cắt muốn hiển thị, mặc định là None (trung tâm)
+    axis : int, optional
+        Trục cho lát cắt (0, 1 hoặc 2), mặc định là 2 (trục z)
+    figure_size : Tuple[int, int], optional
+        Kích thước hình, mặc định là (10, 8)
+    colormap : str, optional
+        Bảng màu, mặc định là 'RdYlGn_r' (đỏ = không đạt, xanh = đạt)
+
+    Returns
+    -------
+    Any
+        Đồ thị matplotlib được tạo
+    """
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import LinearSegmentedColormap
+
+        # Chọn lát cắt hiển thị
+        if slice_idx is None:
+            slice_idx = gamma.shape[axis] // 2
+
+        # Chọn lát cắt
+        if axis == 0:
+            gamma_slice = gamma[slice_idx, :, :]
+            mask_slice = mask[slice_idx, :, :] if mask is not None else None
+        elif axis == 1:
+            gamma_slice = gamma[:, slice_idx, :]
+            mask_slice = mask[:, slice_idx, :] if mask is not None else None
+        else:  # axis == 2
+            gamma_slice = gamma[:, :, slice_idx]
+            mask_slice = mask[:, :, slice_idx] if mask is not None else None
+
+        # Tạo hình
+        fig, ax = plt.subplots(figsize=figure_size)
+
+        # Tạo bảng màu tùy chỉnh nếu cần
+        try:
+            cmap = plt.get_cmap(colormap)
+        except ValueError:
+            # Bảng màu mặc định nếu không tìm thấy
+            green_to_red = LinearSegmentedColormap.from_list(
+                "GreenToRed", [(0, 0.7, 0), (1.0, 1.0, 0), (1.0, 0, 0)]
+            )
+            cmap = green_to_red
+
+        # Áp dụng mask nếu có
+        if mask_slice is not None:
+            masked_gamma = np.copy(gamma_slice)
+            masked_gamma[~mask_slice] = np.nan
+            img = ax.imshow(masked_gamma, cmap=cmap, vmin=0, vmax=2.0)
+        else:
+            img = ax.imshow(gamma_slice, cmap=cmap, vmin=0, vmax=2.0)
+
+        # Thêm thanh màu
+        cbar = plt.colorbar(img, ax=ax)
+        cbar.set_label("Gamma Index")
+
+        # Tính pass rate
+        if mask_slice is not None:
+            pass_rate = gamma_pass_rate(gamma_slice, mask_slice)
+        else:
+            pass_rate = gamma_pass_rate(gamma_slice)
+
+        ax.set_title(f"Gamma Analysis - Pass Rate: {pass_rate:.2f}%")
+
+        return fig
+    except ImportError:
+        logger.warning("Matplotlib không khả dụng. Không thể tạo biểu đồ.")
+        return None
+
+
+def compare_dose_distributions(
+    reference: np.ndarray,
+    evaluation: np.ndarray,
+    voxel_size: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    threshold: float = 0.1,
+    gamma_criteria: List[Tuple[float, float]] = [(3.0, 3.0), (2.0, 2.0)],
+    global_normalization: bool = True,
+) -> Dict[str, Any]:
+    """
+    So sánh hai phân phối liều với nhiều tiêu chí khác nhau.
+
+    Parameters
+    ----------
+    reference : np.ndarray
+        Phân phối liều tham chiếu
+    evaluation : np.ndarray
+        Phân phối liều cần đánh giá
+    voxel_size : Tuple[float, float, float], optional
+        Kích thước voxel theo mm, mặc định là (1.0, 1.0, 1.0)
     threshold : float, optional
-        Ngưỡng gamma để xác định điểm đạt/không đạt, mặc định 1.0
-    output_file : str, optional
-        Đường dẫn file để lưu kết quả, mặc định None (không lưu)
-    show_histogram : bool, optional
-        Hiển thị biểu đồ histogram của giá trị gamma, mặc định True
-    show_heatmap : bool, optional
-        Hiển thị bản đồ nhiệt 2D của lát cắt gamma, mặc định True
-    slice_indices : List[int], optional
-        Chỉ số các lát cắt để hiển thị, mặc định None (lấy lát trung tâm)
-    title : str, optional
-        Tiêu đề cho biểu đồ, mặc định None
+        Ngưỡng liều tương đối để xem xét, mặc định là 0.1 (10%)
+    gamma_criteria : List[Tuple[float, float]], optional
+        Danh sách các tiêu chí gamma [DTA (mm), DD (%)], mặc định là [(3,3), (2,2)]
+    global_normalization : bool, optional
+        Nếu True, sử dụng chuẩn hóa toàn cục, ngược lại sử dụng chuẩn hóa cục bộ
 
     Returns
     -------
     Dict[str, Any]
-        Dictionary chứa kết quả phân tích và tham chiếu đến biểu đồ
+        Kết quả so sánh với các chỉ số khác nhau
     """
-    # Import thư viện vẽ biểu đồ
-    try:
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import LinearSegmentedColormap
-    except ImportError:
-        logger.error("Matplotlib không khả dụng để vẽ kết quả gamma")
-        return {}
+    result = {
+        "shape": reference.shape,
+        "voxel_size": voxel_size,
+        "max_reference": np.max(reference),
+        "max_evaluation": np.max(evaluation),
+        "stats": {},
+        "gamma": {},
+    }
 
-    # Áp dụng mặt nạ nếu có
-    if mask is None:
-        mask = np.ones_like(gamma, dtype=bool)
+    # Tạo mask từ ngưỡng
+    mask = reference >= (threshold * np.max(reference))
+    result["num_evaluated_voxels"] = np.sum(mask)
 
-    # Khởi tạo biểu đồ
-    fig = None
-    if show_histogram or show_heatmap:
-        if show_histogram and show_heatmap:
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-        else:
-            fig, ax = plt.subplots(figsize=(8, 6))
-            if show_histogram:
-                ax1 = ax
-            else:
-                ax2 = ax
+    # Tính các thống kê cơ bản
+    diff = evaluation - reference
+    abs_diff = np.abs(diff)
 
-    # Lấy các giá trị gamma hợp lệ
-    valid_gamma = gamma[mask]
+    # Chỉ xem xét vùng trong mask
+    masked_diff = diff[mask]
+    masked_abs_diff = abs_diff[mask]
 
-    # Tính tỷ lệ đạt
-    pass_rate = 100.0 * np.sum(valid_gamma <= threshold) / len(valid_gamma)
+    result["stats"]["mean_error"] = np.mean(masked_diff)
+    result["stats"]["mean_abs_error"] = np.mean(masked_abs_diff)
+    result["stats"]["max_error"] = np.max(masked_abs_diff)
+    result["stats"]["min_error"] = np.min(masked_diff)
+    result["stats"]["rms_error"] = np.sqrt(np.mean(np.square(masked_diff)))
 
-    # Vẽ histogram
-    if show_histogram and "ax1" in locals():
-        # Tạo histogram
-        bins = min(50, len(np.unique(valid_gamma)))
-        n, bins, patches = ax1.hist(
-            valid_gamma, bins=bins, alpha=0.7, color="royalblue"
-        )
-
-        # Đánh dấu ngưỡng
-        ax1.axvline(
-            x=threshold,
-            linestyle="--",
-            color="red",
-            linewidth=2,
-            label=f"Ngưỡng {threshold}",
-        )
-
-        # Thêm nhãn và tiêu đề
-        ax1.set_xlabel("Giá trị Gamma")
-        ax1.set_ylabel("Tần số")
-        ax1.set_title(f"Phân phối giá trị Gamma (Tỷ lệ đạt: {pass_rate:.2f}%)")
-        ax1.legend()
-        ax1.grid(alpha=0.3)
-
-    # Vẽ bản đồ nhiệt
-    if show_heatmap and "ax2" in locals():
-        # Chọn lát cắt để hiển thị
-        if slice_indices is None:
-            # Mặc định: lát cắt trung tâm
-            z_mid = gamma.shape[0] // 2
-            slice_indices = [z_mid]
-
-        # Tạo bản đồ màu tùy chỉnh
-        cm_gamma = LinearSegmentedColormap.from_list(
-            "gamma",
-            [
-                (0, "darkgreen"),
-                (threshold / 2, "green"),
-                (threshold, "yellow"),
-                (threshold * 1.5, "orange"),
-                (threshold * 2, "red"),
-            ],
-        )
-
-        # Hiển thị lát cắt đầu tiên
-        z = slice_indices[0]
-        im = ax2.imshow(gamma[z], cmap=cm_gamma, vmin=0, vmax=threshold * 2)
-
-        # Thêm thanh màu
-        plt.colorbar(im, ax=ax2, label="Giá trị Gamma")
-
-        # Thêm nhãn và tiêu đề
-        ax2.set_title(f"Bản đồ Gamma (Lát {z})")
-
-    # Thêm tiêu đề chung nếu được cung cấp
-    if title and fig:
-        fig.suptitle(title, fontsize=16)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
-    elif fig:
-        fig.tight_layout()
-
-    # Lưu biểu đồ nếu output_file được cung cấp
-    if output_file and fig:
+    # Tính gamma cho mỗi tiêu chí
+    for dta, dd in gamma_criteria:
+        gamma_key = f"{dta}mm_{dd}pct"
         try:
-            plt.savefig(output_file, dpi=300, bbox_inches="tight")
-            logger.info(f"Đã lưu biểu đồ phân tích gamma vào {output_file}")
+            gamma = calculate_gamma_3d(
+                reference,
+                evaluation,
+                dta_mm=dta,
+                dd_percent=dd,
+                threshold=threshold,
+                voxel_size=voxel_size,
+                local_normalization=not global_normalization,
+            )
+
+            pass_rate = gamma_pass_rate(gamma, mask)
+            result["gamma"][gamma_key] = {
+                "pass_rate": pass_rate,
+                "mean": np.mean(gamma[mask]),
+                "max": np.max(gamma[mask]),
+                "median": np.median(gamma[mask]),
+                "criteria": f"{dta}mm/{dd}%",
+            }
         except Exception as e:
-            logger.error(f"Lỗi khi lưu biểu đồ: {e}")
+            logger.error(f"Lỗi khi tính gamma {dta}mm/{dd}%: {str(e)}")
+            result["gamma"][gamma_key] = {"error": str(e)}
 
-    # Tính các thống kê
-    stats = get_gamma_statistics(gamma, mask)
+    return result
 
-    # Thêm thông tin về biểu đồ
-    if fig:
-        stats["figure"] = fig
 
-    return stats
+__all__ = [
+    "calculate_gamma_3d",
+    "calculate_gamma_2d",
+    "gamma_pass_rate",
+    "plot_gamma_results",
+    "compare_dose_distributions",
+]
+
+__version__ = "0.7.8"

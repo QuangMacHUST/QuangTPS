@@ -12,6 +12,9 @@ Module này cung cấp một giao diện người dùng đồ họa để khám 
 import os
 import logging
 import numpy as np
+import time
+from typing import Dict, List, Optional, Tuple, Union
+
 import matplotlib
 
 matplotlib.use("Qt5Agg")
@@ -19,8 +22,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from typing import Dict, List, Tuple, Optional, Any, Callable
 
+# Import PyQt5 using try/except pattern để xử lý lỗi khi không có PyQt5
 try:
     from PyQt5.QtCore import Qt, pyqtSignal
     from PyQt5.QtWidgets import (
@@ -45,37 +48,80 @@ try:
         QDialogButtonBox,
         QListWidget,
         QListWidgetItem,
+        QApplication,
+        QSpacerItem,
+        QSizePolicy,
+        QTimer,
+        QRadioButton,
     )
     from PyQt5.QtGui import QColor
-except ImportError:
-    from PyQt6.QtCore import Qt, pyqtSignal
-    from PyQt6.QtWidgets import (
-        QWidget,
-        QVBoxLayout,
-        QHBoxLayout,
-        QGridLayout,
-        QLabel,
-        QPushButton,
-        QSlider,
-        QGroupBox,
-        QComboBox,
-        QCheckBox,
-        QTableWidget,
-        QTableWidgetItem,
-        QTabWidget,
-        QFileDialog,
-        QMessageBox,
-        QSplitter,
-        QFrame,
-        QDialog,
-        QDialogButtonBox,
-        QListWidget,
-        QListWidgetItem,
-    )
-    from PyQt6.QtGui import QColor
 
-from quangtps.optimization.mco.pareto_navigator import ParetoNavigator, ParetoSolution
-from quangtps.core.planning import Plan
+    PYQT_AVAILABLE = True
+except ImportError:
+    # Fallback nếu PyQt5 không khả dụng
+    PYQT_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.error("PyQt5 không khả dụng. Chức năng MCO Navigator sẽ bị hạn chế.")
+
+    # Tạo các lớp giả để tránh lỗi import
+    class DummyFigureCanvasQTAgg:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QWidget:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class pyqtSignal:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QVBoxLayout:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QColor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    # Định nghĩa các hằng số giả cho Qt
+    class Qt:
+        Horizontal = 1
+        Vertical = 2
+        AlignCenter = 0
+        AlignVCenter = 0
+        AlignRight = 0
+
+    # Sử dụng lớp giả cho FigureCanvasQTAgg
+    FigureCanvasQTAgg = DummyFigureCanvasQTAgg
+
+
+# Import các module từ QuangTPS
+try:
+    from quangtps.optimization.mco.pareto_navigator import (
+        ParetoNavigator,
+        ParetoSolution,
+    )
+    from quangtps.core.patient import Plan
+
+    HAS_PARETO_MODULES = True
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.error(
+        "Không thể import các module Pareto và Plan. Chức năng MCO Navigator sẽ bị hạn chế."
+    )
+    HAS_PARETO_MODULES = False
+
+    # Tạo lớp giả để tránh lỗi import
+    class ParetoNavigator:
+        pass
+
+    class ParetoSolution:
+        pass
+
+    class Plan:
+        pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -86,45 +132,78 @@ class ParetoFigureCanvas(FigureCanvasQTAgg):
     clicked_point = pyqtSignal(str)  # Phát tín hiệu ID của điểm được chọn
 
     def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = self.fig.add_subplot(111, projection="3d")
-        super().__init__(self.fig)
+        """Khởi tạo canvas cho đồ thị Pareto."""
+        self.figure = Figure(figsize=(width, height), dpi=dpi)
+        super().__init__(self.figure)
         self.setParent(parent)
-        self.solutions = {}
-        self.highlighted_solution = None
-        self.selected_objectives = []
 
-        # Thêm các thuộc tính mới
-        self.color_by_objective = None  # Mục tiêu để tô màu
-        self.solution_points = None  # Lưu trữ các điểm để cập nhật màu
-        self.colorbar = None  # Thanh màu
+        # Các thuộc tính dữ liệu
+        self.solutions = {}  # Dict ID điểm: dữ liệu điểm
+        self.objective_values = {}  # Dict ID điểm: Dict mục tiêu: giá trị
+        self.objective_names = []  # Danh sách tên mục tiêu
+        self.highlighted_solution = None  # ID của giải pháp được tô sáng
+        self.color_by_objective = None  # Tên của mục tiêu để tô màu theo
 
-        # Đặt màu nền cho Eclipse-like style
-        self.fig.patch.set_facecolor("#f0f0f0")
-        self.axes.set_facecolor("#ffffff")
+        # Thuộc tính vẽ
+        self.is_3d = False  # Chế độ hiển thị 3D hay 2D
+        self.is_updating_ui = False  # Đang cập nhật UI hay không
 
-        # Kết nối sự kiện click chuột
+        # Biến theo dõi thời gian click để chống debounce
+        self.last_click_time = 0
+
+        # Tạo trục và kết nối sự kiện chuột
+        self._setup_axes()
         self.mpl_connect("button_press_event", self._on_click)
 
+        # Lưu trữ phạm vi giá trị của các mục tiêu
+        self.objective_ranges = {}
+
+        # Danh sách để lưu trữ các animator cho hiệu ứng highlight
+        self._highlight_animation = []
+
+        # Đặt màu nền cho Eclipse-like style
+        self.figure.patch.set_facecolor("#f0f0f0")
+
+    def _setup_axes(self):
+        """Thiết lập trục tọa độ theo chế độ hiển thị."""
+        self.figure.clear()
+        if self.is_3d and len(self.objective_names) > 2:
+            self.axes = self.figure.add_subplot(111, projection="3d")
+        else:
+            self.axes = self.figure.add_subplot(111)
+
+        # Đặt style giống Eclipse
+        self.axes.set_facecolor("#ffffff")
+        self.axes.grid(True, linestyle="--", alpha=0.7)
+        self.axes.tick_params(labelsize=9)
+
+        for spine in self.axes.spines.values():
+            spine.set_linewidth(0.5)
+            spine.set_color("#999999")
+
     def _on_click(self, event):
-        """Xử lý khi người dùng nhấp vào đồ thị."""
-        if event.inaxes != self.axes:
+        """
+        Xử lý sự kiện click chuột trên đồ thị.
+        Tìm điểm gần nhất và phát tín hiệu clicked_point.
+        """
+        if event.inaxes != self.axes or not self.solutions:
             return
 
-        if not self.solutions:
+        # Chống debounce (tránh xử lý nhiều click liên tiếp)
+        current_time = time.time()
+        if current_time - self.last_click_time < 0.3:
             return
+        self.last_click_time = current_time
 
         # Tìm điểm gần nhất
         min_dist = float("inf")
         closest_id = None
 
-        if len(self.selected_objectives) < 2:
+        if len(self.objective_names) < 2:
             return
 
-        x_obj, y_obj = self.selected_objectives[:2]
-        z_obj = (
-            self.selected_objectives[2] if len(self.selected_objectives) > 2 else None
-        )
+        x_obj, y_obj = self.objective_names[:2]
+        z_obj = self.objective_names[2] if len(self.objective_names) > 2 else None
 
         for sol_id, sol in self.solutions.items():
             if x_obj not in sol.objective_values or y_obj not in sol.objective_values:
@@ -133,12 +212,12 @@ class ParetoFigureCanvas(FigureCanvasQTAgg):
             x = sol.objective_values[x_obj]
             y = sol.objective_values[y_obj]
 
-            if z_obj and z_obj in sol.objective_values:
+            if self.is_3d and z_obj and z_obj in sol.objective_values:
                 z = sol.objective_values[z_obj]
                 dist = np.sqrt(
                     (x - event.xdata) ** 2
                     + (y - event.ydata) ** 2
-                    + (z - event.zdata) ** 2
+                    + (z - event.zdata if hasattr(event, "zdata") else 0) ** 2
                 )
             else:
                 dist = np.sqrt((x - event.xdata) ** 2 + (y - event.ydata) ** 2)
@@ -147,18 +226,35 @@ class ParetoFigureCanvas(FigureCanvasQTAgg):
                 min_dist = dist
                 closest_id = sol_id
 
-        if closest_id and min_dist < 0.1:  # Ngưỡng khoảng cách
+        # Sử dụng ngưỡng tự động tính toán từ kích thước dữ liệu
+        threshold = self._calculate_click_threshold()
+        if closest_id and min_dist < threshold:
             self.clicked_point.emit(closest_id)
+
+    def _calculate_click_threshold(self):
+        """Tính toán ngưỡng khoảng cách click dựa trên phạm vi dữ liệu."""
+        if not self.objective_ranges or len(self.objective_names) < 2:
+            return 0.1  # Giá trị mặc định
+
+        # Tính trung bình phạm vi của các trục để có ngưỡng hợp lý
+        ranges = []
+        for obj in self.objective_names[:3]:  # Tối đa 3 trục
+            if obj in self.objective_ranges:
+                min_val, max_val = self.objective_ranges[obj]
+                ranges.append(max_val - min_val)
+
+        if not ranges:
+            return 0.1
+
+        # Ngưỡng là 2% của phạm vi trung bình
+        return np.mean(ranges) * 0.02
 
     def highlight_solution(self, solution_id):
         """
         Tô sáng một giải pháp cụ thể trên đồ thị.
-
-        Args:
-            solution_id (str): ID của giải pháp cần tô sáng
         """
         self.highlighted_solution = solution_id
-        self.update_plot()
+        self.update_plot(redraw=False, animation=True)
 
     def set_color_by_objective(self, objective_name):
         """
@@ -170,75 +266,252 @@ class ParetoFigureCanvas(FigureCanvasQTAgg):
         self.color_by_objective = objective_name
         self.update_plot()
 
-    def update_plot(self):
-        """Cập nhật đồ thị với cấu hình hiện tại mà không vẽ lại toàn bộ."""
-        if (
-            not self.solutions
-            or not self.selected_objectives
-            or not self.solution_points
-        ):
+    def set_display_mode(self, mode_3d=True):
+        """
+        Chuyển đổi giữa chế độ hiển thị 2D và 3D.
+        """
+        if self.is_3d != mode_3d:
+            self.is_3d = mode_3d
+            self._setup_axes()
+            self.update_plot(redraw=True, animation=False)
+
+    def update_plot(self, redraw=False, animation=False):
+        """
+        Cập nhật đồ thị Pareto với các cấu hình hiện tại.
+
+        Parameters:
+        -----------
+        redraw : bool, optional
+            Nếu True, xóa và vẽ lại toàn bộ đồ thị. Mặc định là False.
+        animation : bool, optional
+            Nếu True, thêm hiệu ứng animation cho highlight. Mặc định là False.
+        """
+        if not self.solutions or not self.objective_names:
             return
 
-        # Cập nhật màu sắc dựa trên mục tiêu được chọn
-        if (
-            self.color_by_objective
-            and self.color_by_objective in self.selected_objectives
-        ):
-            values = []
-            for sol_id in self.solutions:
-                if sol_id in self.solutions:
-                    sol = self.solutions[sol_id]
-                    if self.color_by_objective in sol.objective_values:
-                        values.append(sol.objective_values[self.color_by_objective])
-                    else:
-                        values.append(0)
-
-            if values:
-                self.solution_points.set_array(np.array(values))
-
-                # Cập nhật hoặc tạo thanh màu
-                if self.colorbar:
-                    self.colorbar.update_normal(self.solution_points)
-                else:
-                    self.colorbar = self.fig.colorbar(
-                        self.solution_points, ax=self.axes
-                    )
-                    self.colorbar.set_label(self.color_by_objective)
-
-        # Tô sáng giải pháp được chọn
-        if self.highlighted_solution and self.highlighted_solution in self.solutions:
-            sol = self.solutions[self.highlighted_solution]
-            x_obj, y_obj = self.selected_objectives[:2]
+        try:
+            # Chuẩn bị dữ liệu cho đồ thị
+            x_obj, y_obj = self.objective_names[:2]
             z_obj = (
-                self.selected_objectives[2]
-                if len(self.selected_objectives) > 2
+                self.objective_names[2]
+                if len(self.objective_names) > 2 and self.is_3d
                 else None
             )
 
-            if x_obj in sol.objective_values and y_obj in sol.objective_values:
-                x = sol.objective_values[x_obj]
-                y = sol.objective_values[y_obj]
+            if redraw:
+                self._setup_axes()
 
-                if z_obj and z_obj in sol.objective_values:
-                    z = sol.objective_values[z_obj]
-                    self.axes.scatter(
-                        [x], [y], [z], c="red", s=100, marker="*", zorder=10
+                # Tạo danh sách các điểm để vẽ
+                x_values, y_values, z_values = [], [], []
+                solution_ids = []
+                color_values = []
+
+                for sol_id, sol in self.solutions.items():
+                    if x_obj in sol.objective_values and y_obj in sol.objective_values:
+                        x_values.append(sol.objective_values[x_obj])
+                        y_values.append(sol.objective_values[y_obj])
+
+                        # Thêm giá trị z nếu cần
+                        if z_obj and z_obj in sol.objective_values:
+                            z_values.append(sol.objective_values[z_obj])
+                        else:
+                            z_values.append(0)
+
+                        solution_ids.append(sol_id)
+
+                        # Giá trị màu
+                        if (
+                            self.color_by_objective
+                            and self.color_by_objective in sol.objective_values
+                        ):
+                            color_values.append(
+                                sol.objective_values[self.color_by_objective]
+                            )
+                        else:
+                            color_values.append(0)
+
+                if not x_values:  # Không có dữ liệu
+                    return
+
+                # Cập nhật phạm vi cho các mục tiêu
+                self._update_objective_ranges()
+
+                # Vẽ điểm dựa trên chế độ hiển thị
+                if self.is_3d and z_obj:
+                    self.solution_points = self.axes.scatter(
+                        x_values,
+                        y_values,
+                        z_values,
+                        c=color_values if self.color_by_objective else "b",
+                        cmap="viridis",
+                        s=50,
+                        alpha=0.8,
+                        edgecolors="w",
+                        picker=5,
+                    )
+
+                    self.axes.set_xlabel(x_obj)
+                    self.axes.set_ylabel(y_obj)
+                    self.axes.set_zlabel(z_obj)
+                else:
+                    self.solution_points = self.axes.scatter(
+                        x_values,
+                        y_values,
+                        c=color_values if self.color_by_objective else "b",
+                        cmap="viridis",
+                        s=50,
+                        alpha=0.8,
+                        edgecolors="w",
+                        picker=5,
+                    )
+
+                    self.axes.set_xlabel(x_obj)
+                    self.axes.set_ylabel(y_obj)
+
+                # Thêm thanh màu nếu cần
+                if self.color_by_objective:
+                    if self.colorbar:
+                        self.colorbar.remove()
+                    self.colorbar = self.figure.colorbar(
+                        self.solution_points,
+                        ax=self.axes,
+                        pad=0.1,
+                        label=self.color_by_objective,
+                    )
+
+                # Lưu mối quan hệ giữa điểm và solution_id
+                self._point_to_solution_mapping = dict(enumerate(solution_ids))
+
+            # Tô sáng giải pháp được chọn
+            if (
+                self.highlighted_solution
+                and self.highlighted_solution in self.solutions
+            ):
+                sol = self.solutions[self.highlighted_solution]
+
+                if x_obj in sol.objective_values and y_obj in sol.objective_values:
+                    x = sol.objective_values[x_obj]
+                    y = sol.objective_values[y_obj]
+
+                    # Tìm và xóa điểm được tô sáng trước đó
+                    for artist in self.axes.artists:
+                        if artist != self.solution_points and not isinstance(
+                            artist, matplotlib.colorbar.ColorbarBase
+                        ):
+                            artist.remove()
+
+                    # Thêm điểm mới được tô sáng
+                    if self.is_3d and z_obj and z_obj in sol.objective_values:
+                        z = sol.objective_values[z_obj]
+                        self.axes.scatter(
+                            [x],
+                            [y],
+                            [z],
+                            color="red",
+                            s=100,
+                            edgecolors="k",
+                            linewidth=2,
+                            zorder=10,
+                        )
+                    else:
+                        self.axes.scatter(
+                            [x],
+                            [y],
+                            color="red",
+                            s=100,
+                            edgecolors="k",
+                            linewidth=2,
+                            zorder=10,
+                        )
+
+                    # Thêm animation nếu cần
+                    if animation:
+                        self._animate_highlight(
+                            x,
+                            y,
+                            z
+                            if (self.is_3d and z_obj and z_obj in sol.objective_values)
+                            else None,
+                        )
+
+            self.figure.tight_layout()
+            self.draw()
+
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật đồ thị Pareto: {str(e)}")
+
+    def _animate_highlight(self, x, y, z=None):
+        """
+        Tạo hiệu ứng animation khi highlight một điểm.
+        """
+        # Khởi tạo danh sách nếu chưa có
+        self._highlight_animation = []
+
+        try:
+            # Tạo hiệu ứng động cho điểm được tô sáng
+            if hasattr(self, "_highlight_animation"):
+                for artist in self._highlight_animation:
+                    if artist in self.axes.artists:
+                        artist.remove()
+
+            self._highlight_animation = []
+
+            # Thêm các vòng tròn tập trung vào điểm được chọn
+            for size in [120, 140, 160]:
+                if self.is_3d and z is not None:
+                    circle = self.axes.scatter(
+                        [x],
+                        [y],
+                        [z],
+                        facecolors="none",
+                        edgecolors="r",
+                        alpha=0.5,
+                        s=size,
+                        linewidth=1,
+                        zorder=9,
                     )
                 else:
-                    self.axes.scatter(
-                        [x], [y], [0], c="red", s=100, marker="*", zorder=10
+                    circle = self.axes.scatter(
+                        [x],
+                        [y],
+                        facecolors="none",
+                        edgecolors="r",
+                        alpha=0.5,
+                        s=size,
+                        linewidth=1,
+                        zorder=9,
                     )
+                self._highlight_animation.append(circle)
 
-        self.draw()
+            self.draw()
 
-    def clear(self):
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo animation: {str(e)}")
+
+    def _update_objective_ranges(self):
+        """
+        Cập nhật phạm vi giá trị cho từng mục tiêu.
+        """
+        self.objective_ranges = {}
+
+        for obj_name in self.objective_names:
+            values = []
+            for sol in self.solutions.values():
+                if obj_name in sol.objective_values:
+                    values.append(sol.objective_values[obj_name])
+
+            if values:
+                self.objective_ranges[obj_name] = (min(values), max(values))
+
+    def clear_plot(self):
         """Xóa đồ thị và đặt lại các tham số."""
         self.axes.clear()
         self.highlighted_solution = None
-        self.solution_points = None
-        if self.colorbar:
-            self.colorbar.remove()
-            self.colorbar = None
+        self.solutions = {}
+        self.objective_values = {}
+        self.objective_names = []
+        self.color_by_objective = None
+        self._setup_axes()
         self.draw()
 
 
@@ -617,7 +890,7 @@ class ParetoNavigatorWidget(QWidget):
         selected_objectives = [x_obj, y_obj]
         if z_obj:
             selected_objectives.append(z_obj)
-        self.figure_canvas.selected_objectives = selected_objectives
+        self.figure_canvas.objective_names = selected_objectives
 
         # Lấy tất cả giải pháp từ navigator
         if not hasattr(self.navigator.pareto_surface, "solutions"):
@@ -714,7 +987,7 @@ class ParetoNavigatorWidget(QWidget):
         self.figure_canvas.solution_points = scatter
 
         # Cập nhật thanh màu và tô sáng giải pháp được chọn
-        self.figure_canvas.colorbar = self.figure_canvas.fig.colorbar(
+        self.figure_canvas.colorbar = self.figure_canvas.figure.colorbar(
             scatter, ax=self.figure_canvas.axes
         )
         self.figure_canvas.colorbar.set_label(color_objective)
@@ -731,12 +1004,9 @@ class ParetoNavigatorWidget(QWidget):
 
     def _on_weights_changed(self, weights: Dict[str, float]):
         """
-        Xử lý khi trọng số được thay đổi thông qua giao diện sliders.
-
-        Args:
-            weights: Dict[str, float] - Từ điển chứa tên mục tiêu và trọng số tương ứng
+        Xử lý khi trọng số thay đổi.
         """
-        if not self.navigator or not weights:
+        if self.is_updating_ui:
             return
 
         try:
@@ -782,10 +1052,7 @@ class ParetoNavigatorWidget(QWidget):
 
     def _select_by_weights(self):
         """
-        Chọn giải pháp tốt nhất dựa trên trọng số hiện tại.
-
-        Chức năng này tìm kiếm giải pháp phù hợp nhất với trọng số hiện tại
-        hoặc nội suy một giải pháp mới nếu không có giải pháp trực tiếp.
+        Tìm và chọn giải pháp dựa trên trọng số hiện tại.
         """
         if not self.navigator:
             QMessageBox.warning(self, "Lỗi", "Chưa khởi tạo ParetoNavigator.")
@@ -968,10 +1235,7 @@ class ParetoNavigatorWidget(QWidget):
 
     def _on_solution_selected(self, solution_id: str):
         """
-        Xử lý khi người dùng chọn một giải pháp từ đồ thị.
-
-        Args:
-            solution_id (str): ID của giải pháp được chọn
+        Xử lý khi người dùng chọn một giải pháp từ đồ thị Pareto.
         """
         if not self.navigator:
             return
