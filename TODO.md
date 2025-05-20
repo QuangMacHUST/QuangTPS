@@ -1,6 +1,17 @@
 # QuangTPS Development Tasks
 
 ## Completed Tasks
+- [x] Basic dose calculation engine
+- [x] DICOM RT import/export
+- [x] Structure contouring tools
+- [x] DVH calculation and visualization
+- [x] Forward planning tools
+- [x] Inverse planning optimization
+- [x] Plan evaluation tools
+- [x] Basic reporting functionality
+- [x] Implement Knowledge-Based Planning (KBP) similar to RapidPlan
+- [x] Implement MCO with Eclipse-like interface
+- [x] Fix stability issues with MCO and KBP modules
 - [x] Enhanced VMAT optimization implementation
 - [x] Added test file for dose calculation algorithms
 - [x] Enhanced beam visualization with 3D capabilities
@@ -13,50 +24,78 @@
 - [x] Created template manager for applying templates to treatment plans
 - [x] Added DICOM-RT plan template converter
 - [x] Added template selection dialog UI
-- [x] Created unit tests for the templates module
-- [x] Created test runner script
-- [x] Implemented robust optimization with setup uncertainties
-- [x] Implemented Eclipse-like Structure tab with contouring tools
-- [x] Created integrated External Beam Planning tab combining planning and dose features
-- [x] Enhanced DVH calculation with comprehensive metrics
-- [x] Fixed import issues in core modules to resolve circular dependencies
-- [x] Implemented better error handling in the main window initialization
-- [x] Enhanced Monte Carlo dose calculation with variance reduction techniques
-- [x] Fixed WeasyPrint dependency for report generation (libgobject library issue)
-- [x] Fixed critical bugs in IMRT optimization module
-- [x] Complete leaf sequencing algorithm for IMRT plans
-- [x] Add verification tools for plan quality assurance
-- [x] Add comprehensive dependency installation script (install_all_dependencies.py)
-- [x] Improved 3D visualization colormap handling and error recovery
-- [x] Enhanced Monte Carlo GPU integration with automatic hardware detection
-- [x] Fixed adaptive planning module component integration
-- [x] Improved BEV visualization with robust colormap fallback mechanisms
-- [x] Implemented comprehensive robustness analysis module with Eclipse-like UI
-- [x] Created robustness visualization with DVH bands and spatial analysis
-- [x] Integrate 3D dose visualization in External Beam Planning tab
-- [x] Enhance DVH visualization with interpolation and clinical goal markers
-- [x] Implement comprehensive plan evaluation and reporting system
-- [x] Implement auto-segmentation integration with Structure tab
-- [x] Fix colormap issues in MCO module for robust 3D Pareto visualization
-- [x] Enhance error handling for auto-segmentation and MCO features
-- [x] Enhance MPR viewer in Structure tab with real image data display
+- [x] Created unit tests for the template system
+- [x] Implemented auto-segmentation module with AI models
+- [x] Added support for multiple dose calculation algorithms
+- [x] Improved structure visualization in 3D view
+- [x] Added plan evaluation metrics
+- [x] Created clinical protocol system for plan evaluation
+- [x] Implemented plan comparison functionality
+- [x] Added patient database integration
+- [x] Created robust analysis module
+- [x] Enhanced UI with Eclipse-like interface
+- [x] Added Pareto surface navigation for MCO
+- [x] Improved object explorer panel with Eclipse-like functionality
+- [x] Implemented better integration between Structure tab and External Beam Planning tab
+- [x] Add multi-criteria optimization to Eclipse-like interface
+- [x] Create comprehensive dialog system for plan and structure properties
+- [x] Implement complete dialog system with Eclipse-like styling
+- [x] Enhance error handling and fallback mechanisms for missing components
+- [x] Improve import error handling with more robust fallback mechanisms
+- [x] Implement comprehensive dose calculation algorithm selection UI
+- [x] Add knowledge-based planning features:
+  - [x] Created KBPDialog with RapidPlan-style interface
+  - [x] Implemented KBP button in External Beam Planning toolbar
+  - [x] Developed model information display with feature importance visualization
+  - [x] Added automatic objectives and constraints application from KBP recommendations
+  - [x] Integrated KBP seamlessly with inverse planning workflow
+- [x] Enhance synchronization between ObjectExplorerPanel and all tabs
+- [x] Implement inverse planning algorithms for IMRT/VMAT optimization
+- [x] Create comprehensive documentation system
+
+## In Progress
+- [ ] Implement machine learning dose prediction module
+- [ ] Create adaptive planning workflow
+- [ ] Add support for proton therapy planning
+- [ ] Enhance Monte Carlo dose calculation with GPU acceleration
+- [ ] Implement automated quality assurance tools
+- [ ] Add export functionality for 3D visualizations and BEV snapshots
+- [ ] Implement radiobiology modeling for TCP/NTCP in plan evaluation
+- [ ] Implement MCO with Eclipse-like interface
+
+## Planned Tasks
+- [ ] Create advanced reporting system with customizable templates
+- [ ] Implement deformable image registration for adaptive planning
+- [ ] Add support for brachytherapy planning
+- [ ] Create machine log file analysis tools
+- [ ] Implement collision detection system
+- [ ] Add support for stereotactic radiosurgery planning
+- [ ] Create treatment delivery simulation
+- [ ] Implement beam data modeling tools
+- [ ] Add support for multiple treatment machines
+- [ ] Create patient-specific QA tools
+- [ ] Implement advanced biological models for treatment evaluation
+- [ ] Add support for 4D planning
+- [ ] Create workflow for MR-guided radiotherapy
+- [ ] Implement advanced optimization techniques (FMO, DAO)
+- [ ] Add support for scripting and automation
+- [ ] Create plugin system for extending functionality
+- [ ] Implement DICOM-RT Ion support
+- [ ] Add support for online adaptive planning
+- [ ] Implement multi-language support
+- [ ] Add treatment scheduling and fractionation tools
 
 ## Current Tasks
-- [ ] Improve object explorer panel with comprehensive structure and plan management
-- [ ] Implement better integration between Structure tab and External Beam Planning tab
-- [ ] Add multi-criteria optimization to Eclipse-like interface
-- [ ] Implement inverse planning algorithms for IMRT/VMAT optimization
 - [ ] Extend robust optimization based on robustness analysis results
 - [ ] Add comprehensive GPU memory management for large Monte Carlo calculations
 - [ ] Implement real-time adaptive planning with anatomy prediction
-- [ ] Add export functionality for 3D visualizations and BEV snapshots
 - [ ] Enhance robustness analysis with machine-specific uncertainty models
 - [ ] Implement probabilistic robustness analysis framework
 - [ ] Create scenario-based planning optimization derived from robustness results
 - [ ] Develop advanced biological metrics for treatment plan evaluation
 - [ ] Implement automated protocol selection based on treatment site
 - [ ] Create knowledge-based quality metrics using historical plan data
-- [ ] Implement radiobiology modeling for TCP/NTCP in plan evaluation
+- [ ] Add auto-recovery and auto-save for patient and plan data
 
 ## Future Tasks
 - [ ] Further enhance Eclipse-like UI with ribbon interface
@@ -64,7 +103,6 @@
 - [ ] Implement plan template library similar to Eclipse
 - [ ] Create clinical protocol system for automated plan evaluation
 - [ ] Implement adaptive planning workflow
-- [ ] Add knowledge-based planning features
 - [ ] Create machine learning module for dose prediction
 - [ ] Add automated plan quality evaluation
 - [ ] Enhance reporting capabilities with custom templates
@@ -84,7 +122,6 @@
 
 ## High Priority
 
-- [ ] Complete the Eclipse-like UI integration across all modules
 - [ ] Improve contouring tools with auto-segmentation integration
 - [ ] Enhance real-time dose calculation and display in planning interface
 - [ ] Add patient-specific QA module integrated with External Beam Planning tab

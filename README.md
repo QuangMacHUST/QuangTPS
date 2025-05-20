@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.8.11-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.9.2-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -36,120 +36,145 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
   - QA cho kế hoạch xạ trị
   - Báo cáo QA tự động
 
-### Cải tiến trong phiên bản 0.8.11
+### Cải tiến trong phiên bản 0.9.1
 
-- **Nâng cấp MPR viewer trong Structure tab với hiển thị dữ liệu hình ảnh thực**:
-  - Tích hợp đầy đủ MPRViewer vào Structure tab với hiển thị đa mặt phẳng (axial, sagittal, coronal)
-  - Hiển thị dữ liệu hình ảnh thực với khả năng điều chỉnh cửa sổ, mức độ phóng đại và thay đổi lát cắt
-  - Đồng bộ hóa hiển thị giữa MPR viewer và các cấu trúc giải phẫu đã phân đoạn
-  - Thanh công cụ vẽ contour trực tiếp trên MPR viewer
+- **Knowledge-Based Planning (KBP) phong cách RapidPlan**:
+  - Giao diện KBP hiện đại với thiết kế tương tự RapidPlan của Eclipse
+  - Dự đoán tự động các tham số tối ưu từ dữ liệu kế hoạch trước đó
+  - Phân tích thông minh đặc trưng hình học và liều lượng
+  - Tích hợp liền mạch vào quy trình lập kế hoạch ngược
 
-- **Cải thiện trải nghiệm người dùng khi phân đoạn cấu trúc**:
-  - Tích hợp xử lý sự kiện chuột để vẽ contour trực tiếp trên MPR viewer
-  - Công cụ vẽ đa dạng: vẽ tự do, xóa, cọ và smart brush
-  - Hỗ trợ hoàn tác/làm lại các thao tác vẽ contour
-  - Hiển thị trạng thái cấu trúc đã chọn một cách trực quan trong MPR viewer
+- **Nút KBP trong thanh công cụ External Beam Planning**:
+  - Truy cập nhanh chức năng KBP từ giao diện chính
+  - Hiển thị thông tin mô hình và các đề xuất trực quan
+  - Áp dụng tự động đề xuất vào kế hoạch hiện tại
+  - Hỗ trợ tối ưu hóa tự động sau khi áp dụng đề xuất
 
-- **Tăng cường tính ổn định của hệ thống**:
-  - Xử lý ngoại lệ toàn diện cho tất cả các tương tác với dữ liệu hình ảnh
-  - Cơ chế dự phòng khi các module không khả dụng hoặc dữ liệu hình ảnh không hợp lệ
-  - Báo cáo lỗi chi tiết giúp xác định và khắc phục vấn đề nhanh chóng
-  - Tối ưu hóa hiệu năng khi làm việc với các dữ liệu hình ảnh lớn
+- **Phân tích các đặc trưng quan trọng**:
+  - Hiển thị đóng góp của các đặc trưng trong mô hình KBP
+  - Hỗ trợ phân tích khoảng cách từ PTV đến các OAR
+  - Dự đoán các tham số tối ưu cho các cấu trúc cụ thể
+  - Điều chỉnh trọng số mục tiêu tối ưu theo kinh nghiệm lâm sàng
 
-### Cải tiến trong phiên bản 0.8.10
+- **Cải thiện trải nghiệm người dùng**:
+  - Biểu tượng chuyên nghiệp trong thanh công cụ
+  - Thông báo trực quan với hướng dẫn rõ ràng
+  - Xử lý ngoại lệ toàn diện cho tất cả tính năng
+  - Giao diện nhất quán theo phong cách Eclipse hiện đại
 
-- **Hoàn thiện tính năng phân đoạn tự động (Auto Segmentation)**:
-  - Tích hợp AutoSegmentationEngine vào Structure tab với giao diện đầy đủ
-  - Phân đoạn tự động các cấu trúc thông qua mô hình học máy tiên tiến
-  - Giao diện người dùng trực quan với các tùy chọn và thông báo tiến trình
-  - Xử lý kết quả phân đoạn với khả năng tích hợp vào quy trình lập kế hoạch
+### Cải tiến trong phiên bản 0.9.2
 
-- **Cải thiện tính ổn định module MCO**:
-  - Khắc phục lỗi liên quan đến hiển thị bề mặt Pareto 3D
-  - Tăng cường khả năng phục hồi với cơ chế fallback cho các thành phần không khả dụng
-  - Đảm bảo hiển thị đồ thị Pareto màu sắc hoạt động trong mọi môi trường
+- **Nâng cấp độ ổn định của module MCO (Multi-Criteria Optimization)**:
+  - Khắc phục lỗi indentation gây trở ngại trong việc import module
+  - Cải thiện phương thức lựa chọn giải pháp Pareto tối ưu
+  - Tăng cường xử lý ngoại lệ khi các thành phần không khả dụng
+  - Tích hợp liền mạch với quy trình lập kế hoạch ngược
 
-- **Nâng cao khả năng xử lý ngoại lệ toàn hệ thống**:
-  - Cải thiện xử lý lỗi khi các thư viện phụ thuộc không khả dụng
-  - Cơ chế phục hồi thông minh với khả năng thông báo rõ ràng
-  - Trải nghiệm người dùng mượt mà ngay cả khi thiếu thành phần không thiết yếu
+- **Tối ưu hóa tích hợp KBP (Knowledge-Based Planning)**:
+  - Chuẩn hóa hệ thống biểu tượng với hàm create_eclipse_icon
+  - Khắc phục lỗi import trong kbp_dialog.py cho tăng tính tương thích
+  - Cải thiện quy trình xử lý đề xuất KBP vào kế hoạch hiện tại
+  - Đồng bộ hóa giữa KBP và hệ thống tối ưu hóa ngược
 
-### Cải tiến trong phiên bản 0.8.9
+- **Tăng cường tính ổn định toàn hệ thống**:
+  - Cập nhật cơ chế import trong hệ thống dialog với cơ chế dự phòng
+  - Cải thiện hệ thống thông báo lỗi với chi tiết và hướng dẫn khắc phục
+  - Đảm bảo khả năng hoạt động khi thiếu các thành phần không thiết yếu
+  - Tăng cường truy vết lỗi và logging để dễ dàng gỡ lỗi
 
-- **Hoàn thiện module đánh giá kế hoạch tích hợp phong cách Eclipse**:
-  - Tạo module báo cáo kế hoạch chuyên nghiệp với nhiều định dạng xuất (PDF, HTML, CSV)
-  - Định nghĩa chuẩn cho hơn 20 loại mục tiêu lâm sàng đầy đủ phong cách Eclipse
-  - Hệ thống điểm đánh giá kế hoạch với thang điểm trực quan từ "Kém" đến "Xuất sắc"
+### Cải tiến trong phiên bản 0.9.0
 
-- **Bộ đánh giá kế hoạch xạ trị toàn diện**:
-  - Đánh giá tự động kế hoạch theo protocol lâm sàng với tính điểm riêng cho PTV và OAR
-  - Tính toán chỉ số đồng nhất (HI), chỉ số phù hợp (CI) và các chỉ số nâng cao khác
-  - Phân tích kết quả với hiển thị trực quan bằng màu sắc và biểu đồ
+- **Tối ưu hiệu năng tính toán liều**:
+  - Cải thiện thuật toán Monte Carlo CPU và GPU cho hiệu suất cao hơn 30%
+  - Tính toán song song đa luồng với hỗ trợ tối ưu cho nhiều nền tảng
+  - Quản lý bộ nhớ thông minh giảm 40% lượng RAM sử dụng cho kế hoạch lớn
+  - Hiển thị 3D hiệu suất cao cho kế hoạch phức tạp với nhiều cấu trúc
+
+- **Hệ thống dialog toàn diện phong cách Eclipse**:
+  - Import thông minh với cơ chế dự phòng tự động cho tất cả dialog
+  - Thông báo lỗi hữu ích với hướng dẫn chi tiết khi thiếu thành phần
+  - Hiển thị tự động PlanPropertiesDialog khi chỉnh sửa kế hoạch
+  - ColorButton trong StructurePropertiesDialog với bảng màu trực quan
+
+- **Tích hợp MCO nâng cao**:
+  - Cải thiện giao diện Pareto Navigator với hiển thị 3D đẹp mắt
+  - Điều hướng trực quan trên bề mặt Pareto với trải nghiệm mượt mà
+  - Thêm cân bằng và phân tích độ nhạy cho các tiêu chí tối ưu
+  - Hệ thống lưu trữ và truy xuất giải pháp Pareto hiệu quả
+
+- **Tích hợp quy trình làm việc liền mạch**:
+  - Kết nối thông minh giữa Object Explorer và các dialog thuộc tính
+  - Đồng bộ hóa tự động giữa các thành phần khi dữ liệu thay đổi
+  - Hệ thống thông báo và cảnh báo toàn diện với hướng dẫn khắc phục
+  - Giao diện nhất quán theo phong cách Eclipse trong toàn bộ hệ thống
+
+### Cải tiến trong phiên bản 0.8.16
+
+- **Hoàn thiện hệ thống dialog phong cách Eclipse**:
+  - Dialog so sánh kế hoạch với biểu đồ DVH chồng và bảng so sánh chỉ số
+  - Dialog chỉnh sửa thuộc tính kế hoạch với giao diện trực quan
+  - Dialog chỉnh sửa thuộc tính cấu trúc với ColorButton tùy chỉnh
+  - Tích hợp đầy đủ các dialog vào quy trình làm việc chính
+  - Giao diện nhất quán theo phong cách Eclipse hiện đại
+
+- **Nâng cao khả năng phục hồi khi thiếu thành phần**:
+  - Xử lý ngoại lệ toàn diện khi import các module không khả dụng
+  - Lớp giả mạch cho tất cả các thành phần có thể thiếu
+  - Thông báo lỗi chi tiết với hướng dẫn khắc phục
+  - Đảm bảo hệ thống vẫn hoạt động với chức năng cơ bản
+
+- **Cải thiện tích hợp giữa các thành phần**:
+  - Đồng bộ hóa giữa Object Explorer và các dialog thuộc tính
+  - Kết nối liền mạch giữa PlanComparisonDialog và DVH Widget
+  - Nhất quán dữ liệu khi chỉnh sửa thuộc tính đối tượng
+  - Cập nhật tự động các thành phần UI khi dữ liệu thay đổi
+
+### Cải tiến trong phiên bản 0.8.15
+
+- **Hoàn thiện tích hợp Object Explorer phong cách Eclipse**:
+  - Kết nối liền mạch giữa Object Explorer và các thành phần chính của hệ thống
+  - Xử lý ngoại lệ thông minh khi kết nối signal/slot
+  - Cải thiện giao diện với splitter điều chỉnh kích thước
+  - Đồng bộ hóa tự động giữa Object Explorer và các tab chức năng
+
+- **Tái cấu trúc hệ thống tab hiện đại**:
+  - Thiết kế lại bố cục tab đúng phong cách Eclipse
+  - Tích hợp các tab chuyên biệt: Plan Evaluation Report, Robust Analysis
+  - Tab MCO Navigator thông minh (hiển thị khi cần thiết)
+  - Chuyển đổi mượt mà giữa các tab chức năng
 
 - **Nâng cao độ tin cậy của hệ thống**:
-  - Xử lý ngoại lệ và lỗi import thông minh với cơ chế fallback tự động
-  - Dễ dàng mở rộng với các module mới nhờ kiến trúc mô-đun hóa
-  - Tăng cường khả năng phục hồi khi thiếu thư viện bên ngoài
+  - Khắc phục nhiều lỗi linter trong các file UI chính
+  - Xử lý ngoại lệ toàn diện cho quá trình tính toán liều
+  - Cải thiện hệ thống import với cơ chế try-except và fallback
+  - Đảm bảo hoạt động cơ bản ngay cả khi thiếu thành phần không thiết yếu
 
-### Cải tiến trong phiên bản 0.8.8
+- **Cải thiện đồng bộ hóa dữ liệu**:
+  - Cập nhật tự động Object Explorer khi tải kế hoạch hoặc cấu trúc mới
+  - Đồng bộ đa chiều giữa Object Explorer và các module chính
+  - Logging chi tiết và báo cáo lỗi trong quá trình đồng bộ
+  - Thông báo trạng thái trực quan trong status bar
 
-- **Hệ thống đánh giá kế hoạch xạ trị toàn diện theo phong cách Eclipse**:
-  - Giao diện hiện đại tích hợp DVH, đánh giá mục tiêu lâm sàng và thống kê liều
-  - Hiển thị điểm đánh giá kế hoạch với thang màu từ đỏ đến xanh theo chất lượng
-  - Đánh giá tự động các mục tiêu lâm sàng với hiển thị màu sắc trực quan
-  - Khả năng tùy chỉnh và chỉnh sửa protocol lâm sàng trực tiếp trong giao diện
+### Cải tiến trong phiên bản 0.8.14
 
-- **Tính năng báo cáo đánh giá chuyên nghiệp**:
-  - Báo cáo PDF với đầy đủ thông tin kế hoạch, DVH và kết quả đánh giá
-  - Báo cáo HTML tương tác với khả năng phóng to/thu nhỏ biểu đồ
-  - Xuất dữ liệu đánh giá ra CSV để phân tích nâng cao
-  - Tích hợp so sánh kế hoạch để phân tích nhiều phương án điều trị
+- **Object Explorer Panel hoàn chỉnh theo phong cách Eclipse**:
+  - Hiển thị và quản lý bệnh nhân, cấu trúc giải phẫu và kế hoạch xạ trị trong một giao diện hợp nhất
+  - Hỗ trợ tìm kiếm đối tượng với bộ lọc thời gian thực
+  - Hiển thị cấu trúc với màu sắc trực quan tương ứng với màu thực tế
+  - Menu ngữ cảnh đầy đủ cho các thao tác phổ biến (tạo mới, sửa, xóa)
+  - Checkbox hiển thị/ẩn cấu trúc trực tiếp trên panel
 
-- **Tích hợp hoàn chỉnh với các thành phần hiện có**:
-  - Kết nối liền mạch với module DVH và hiển thị liều 3D
-  - Tích hợp với protocol manager để quản lý các tiêu chí lâm sàng
-  - Xử lý ngoại lệ thông minh khi thiếu các thành phần phụ thuộc
-  - Giao diện đồng nhất theo phong cách Eclipse trong toàn hệ thống
+- **Tích hợp Object Explorer Panel vào hệ thống**:
+  - Đồng bộ hóa tự động giữa Object Explorer và các tab khác
+  - Tương tác hai chiều giữa Object Explorer và các module chức năng
+  - Quản lý toàn diện cho bệnh nhân, cấu trúc, và kế hoạch xạ trị
+  - Tạo cấu trúc và kế hoạch mới trực tiếp từ Object Explorer
 
-### Cải tiến trong phiên bản 0.8.7
-
-- **Tích hợp hoàn chỉnh hiển thị liều 3D vào External Beam Planning**:
-  - Tích hợp liền mạch DoseVisualization3D vào tab External Beam Planning
-  - Hiển thị đồng thời phân bố liều 3D, isodose và cấu trúc giải phẫu
-  - Đồng bộ hóa tự động giữa hiển thị 3D và DVH khi dữ liệu thay đổi
-  - Cập nhật trực quan khi cấu trúc hoặc chùm tia thay đổi
-
-- **Giao diện Eclipse-style cho External Beam Planning tab**:
-  - Thiết kế lại layout với panel trái quản lý kế hoạch và panel phải hiển thị kết quả
-  - Chọn chế độ lập kế hoạch (Forward, Inverse, MCO) bằng radio button trực quan
-  - Tab chùm tia và mục tiêu tối ưu hóa được tổ chức hợp lý và dễ sử dụng
-  - Status bar hiển thị thông tin trạng thái và tiến trình
-
-- **Xử lý lỗi toàn diện**:
-  - Placeholder thông minh cho các thành phần không khả dụng
-  - Chế độ dự phòng khi VTK hoặc PyQt5 không hoạt động
-  - Chuyển đổi tự động giữa các định dạng dữ liệu liều
-  - Logging chi tiết để dễ dàng gỡ lỗi và theo dõi
-
-### Cải tiến trong phiên bản 0.8.6
-
-- **Hoàn thiện module phân tích độ bền vững**:
-  - Module toàn diện mô phỏng Eclipse Robustness Analyzer với giao diện hiện đại
-  - Đánh giá độ bền vững kế hoạch đối với độ không chắc chắn về vị trí và phạm vi
-  - Hỗ trợ phân tích nhiều kịch bản với số lượng tùy chỉnh
-  - Phân tích chỉ số đầy đủ cho cả mục tiêu và cơ quan nguy cấp
-
-- **Trực quan hóa kết quả phân tích độ bền vững nâng cao**:
-  - Hiển thị DVH bands cho từng cấu trúc với dải biến thiên theo từng kịch bản
-  - Biểu đồ độ phủ mục tiêu với phân tích min-max range
-  - Bản đồ nhiệt phân tích không gian hiển thị các điểm nóng của sự thay đổi liều
-  - Bảng chỉ số đánh giá với màu sắc trực quan theo mức độ biến thiên
-
-- **Tạo báo cáo phân tích độ bền vững chuyên nghiệp**:
-  - Xuất báo cáo CSV và Excel đa sheet với phân tích chi tiết
-  - Tạo báo cáo PDF với bảng, biểu đồ và đánh giá lâm sàng
-  - Tạo báo cáo HTML tương tác với khả năng lọc và hiển thị tùy chỉnh
-  - Tích hợp đánh giá tự động dựa trên ngưỡng lâm sàng
+- **Nâng cao độ tin cậy của hệ thống**:
+  - Cải thiện xử lý ngoại lệ cho các thành phần không khả dụng
+  - Bổ sung cơ chế dự phòng khi các phương thức quan trọng không tồn tại
+  - Sửa nhiều lỗi linter và khắc phục các vấn đề tiềm ẩn
+  - Xử lý các trường hợp ngoại lệ toàn diện
 
 ## Cài đặt
 

@@ -1879,19 +1879,44 @@ class StructureTab(QWidget):
             # Emit signal
             self.structureModified.emit(self.selected_structure)
 
-    def handle_mouse_event(self, event_type, point, slice_index=None, orientation=None):
-        """Handle mouse events from the image viewer."""
-        if not self.selected_structure:
+    def handle_mouse_event(
+        self, event_type, point, slice_index=None, orientation=None, tool_type="draw"
+    ):
+        """Xử lý các sự kiện chuột từ MPR viewer."""
+        if not self.selected_structure or not self.segmentation_interface:
             return False
 
-        if event_type == "press":
-            return self.segmentation_interface.handle_mouse_press(
-                point, slice_index, orientation
-            )
-        elif event_type == "move":
-            return self.segmentation_interface.handle_mouse_move(point)
-        elif event_type == "release":
-            return self.segmentation_interface.handle_mouse_release(point)
+        try:
+            # Truyền thêm thông tin tool_type cho segmentation_interface
+            if event_type == "press":
+                return self.segmentation_interface.handle_mouse_press(
+                    point, slice_index, orientation, tool_type
+                )
+            elif event_type == "move":
+                return self.segmentation_interface.handle_mouse_move(point, tool_type)
+            elif event_type == "release":
+                result = self.segmentation_interface.handle_mouse_release(
+                    point, tool_type
+                )
+
+                # Nếu có thay đổi, thêm vào lịch sử undo
+                if result and hasattr(self, "contour_manager") and self.contour_manager:
+                    self.contour_manager._undo_stack.append(
+                        {
+                            "structure_id": self.selected_structure.id,
+                            "operation": "edit_contour",
+                            "slice_index": slice_index,
+                            "orientation": orientation,
+                        }
+                    )
+                    # Xóa lịch sử redo vì đã có thay đổi mới
+                    self.contour_manager._redo_stack = []
+
+                return result
+
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sự kiện chuột: {str(e)}")
+            return False
 
         return False
 
@@ -2342,33 +2367,112 @@ class StructureTab(QWidget):
 
     def on_mpr_mouse_pressed(self, view_id, view_pos, image_pos):
         """Xử lý khi nhấn chuột trong MPR viewer."""
-        if self.selected_structure:
-            self.handle_mouse_event(
+        if not self.selected_structure:
+            # Hiển thị thông báo chọn cấu trúc
+            self.status_label.setText("Vui lòng chọn một cấu trúc để vẽ")
+            return
+
+        try:
+            # Lấy thông tin slice và orientation hiện tại
+            orientation = self.mpr_viewer.get_current_orientation()
+            slice_index = self.mpr_viewer.get_current_slice_index()
+
+            # Xác định công cụ vẽ nào đang được chọn
+            tool_type = self._get_active_drawing_tool()
+
+            # Ghi log sự kiện
+            logger.debug(f"Mouse pressed at {image_pos} with tool: {tool_type}")
+
+            # Xử lý sự kiện dựa trên công cụ đang chọn và vị trí
+            result = self.handle_mouse_event(
                 "press",
                 image_pos,
-                slice_index=self.mpr_viewer.get_current_slice_index(),
-                orientation=self.mpr_viewer.get_current_orientation(),
+                slice_index=slice_index,
+                orientation=orientation,
+                tool_type=tool_type,
             )
+
+            # Cập nhật UI nếu cần
+            if result:
+                self.update_structure_overlay(orientation)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sự kiện nhấn chuột: {str(e)}")
 
     def on_mpr_mouse_moved(self, view_id, view_pos, image_pos):
         """Xử lý khi di chuyển chuột trong MPR viewer."""
-        if self.selected_structure:
-            self.handle_mouse_event(
+        if not self.selected_structure:
+            return
+
+        try:
+            # Lấy thông tin slice và orientation hiện tại
+            orientation = self.mpr_viewer.get_current_orientation()
+            slice_index = self.mpr_viewer.get_current_slice_index()
+
+            # Xác định công cụ vẽ nào đang được chọn
+            tool_type = self._get_active_drawing_tool()
+
+            # Xử lý sự kiện di chuyển
+            result = self.handle_mouse_event(
                 "move",
                 image_pos,
-                slice_index=self.mpr_viewer.get_current_slice_index(),
-                orientation=self.mpr_viewer.get_current_orientation(),
+                slice_index=slice_index,
+                orientation=orientation,
+                tool_type=tool_type,
             )
+
+            # Cập nhật UI nếu có thay đổi
+            if result:
+                self.update_structure_overlay(orientation)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sự kiện di chuyển chuột: {str(e)}")
 
     def on_mpr_mouse_released(self, view_id, view_pos, image_pos):
         """Xử lý khi thả chuột trong MPR viewer."""
-        if self.selected_structure:
-            self.handle_mouse_event(
+        if not self.selected_structure:
+            return
+
+        try:
+            # Lấy thông tin slice và orientation hiện tại
+            orientation = self.mpr_viewer.get_current_orientation()
+            slice_index = self.mpr_viewer.get_current_slice_index()
+
+            # Xác định công cụ vẽ nào đang được chọn
+            tool_type = self._get_active_drawing_tool()
+
+            # Xử lý sự kiện thả chuột
+            result = self.handle_mouse_event(
                 "release",
                 image_pos,
-                slice_index=self.mpr_viewer.get_current_slice_index(),
-                orientation=self.mpr_viewer.get_current_orientation(),
+                slice_index=slice_index,
+                orientation=orientation,
+                tool_type=tool_type,
             )
+
+            # Cập nhật UI và phát tín hiệu nếu cấu trúc đã thay đổi
+            if result:
+                self.update_structure_overlay(orientation)
+                self.structureModified.emit(self.selected_structure)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi xử lý sự kiện thả chuột: {str(e)}")
+
+    def _get_active_drawing_tool(self):
+        """Xác định công cụ vẽ nào đang được chọn."""
+        try:
+            if self.action_draw.isChecked():
+                return "draw"
+            elif self.action_erase.isChecked():
+                return "erase"
+            elif self.action_brush.isChecked():
+                return "brush"
+            elif self.action_smart.isChecked():
+                return "smart_brush"
+            else:
+                return "none"  # Không có công cụ nào được chọn
+        except Exception:
+            return "none"
 
     def on_draw_tool_toggled(self, checked):
         """Xử lý khi bật/tắt công cụ vẽ."""
@@ -2434,43 +2538,98 @@ class StructureTab(QWidget):
         """Hoàn tác thao tác vẽ gần nhất."""
         # Thực hiện hoàn tác nếu có contour manager
         if hasattr(self, "contour_manager") and self.contour_manager:
-            self.contour_manager.undo()
-            self.update_all_structure_overlays()
+            if self.contour_manager.undo():
+                # Cập nhật hiển thị sau khi hoàn tác
+                self.update_all_structure_overlays()
+                # Phát tín hiệu thay đổi cấu trúc
+                if self.selected_structure:
+                    self.structureModified.emit(self.selected_structure)
 
     def on_redo(self):
         """Làm lại thao tác vẽ đã hoàn tác."""
         # Thực hiện làm lại nếu có contour manager
         if hasattr(self, "contour_manager") and self.contour_manager:
-            self.contour_manager.redo()
-            self.update_all_structure_overlays()
+            if self.contour_manager.redo():
+                # Cập nhật hiển thị sau khi làm lại
+                self.update_all_structure_overlays()
+                # Phát tín hiệu thay đổi cấu trúc
+                if self.selected_structure:
+                    self.structureModified.emit(self.selected_structure)
 
     def update_structure_overlay(self, orientation):
         """Cập nhật overlay cấu trúc trong MPR viewer cho một hướng cụ thể."""
         if not self.mpr_viewer or not self.structure_set:
             return
 
-        # Cập nhật overlay cho tất cả các cấu trúc hiển thị
-        for structure in self.structure_set.structures:
-            if structure.visible:
-                color = structure.color
-                is_selected = structure == self.selected_structure
-                self.mpr_viewer.add_structure_overlay(
-                    structure.id, structure, color, is_selected
-                )
+        try:
+            # Lấy slice index hiện tại cho orientation
+            current_slice = self.mpr_viewer.get_current_slice_index(orientation)
+            if current_slice is None:
+                return
+
+            # Cập nhật tất cả các cấu trúc có hiển thị (visible=True)
+            for structure in self.structure_set.structures:
+                if structure.visible:
+                    # Kiểm tra xem cấu trúc có dữ liệu contour không
+                    if hasattr(structure, "contours") and structure.contours:
+                        # Đánh dấu nổi bật nếu là cấu trúc đang chọn
+                        is_selected = structure == self.selected_structure
+
+                        # Thêm overlay vào MPR viewer
+                        self.mpr_viewer.add_structure_overlay(
+                            structure.id, structure, structure.color, is_selected
+                        )
+
+                        # Cập nhật slice hiện tại
+                        self.mpr_viewer.update_view(orientation)
+                else:
+                    # Xóa overlay nếu cấu trúc không hiển thị
+                    self.mpr_viewer.remove_structure_overlay(structure.id)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật overlay cấu trúc: {str(e)}")
 
     def update_all_structure_overlays(self):
-        """Cập nhật tất cả các overlay cấu trúc trong tất cả các hướng."""
-        if self.mpr_viewer:
-            from quangtps.ui.mpr_viewer import ViewOrientation
+        """Cập nhật tất cả các overlay cấu trúc trong tất cả các hướng MPR."""
+        if not self.mpr_viewer or not self.structure_set:
+            return
 
-            self.update_structure_overlay(ViewOrientation.AXIAL)
-            self.update_structure_overlay(ViewOrientation.SAGITTAL)
-            self.update_structure_overlay(ViewOrientation.CORONAL)
+        try:
+            # Xóa tất cả các overlay hiện tại
+            self.mpr_viewer.clear_all_structure_overlays()
+
+            # Thêm lại các overlay cho tất cả các cấu trúc hiển thị
+            for structure in self.structure_set.structures:
+                if structure.visible:
+                    is_selected = structure == self.selected_structure
+                    self.mpr_viewer.add_structure_overlay(
+                        structure.id, structure, structure.color, is_selected
+                    )
+
+            # Cập nhật tất cả các view
+            self.mpr_viewer.update_all_views()
+
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật tất cả các overlay cấu trúc: {str(e)}")
 
     def update_orientation_ui(self, orientation):
-        """Cập nhật giao diện người dùng dựa trên hướng MPR hiện tại."""
-        # Thực hiện cập nhật UI dựa trên hướng hiện tại
-        pass
+        """Cập nhật giao diện người dùng dựa trên hướng hiện tại."""
+        try:
+            # Cập nhật các nút điều khiển hoặc hiển thị thông tin cho hướng hiện tại
+            current_slice = self.mpr_viewer.get_current_slice_index(orientation)
+            total_slices = self.mpr_viewer.get_total_slices(orientation)
+
+            # Cập nhật status bar hoặc label hiển thị thông tin slice
+            if hasattr(self, "status_label"):
+                self.status_label.setText(
+                    f"Orientation: {orientation}, Slice: {current_slice + 1}/{total_slices}"
+                )
+
+            # Cập nhật overlay cấu trúc cho hướng hiện tại
+            self.update_structure_overlay(orientation)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật UI cho hướng {orientation}: {str(e)}")
 
 
 def test_structure_tab():

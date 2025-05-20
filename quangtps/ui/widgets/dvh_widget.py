@@ -253,266 +253,166 @@ class DVHWidget(QWidget):
         }
         self.dvh_calculator = DVHCalculator()
 
+        # Thêm hỗ trợ cho DVH bands từ phân tích độ bền vững
+        self.robustness_results = {}  # Dict[structure_name, robustness_result]
+        self.show_robustness_bands = False  # Có hiển thị dải DVH không
+        self.robustness_alpha = 0.3  # Độ trong suốt của dải DVH
+
         # Các thành phần UI
         self._init_ui()
         self._connect_signals()
 
     def _init_ui(self):
         """Khởi tạo giao diện người dùng."""
-        # Layout tổng thể
+        if not PYQT_AVAILABLE:
+            layout = QVBoxLayout(self)
+            label = QLabel("PyQt không khả dụng, không thể hiển thị DVH")
+            layout.addWidget(label)
+            return
+
+        # Tạo layout chính
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Thanh công cụ
-        toolbar = QToolBar()
-        toolbar.setIconSize(QSize(16, 16))
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        # Tạo splitter để chia màn hình
+        splitter = QSplitter(Qt.Horizontal)
 
-        # Nút xuất và in
-        export_action = QAction(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "export.png")),
-            "Xuất",
-            self,
-        )
-        export_action.triggered.connect(self.export_dvh)
-        toolbar.addAction(export_action)
-
-        print_action = QAction(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "print.png")),
-            "In",
-            self,
-        )
-        print_action.triggered.connect(self.print_dvh)
-        toolbar.addAction(print_action)
-
-        toolbar.addSeparator()
-
-        # Loại DVH
-        dvh_type_label = QLabel("Loại DVH:")
-        toolbar.addWidget(dvh_type_label)
-
-        self.dvh_type_combo = QComboBox()
-        self.dvh_type_combo.addItem("Tích lũy", DVHType.CUMULATIVE)
-        self.dvh_type_combo.addItem("Vi phân", DVHType.DIFFERENTIAL)
-        toolbar.addWidget(self.dvh_type_combo)
-
-        toolbar.addSeparator()
-
-        # Hiển thị thể tích
-        volume_label = QLabel("Thể tích:")
-        toolbar.addWidget(volume_label)
-
-        self.volume_combo = QComboBox()
-        self.volume_combo.addItem("Tương đối (%)", True)
-        self.volume_combo.addItem("Tuyệt đối (cc)", False)
-        toolbar.addWidget(self.volume_combo)
-
-        toolbar.addSeparator()
-
-        # Chuẩn hóa liều
-        norm_label = QLabel("Chuẩn hóa:")
-        toolbar.addWidget(norm_label)
-
-        self.norm_combo = QComboBox()
-        self.norm_combo.setEditable(True)
-        self.norm_combo.addItem("100%")
-        self.norm_combo.addItem("95%")
-        self.norm_combo.addItem("90%")
-        self.norm_combo.addItem("80%")
-        toolbar.addWidget(self.norm_combo)
-
-        # Nút làm mới
-        refresh_action = QAction(
-            QIcon(os.path.join(os.path.dirname(__file__), "icons", "refresh.png")),
-            "Làm mới",
-            self,
-        )
-        refresh_action.triggered.connect(self.refresh_dvh)
-        toolbar.addAction(refresh_action)
-
-        main_layout.addWidget(toolbar)
-
-        # Tạo splitter chính (chia màn hình thành 2 phần)
-        main_splitter = QSplitter(Qt.Horizontal)
-
-        # Phần trái: Danh sách kế hoạch và cấu trúc
+        # Panel bên trái: Điều khiển và danh sách cấu trúc
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Danh sách kế hoạch
-        plan_group = QGroupBox("Kế hoạch")
-        plan_layout = QVBoxLayout()
+        # Tạo group box cho các điều khiển
+        controls_group = QGroupBox("Điều khiển DVH")
+        controls_layout = QFormLayout(controls_group)
 
+        # Chọn kế hoạch
         self.plan_combo = QComboBox()
-        self.plan_combo.setMaximumWidth(200)
-        plan_layout.addWidget(self.plan_combo)
+        controls_layout.addRow("Kế hoạch:", self.plan_combo)
 
-        plan_group.setLayout(plan_layout)
-        left_layout.addWidget(plan_group)
+        # Loại DVH (tích lũy/vi phân)
+        self.dvh_type_combo = QComboBox()
+        self.dvh_type_combo.addItems(["Tích lũy", "Vi phân"])
+        controls_layout.addRow("Loại DVH:", self.dvh_type_combo)
 
-        # Danh sách cấu trúc
-        structure_group = QGroupBox("Cấu trúc")
-        structure_layout = QVBoxLayout()
+        # Hiển thị thể tích (% hoặc cc)
+        self.volume_combo = QComboBox()
+        self.volume_combo.addItems(["Tương đối (%)", "Tuyệt đối (cc)"])
+        controls_layout.addRow("Thể tích:", self.volume_combo)
 
-        self.ptv_group = QGroupBox("PTV")
-        self.ptv_layout = QVBoxLayout()
-        self.ptv_group.setLayout(self.ptv_layout)
-        structure_layout.addWidget(self.ptv_group)
+        # Chuẩn hóa liều
+        self.norm_combo = QComboBox()
+        self.norm_combo.setEditable(True)
+        self.norm_combo.addItems(["100", "95", "90", "80", "50"])
+        controls_layout.addRow("Chuẩn hóa (%):", self.norm_combo)
 
-        self.oar_group = QGroupBox("OAR")
-        self.oar_layout = QVBoxLayout()
-        self.oar_group.setLayout(self.oar_layout)
-        structure_layout.addWidget(self.oar_group)
+        # Thêm checkbox hiển thị dải DVH từ phân tích độ bền vững
+        self.show_bands_checkbox = QCheckBox("Hiển thị dải DVH")
+        self.show_bands_checkbox.setToolTip("Hiển thị dải DVH từ phân tích độ bền vững")
+        self.show_bands_checkbox.setChecked(False)
+        controls_layout.addRow("Độ bền vững:", self.show_bands_checkbox)
 
-        self.other_group = QGroupBox("Khác")
-        self.other_layout = QVBoxLayout()
-        self.other_group.setLayout(self.other_layout)
-        structure_layout.addWidget(self.other_group)
+        left_layout.addWidget(controls_group)
 
-        # Nút chọn tất cả / bỏ chọn tất cả
+        # Tạo group box cho danh sách cấu trúc
+        structures_group = QGroupBox("Cấu trúc")
+        structures_layout = QVBoxLayout(structures_group)
+
+        # Các nút chọn tất cả/bỏ chọn tất cả
         buttons_layout = QHBoxLayout()
         self.select_all_button = QPushButton("Chọn tất cả")
-        self.select_all_button.clicked.connect(self.select_all_structures)
         buttons_layout.addWidget(self.select_all_button)
 
         self.deselect_all_button = QPushButton("Bỏ chọn tất cả")
-        self.deselect_all_button.clicked.connect(self.deselect_all_structures)
         buttons_layout.addWidget(self.deselect_all_button)
+        structures_layout.addLayout(buttons_layout)
 
-        structure_layout.addLayout(buttons_layout)
+        # Tạo scroll area cho danh sách cấu trúc
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
 
-        structure_group.setLayout(structure_layout)
-        left_layout.addWidget(structure_group)
+        self.structures_widget = QWidget()
+        self.structures_layout = QVBoxLayout(self.structures_widget)
+        self.structures_layout.setContentsMargins(0, 0, 0, 0)
+        self.structures_layout.setSpacing(2)
+        self.structures_layout.addStretch()
 
-        # Thêm stretch để đẩy các widget lên trên
-        left_layout.addStretch(1)
+        scroll_area.setWidget(self.structures_widget)
+        structures_layout.addWidget(scroll_area)
 
-        # Phần phải: Biểu đồ DVH và bảng thống kê
+        left_layout.addWidget(structures_group)
+        splitter.addWidget(left_panel)
+
+        # Panel bên phải: Biểu đồ DVH và bảng thống kê
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Biểu đồ DVH
-        dvh_group = QGroupBox("Biểu đồ Liều-Thể tích (DVH)")
-        dvh_layout = QVBoxLayout()
+        # Tạo tab widget cho biểu đồ và bảng thống kê
+        tab_widget = QTabWidget()
 
-        if MATPLOTLIB_AVAILABLE:
-            self.figure = Figure(figsize=(6, 4), dpi=100)
-            self.canvas = FigureCanvas(self.figure)
-            self.toolbar = NavigationToolbar(self.canvas, self)
-            self.ax = self.figure.add_subplot(111)
+        # Tab biểu đồ DVH
+        dvh_tab = QWidget()
+        dvh_layout = QVBoxLayout(dvh_tab)
 
-            dvh_layout.addWidget(self.toolbar)
-            dvh_layout.addWidget(self.canvas)
-        else:
-            # Hiển thị thông báo nếu matplotlib không khả dụng
-            dvh_label = QLabel(
-                "Matplotlib không khả dụng. Không thể hiển thị biểu đồ DVH."
-            )
-            dvh_label.setStyleSheet("color: red;")
-            dvh_layout.addWidget(dvh_label)
+        # Tạo biểu đồ matplotlib
+        self.figure = Figure(figsize=(8, 6), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111)
+        self.ax.set_xlabel(f"Liều ({self.dose_unit})")
+        self.ax.set_ylabel("Thể tích (%)")
+        self.ax.set_title("Biểu đồ liều-thể tích (DVH)")
+        self.ax.grid(True)
 
-        dvh_group.setLayout(dvh_layout)
-        right_layout.addWidget(dvh_group)
+        # Thêm thanh công cụ matplotlib
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        dvh_layout.addWidget(self.toolbar)
+        dvh_layout.addWidget(self.canvas)
 
-        # Bảng thống kê
-        stats_group = QGroupBox("Thống kê liều lượng")
-        stats_layout = QVBoxLayout()
+        tab_widget.addTab(dvh_tab, "Biểu đồ DVH")
+
+        # Tab thống kê liều
+        stats_tab = QWidget()
+        stats_layout = QVBoxLayout(stats_tab)
 
         self.stats_table = QTableWidget()
-        self.stats_table.setColumnCount(7)
+        self.stats_table.setColumnCount(6)
         self.stats_table.setHorizontalHeaderLabels(
-            ["Cấu trúc", "Dmin", "Dmax", "Dmean", "D95", "V20Gy", "V30Gy"]
+            ["Cấu trúc", "Min (Gy)", "Max (Gy)", "Mean (Gy)", "D95 (Gy)", "V20 (%)"]
         )
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-
         stats_layout.addWidget(self.stats_table)
 
-        stats_group.setLayout(stats_layout)
-        right_layout.addWidget(stats_group)
+        tab_widget.addTab(stats_tab, "Thống kê liều")
 
-        # Thêm các panel vào splitter
-        main_splitter.addWidget(left_panel)
-        main_splitter.addWidget(right_panel)
-        main_splitter.setSizes([200, 600])  # Thiết lập kích thước ban đầu
+        right_layout.addWidget(tab_widget)
 
-        main_layout.addWidget(main_splitter)
+        # Thêm các nút xuất và in DVH
+        buttons_layout = QHBoxLayout()
+        self.export_button = QPushButton("Xuất DVH")
+        buttons_layout.addWidget(self.export_button)
 
-        # Thêm stylesheet
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 1ex;
-                padding-top: 10px;
-            }
+        self.print_button = QPushButton("In DVH")
+        buttons_layout.addWidget(self.print_button)
 
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top center;
-                padding: 0 3px;
-                background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                              stop: 0 #f0f0f0, stop: 1 #e0e0e0);
-            }
+        right_layout.addLayout(buttons_layout)
 
-            QPushButton {
-                background-color: #0078D7;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 5px 10px;
-            }
+        splitter.addWidget(right_panel)
+        splitter.setSizes([200, 600])  # Thiết lập kích thước ban đầu
 
-            QPushButton:hover {
-                background-color: #005A9E;
-            }
-
-            QPushButton:pressed {
-                background-color: #004578;
-            }
-
-            QCheckBox {
-                spacing: 5px;
-            }
-
-            QComboBox {
-                border: 1px solid #cccccc;
-                border-radius: 3px;
-                padding: 3px 5px;
-            }
-
-            QTableWidget {
-                border: 1px solid #cccccc;
-                gridline-color: #e0e0e0;
-            }
-
-            QHeaderView::section {
-                background-color: #f0f0f0;
-                border: 1px solid #e0e0e0;
-                padding: 4px;
-            }
-
-            QToolBar {
-                border: none;
-                background-color: #f5f5f5;
-            }
-        """)
-
-        # Kích hoạt các control
-        self.set_controls_enabled(False)  # Tắt các control cho đến khi có dữ liệu
+        main_layout.addWidget(splitter)
 
     def _connect_signals(self):
-        """Kết nối các signals và slots."""
-        if not PYQT_AVAILABLE:
-            return
-
-        # Kết nối các sự kiện thay đổi
+        """Kết nối các tín hiệu với các slot."""
         self.plan_combo.currentIndexChanged.connect(self.on_plan_changed)
         self.dvh_type_combo.currentIndexChanged.connect(self.on_dvh_type_changed)
         self.volume_combo.currentIndexChanged.connect(self.on_volume_display_changed)
         self.norm_combo.currentTextChanged.connect(self.on_normalization_changed)
+        self.select_all_button.clicked.connect(self.select_all_structures)
+        self.deselect_all_button.clicked.connect(self.deselect_all_structures)
+        self.export_button.clicked.connect(self.export_dvh)
+        self.print_button.clicked.connect(self.print_dvh)
+
+        # Kết nối checkbox hiển thị dải DVH
+        self.show_bands_checkbox.toggled.connect(self.on_show_bands_toggled)
 
     def set_controls_enabled(self, enabled):
         """Bật/tắt các điều khiển UI."""
@@ -605,7 +505,7 @@ class DVHWidget(QWidget):
     def clear_structure_lists(self):
         """Xóa danh sách cấu trúc."""
         # Xóa các check box trong danh sách cấu trúc
-        for layout in [self.ptv_layout, self.oar_layout, self.other_layout]:
+        for layout in [self.structures_layout]:
             while layout.count():
                 item = layout.takeAt(0)
                 if item.widget():
@@ -652,13 +552,13 @@ class DVHWidget(QWidget):
             # Thêm vào nhóm phù hợp dựa trên loại cấu trúc
             if hasattr(structure, "type"):
                 if structure.type == StructureType.PTV:
-                    self.ptv_layout.addWidget(checkbox)
+                    self.structures_layout.addWidget(checkbox)
                 elif structure.type == StructureType.OAR:
-                    self.oar_layout.addWidget(checkbox)
+                    self.structures_layout.addWidget(checkbox)
                 else:
-                    self.other_layout.addWidget(checkbox)
+                    self.structures_layout.addWidget(checkbox)
             else:
-                self.other_layout.addWidget(checkbox)
+                self.structures_layout.addWidget(checkbox)
 
     def get_structure_color(self, structure):
         """
@@ -799,7 +699,7 @@ class DVHWidget(QWidget):
             checked: Trạng thái mới (True: chọn, False: bỏ chọn)
         """
         # Lặp qua tất cả checkbox trong các layout
-        for layout in [self.ptv_layout, self.oar_layout, self.other_layout]:
+        for layout in [self.structures_layout]:
             for i in range(layout.count()):
                 widget = layout.itemAt(i).widget()
                 if isinstance(widget, QCheckBox):
@@ -888,92 +788,79 @@ class DVHWidget(QWidget):
             return None
 
     def update_dvh_plot(self):
-        """Cập nhật biểu đồ DVH với dữ liệu mới nhất."""
+        """Cập nhật biểu đồ DVH với dữ liệu hiện tại."""
         if not MATPLOTLIB_AVAILABLE:
-            return
-
-        if not self.current_plan_name or not self.selected_structures:
-            # Xóa biểu đồ nếu không có dữ liệu
-            self.ax.clear()
-            self.canvas.draw()
+            logger.warning("Matplotlib không khả dụng, không thể vẽ biểu đồ DVH")
             return
 
         # Xóa biểu đồ cũ
         self.ax.clear()
 
-        # Danh sách để lưu trữ các đường và nhãn cho legend
-        lines = []
-        labels = []
+        # Thiết lập tiêu đề và nhãn trục
+        self.ax.set_xlabel(f"Liều ({self.dose_unit})")
+        self.ax.set_ylabel("Thể tích (%)" if self.display_volumes else "Thể tích (cc)")
+        self.ax.set_title("Biểu đồ liều-thể tích (DVH)")
+        self.ax.grid(True)
 
-        # Tính toán và vẽ DVH cho mỗi cấu trúc được chọn
-        for structure_name in self.selected_structures:
-            # Tính toán DVH cho kế hoạch hiện tại
-            dvh_data = self.calculate_dvh(self.current_plan_name, structure_name)
+        # Kiểm tra xem có kế hoạch và cấu trúc được chọn không
+        if not self.current_plan_name or not self.selected_structures:
+            self.canvas.draw()
+            return
+
+        # Vẽ DVH cho từng cấu trúc được chọn
+        for i, structure_name in enumerate(sorted(self.selected_structures)):
+            # Lấy dữ liệu DVH
+            key = (self.current_plan_name, structure_name)
+            if key not in self.calculated_dvhs:
+                try:
+                    self.calculate_dvh(self.current_plan_name, structure_name)
+                except Exception as e:
+                    logger.error(f"Lỗi khi tính toán DVH cho {structure_name}: {e}")
+                    continue
+
+            dvh_data = self.calculated_dvhs.get(key)
             if not dvh_data:
                 continue
 
-            # Lấy màu cấu trúc
-            color = self.structure_colors.get(
-                structure_name, (0, 0, 255)
-            )  # Mặc định là xanh lam
+            # Lấy màu cho cấu trúc
+            color = self.get_structure_color(structure_name)
 
-            # Chuẩn bị màu cho matplotlib (chuyển từ 0-255 sang 0-1)
-            mpl_color = tuple(c / 255.0 for c in color[:3])
+            # Vẽ đường DVH chính
+            label = f"{structure_name}"
+            dose = dvh_data.get("dose", [])
+            volume = dvh_data.get("volume", [])
 
-            # Lấy dữ liệu từ dvh_data
-            dose_values = dvh_data.get("dose", [])
-            volume_values = dvh_data.get("volume", [])
+            self.ax.plot(dose, volume, color=color, label=label, linewidth=2)
 
-            if len(dose_values) == 0 or len(volume_values) == 0:
-                continue
+            # Vẽ dải DVH nếu được bật và có dữ liệu
+            if self.show_robustness_bands and structure_name in self.robustness_results:
+                rob_data = self.robustness_results[structure_name]
 
-            # Chuẩn hóa liều nếu cần
-            if self.normalization_value != 100.0:
-                dose_values = np.array(dose_values) * (self.normalization_value / 100.0)
+                # Trích xuất dữ liệu dải DVH
+                min_dvh = rob_data.get("min_dvh", {})
+                max_dvh = rob_data.get("max_dvh", {})
 
-            # Kiểm tra xem hiển thị thể tích tương đối hay tuyệt đối
-            if self.display_volumes and "relative_volume" in dvh_data:
-                volume_values = dvh_data["relative_volume"]
-            elif not self.display_volumes and "absolute_volume" in dvh_data:
-                volume_values = dvh_data["absolute_volume"]
+                if min_dvh and max_dvh:
+                    min_dose = min_dvh.get("dose", [])
+                    min_volume = min_dvh.get("volume", [])
+                    max_dose = max_dvh.get("dose", [])
+                    max_volume = max_dvh.get("volume", [])
 
-            # Vẽ đường DVH
-            (line,) = self.ax.plot(
-                dose_values,
-                volume_values,
-                color=mpl_color,
-                linestyle=self.plan_line_styles.get(0, "-"),  # Kiểu đường mặc định
-                label=structure_name,
-                linewidth=2,
-            )
+                    # Vẽ vùng giữa min và max
+                    self.ax.fill_between(
+                        min_dose,
+                        min_volume,
+                        max_volume,
+                        color=color,
+                        alpha=self.robustness_alpha,
+                        label=f"{structure_name} (độ bền vững)",
+                    )
 
-            lines.append(line)
-            labels.append(structure_name)
+        # Thêm legend
+        if self.selected_structures:
+            self.ax.legend(loc="best")
 
-        # Đặt nhãn trục
-        self.ax.set_xlabel(f"Liều ({self.dose_unit})")
-        if self.display_volumes:
-            self.ax.set_ylabel("Thể tích (%)")
-        else:
-            self.ax.set_ylabel("Thể tích (cc)")
-
-        # Đặt tiêu đề
-        self.ax.set_title(f"DVH - {self.current_plan_name}")
-
-        # Hiển thị lưới
-        self.ax.grid(True, linestyle="--", alpha=0.7)
-
-        # Đặt giới hạn trục x và y
-        self.ax.set_xlim(0, None)  # Bắt đầu từ 0, kết thúc tự động
-        self.ax.set_ylim(
-            0, 105 if self.display_volumes else None
-        )  # Giới hạn y tùy thuộc vào kiểu hiển thị
-
-        # Hiển thị legend
-        if lines:
-            self.ax.legend(handles=lines, labels=labels, loc="upper right")
-
-        # Cập nhật canvas
+        # Cập nhật biểu đồ
         self.canvas.draw()
 
     def update_stats_table(self):
@@ -1167,6 +1054,41 @@ class DVHWidget(QWidget):
                 )
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", f"Không thể in biểu đồ DVH: {str(e)}")
+
+    def set_robustness_result(self, result):
+        """
+        Thiết lập kết quả phân tích độ bền vững để hiển thị dải DVH.
+
+        Parameters
+        ----------
+        result : RobustnessResult
+            Kết quả phân tích độ bền vững
+        """
+        if result is None:
+            self.robustness_results = {}
+            self.show_robustness_bands = False
+            return
+
+        self.robustness_results = {}
+
+        try:
+            # Lấy dữ liệu DVH cho từng cấu trúc
+            for structure_name, dvh_data in result.get_structure_dvhs().items():
+                self.robustness_results[structure_name] = dvh_data
+
+            # Bật hiển thị dải DVH
+            self.show_robustness_bands = True
+
+            # Cập nhật biểu đồ
+            self.update_dvh_plot()
+        except Exception as e:
+            logger.error(f"Lỗi khi thiết lập kết quả phân tích độ bền vững: {e}")
+            self.show_robustness_bands = False
+
+    def on_show_bands_toggled(self, checked):
+        """Xử lý khi bật/tắt hiển thị dải DVH."""
+        self.show_robustness_bands = checked
+        self.update_dvh_plot()
 
 
 def show_dvh_dialog(parent=None, plan=None):

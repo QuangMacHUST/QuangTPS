@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (
     QStyle,
     QStyleFactory,
     QSizePolicy,
+    QFrame,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QSettings, QSize, QTimer
 from PyQt5.QtGui import QIcon, QColor, QPalette, QKeySequence, QPixmap
@@ -88,41 +89,132 @@ except ImportError:
     logging.warning("Không thể tích hợp Log Viewer")
     LogViewerWidget = None
 
+# Thêm import cho RobustAnalysisTab
+try:
+    from quangtps.ui.robust_analysis_tab import RobustAnalysisTab
+
+    HAS_ROBUST_ANALYSIS = True
+except ImportError:
+    HAS_ROBUST_ANALYSIS = False
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "RobustAnalysisTab không khả dụng, chức năng phân tích độ bền vững bị vô hiệu hóa"
+    )
+
+# Thử import ObjectExplorerPanel mới
+try:
+    from quangtps.ui.object_explorer_panel import ObjectExplorerPanel, ObjectType
+
+    HAS_OBJECT_EXPLORER = True
+except ImportError:
+    logging.warning("ObjectExplorerPanel không khả dụng.")
+    HAS_OBJECT_EXPLORER = False
+
+# Thêm các lớp dự phòng cho các thành phần có thể không tồn tại
+try:
+    from quangtps.ui.object_explorer_panel import ObjectExplorerPanel
+except ImportError:
+
+    class ObjectExplorerPanel(QWidget):
+        """Lớp giả khi module không khả dụng"""
+
+        patientSelected = pyqtSignal(object)
+        planSelected = pyqtSignal(object)
+        structureSelected = pyqtSignal(object)
+        structureVisibilityChanged = pyqtSignal(object, bool)
+        structureSetSelected = pyqtSignal(object)
+        objectContextMenuRequested = pyqtSignal(object, object, object)
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            QMessageBox.warning(
+                None,
+                "Module không khả dụng",
+                "ObjectExplorerPanel không khả dụng. Một số tính năng sẽ bị giới hạn.",
+            )
+
+        def add_patient(self, patient):
+            pass
+
+        def select_patient(self, patient):
+            pass
+
+        def select_plan(self, plan):
+            pass
+
+        def select_structure(self, structure):
+            pass
+
+        def refresh(self):
+            pass
+
+
 logger = logging.getLogger(__name__)
 
 
 class LeftPanel(QWidget):
-    """
-    Left panel containing patient browser and other navigation elements.
-    Mimics the Eclipse-style left panel.
-    """
+    """Left panel của giao diện chính chứa Object Explorer và các công cụ khác."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._init_ui()
 
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(350)
-
+    def _init_ui(self):
+        """Khởi tạo giao diện người dùng cho panel."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(2)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Patient browser
-        self.patient_browser = PatientBrowser()
-        layout.addWidget(self.patient_browser)
+        # Tạo splitter chính để điều chỉnh kích thước giữa object explorer và các phần khác
+        self.main_splitter = QSplitter(Qt.Vertical)
 
-        # Setup style
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                border-radius: 2px;
-            }
-            QLabel {
-                border: none;
-                background: transparent;
-            }
-        """)
+        # Tạo Object Explorer Panel
+        try:
+            self.object_explorer = ObjectExplorerPanel(self)
+            logger.info("Successfully created ObjectExplorerPanel")
+        except Exception as e:
+            logger.error(f"Error creating ObjectExplorerPanel: {e}")
+            # Tạo một widget trống nếu không tạo được ObjectExplorerPanel
+            self.object_explorer = QWidget(self)
+            placeholder_layout = QVBoxLayout(self.object_explorer)
+            placeholder_layout.addWidget(QLabel("Object Explorer không khả dụng"))
+
+        # Thêm tiêu đề cho Object Explorer
+        object_explorer_container = QWidget()
+        object_explorer_layout = QVBoxLayout(object_explorer_container)
+        object_explorer_layout.setContentsMargins(0, 0, 0, 0)
+
+        title_label = QLabel("Object Explorer")
+        title_label.setStyleSheet(
+            "font-weight: bold; background-color: #2c3e50; color: white; padding: 5px;"
+        )
+
+        object_explorer_layout.addWidget(title_label)
+        object_explorer_layout.addWidget(self.object_explorer)
+
+        # Thêm vào splitter
+        self.main_splitter.addWidget(object_explorer_container)
+
+        # Thêm một widget trống cho các công cụ bổ sung trong tương lai
+        self.tools_widget = QWidget()
+        tools_layout = QVBoxLayout(self.tools_widget)
+        tools_layout.addWidget(QLabel("Tools"))
+        tools_layout.addStretch()
+
+        self.main_splitter.addWidget(self.tools_widget)
+
+        # Set kích thước khởi tạo cho các widget
+        self.main_splitter.setSizes(
+            [700, 300]
+        )  # Object Explorer chiếm nhiều không gian hơn
+
+        # Thêm splitter vào layout chính
+        layout.addWidget(self.main_splitter)
+
+    def get_object_explorer(self):
+        """Trả về Object Explorer Panel."""
+        return self.object_explorer
 
 
 class ContouringView(QWidget):
@@ -270,9 +362,9 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Set window properties
-        self.setWindowTitle("QuangTPS - Radiation Treatment Planning System")
+        self.setWindowTitle("QuangTPS - Hệ thống Lập kế hoạch Xạ trị")
         self.setMinimumSize(1024, 768)
-        self.setWindowIcon(QIcon("quangtps/resources/icons/logo.png"))
+        self.setWindowIcon(QIcon("quangtps/ui/icons/new_icons/quang_tps_logo.png"))
 
         # Initialize state
         self.current_patient = None
@@ -318,65 +410,105 @@ class MainWindow(QMainWindow):
         self.show()
 
     def _setup_ui(self):
-        """Set up the main UI components."""
-        # Create central widget and main layout
+        """Set up the main user interface components."""
+        self.setWindowTitle("QuangTPS - Hệ thống Lập kế hoạch Xạ trị")
+        self.setWindowIcon(QIcon("quangtps/ui/icons/new_icons/quang_tps_logo.png"))
+        self.resize(1280, 800)
+
+        # Create central widget and layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
+        self.main_layout = QHBoxLayout(self.central_widget)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
 
-        self.main_layout = QVBoxLayout(self.central_widget)
-
-        # Create main splitter
+        # Main splitter - Cho phép điều chỉnh kích thước giữa panel trái và khu vực chính
         self.main_splitter = QSplitter(Qt.Horizontal)
 
-        # Create left panel for patient/plan browser
+        # Create and add the left panel (patient browser, object explorer, etc.)
         self.left_panel = LeftPanel()
+        self.left_panel.setMinimumWidth(250)
+        self.left_panel.setMaximumWidth(400)
         self.main_splitter.addWidget(self.left_panel)
 
-        # Create right area with tabs
-        self.right_area = QTabWidget()
+        # Lấy tham chiếu đến Object Explorer
+        self.object_explorer_panel = self.left_panel.get_object_explorer()
 
-        # Tab 1: Contouring tab
-        self.contouring_tab = ContouringView()
-        self.right_area.addTab(self.contouring_tab, "Contouring")
+        # Kết nối signals từ Object Explorer nếu có
+        if hasattr(self.object_explorer_panel, "patientSelected"):
+            try:
+                self.object_explorer_panel.patientSelected.connect(
+                    self._on_patient_selected_from_explorer
+                )
+                logger.info("Connected patientSelected signal")
+            except Exception as e:
+                logger.warning(f"Could not connect patientSelected signal: {e}")
 
-        # Tab 2: Planning tab
-        self.planning_tab = PlanningView()
-        self.right_area.addTab(self.planning_tab, "Planning")
+        if hasattr(self.object_explorer_panel, "planSelected"):
+            try:
+                self.object_explorer_panel.planSelected.connect(
+                    self._on_plan_selected_from_explorer
+                )
+                logger.info("Connected planSelected signal")
+            except Exception as e:
+                logger.warning(f"Could not connect planSelected signal: {e}")
 
-        # Tab 3: Evaluation tab
-        self.evaluation_tab = EvaluationView()
-        self.right_area.addTab(self.evaluation_tab, "Evaluation")
+        if hasattr(self.object_explorer_panel, "structureSelected"):
+            try:
+                self.object_explorer_panel.structureSelected.connect(
+                    self._on_structure_selected_from_explorer
+                )
+                logger.info("Connected structureSelected signal")
+            except Exception as e:
+                logger.warning(f"Could not connect structureSelected signal: {e}")
 
-        # Tab 4: Optimization tab
-        self.optimization_tab = OptimizationView()
-        self.right_area.addTab(self.optimization_tab, "Optimization")
+        if hasattr(self.object_explorer_panel, "structureVisibilityChanged"):
+            try:
+                self.object_explorer_panel.structureVisibilityChanged.connect(
+                    self._on_structure_visibility_changed
+                )
+                logger.info("Connected structureVisibilityChanged signal")
+            except Exception as e:
+                logger.warning(
+                    f"Could not connect structureVisibilityChanged signal: {e}"
+                )
 
-        # Tab 5: MCO Tab (Multi-Criteria Optimization)
-        self.mco_tab = MCOPanel()
-        self.right_area.addTab(self.mco_tab, "MCO")
+        if hasattr(self.object_explorer_panel, "objectContextMenuRequested"):
+            try:
+                self.object_explorer_panel.objectContextMenuRequested.connect(
+                    self._on_object_context_menu_requested
+                )
+                logger.info("Connected objectContextMenuRequested signal")
+            except Exception as e:
+                logger.warning(
+                    f"Could not connect objectContextMenuRequested signal: {e}"
+                )
 
-        # Tab 6: Review tab
-        self.review_tab = ReviewView()
-        self.right_area.addTab(self.review_tab, "Review")
+        # Create the main tab widget
+        self.main_tab_widget = QTabWidget()
+        self.main_splitter.addWidget(self.main_tab_widget)
 
-        # Add right area to main splitter
-        self.main_splitter.addWidget(self.right_area)
-
-        # Set initial sizes
+        # Set initial sizes - left panel takes about 25% of the width
         self.main_splitter.setSizes([300, 900])
 
-        # Add splitter to main layout
+        # Add main splitter to layout
         self.main_layout.addWidget(self.main_splitter)
 
-        # Create menus and toolbars
-        self._create_menus()
-        self._create_toolbars()
+        # Create tabs for different views
+        self.create_tabs()
 
-        # Load user settings
-        self._load_settings()
+        # Create status bar
+        self.statusBar().showMessage("Ready")
 
-        # Initially hide patient browser
-        self.toggle_patient_browser(False)
+        # Add progress bar to status bar (hidden by default)
+        self.status_progress_bar = QProgressBar()
+        self.status_progress_bar.setMaximumWidth(150)
+        self.status_progress_bar.setMaximumHeight(16)
+        self.status_progress_bar.setVisible(False)
+        self.statusBar().addPermanentWidget(self.status_progress_bar)
+
+        # Apply the Eclipse-like styling
+        self.apply_styling()
 
     def _create_menus(self):
         """Create the application menus."""
@@ -903,30 +1035,44 @@ class MainWindow(QMainWindow):
             )
 
     def load_structure_set(self, structure_set):
-        """Load a structure set into the application."""
-        if not structure_set:
+        """Tải structure set và hiển thị trong giao diện."""
+        if structure_set is None:
+            logger.warning("Attempted to load None structure_set")
             return
 
-        # Set current structure set
         self.current_structure_set = structure_set
 
-        # Set in structure tab
-        self.structure_tab.set_structure_set(structure_set)
+        # Cập nhật hiển thị trong các tab
+        if hasattr(self.contouring_tab, "set_structure_set"):
+            try:
+                self.contouring_tab.set_structure_set(structure_set)
+            except Exception as e:
+                logger.error(f"Error setting structure_set in contouring_tab: {e}")
 
-        # Set in dose calculator
-        if self.dose_calculator:
-            self.dose_calculator.structure_set = structure_set
+        if hasattr(self.planning_tab, "set_structure_set"):
+            try:
+                self.planning_tab.set_structure_set(structure_set)
+            except Exception as e:
+                logger.error(f"Error setting structure_set in planning_tab: {e}")
 
-        # Update status bar
-        structure_count = (
-            len(structure_set.structures) if structure_set.structures else 0
-        )
+        if hasattr(self.evaluation_tab, "set_structure_set"):
+            try:
+                self.evaluation_tab.set_structure_set(structure_set)
+            except Exception as e:
+                logger.error(f"Error setting structure_set in evaluation_tab: {e}")
+
+        # Cập nhật Object Explorer nếu có
+        if hasattr(self.object_explorer_panel, "refresh"):
+            try:
+                self.object_explorer_panel.refresh()
+            except Exception as e:
+                logger.error(f"Error refreshing object_explorer_panel: {e}")
+
+        # Cập nhật trạng thái UI
+        self._update_ui_state()
         self.statusBar().showMessage(
-            f"Structure set loaded: {structure_set.name} ({structure_count} structures)"
+            f"Loaded Structure Set: {structure_set.id if hasattr(structure_set, 'id') else 'Unknown'}"
         )
-
-        # Switch to Structure tab
-        self.right_area.setCurrentWidget(self.contouring_tab)
 
     def save_plan_dialog(self):
         """Show dialog to save the current plan."""
@@ -1043,7 +1189,14 @@ class MainWindow(QMainWindow):
         beam_set.plan = plan
 
         # Add beam set to plan
-        plan.add_beam_set(beam_set)
+        if hasattr(plan, "add_beam_set"):
+            plan.add_beam_set(beam_set)
+        else:
+            # Dự phòng nếu không có phương thức add_beam_set
+            if not hasattr(plan, "beam_sets"):
+                plan.beam_sets = []
+            plan.beam_sets.append(beam_set)
+            logger.warning("Sử dụng phương thức dự phòng để thêm beam set vào plan")
 
         # Set the plan and beam set
         self.load_plan(plan)
@@ -1052,114 +1205,179 @@ class MainWindow(QMainWindow):
         self.right_area.setCurrentWidget(self.planning_tab)
 
     def load_plan(self, plan):
-        """
-        Load a treatment plan and update all UI components.
-
-        Args:
-            plan: TreatmentPlan object to load
-        """
-        if not plan:
-            self.status_bar.showMessage(
-                "Failed to load plan: Invalid plan object", 5000
-            )
+        """Tải kế hoạch xạ trị và cập nhật giao diện."""
+        if plan is None:
+            logger.warning("Attempted to load None plan")
             return
 
         self.current_plan = plan
 
-        # Update plan-related tabs
-        self.planning_tab.set_plan(plan)
-        self.evaluation_tab.set_plan(plan)
-        self.optimization_tab.set_plan(plan)
-        self.mco_tab.set_plan(plan)
-        self.review_tab.set_plan(plan)  # Set plan for review tab
+        # Lưu trữ cấu trúc giải phẫu liên kết với kế hoạch nếu có
+        if hasattr(plan, "structure_set") and plan.structure_set:
+            self.current_structure_set = plan.structure_set
 
-        # Update left panel
-        if hasattr(self.left_panel, "update_plan"):
-            self.left_panel.update_plan(plan)
+        # Lấy dose grid nếu có
+        if hasattr(plan, "get_dose") and callable(plan.get_dose):
+            try:
+                self.current_dose = plan.get_dose()
+                logger.info(f"Loaded dose from plan: {self.current_dose is not None}")
+            except Exception as e:
+                logger.warning(f"Could not get dose from plan: {e}")
+                self.current_dose = None
 
-        # Update UI state
+        # Cập nhật hiển thị trong các tab
+        for tab_name, tab_obj in [
+            ("planning_tab", self.planning_tab),
+            ("evaluation_tab", self.evaluation_tab),
+            ("review_tab", self.review_tab),
+        ]:
+            if hasattr(tab_obj, "set_plan"):
+                try:
+                    tab_obj.set_plan(plan)
+                    logger.info(f"Set plan in {tab_name}")
+                except Exception as e:
+                    logger.error(f"Error setting plan in {tab_name}: {e}")
+
+        # Cập nhật các tab chuyên biệt
+        if self.plan_evaluation_report_tab is not None and hasattr(
+            self.plan_evaluation_report_tab, "set_plan"
+        ):
+            try:
+                self.plan_evaluation_report_tab.set_plan(plan)
+                logger.info("Set plan in plan_evaluation_report_tab")
+            except Exception as e:
+                logger.error(f"Error setting plan in plan_evaluation_report_tab: {e}")
+
+        if self.robust_analysis_tab is not None and hasattr(
+            self.robust_analysis_tab, "set_plan"
+        ):
+            try:
+                self.robust_analysis_tab.set_plan(plan)
+                logger.info("Set plan in robust_analysis_tab")
+            except Exception as e:
+                logger.error(f"Error setting plan in robust_analysis_tab: {e}")
+
+        # Cập nhật Object Explorer nếu có
+        if hasattr(self.object_explorer_panel, "select_plan"):
+            try:
+                self.object_explorer_panel.select_plan(plan)
+                logger.info("Selected plan in object_explorer_panel")
+            except Exception as e:
+                logger.error(f"Error selecting plan in object_explorer_panel: {e}")
+
+        # Cập nhật trạng thái UI
         self._update_ui_state()
+        self.statusBar().showMessage(
+            f"Loaded Plan: {plan.name if hasattr(plan, 'name') else 'Unknown'}"
+        )
 
-        # Update window title
-        patient_name = "Unknown Patient"
-        if plan.patient:
-            patient_name = plan.patient.name
-        self.setWindowTitle(f"{patient_name} - {plan.name} - QuangTPS")
-
-        self.status_bar.showMessage(f"Loaded plan: {plan.name}", 5000)
+        # Chuyển đến tab Planning
+        planning_tab_index = self._get_tab_by_name("Planning")
+        if planning_tab_index is not None:
+            self.main_tab_widget.setCurrentIndex(planning_tab_index)
 
     def calculate_dose(self):
-        """Calculate dose for the current plan."""
-        if (
-            not self.current_image
-            or not self.current_structure_set
-            or not self.current_beam_set
-        ):
+        """Tính toán và hiển thị phân phối liều cho kế hoạch hiện tại."""
+        if not self.current_plan:
             QMessageBox.warning(
                 self,
                 "Warning",
-                "Cannot calculate dose. Please ensure image, structure set, and beam set are loaded.",
+                "No plan is currently loaded. Please load a plan first.",
             )
             return
 
-        if not self.dose_calculator:
-            QMessageBox.warning(self, "Warning", "Dose calculator is not initialized.")
-            return
+        # Declare current_beam_set first to avoid "access before definition" error
+        current_beam_set = None
 
-        # Show status message
-        self.statusBar().showMessage("Calculating dose...")
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
+        # Check if the plan has beam sets
+        if hasattr(self.current_plan, "beam_sets") and self.current_plan.beam_sets:
+            current_beam_set = self.current_plan.beam_sets[0]  # Lấy beam set đầu tiên
+        else:
+            # Tạo beam set mới nếu không có
+            from quangtps.treatment.beams import BeamSet
 
+            try:
+                if hasattr(self.current_plan, "add_beam_set"):
+                    current_beam_set = BeamSet(name="BeamSet1")
+                    self.current_plan.add_beam_set(current_beam_set)
+                else:
+                    logger.error("Plan object does not have add_beam_set method")
+                    QMessageBox.warning(
+                        self, "Error", "Cannot add beam set to the current plan."
+                    )
+                    return
+            except Exception as e:
+                logger.error(f"Error creating beam set: {e}")
+                QMessageBox.warning(self, "Error", f"Error creating beam set: {str(e)}")
+                return
+
+        # Tiếp tục với tính toán liều
         try:
-            # Setup dose calculator
-            self.dose_calculator.image = self.current_image
-            self.dose_calculator.structure_set = self.current_structure_set
-            self.dose_calculator.beam_set = self.current_beam_set
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.statusBar().addPermanentWidget(self.progress_bar)
 
-            # Connect progress signal
-            self.dose_calculator.progress_updated.connect(self.update_dose_progress)
+            # Kiểm tra nếu DoseCalculator có các phương thức cần thiết
+            if hasattr(self.dose_calculator, "progress_updated"):
+                try:
+                    self.dose_calculator.progress_updated.connect(
+                        self.update_dose_progress
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not connect progress signal: {e}")
+            else:
+                logger.warning("DoseCalculator does not have progress_updated method")
 
-            # Calculate dose
-            dose = self.dose_calculator.calculate()
+            if hasattr(self.dose_calculator, "calculate"):
+                logger.info("Starting dose calculation...")
+                try:
+                    dose = self.dose_calculator.calculate(
+                        current_beam_set, self.current_structure_set
+                    )
 
-            # Disconnect progress signal
-            self.dose_calculator.progress_updated.disconnect(self.update_dose_progress)
+                    # Cập nhật phân phối liều trong kế hoạch
+                    if hasattr(self.current_plan, "set_dose"):
+                        self.current_plan.set_dose(dose)
 
-            # Set dose in plan
-            if self.current_plan:
-                self.current_plan.dose = dose
+                    # Cập nhật tabs hiển thị phân phối liều
+                    self._update_ui_state()
 
-                # Set in evaluation tab
-                self.evaluation_tab.set_dose(dose)
-                self.evaluation_tab.set_plan(self.current_plan)
+                    # Chuyển đến tab đánh giá
+                    review_tab_index = self._get_tab_by_name("Review")
+                    if review_tab_index is not None:
+                        self.main_tab_widget.setCurrentIndex(review_tab_index)
 
-                # Show dose overlay in MPR viewer
-                self.mpr_viewer.set_dose(dose)
-
-            # Update status bar
-            self.statusBar().showMessage("Dose calculation completed.")
-            self.progress_bar.setValue(100)
-
-            # Clear status message after delay
-            QTimer.singleShot(2000, lambda: self.statusBar().clearMessage())
-            QTimer.singleShot(2000, lambda: self.progress_bar.setVisible(False))
-
-            # Switch to evaluation tab
-            self.right_area.setCurrentWidget(self.evaluation_tab)
-
+                    QMessageBox.information(
+                        self, "Success", "Dose calculation completed successfully."
+                    )
+                except Exception as e:
+                    logger.error(f"Error during dose calculation: {e}")
+                    QMessageBox.critical(
+                        self, "Dose Calculation Error", f"An error occurred: {str(e)}"
+                    )
+            else:
+                logger.warning("DoseCalculator does not have calculate method")
+                QMessageBox.warning(
+                    self,
+                    "Method Not Available",
+                    "Cannot calculate dose because the calculate method does not exist.",
+                )
+                return
         except Exception as e:
-            # Show error message
-            QMessageBox.critical(self, "Error", f"Failed to calculate dose: {str(e)}")
-            logger.error(f"Failed to calculate dose: {e}")
-
-            # Clear status message
-            self.statusBar().clearMessage()
-            self.progress_bar.setVisible(False)
+            logger.error(f"Error in dose calculation process: {e}")
+            QMessageBox.critical(
+                self, "Dose Calculation Error", f"An error occurred: {str(e)}"
+            )
+        finally:
+            # Đảm bảo dọn dẹp widget progress bar
+            if hasattr(self, "progress_bar"):
+                self.statusBar().removeWidget(self.progress_bar)
 
     def update_dose_progress(self, progress):
-        """Update dose calculation progress."""
-        self.progress_bar.setValue(int(progress * 100))
+        """Cập nhật tiến trình tính toán liều."""
+        if hasattr(self, "progress_bar"):
+            self.progress_bar.setValue(int(progress * 100))
 
     def show_protocols_dialog(self):
         """Show the clinical protocols dialog."""
@@ -1214,9 +1432,12 @@ class MainWindow(QMainWindow):
 
         # Update UI based on current tab
         if current_tab == self.contouring_tab:
-            self.statusBar().showMessage(
-                "Contouring tab: Use the tools to create and edit structures"
-            )
+            try:
+                self.statusBar().showMessage(
+                    "Contouring tab: Use the tools to create and edit structures"
+                )
+            except Exception as e:
+                logging.error(f"Lỗi khi hiển thị thông báo: {e}")
         elif current_tab == self.planning_tab:
             self.statusBar().showMessage(
                 "Planning tab: Create and modify treatment plans"
@@ -1264,6 +1485,12 @@ class MainWindow(QMainWindow):
         self.optimize_tool.setEnabled(has_plan)
         self.evaluate_tool.setEnabled(has_dose)
         self.report_tool.setEnabled(has_dose)
+
+        # Update robust analysis tab if it exists
+        if HAS_ROBUST_ANALYSIS and hasattr(self, "robust_analysis_tab"):
+            if has_plan:
+                # Cập nhật kế hoạch hiện tại cho tab phân tích độ bền vững
+                self.robust_analysis_tab.set_plan(self.current_plan)
 
     def show_about_dialog(self):
         """Show the about dialog."""
@@ -1361,25 +1588,46 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Plan Evaluation", "Evaluation tab not found")
 
     def _open_plan_comparison(self):
-        """Open the plan comparison dialog."""
-        # Get the current active plan from the planning tab
-        planning_tab = self._get_tab_by_name("Planning")
-        if not planning_tab or not hasattr(planning_tab, "current_plan"):
-            QMessageBox.warning(self, "Plan Comparison", "Please open a plan first")
-            return
+        """Mở hộp thoại so sánh kế hoạch."""
+        if not self.plan_comparison_dialog:
+            try:
+                from quangtps.ui.plan_comparison_dialog import PlanComparisonDialog
 
-        if not planning_tab.current_plan:
-            QMessageBox.warning(
-                self, "Plan Comparison", "Please select a plan to use as reference"
-            )
-            return
+                try:
+                    # Kiểm tra signature của hàm khởi tạo
+                    import inspect
 
-        # Import here to avoid circular imports
-        from quangtps.ui.plan_comparison_dialog import PlanComparisonDialog
+                    params = inspect.signature(PlanComparisonDialog.__init__).parameters
+                    if len(params) > 2:  # self và parent
+                        # Constructor chấp nhận các tham số bổ sung
+                        self.plan_comparison_dialog = PlanComparisonDialog(
+                            parent=self,
+                            structure_manager=self.structure_manager,
+                            plan_manager=self.plan_manager,
+                        )
+                    else:
+                        # Constructor chỉ chấp nhận parent
+                        self.plan_comparison_dialog = PlanComparisonDialog(parent=self)
+                        # Cài đặt các thuộc tính sau khi tạo
+                        if hasattr(self.plan_comparison_dialog, "set_managers"):
+                            self.plan_comparison_dialog.set_managers(
+                                self.structure_manager, self.plan_manager
+                            )
+                except Exception as e:
+                    logging.error(f"Lỗi khi tạo PlanComparisonDialog: {e}")
+                    # Fallback - chỉ truyền parent
+                    self.plan_comparison_dialog = PlanComparisonDialog(parent=self)
+            except ImportError:
+                logging.error("Không thể import PlanComparisonDialog")
+                QMessageBox.warning(
+                    self,
+                    "Module không khả dụng",
+                    "Module so sánh kế hoạch không khả dụng.",
+                )
+                return
 
-        # Create and show the dialog
-        dialog = PlanComparisonDialog(planning_tab.current_plan, self)
-        dialog.exec_()
+        # Hiển thị dialog
+        self.plan_comparison_dialog.show()
 
     def _get_tab_by_name(self, tab_name):
         """
@@ -1396,3 +1644,189 @@ class MainWindow(QMainWindow):
             if tab.objectName() == tab_name:
                 return tab
         return None
+
+    # Các hàm xử lý sự kiện từ ObjectExplorerPanel
+    def _on_patient_selected_from_explorer(self, patient):
+        """Xử lý khi bệnh nhân được chọn từ Object Explorer."""
+        self.current_patient = patient
+        self.statusBar().showMessage(f"Patient selected: {patient.name} ({patient.id})")
+
+    def _on_plan_selected_from_explorer(self, plan):
+        """Xử lý khi kế hoạch được chọn từ Object Explorer."""
+        self.load_plan(plan)
+
+    def _on_structure_selected_from_explorer(self, structure):
+        """Xử lý khi cấu trúc được chọn từ Object Explorer."""
+        # Chuyển đến tab Structure và chọn cấu trúc
+        self.right_area.setCurrentIndex(0)  # Tab Structure
+
+        # Nếu structure_tab có phương thức select_structure, gọi nó
+        if hasattr(self.contouring_tab, "structure_tab") and hasattr(
+            self.contouring_tab.structure_tab, "select_structure"
+        ):
+            self.contouring_tab.structure_tab.select_structure(structure)
+
+        self.statusBar().showMessage(f"Structure selected: {structure.name}")
+
+    def _on_structure_visibility_changed(self, structure, visible):
+        """Xử lý khi hiển thị cấu trúc thay đổi từ Object Explorer."""
+        # Cập nhật hiển thị trên các tab khác nếu cần
+        pass
+
+    def _on_object_context_menu_requested(self, global_point, obj, obj_type):
+        """Xử lý khi yêu cầu menu ngữ cảnh từ Object Explorer."""
+        if obj is None:
+            return
+
+        # Import module enum ObjectType từ object_explorer_panel nếu cần
+        try:
+            from quangtps.ui.object_explorer_panel import ObjectType
+
+            menu = QMenu()
+
+            if obj_type == ObjectType.PATIENT:
+                # Tạo menu cho bệnh nhân
+                new_plan_action = menu.addAction("Tạo kế hoạch mới")
+                import_action = menu.addAction("Nhập dữ liệu...")
+                new_plan_action.triggered.connect(
+                    lambda: self._create_new_plan_for_patient(obj)
+                )
+
+            elif obj_type == ObjectType.PLAN:
+                # Tạo menu cho kế hoạch
+                open_action = menu.addAction("Mở kế hoạch")
+                calculate_dose_action = menu.addAction("Tính liều")
+                export_action = menu.addAction("Xuất kế hoạch...")
+                open_action.triggered.connect(
+                    lambda: self._on_plan_selected_from_explorer(obj)
+                )
+                calculate_dose_action.triggered.connect(self.calculate_dose)
+
+            elif obj_type == ObjectType.STRUCTURE:
+                # Tạo menu cho cấu trúc
+                edit_action = menu.addAction("Sửa thuộc tính")
+                hide_action = menu.addAction("Ẩn/Hiện" if obj.visible else "Hiện")
+                edit_action.triggered.connect(
+                    lambda: self._edit_structure_properties(obj)
+                )
+
+            # Hiện menu nếu có hành động
+            if not menu.isEmpty():
+                menu.exec_(global_point)
+
+        except ImportError:
+            pass
+
+    def _create_new_plan_for_patient(self, patient):
+        """Tạo kế hoạch mới cho bệnh nhân."""
+        try:
+            from quangtps.ui.dialogs.plan_properties_dialog import PlanPropertiesDialog
+
+            # Tạo kế hoạch mới
+            new_plan = Plan()
+            new_plan.name = "New Plan"
+
+            # Hiển thị dialog thuộc tính kế hoạch
+            dialog = PlanPropertiesDialog(new_plan, self)
+
+            if dialog.exec_():
+                # Thêm kế hoạch vào bệnh nhân
+                if not hasattr(patient, "plans"):
+                    patient.plans = []
+                patient.plans.append(new_plan)
+
+                # Cập nhật explorer
+                if self.left_panel.object_explorer:
+                    self.left_panel.object_explorer.refresh()
+                    self.left_panel.object_explorer.select_plan(new_plan)
+
+                # Tải kế hoạch
+                self.load_plan(new_plan)
+        except Exception as e:
+            logger.error(f"Error creating new plan: {e}")
+            QMessageBox.warning(self, "Error", f"Could not create new plan: {str(e)}")
+
+    def _edit_structure_properties(self, structure):
+        """Hiển thị dialog thuộc tính cấu trúc."""
+        try:
+            from quangtps.ui.dialogs.structure_properties_dialog import (
+                StructurePropertiesDialog,
+            )
+
+            dialog = StructurePropertiesDialog(structure, self)
+
+            if dialog.exec_():
+                # Cập nhật explorer
+                if self.left_panel.object_explorer:
+                    self.left_panel.object_explorer.refresh()
+        except Exception as e:
+            logger.error(f"Error editing structure properties: {e}")
+            QMessageBox.warning(
+                self, "Error", f"Could not edit structure properties: {str(e)}"
+            )
+
+    def create_tabs(self):
+        """Tạo các tab chức năng cho giao diện chính."""
+        self.main_tab_widget.clear()
+        self.main_tab_widget.setDocumentMode(True)
+        self.main_tab_widget.setTabPosition(QTabWidget.North)
+        self.main_tab_widget.currentChanged.connect(self._on_tab_changed)
+
+        # Tab 1: Contouring/Structure tab
+        self.contouring_tab = ContouringView()
+        self.main_tab_widget.addTab(self.contouring_tab, "Structure")
+
+        # Tab 2: External Beam Planning tab
+        self.planning_tab = PlanningView()
+        self.main_tab_widget.addTab(self.planning_tab, "Planning")
+
+        # Tab 3: Evaluation tab
+        self.evaluation_tab = EvaluationView()
+        self.main_tab_widget.addTab(self.evaluation_tab, "Evaluation")
+
+        # Tab 4: Plan Evaluation Report tab
+        # Cố gắng tạo tab Plan Evaluation Report nếu có sẵn
+        try:
+            from quangtps.ui.plan_evaluation_report_tab import PlanEvaluationReportTab
+
+            self.plan_evaluation_report_tab = PlanEvaluationReportTab()
+            self.main_tab_widget.addTab(
+                self.plan_evaluation_report_tab, "Plan Evaluation"
+            )
+            logger.info("Successfully added Plan Evaluation Report tab")
+        except ImportError:
+            logger.warning("PlanEvaluationReportTab not available")
+            self.plan_evaluation_report_tab = None
+
+        # Tab 5: Robustness Analysis tab
+        # Cố gắng tạo tab Robust Analysis nếu có sẵn
+        try:
+            from quangtps.ui.robust_analysis_tab import RobustAnalysisTab
+
+            self.robust_analysis_tab = RobustAnalysisTab()
+            self.main_tab_widget.addTab(self.robust_analysis_tab, "Robustness")
+            logger.info("Successfully added Robustness Analysis tab")
+        except ImportError:
+            logger.warning("RobustAnalysisTab not available")
+            self.robust_analysis_tab = None
+
+        # Tab 6: MCO Navigator tab (hidden by default)
+        try:
+            from quangtps.ui.mco_navigator_widget import MCONavigatorWidget
+
+            self.mco_navigator_tab = MCONavigatorWidget()
+            self.mco_tab_index = self.main_tab_widget.addTab(
+                self.mco_navigator_tab, "MCO Navigator"
+            )
+            self.main_tab_widget.setTabVisible(
+                self.mco_tab_index, False
+            )  # Ẩn tab mặc định
+            logger.info("Successfully added MCO Navigator tab (hidden)")
+        except ImportError:
+            logger.warning("MCONavigatorWidget not available")
+            self.mco_navigator_tab = None
+            self.mco_tab_index = -1
+
+        # Tab 7: Review tab
+        self.review_tab = ReviewView()
+        self.main_tab_widget.addTab(self.review_tab, "Review")

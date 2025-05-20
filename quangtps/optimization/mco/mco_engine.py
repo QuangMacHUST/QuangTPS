@@ -369,32 +369,77 @@ class MCOEngine:
         return solution
 
     def select_solution_by_objectives(
-        self, target_objectives: Dict[str, float]
-    ) -> Optional[ParetoSolution]:
+        self, objectives: Dict[str, Dict[str, Any]], weights: Dict[str, float] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Select a solution based on the desired objective values.
+        Chọn giải pháp tốt nhất dựa trên các mục tiêu và trọng số.
 
         Parameters
         ----------
-        target_objectives : Dict[str, float]
-            Desired objective values
+        objectives : Dict[str, Dict[str, Any]]
+            Từ điển các mục tiêu, với cấu trúc {structure_name: {objective_type: params}}
+        weights : Dict[str, float], optional
+            Trọng số cho mỗi mục tiêu, theo cấu trúc {objective_id: weight}
 
         Returns
         -------
-        Optional[ParetoSolution]
-            The found Pareto solution
+        Optional[Dict[str, Any]]
+            Giải pháp tốt nhất, hoặc None nếu không tìm thấy
         """
-        if not self.pareto_navigator:
-            logger.warning("Pareto navigator not created")
+        if not self.pareto_surface or not self.pareto_surface.solutions:
+            logger.warning("No Pareto solutions available to select from")
             return None
 
-        solution = self.pareto_navigator.select_solution_by_objectives(
-            target_objectives
-        )
-        if solution:
-        self.current_solution = solution
+        try:
+            # Tạo vector trọng số nếu không được cung cấp
+            if weights is None:
+                weights = {obj_id: 1.0 for obj_id in objectives.keys()}
 
-        return solution
+            # Tính điểm cho mỗi giải pháp
+            solution_scores = {}
+
+            for sol_id, solution in self.pareto_surface.solutions.items():
+                score = 0.0
+
+                # Tính điểm dựa trên mức độ đáp ứng mục tiêu
+                for structure, structure_objectives in objectives.items():
+                    if structure not in solution.objective_values:
+                        continue
+
+                    for obj_type, params in structure_objectives.items():
+                        # Lấy trọng số cho mục tiêu này
+                        weight = weights.get(f"{structure}_{obj_type}", 1.0)
+
+                        # Tính điểm cho mục tiêu cụ thể
+                        obj_score = self._calculate_objective_score(
+                            solution.objective_values[structure], obj_type, params
+                        )
+
+                        # Cộng vào điểm tổng
+                        score += obj_score * weight
+
+                solution_scores[sol_id] = score
+
+            # Chọn giải pháp có điểm cao nhất
+            if not solution_scores:
+                logger.warning("Không thể tính điểm cho bất kỳ giải pháp nào")
+                return None
+
+            best_solution_id = max(solution_scores, key=solution_scores.get)
+            logger.info(
+                f"Đã chọn giải pháp {best_solution_id} với điểm {solution_scores[best_solution_id]}"
+            )
+
+            return self.pareto_surface.solutions.get(best_solution_id)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi chọn giải pháp theo mục tiêu: {e}")
+            # Trả về giải pháp đầu tiên trong trường hợp lỗi
+            if self.pareto_surface.solutions:
+                first_solution_id = next(iter(self.pareto_surface.solutions))
+                logger.warning(f"Trả về giải pháp {first_solution_id} do lỗi xử lý")
+                return self.pareto_surface.solutions.get(first_solution_id)
+            return None
 
     def get_current_plan(self) -> Optional[Plan]:
         """
@@ -602,11 +647,101 @@ class MCOEngine:
                     pass  # TODO: Load navigation history
 
             logger.info(f"Loaded MCO session from {filepath}")
-    return engine
+            return engine
 
         except Exception as e:
             logger.error(f"Error loading MCO session: {str(e)}")
             raise OptimizationError(f"Cannot load MCO session: {str(e)}")
+
+    def _calculate_objective_score(
+        self, metrics: Dict[str, Any], obj_type: str, params: Dict[str, Any]
+    ) -> float:
+        """
+        Tính điểm cho một mục tiêu cụ thể dựa trên các tham số và giá trị thực tế.
+
+        Parameters
+        ----------
+        metrics : Dict[str, Any]
+            Các metrics của cấu trúc
+        obj_type : str
+            Loại mục tiêu (ví dụ: 'max_dose', 'mean_dose', 'dvh')
+        params : Dict[str, Any]
+            Tham số cho mục tiêu
+
+        Returns
+        -------
+        float
+            Điểm số của mục tiêu (càng cao càng tốt)
+        """
+        try:
+            # Xử lý các loại mục tiêu khác nhau
+            if obj_type == "max_dose":
+                target = params.get("dose", 0.0)
+                actual = metrics.get("max_dose", 0.0)
+
+                # Nếu là OAR, thì thấp hơn mục tiêu là tốt
+                if params.get("is_oar", True):
+                    return 100.0 if actual <= target else 100.0 * (target / actual)
+                # Nếu là PTV, thì gần với mục tiêu là tốt
+                else:
+                    return 100.0 / (1.0 + abs(actual - target) / target)
+
+            elif obj_type == "mean_dose":
+                target = params.get("dose", 0.0)
+                actual = metrics.get("mean_dose", 0.0)
+
+                # Nếu là OAR, thì thấp hơn mục tiêu là tốt
+                if params.get("is_oar", True):
+                    return 100.0 if actual <= target else 100.0 * (target / actual)
+                # Nếu là PTV, thì gần với mục tiêu là tốt
+                else:
+                    return 100.0 / (1.0 + abs(actual - target) / target)
+
+            elif obj_type == "dvh":
+                dose = params.get("dose", 0.0)
+                volume = params.get("volume", 0.0)
+                relation = params.get("relation", "less")  # "less" hoặc "more"
+
+                # Lấy giá trị DVH thực tế
+                dvh_data = metrics.get("dvh", {})
+                actual_volume = None
+
+                # Tìm điểm DVH gần nhất
+                if dvh_data and "doses" in dvh_data and "volumes" in dvh_data:
+                    doses = dvh_data["doses"]
+                    volumes = dvh_data["volumes"]
+
+                    # Tìm điểm gần nhất với dose
+                    closest_idx = min(
+                        range(len(doses)), key=lambda i: abs(doses[i] - dose)
+                    )
+                    actual_volume = volumes[closest_idx]
+
+                if actual_volume is None:
+                    return 0.0
+
+                # Tính điểm
+                if relation == "less":  # V20Gy < 30% (OAR)
+                    return (
+                        100.0
+                        if actual_volume <= volume
+                        else 100.0 * (volume / actual_volume)
+                    )
+                else:  # V95% > 98% (PTV)
+                    return (
+                        100.0
+                        if actual_volume >= volume
+                        else 100.0 * (actual_volume / volume)
+                    )
+
+            # Các loại mục tiêu khác
+            else:
+                logger.warning(f"Loại mục tiêu không được hỗ trợ: {obj_type}")
+                return 0.0
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính điểm mục tiêu {obj_type}: {e}")
+            return 0.0
 
 
 def create_mco_engine(

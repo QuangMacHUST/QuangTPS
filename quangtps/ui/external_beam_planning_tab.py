@@ -159,6 +159,7 @@ try:
     from quangtps.ui.dialogs.beam_dialog import BeamDialog
     from quangtps.ui.beam_visualization_panel import BeamVisualizationPanel
     from quangtps.ui.dose_visualization_3d import DoseVisualization3D
+    from quangtps.ui.dialogs.kbp_dialog import KBPDialog
 
     # Import additional modules
     from quangtps.ui.visualization_3d import (
@@ -620,55 +621,78 @@ class ExternalBeamPlanningTab(QWidget):
 
     def _setup_toolbar_actions(self, toolbar):
         """Thiết lập các action cho toolbar."""
-        # New Plan
-        new_plan_action = QAction("Kế hoạch mới", self)
+
+        # Tạo các action cho toolbar
+        toolbar.setIconSize(QSize(24, 24))
+
+        # Action tạo kế hoạch mới
+        new_plan_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "new_plan.png")),
+            "Tạo kế hoạch mới",
+            self,
+        )
         new_plan_action.triggered.connect(self._on_new_plan)
         toolbar.addAction(new_plan_action)
 
-        # Save Plan
-        save_plan_action = QAction("Lưu kế hoạch", self)
+        # Action lưu kế hoạch
+        save_plan_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "save.png")),
+            "Lưu kế hoạch",
+            self,
+        )
         save_plan_action.triggered.connect(self._on_save_plan)
         toolbar.addAction(save_plan_action)
 
         toolbar.addSeparator()
 
-        # Calculate Dose
-        calc_dose_action = QAction("Tính toán liều", self)
+        # Action thêm chùm tia
+        add_beam_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "add_beam.png")),
+            "Thêm chùm tia",
+            self,
+        )
+        add_beam_action.triggered.connect(self._on_add_beam)
+        toolbar.addAction(add_beam_action)
+
+        toolbar.addSeparator()
+
+        # Knowledge-Based Planning action
+        kbp_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "kbp.png")),
+            "Knowledge-Based Planning",
+            self,
+        )
+        kbp_action.triggered.connect(self._on_knowledge_based_planning)
+        toolbar.addAction(kbp_action)
+
+        toolbar.addSeparator()
+
+        # Action xuất báo cáo
+        report_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "report.png")),
+            "Xuất báo cáo",
+            self,
+        )
+        report_action.triggered.connect(self._on_export_report)
+        toolbar.addAction(report_action)
+
+        # Action tính toán liều
+        calc_dose_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "calculate.png")),
+            "Tính toán liều",
+            self,
+        )
         calc_dose_action.triggered.connect(self._on_calculate_dose)
         toolbar.addAction(calc_dose_action)
 
-        # Optimize
-        optimize_action = QAction("Tối ưu hóa", self)
+        # Action tối ưu hóa
+        optimize_action = QAction(
+            QIcon(os.path.join("quangtps", "ui", "icons", "optimize.png")),
+            "Tối ưu hóa",
+            self,
+        )
         optimize_action.triggered.connect(self._on_optimize)
         toolbar.addAction(optimize_action)
-
-        toolbar.addSeparator()
-
-        # Algorithm selection
-        self.algorithm_combo = QComboBox()
-        if HAS_QUANGTPS_MODULES:
-            try:
-                from quangtps.dose.algorithms import get_algorithm_display_names
-
-                self.algorithm_combo.addItems(get_algorithm_display_names())
-            except:
-                self.algorithm_combo.addItems(
-                    ["Monte Carlo", "Pencil Beam", "Collapsed Cone"]
-                )
-        else:
-            self.algorithm_combo.addItems(
-                ["Monte Carlo", "Pencil Beam", "Collapsed Cone"]
-            )
-
-        toolbar.addWidget(QLabel("Thuật toán: "))
-        toolbar.addWidget(self.algorithm_combo)
-
-        toolbar.addSeparator()
-
-        # Export Report
-        export_report_action = QAction("Xuất báo cáo", self)
-        export_report_action.triggered.connect(self._on_export_report)
-        toolbar.addAction(export_report_action)
 
     def _create_objectives_widget(self):
         """
@@ -1410,3 +1434,242 @@ class ExternalBeamPlanningTab(QWidget):
 
             # Tạm dừng để giả lập tính toán
             time.sleep(0.02)
+
+    def _on_knowledge_based_planning(self):
+        """
+        Mở dialog Knowledge-Based Planning để đề xuất các tham số tối ưu.
+        """
+        if not self.current_plan:
+            QMessageBox.warning(
+                self, "Lỗi", "Vui lòng tạo hoặc chọn một kế hoạch trước."
+            )
+            return
+
+        if not self.current_structure_set:
+            QMessageBox.warning(self, "Lỗi", "Vui lòng chọn một bộ cấu trúc trước.")
+            return
+
+        try:
+            # Lấy thông tin cần thiết cho KBP
+            patient_id = self.current_patient.id if self.current_patient else ""
+            structure_set_id = (
+                self.current_structure_set.id if self.current_structure_set else ""
+            )
+
+            # Xác định vị trí điều trị từ tên kế hoạch hoặc cấu trúc
+            site = ""
+            if self.current_plan and hasattr(self.current_plan, "site"):
+                site = self.current_plan.site
+            elif self.current_structure_set:
+                # Thử xác định vị trí từ tên cấu trúc
+                structure_names = [s.name.lower() for s in self.structures.values()]
+
+                site_keywords = {
+                    "brain": ["brain", "cerebral", "cranial", "head"],
+                    "lung": ["lung", "pulmonary", "thoracic"],
+                    "prostate": ["prostate", "prostatic"],
+                    "head_neck": ["head", "neck", "throat", "larynx"],
+                    "breast": ["breast", "chest"],
+                    "rectum": ["rectum", "rectal"],
+                    "bladder": ["bladder"],
+                    "spine": ["spine", "spinal"],
+                }
+
+                for potential_site, keywords in site_keywords.items():
+                    if any(
+                        keyword in " ".join(structure_names) for keyword in keywords
+                    ):
+                        site = potential_site
+                        break
+
+            # Tạo và hiển thị dialog KBP
+            from quangtps.ui.dialogs import KBPDialog
+
+            kbp_dialog = KBPDialog(
+                patient_id=patient_id,
+                structure_set_id=structure_set_id,
+                site=site,
+                parent=self,
+            )
+
+            # Kết nối tín hiệu áp dụng đề xuất
+            kbp_dialog.kbpRecommendationApplied.connect(self._apply_kbp_recommendation)
+
+            # Hiển thị dialog
+            kbp_dialog.exec_()
+
+        except ImportError as e:
+            logger.error(f"Không thể import KBPDialog: {e}")
+            QMessageBox.warning(
+                self,
+                "Tính năng không khả dụng",
+                "Module Knowledge-Based Planning không khả dụng.\n"
+                "Vui lòng kiểm tra cài đặt và thử lại sau.",
+            )
+        except Exception as e:
+            logger.error(f"Lỗi khi mở KBP Dialog: {e}")
+            QMessageBox.critical(
+                self, "Lỗi", f"Đã xảy ra lỗi khi mở Knowledge-Based Planning:\n{str(e)}"
+            )
+
+    def _apply_kbp_recommendation(self, recommendation):
+        """
+        Áp dụng đề xuất từ KBP vào kế hoạch hiện tại.
+
+        Parameters
+        ----------
+        recommendation : Dict
+            Đề xuất từ KBP, bao gồm mục tiêu tối ưu và ràng buộc liều
+        """
+        if not recommendation or not self.current_plan:
+            logger.warning(
+                "Không thể áp dụng đề xuất KBP: Không có đề xuất hoặc kế hoạch"
+            )
+            return
+
+        try:
+            logger.info(
+                "Áp dụng đề xuất Knowledge-Based Planning vào kế hoạch hiện tại"
+            )
+
+            # Hiển thị thông báo tiến trình
+            progress_dialog = QProgressDialog(
+                "Đang áp dụng đề xuất Knowledge-Based Planning...", "Hủy", 0, 100, self
+            )
+            progress_dialog.setWindowTitle("Knowledge-Based Planning")
+            progress_dialog.setWindowModality(Qt.WindowModal)
+            progress_dialog.setValue(0)
+            progress_dialog.show()
+
+            # Cập nhật các mục tiêu tối ưu
+            if "objectives" in recommendation and self.objectives_widget:
+                progress_dialog.setValue(10)
+                progress_dialog.setLabelText("Đang cập nhật mục tiêu tối ưu...")
+
+                # Xóa các mục tiêu hiện tại
+                self.objectives_widget.clear_objectives()
+
+                # Thêm các mục tiêu mới từ đề xuất
+                for structure_name, objectives in recommendation["objectives"].items():
+                    for obj_type, params in objectives.items():
+                        # Tạo mục tiêu mới
+                        objective = {
+                            "structure": structure_name,
+                            "type": obj_type,
+                            "params": params,
+                            "weight": params.get("weight", 1.0),
+                        }
+
+                        # Thêm vào widget
+                        self.objectives_widget.add_objective(objective)
+
+                        # Cập nhật vào kế hoạch
+                        if hasattr(self.current_plan, "objectives"):
+                            if not isinstance(self.current_plan.objectives, list):
+                                self.current_plan.objectives = []
+                            self.current_plan.objectives.append(objective)
+
+                progress_dialog.setValue(40)
+
+            # Cập nhật các ràng buộc liều
+            if "constraints" in recommendation and hasattr(self, "constraints_widget"):
+                progress_dialog.setValue(50)
+                progress_dialog.setLabelText("Đang cập nhật ràng buộc liều...")
+
+                # Xóa các ràng buộc hiện tại nếu có widget constraints
+                if hasattr(self, "constraints_widget") and self.constraints_widget:
+                    self.constraints_widget.clear_constraints()
+
+                # Thêm các ràng buộc mới từ đề xuất
+                for structure_name, constraints in recommendation[
+                    "constraints"
+                ].items():
+                    for constraint_type, params in constraints.items():
+                        # Tạo ràng buộc mới
+                        constraint = {
+                            "structure": structure_name,
+                            "type": constraint_type,
+                            "params": params,
+                            "priority": params.get("priority", "High"),
+                        }
+
+                        # Thêm vào widget nếu có
+                        if (
+                            hasattr(self, "constraints_widget")
+                            and self.constraints_widget
+                        ):
+                            self.constraints_widget.add_constraint(constraint)
+
+                        # Cập nhật vào kế hoạch
+                        if hasattr(self.current_plan, "constraints"):
+                            if not isinstance(self.current_plan.constraints, list):
+                                self.current_plan.constraints = []
+                            self.current_plan.constraints.append(constraint)
+
+                progress_dialog.setValue(80)
+
+            # Cập nhật các tham số tối ưu hóa nếu có
+            if "optimization_params" in recommendation:
+                progress_dialog.setValue(90)
+                progress_dialog.setLabelText("Đang cập nhật tham số tối ưu hóa...")
+
+                opt_params = recommendation["optimization_params"]
+
+                # Cập nhật các tham số vào kế hoạch
+                if hasattr(self.current_plan, "optimization_params"):
+                    self.current_plan.optimization_params.update(opt_params)
+                else:
+                    self.current_plan.optimization_params = opt_params
+
+            progress_dialog.setValue(100)
+            progress_dialog.close()
+
+            # Thông báo thành công
+            QMessageBox.information(
+                self,
+                "Knowledge-Based Planning",
+                "Đã áp dụng thành công đề xuất Knowledge-Based Planning vào kế hoạch hiện tại.\n\n"
+                "Bạn có thể tiến hành tối ưu hóa kế hoạch ngay bây giờ.",
+            )
+
+            # Phát tín hiệu cập nhật kế hoạch
+            self.plan_updated.emit(self.current_plan)
+
+            # Tự động chuyển sang chế độ tối ưu hóa ngược
+            self.inverse_radio.setChecked(True)
+            self._on_mode_changed(1)  # 1 = Inverse Planning mode
+
+        except Exception as e:
+            logger.error(f"Lỗi khi áp dụng đề xuất KBP: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Lỗi",
+                f"Đã xảy ra lỗi khi áp dụng đề xuất Knowledge-Based Planning:\n{str(e)}",
+            )
+
+    def _format_params(self, params):
+        """
+        Format các tham số mục tiêu/ràng buộc thành chuỗi.
+
+        Parameters
+        ----------
+        params : Dict[str, Any]
+            Từ điển các tham số cần định dạng
+
+        Returns
+        -------
+        str
+            Chuỗi đã định dạng
+        """
+        result = []
+        for key, value in params.items():
+            if key == "dose":
+                result.append(f"{value:.1f} Gy")
+            elif key == "volume":
+                result.append(f"{value:.1f}%")
+            elif key == "weight" or key == "priority":
+                # Bỏ qua các tham số này vì chúng được hiển thị riêng
+                continue
+            else:
+                result.append(f"{key}: {value}")
+        return ", ".join(result)
