@@ -36,14 +36,16 @@
 - [x] Integrate 3D dose visualization in External Beam Planning tab
 - [x] Enhance DVH visualization with interpolation and clinical goal markers
 - [x] Implement comprehensive plan evaluation and reporting system
+- [x] Implement auto-segmentation integration with Structure tab
+- [x] Fix colormap issues in MCO module for robust 3D Pareto visualization
+- [x] Enhance error handling for auto-segmentation and MCO features
+- [x] Enhance MPR viewer in Structure tab with real image data display
 
 ## Current Tasks
-- [ ] Enhance MPR viewer in Structure tab with real image data display
 - [ ] Improve object explorer panel with comprehensive structure and plan management
 - [ ] Implement better integration between Structure tab and External Beam Planning tab
 - [ ] Add multi-criteria optimization to Eclipse-like interface
 - [ ] Implement inverse planning algorithms for IMRT/VMAT optimization
-- [ ] Enhance image registration for multi-modality image fusion
 - [ ] Extend robust optimization based on robustness analysis results
 - [ ] Add comprehensive GPU memory management for large Monte Carlo calculations
 - [ ] Implement real-time adaptive planning with anatomy prediction

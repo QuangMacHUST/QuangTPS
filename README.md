@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.8.10-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.8.11-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -35,6 +35,26 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
   - Phân tích log file máy điều trị
   - QA cho kế hoạch xạ trị
   - Báo cáo QA tự động
+
+### Cải tiến trong phiên bản 0.8.11
+
+- **Nâng cấp MPR viewer trong Structure tab với hiển thị dữ liệu hình ảnh thực**:
+  - Tích hợp đầy đủ MPRViewer vào Structure tab với hiển thị đa mặt phẳng (axial, sagittal, coronal)
+  - Hiển thị dữ liệu hình ảnh thực với khả năng điều chỉnh cửa sổ, mức độ phóng đại và thay đổi lát cắt
+  - Đồng bộ hóa hiển thị giữa MPR viewer và các cấu trúc giải phẫu đã phân đoạn
+  - Thanh công cụ vẽ contour trực tiếp trên MPR viewer
+
+- **Cải thiện trải nghiệm người dùng khi phân đoạn cấu trúc**:
+  - Tích hợp xử lý sự kiện chuột để vẽ contour trực tiếp trên MPR viewer
+  - Công cụ vẽ đa dạng: vẽ tự do, xóa, cọ và smart brush
+  - Hỗ trợ hoàn tác/làm lại các thao tác vẽ contour
+  - Hiển thị trạng thái cấu trúc đã chọn một cách trực quan trong MPR viewer
+
+- **Tăng cường tính ổn định của hệ thống**:
+  - Xử lý ngoại lệ toàn diện cho tất cả các tương tác với dữ liệu hình ảnh
+  - Cơ chế dự phòng khi các module không khả dụng hoặc dữ liệu hình ảnh không hợp lệ
+  - Báo cáo lỗi chi tiết giúp xác định và khắc phục vấn đề nhanh chóng
+  - Tối ưu hóa hiệu năng khi làm việc với các dữ liệu hình ảnh lớn
 
 ### Cải tiến trong phiên bản 0.8.10
 

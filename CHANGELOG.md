@@ -5,6 +5,49 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.11] - 2023-09-15
+
+### Thêm mới
+- Nâng cấp MPR viewer trong Structure tab với hiển thị dữ liệu hình ảnh thực:
+  - Tích hợp đầy đủ MPRViewer với hiển thị đa mặt phẳng (axial, sagittal, coronal)
+  - Thanh công cụ vẽ contour với các tùy chọn: vẽ, xóa, cọ và smart brush
+  - Hỗ trợ hoàn tác/làm lại các thao tác vẽ contour
+  - Hiển thị và tương tác với cấu trúc giải phẫu trên các mặt phẳng MPR
+
+### Cải tiến
+- Nâng cao trải nghiệm người dùng khi phân đoạn cấu trúc:
+  - Xử lý sự kiện chuột để vẽ contour trực tiếp trên MPR viewer
+  - Đồng bộ hóa hiển thị giữa danh sách cấu trúc và MPR viewer
+  - Cập nhật tự động hiển thị khi chỉnh sửa hoặc thay đổi lựa chọn cấu trúc
+  - Hiển thị trực quan trạng thái "đã chọn" cho cấu trúc trong MPR viewer
+
+### Sửa lỗi
+- Khắc phục lỗi không hiển thị cấu trúc trong MPR viewer khi thay đổi lựa chọn
+- Xử lý các trường hợp ngoại lệ khi dữ liệu hình ảnh không hợp lệ
+- Cải thiện xử lý ngoại lệ khi các module phụ thuộc không khả dụng
+- Đảm bảo làm sạch tài nguyên khi đóng Structure tab
+
+## [0.8.10] - 2023-09-10
+
+### Thêm mới
+- Hoàn thiện tính năng phân đoạn tự động trong Structure tab:
+  - Tích hợp đầy đủ AutoSegmentationEngine vào phương thức `auto_segment()`
+  - Giao diện người dùng cho lựa chọn và thiết lập tham số phân đoạn
+  - Hiển thị tiến trình thực hiện với ProgressDialog và ProgressBar
+  - Tích hợp kết quả phân đoạn vào quy trình lập kế hoạch
+
+### Cải tiến
+- Tăng cường tính ổn định cho module MCO:
+  - Khắc phục lỗi trong hàm plot_pareto_front_3d của mco_module.py
+  - Thêm xử lý ngoại lệ cho colormap khi matplotlib.cm.viridis không khả dụng
+  - Giảm thiểu rủi ro lỗi runtime khi hiển thị bề mặt Pareto 3D
+  - Đảm bảo khả năng sử dụng trên nhiều môi trường khác nhau
+
+### Sửa lỗi
+- Sửa lỗi trong mco_module.py khi biến cmap và norm được sử dụng trước khi khởi tạo
+- Cải thiện xử lý ngoại lệ khi thiếu thư viện PyQt5 hoặc VTK
+- Khắc phục vấn đề cập nhật giao diện người dùng sau quá trình phân đoạn tự động
+
 ## [0.8.9] - 2023-09-05
 
 ### Thêm mới
@@ -129,6 +172,8 @@ và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.
 - Cải thiện trải nghiệm phân tích độ bền vững
 - Bổ sung tính năng tương thích
 
+[0.8.11]: https://github.com/username/QuangTPS/compare/v0.8.10...v0.8.11
+[0.8.10]: https://github.com/username/QuangTPS/compare/v0.8.9...v0.8.10
 [0.8.9]: https://github.com/username/QuangTPS/compare/v0.8.8...v0.8.9
 [0.8.8]: https://github.com/username/QuangTPS/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/username/QuangTPS/compare/v0.8.6...v0.8.7

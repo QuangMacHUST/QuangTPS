@@ -1,5 +1,57 @@
 # Plan Quality Evaluation Improvements
 
+## Cải tiến mới nhất (v0.8.11)
+
+### Nâng cấp MPR viewer trong Structure tab với hiển thị dữ liệu hình ảnh thực
+
+- [x] Tích hợp đầy đủ MPRViewer vào Structure tab:
+  - [x] Phát triển phương thức setup_slice_view() với đầy đủ chức năng
+  - [x] Tạo MPRViewer với hiển thị 3 hướng: axial, sagittal, coronal
+  - [x] Xử lý sự kiện chuột để tương tác trực tiếp với cấu trúc
+  - [x] Cài đặt các chức năng điều chỉnh cửa sổ, mức độ phóng đại, và chuyển lát cắt
+
+- [x] Thiết kế thanh công cụ vẽ contour:
+  - [x] Thêm công cụ vẽ tự do, xóa, cọ, và smart brush
+  - [x] Hỗ trợ hoàn tác và làm lại các thao tác vẽ
+  - [x] Tích hợp nút phân đoạn tự động và tạo margin
+  - [x] Thiết kế giao diện trực quan, dễ sử dụng
+
+- [x] Đồng bộ hóa hiển thị cấu trúc:
+  - [x] Cập nhật tự động khi thay đổi lựa chọn cấu trúc
+  - [x] Hiển thị trạng thái "đã chọn" cho cấu trúc trong MPR viewer
+  - [x] Đồng bộ hiện/ẩn cấu trúc giữa danh sách và MPR viewer
+  - [x] Cập nhật khi chỉnh sửa contour hoặc thuộc tính cấu trúc
+
+- [x] Cải thiện xử lý lỗi và tính ổn định:
+  - [x] Thêm xử lý ngoại lệ toàn diện cho việc tải và hiển thị hình ảnh
+  - [x] Cơ chế dự phòng khi module không khả dụng
+  - [x] Báo cáo lỗi chi tiết với hướng dẫn khắc phục
+  - [x] Đảm bảo làm sạch tài nguyên khi đóng tab
+
+## Cải tiến mới nhất (v0.8.10)
+
+### Hoàn thiện tính năng phân đoạn tự động (Auto Segmentation)
+
+- [x] Tích hợp AutoSegmentationEngine với Structure tab:
+  - [x] Cập nhật phương thức auto_segment() trong structure_tab.py
+  - [x] Xây dựng giao diện người dùng trực quan cho phân đoạn tự động
+  - [x] Thêm các tùy chọn nâng cao (sử dụng GPU, ngưỡng phân đoạn)
+  - [x] Tích hợp progress bar và dialog thông báo tiến trình
+
+- [x] Cải thiện trải nghiệm người dùng:
+  - [x] Hiển thị danh sách các cấu trúc có thể phân đoạn
+  - [x] Thông báo lỗi chi tiết với hướng dẫn khắc phục
+  - [x] Hiển thị kết quả phân đoạn trực quan sau khi hoàn tất
+  - [x] Xử lý lỗi toàn diện để đảm bảo tính ổn định
+
+### Nâng cao tính ổn định module MCO
+
+- [x] Khắc phục lỗi hiển thị bề mặt Pareto 3D:
+  - [x] Sửa lỗi biến cmap và norm không được khởi tạo
+  - [x] Thêm xử lý ngoại lệ cho matplotlib.cm.viridis
+  - [x] Tạo cơ chế fallback sang colormap thay thế
+  - [x] Đảm bảo hiển thị đồ thị trong mọi môi trường
+
 ## Overview
 
 We have implemented a comprehensive plan quality evaluation system for QuangTPS, mimicking the functionality available in Eclipse TPS. The system includes clinical protocol management, goal evaluation, and robust reporting capabilities.

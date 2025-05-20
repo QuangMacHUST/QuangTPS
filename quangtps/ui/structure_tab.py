@@ -1222,6 +1222,27 @@ class StructureTab(QWidget):
             # Set image in segmentation interface
             self.segmentation_interface.set_image_data(image)
 
+            # Update MPR viewer with image data
+            if hasattr(self, "mpr_viewer") and self.mpr_viewer:
+                try:
+                    logger.info("Cập nhật MPR viewer với dữ liệu hình ảnh")
+                    # Cập nhật hiển thị MPR với dữ liệu hình ảnh thực
+                    self.mpr_viewer.set_image(image)
+
+                    # Cập nhật các overlay cấu trúc nếu có
+                    if self.structure_set and self.structure_set.structures:
+                        self.update_all_structure_overlays()
+
+                    # Đặt lại các thuộc tính hiển thị
+                    self.mpr_viewer.reset_view()
+                except Exception as e:
+                    logger.error(f"Lỗi khi cập nhật MPR viewer: {str(e)}")
+                    QMessageBox.warning(
+                        self,
+                        "Lỗi MPR Viewer",
+                        f"Không thể hiển thị dữ liệu hình ảnh trong MPR viewer: {str(e)}",
+                    )
+
             # Enable the add structure button
             self.add_structure_btn.setEnabled(True)
         else:
@@ -1230,6 +1251,13 @@ class StructureTab(QWidget):
             self.add_structure_btn.setEnabled(False)
             self.delete_structure_btn.setEnabled(False)
             self.edit_structure_btn.setEnabled(False)
+
+            # Clear MPR viewer
+            if hasattr(self, "mpr_viewer") and self.mpr_viewer:
+                try:
+                    self.mpr_viewer.set_image(None)
+                except Exception:
+                    pass
 
     def set_structure_set(self, structure_set):
         """Set the structure set for editing."""
@@ -1375,6 +1403,33 @@ class StructureTab(QWidget):
             # Set the current structure in segmentation interface
             self.segmentation_interface.set_structure(structure)
 
+            # Cập nhật trạng thái chọn trong MPR viewer
+            if hasattr(self, "mpr_viewer") and self.mpr_viewer:
+                try:
+                    # Xóa trạng thái "đã chọn" của cấu trúc trước đó
+                    if previous:
+                        prev_structure = previous.data(Qt.UserRole)
+                        if prev_structure and prev_structure.visible:
+                            self.mpr_viewer.add_structure_overlay(
+                                prev_structure.id,
+                                prev_structure,
+                                prev_structure.color,
+                                False,
+                            )
+
+                    # Thêm cấu trúc đã chọn với trạng thái "đã chọn"
+                    if structure.visible:
+                        self.mpr_viewer.add_structure_overlay(
+                            structure.id, structure, structure.color, True
+                        )
+
+                    # Cập nhật hiển thị MPR
+                    self.mpr_viewer.update_all_views()
+                except Exception as e:
+                    logger.error(
+                        f"Lỗi khi cập nhật cấu trúc đã chọn trong MPR viewer: {str(e)}"
+                    )
+
             # Emit signal
             self.structureSelectionChanged.emit(structure)
         else:
@@ -1389,6 +1444,23 @@ class StructureTab(QWidget):
 
             # Clear structure in segmentation interface
             self.segmentation_interface.set_structure(None)
+
+            # Xóa trạng thái đã chọn trong MPR viewer
+            if hasattr(self, "mpr_viewer") and self.mpr_viewer and previous:
+                try:
+                    prev_structure = previous.data(Qt.UserRole)
+                    if prev_structure and prev_structure.visible:
+                        self.mpr_viewer.add_structure_overlay(
+                            prev_structure.id,
+                            prev_structure,
+                            prev_structure.color,
+                            False,
+                        )
+                        self.mpr_viewer.update_all_views()
+                except Exception as e:
+                    logger.error(
+                        f"Lỗi khi xóa trạng thái đã chọn trong MPR viewer: {str(e)}"
+                    )
 
     def update_property_display(self):
         """Update the property display for the selected structure."""
@@ -1559,6 +1631,24 @@ class StructureTab(QWidget):
         """Toggle the visibility of a structure."""
         structure.visible = visible
         self.structureVisibilityChanged.emit(structure, visible)
+
+        # Cập nhật hiển thị trong MPR viewer
+        if hasattr(self, "mpr_viewer") and self.mpr_viewer:
+            try:
+                if visible:
+                    # Thêm overlay cấu trúc vào MPR viewer
+                    color = structure.color
+                    is_selected = structure == self.selected_structure
+                    self.mpr_viewer.add_structure_overlay(
+                        structure.id, structure, color, is_selected
+                    )
+                else:
+                    # Xóa overlay cấu trúc khỏi MPR viewer
+                    self.mpr_viewer.remove_structure_overlay(structure.id)
+            except Exception as e:
+                logger.error(
+                    f"Lỗi khi cập nhật hiển thị cấu trúc trong MPR viewer: {str(e)}"
+                )
 
     def copy_to_next_slice(self, structure=None):
         """Copy the current structure contour to the next slice."""
@@ -1765,6 +1855,26 @@ class StructureTab(QWidget):
         if self.selected_structure:
             # Update property display
             self.update_property_display()
+
+            # Cập nhật hiển thị trong MPR viewer
+            if hasattr(self, "mpr_viewer") and self.mpr_viewer:
+                try:
+                    # Cập nhật overlay của cấu trúc đã chỉnh sửa
+                    structure = self.selected_structure
+                    if structure.visible:
+                        self.mpr_viewer.add_structure_overlay(
+                            structure.id, structure, structure.color, True
+                        )
+
+                    # Cập nhật hiển thị MPR
+                    self.mpr_viewer.update_all_views()
+                    logger.info(
+                        f"Đã cập nhật hiển thị cấu trúc {structure.name} trong MPR viewer"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Lỗi khi cập nhật hiển thị cấu trúc trong MPR viewer: {str(e)}"
+                    )
 
             # Emit signal
             self.structureModified.emit(self.selected_structure)
@@ -2093,6 +2203,274 @@ class StructureTab(QWidget):
             # Show error message
             QMessageBox.critical(self, "Error", f"Failed to apply margin: {str(e)}")
             logger.error(f"Error applying margin: {str(e)}")
+
+    def setup_slice_view(self):
+        """Thiết lập khu vực hiển thị cắt lớp MPR với dữ liệu hình ảnh thực."""
+        try:
+            # Import MPRViewer từ module mpr_viewer
+            from quangtps.ui.mpr_viewer import MPRViewer, ViewOrientation
+
+            # Tạo container cho MPR viewer
+            self.slice_view_container = QWidget()
+            container_layout = QVBoxLayout(self.slice_view_container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+
+            # Tạo tiêu đề
+            title_label = QLabel("Hiển thị đa mặt phẳng (MPR)")
+            title_label.setAlignment(Qt.AlignCenter)
+            title_label.setStyleSheet("""
+                font-weight: bold;
+                background-color: #2070c0;
+                color: white;
+                padding: 2px;
+            """)
+            container_layout.addWidget(title_label)
+
+            # Tạo MPRViewer
+            self.mpr_viewer = MPRViewer()
+            container_layout.addWidget(self.mpr_viewer, 1)
+
+            # Kết nối signals
+            self.mpr_viewer.sliceChanged.connect(self.on_slice_changed)
+            self.mpr_viewer.orientationChanged.connect(self.on_orientation_changed)
+            self.mpr_viewer.mousePressed.connect(self.on_mpr_mouse_pressed)
+            self.mpr_viewer.mouseMoved.connect(self.on_mpr_mouse_moved)
+            self.mpr_viewer.mouseReleased.connect(self.on_mpr_mouse_released)
+
+            # Thêm toolbox vẽ contour
+            self.setup_drawing_tools()
+            container_layout.addWidget(self.drawing_toolbar)
+
+        except ImportError as e:
+            # Nếu không import được MPRViewer, tạo một widget trống với thông báo lỗi
+            logger.error(f"Không thể tải module MPRViewer: {str(e)}")
+            self.slice_view_container = QWidget()
+            container_layout = QVBoxLayout(self.slice_view_container)
+
+            error_label = QLabel(
+                "Không thể tải module hiển thị đa mặt phẳng.\nVui lòng cài đặt các thư viện cần thiết."
+            )
+            error_label.setAlignment(Qt.AlignCenter)
+            error_label.setStyleSheet("color: red; font-weight: bold;")
+            container_layout.addWidget(error_label)
+
+            # Tạo các placeholder cho các thuộc tính mà code khác có thể tham chiếu đến
+            self.mpr_viewer = None
+
+    def setup_drawing_tools(self):
+        """Thiết lập các công cụ vẽ contour."""
+        self.drawing_toolbar = QToolBar("Công cụ vẽ")
+
+        # Thêm các công cụ vẽ cơ bản
+        self.action_draw = QAction(
+            QIcon("quangtps/ui/icons/new_icons/draw.png"), "Vẽ", self
+        )
+        self.action_draw.setCheckable(True)
+        self.action_draw.toggled.connect(self.on_draw_tool_toggled)
+        self.drawing_toolbar.addAction(self.action_draw)
+
+        self.action_erase = QAction(
+            QIcon("quangtps/ui/icons/new_icons/erase.png"), "Xóa", self
+        )
+        self.action_erase.setCheckable(True)
+        self.action_erase.toggled.connect(self.on_erase_tool_toggled)
+        self.drawing_toolbar.addAction(self.action_erase)
+
+        self.action_brush = QAction(
+            QIcon("quangtps/ui/icons/new_icons/brush.png"), "Cọ", self
+        )
+        self.action_brush.setCheckable(True)
+        self.action_brush.toggled.connect(self.on_brush_tool_toggled)
+        self.drawing_toolbar.addAction(self.action_brush)
+
+        self.action_smart = QAction(
+            QIcon("quangtps/ui/icons/new_icons/smart.png"), "Smart Brush", self
+        )
+        self.action_smart.setCheckable(True)
+        self.action_smart.toggled.connect(self.on_smart_tool_toggled)
+        self.drawing_toolbar.addAction(self.action_smart)
+
+        self.drawing_toolbar.addSeparator()
+
+        # Thêm công cụ xem trước và quay lại
+        self.action_undo = QAction(
+            QIcon("quangtps/ui/icons/new_icons/undo.png"), "Hoàn tác", self
+        )
+        self.action_undo.triggered.connect(self.on_undo)
+        self.drawing_toolbar.addAction(self.action_undo)
+
+        self.action_redo = QAction(
+            QIcon("quangtps/ui/icons/new_icons/redo.png"), "Làm lại", self
+        )
+        self.action_redo.triggered.connect(self.on_redo)
+        self.drawing_toolbar.addAction(self.action_redo)
+
+        # Công cụ tính toán tự động
+        self.drawing_toolbar.addSeparator()
+
+        self.action_auto = QAction(
+            QIcon("quangtps/ui/icons/new_icons/auto_segment.png"),
+            "Phân đoạn tự động",
+            self,
+        )
+        self.action_auto.triggered.connect(self.auto_segment)
+        self.drawing_toolbar.addAction(self.action_auto)
+
+        self.action_margin = QAction(
+            QIcon("quangtps/ui/icons/new_icons/margin.png"), "Tạo margin", self
+        )
+        self.action_margin.triggered.connect(
+            lambda: self.apply_margin_to_structure(self.selected_structure)
+        )
+        self.drawing_toolbar.addAction(self.action_margin)
+
+        # Đặt layout cho toolbar
+        self.drawing_toolbar.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self.drawing_toolbar.setIconSize(QSize(24, 24))
+
+    def on_slice_changed(self, slice_index, orientation):
+        """Xử lý khi thay đổi slice trong MPR viewer."""
+        if self.selected_structure and self.mpr_viewer:
+            # Cập nhật overlay cấu trúc trong chế độ xem
+            self.update_structure_overlay(orientation)
+
+    def on_orientation_changed(self, orientation):
+        """Xử lý khi thay đổi hướng trong MPR viewer."""
+        # Cập nhật giao diện người dùng dựa trên hướng mới
+        if orientation and self.mpr_viewer:
+            self.update_orientation_ui(orientation)
+
+    def on_mpr_mouse_pressed(self, view_id, view_pos, image_pos):
+        """Xử lý khi nhấn chuột trong MPR viewer."""
+        if self.selected_structure:
+            self.handle_mouse_event(
+                "press",
+                image_pos,
+                slice_index=self.mpr_viewer.get_current_slice_index(),
+                orientation=self.mpr_viewer.get_current_orientation(),
+            )
+
+    def on_mpr_mouse_moved(self, view_id, view_pos, image_pos):
+        """Xử lý khi di chuyển chuột trong MPR viewer."""
+        if self.selected_structure:
+            self.handle_mouse_event(
+                "move",
+                image_pos,
+                slice_index=self.mpr_viewer.get_current_slice_index(),
+                orientation=self.mpr_viewer.get_current_orientation(),
+            )
+
+    def on_mpr_mouse_released(self, view_id, view_pos, image_pos):
+        """Xử lý khi thả chuột trong MPR viewer."""
+        if self.selected_structure:
+            self.handle_mouse_event(
+                "release",
+                image_pos,
+                slice_index=self.mpr_viewer.get_current_slice_index(),
+                orientation=self.mpr_viewer.get_current_orientation(),
+            )
+
+    def on_draw_tool_toggled(self, checked):
+        """Xử lý khi bật/tắt công cụ vẽ."""
+        if checked:
+            # Vô hiệu hóa các công cụ khác
+            if self.action_erase.isChecked():
+                self.action_erase.setChecked(False)
+            if self.action_brush.isChecked():
+                self.action_brush.setChecked(False)
+            if self.action_smart.isChecked():
+                self.action_smart.setChecked(False)
+
+            # Cập nhật chế độ vẽ
+            if self.mpr_viewer:
+                self.mpr_viewer.set_cursor(Qt.CrossCursor)
+
+    def on_erase_tool_toggled(self, checked):
+        """Xử lý khi bật/tắt công cụ xóa."""
+        if checked:
+            # Vô hiệu hóa các công cụ khác
+            if self.action_draw.isChecked():
+                self.action_draw.setChecked(False)
+            if self.action_brush.isChecked():
+                self.action_brush.setChecked(False)
+            if self.action_smart.isChecked():
+                self.action_smart.setChecked(False)
+
+            # Cập nhật chế độ xóa
+            if self.mpr_viewer:
+                self.mpr_viewer.set_cursor(Qt.CrossCursor)
+
+    def on_brush_tool_toggled(self, checked):
+        """Xử lý khi bật/tắt công cụ cọ."""
+        if checked:
+            # Vô hiệu hóa các công cụ khác
+            if self.action_draw.isChecked():
+                self.action_draw.setChecked(False)
+            if self.action_erase.isChecked():
+                self.action_erase.setChecked(False)
+            if self.action_smart.isChecked():
+                self.action_smart.setChecked(False)
+
+            # Cập nhật chế độ cọ
+            if self.mpr_viewer:
+                self.mpr_viewer.set_cursor(Qt.CrossCursor)
+
+    def on_smart_tool_toggled(self, checked):
+        """Xử lý khi bật/tắt công cụ Smart Brush."""
+        if checked:
+            # Vô hiệu hóa các công cụ khác
+            if self.action_draw.isChecked():
+                self.action_draw.setChecked(False)
+            if self.action_erase.isChecked():
+                self.action_erase.setChecked(False)
+            if self.action_brush.isChecked():
+                self.action_brush.setChecked(False)
+
+            # Cập nhật chế độ Smart Brush
+            if self.mpr_viewer:
+                self.mpr_viewer.set_cursor(Qt.CrossCursor)
+
+    def on_undo(self):
+        """Hoàn tác thao tác vẽ gần nhất."""
+        # Thực hiện hoàn tác nếu có contour manager
+        if hasattr(self, "contour_manager") and self.contour_manager:
+            self.contour_manager.undo()
+            self.update_all_structure_overlays()
+
+    def on_redo(self):
+        """Làm lại thao tác vẽ đã hoàn tác."""
+        # Thực hiện làm lại nếu có contour manager
+        if hasattr(self, "contour_manager") and self.contour_manager:
+            self.contour_manager.redo()
+            self.update_all_structure_overlays()
+
+    def update_structure_overlay(self, orientation):
+        """Cập nhật overlay cấu trúc trong MPR viewer cho một hướng cụ thể."""
+        if not self.mpr_viewer or not self.structure_set:
+            return
+
+        # Cập nhật overlay cho tất cả các cấu trúc hiển thị
+        for structure in self.structure_set.structures:
+            if structure.visible:
+                color = structure.color
+                is_selected = structure == self.selected_structure
+                self.mpr_viewer.add_structure_overlay(
+                    structure.id, structure, color, is_selected
+                )
+
+    def update_all_structure_overlays(self):
+        """Cập nhật tất cả các overlay cấu trúc trong tất cả các hướng."""
+        if self.mpr_viewer:
+            from quangtps.ui.mpr_viewer import ViewOrientation
+
+            self.update_structure_overlay(ViewOrientation.AXIAL)
+            self.update_structure_overlay(ViewOrientation.SAGITTAL)
+            self.update_structure_overlay(ViewOrientation.CORONAL)
+
+    def update_orientation_ui(self, orientation):
+        """Cập nhật giao diện người dùng dựa trên hướng MPR hiện tại."""
+        # Thực hiện cập nhật UI dựa trên hướng hiện tại
+        pass
 
 
 def test_structure_tab():
