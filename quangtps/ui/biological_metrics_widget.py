@@ -496,174 +496,257 @@ class ModelParametersWidget(QWidget):
         }
 
 
-class BiologicalMetricsWidget(QWidget):
-    """Widget chính hiển thị các chỉ số sinh học."""
-
-    structureSelectionChanged = pyqtSignal(str)
+class RadarChart(QWidget):
+    """Widget hiển thị biểu đồ radar (còn gọi là lưới nhện) để trực quan hóa nhiều chỉ số sinh học cùng lúc."""
 
     def __init__(self, parent=None):
-        """Khởi tạo BiologicalMetricsWidget."""
+        if not HAS_MPL:
+            logging.error("Matplotlib không khả dụng. RadarChart không hoạt động.")
+            return
+
         super().__init__(parent)
-        self.dvh_data = {}
-        self.structure_types = {}
-        self.current_structure = None
         self._init_ui()
 
     def _init_ui(self):
-        """Khởi tạo giao diện widget."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        """Khởi tạo giao diện biểu đồ radar."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        # Tiêu đề
-        title_label = QLabel("Phân tích sinh học")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(12)
-        title_label.setFont(title_font)
-        main_layout.addWidget(title_label)
+        self.figure = Figure(figsize=(8, 6), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
 
-        # Tạo splitter chính để chia màn hình
-        main_splitter = QSplitter(Qt.Horizontal)
-        main_splitter.setHandleWidth(2)
-        main_splitter.setChildrenCollapsible(False)
+        layout.addWidget(self.canvas)
 
-        # Panel trái: Bảng điều khiển và thông số
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        # Thiết lập giá trị mặc định
+        self.data = {}
+        self.metrics = []
+        self.structure_types = {}
 
-        # Nhóm điều khiển cấu trúc
+    def plot_radar(
+        self, metrics_data: Dict[str, Dict[str, Any]], structure_types: Dict[str, str]
+    ):
+        """
+        Vẽ biểu đồ radar từ dữ liệu chỉ số sinh học.
+
+        Parameters
+        ----------
+        metrics_data : Dict[str, Dict[str, Any]]
+            Từ điển chỉ số sinh học cho mỗi cấu trúc
+        structure_types : Dict[str, str]
+            Từ điển loại cấu trúc (TARGET/OAR)
+        """
+        self.figure.clear()
+        self.data = metrics_data
+        self.structure_types = structure_types
+
+        if not metrics_data:
+            self.canvas.draw()
+            return
+
+        # Lọc các chỉ số cần hiển thị
+        display_metrics = ["TCP", "NTCP_inv", "EUD_norm", "CI", "HI"]
+        metric_labels = [
+            "TCP",
+            "Độ an toàn",
+            "Liều phân phối",
+            "Chỉ số bao phủ",
+            "Độ đồng nhất",
+        ]
+
+        # Thiết lập dữ liệu radar
+        targets = []
+        target_values = []
+        oars = []
+        oar_values = []
+
+        for name, metrics in metrics_data.items():
+            # Chuẩn hóa và chuyển đổi dữ liệu
+            radar_data = []
+
+            # TCP - đã ở dạng %
+            tcp = metrics.get("TCP", 0.0)
+
+            # NTCP đảo ngược (100 - NTCP) để giá trị cao = tốt
+            ntcp = metrics.get("NTCP", 0.0)
+            ntcp_inv = max(0, 100 - ntcp)
+
+            # Chuẩn hóa EUD (0-100%)
+            eud = metrics.get("EUD", 0.0)
+            eud_norm = min(100, eud / 80.0 * 100) if eud > 0 else 0
+
+            # Thêm các chỉ số khác nếu có
+            ci = metrics.get("CI", 85.0)  # Conformity Index
+            hi = metrics.get("HI", 85.0)  # Homogeneity Index
+
+            # Tạo mảng dữ liệu radar
+            values = [tcp, ntcp_inv, eud_norm, ci, hi]
+
+            # Phân loại dữ liệu theo loại cấu trúc
+            structure_type = structure_types.get(name, "OAR")
+            if (
+                "TARGET" in structure_type
+                or "PTV" in structure_type
+                or "CTV" in structure_type
+            ):
+                targets.append(name)
+                target_values.append(values)
+            else:
+                oars.append(name)
+                oar_values.append(values)
+
+        # Vẽ biểu đồ radar
+        ax = self.figure.add_subplot(111, polar=True)
+
+        # Thiết lập góc cho các trục (categories)
+        angles = np.linspace(
+            0, 2 * np.pi, len(display_metrics), endpoint=False
+        ).tolist()
+        angles += angles[:1]  # Đóng vòng tròn
+
+        # Thiết lập nhãn cho các trục
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(metric_labels)
+
+        # Thiết lập các vòng giá trị
+        ax.set_yticks([20, 40, 60, 80, 100])
+        ax.set_yticklabels(["20", "40", "60", "80", "100"])
+        ax.set_ylim(0, 100)
+
+        # Vẽ các TARGET
+        for i, (name, values) in enumerate(zip(targets, target_values)):
+            values += values[:1]  # Đóng vòng tròn
+            ax.plot(
+                angles, values, "o-", linewidth=2, label=f"{name} (TARGET)", alpha=0.8
+            )
+            ax.fill(angles, values, alpha=0.1)
+
+        # Vẽ các OAR
+        for i, (name, values) in enumerate(zip(oars, oar_values)):
+            values += values[:1]  # Đóng vòng tròn
+            ax.plot(angles, values, "o-", linewidth=1, label=f"{name} (OAR)", alpha=0.6)
+
+        # Thêm legend
+        if targets or oars:
+            ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.0))
+
+        # Vẽ các vòng tròn đồng tâm cho thang đánh giá
+        self._draw_background_circles(ax)
+
+        self.canvas.draw()
+
+    def _draw_background_circles(self, ax):
+        """Vẽ các vòng tròn đồng tâm với mã màu đánh giá."""
+        # Các mức đánh giá và màu tương ứng
+        evaluation_ranges = [
+            (0, 20, "#ffcccc"),  # Rất kém - đỏ nhạt
+            (20, 40, "#ffeecc"),  # Kém - cam nhạt
+            (40, 60, "#ffffcc"),  # Trung bình - vàng nhạt
+            (60, 80, "#ccffcc"),  # Tốt - xanh lá nhạt
+            (80, 100, "#ccffee"),  # Rất tốt - xanh lục nhạt
+        ]
+
+        # Vẽ các vòng tròn fill màu
+        for min_val, max_val, color in evaluation_ranges:
+            # Tạo mảng dữ liệu để vẽ vòng tròn fill
+            theta = np.linspace(0, 2 * np.pi, 100)
+            ax.fill_between(theta, min_val, max_val, color=color, alpha=0.2)
+
+        # Vẽ các đường vòng tròn
+        for radius in [20, 40, 60, 80, 100]:
+            ax.plot(np.linspace(0, 2 * np.pi, 100), [radius] * 100, "k-", alpha=0.1)
+
+
+class SensitivityAnalysisTab(QWidget):
+    """Tab hiển thị phân tích độ nhạy của các tham số mô hình sinh học."""
+
+    parameterChanged = pyqtSignal(str, float)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._init_ui()
+
+    def _init_ui(self):
+        """Khởi tạo giao diện tab phân tích độ nhạy."""
+        layout = QVBoxLayout(self)
+
+        # Panel điều khiển
+        control_panel = QWidget()
+        control_layout = QHBoxLayout(control_panel)
+
+        # Chọn cấu trúc
         structure_group = QGroupBox("Chọn cấu trúc")
         structure_layout = QVBoxLayout(structure_group)
-
-        # Combo box cho phép chọn cấu trúc
         self.structure_combo = QComboBox()
-        self.structure_combo.currentIndexChanged.connect(self._on_structure_changed)
         structure_layout.addWidget(self.structure_combo)
 
-        # Thêm checkbox sử dụng tham số mặc định
-        self.use_default_params = QCheckBox("Sử dụng tham số mặc định theo cơ quan")
-        self.use_default_params.setChecked(True)
-        self.use_default_params.stateChanged.connect(self._on_default_params_toggled)
-        structure_layout.addWidget(self.use_default_params)
-
-        left_layout.addWidget(structure_group)
-
-        # Thêm widget tham số mô hình
-        self.params_widget = ModelParametersWidget()
-        self.params_widget.parametersChanged.connect(self._on_parameters_changed)
-        left_layout.addWidget(self.params_widget)
-
-        # Thêm nút cập nhật
-        update_button = QPushButton("Cập nhật phân tích")
-        update_button.clicked.connect(lambda: self._calculate_all_metrics())
-        left_layout.addWidget(update_button)
-
-        # Thêm khoảng trống co giãn ở dưới
-        left_layout.addStretch(1)
-
-        # Panel phải: Tab hiển thị kết quả
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Tab widget cho các loại hiển thị kết quả
-        self.results_tabs = QTabWidget()
-
-        # Tab bảng chỉ số
-        table_tab = QWidget()
-        table_layout = QVBoxLayout(table_tab)
-        self.metrics_table = BiologicalMetricsTable()
-        table_layout.addWidget(self.metrics_table)
-        self.results_tabs.addTab(table_tab, "Bảng chỉ số")
-
-        # Tab biểu đồ TCP/NTCP
-        plot_tab = QWidget()
-        plot_layout = QVBoxLayout(plot_tab)
-        self.tcp_ntcp_plot = TCPNTCPPlot()
-        plot_layout.addWidget(self.tcp_ntcp_plot)
-        self.results_tabs.addTab(plot_tab, "Biểu đồ TCP/NTCP")
-
-        # Tab chi tiết cho cấu trúc hiện tại
-        details_tab = QWidget()
-        details_layout = QVBoxLayout(details_tab)
-
-        # Nhóm thông tin chi tiết
-        details_group = QGroupBox("Chi tiết chỉ số sinh học")
-        details_form = QFormLayout(details_group)
-
-        self.eud_label = QLabel("0.00 Gy")
-        self.tcp_label = QLabel("0.00%")
-        self.ntcp_label = QLabel("0.00%")
-        self.geud_label = QLabel("0.00 Gy")
-        self.bed_label = QLabel("0.00 Gy")
-
-        details_form.addRow("EUD (Equivalent Uniform Dose):", self.eud_label)
-        details_form.addRow("TCP (Tumor Control Probability):", self.tcp_label)
-        details_form.addRow(
-            "NTCP (Normal Tissue Complication Probability):", self.ntcp_label
+        # Chọn tham số để phân tích
+        param_group = QGroupBox("Chọn tham số phân tích")
+        param_layout = QVBoxLayout(param_group)
+        self.parameter_combo = QComboBox()
+        self.parameter_combo.addItems(
+            [
+                "a (TCP)",
+                "TCD50 (TCP)",
+                "gamma50 (TCP)",
+                "n (NTCP)",
+                "m (NTCP)",
+                "TD50 (NTCP)",
+                "a/b (BED)",
+            ]
         )
-        details_form.addRow("gEUD (Generalized EUD):", self.geud_label)
-        details_form.addRow("BED (Biologically Effective Dose):", self.bed_label)
+        param_layout.addWidget(self.parameter_combo)
 
-        details_layout.addWidget(details_group)
+        # Thanh trượt điều chỉnh tham số
+        slider_group = QGroupBox("Điều chỉnh giá trị")
+        slider_layout = QFormLayout(slider_group)
+        self.value_slider = QDoubleSpinBox()
+        self.value_slider.setRange(0.1, 100.0)
+        self.value_slider.setSingleStep(0.1)
+        self.value_slider.setValue(10.0)
+        slider_layout.addRow("Giá trị:", self.value_slider)
 
-        # Nhóm thông tin tham số
-        params_group = QGroupBox("Tham số đang sử dụng")
-        params_form = QFormLayout(params_group)
+        # Nút phân tích
+        analyze_button = QPushButton("Phân tích")
+        analyze_button.clicked.connect(self._on_analyze_clicked)
 
-        self.a_param_label = QLabel("0.0")
-        self.n_param_label = QLabel("0.0")
-        self.m_param_label = QLabel("0.0")
-        self.td50_label = QLabel("0.0 Gy")
-        self.gamma50_label = QLabel("0.0")
-        self.alpha_beta_label = QLabel("0.0 Gy")
+        control_layout.addWidget(structure_group, 1)
+        control_layout.addWidget(param_group, 1)
+        control_layout.addWidget(slider_group, 1)
+        control_layout.addWidget(analyze_button)
 
-        params_form.addRow("Tham số a:", self.a_param_label)
-        params_form.addRow("Tham số n:", self.n_param_label)
-        params_form.addRow("Tham số m:", self.m_param_label)
-        params_form.addRow("TD50:", self.td50_label)
-        params_form.addRow("γ50:", self.gamma50_label)
-        params_form.addRow("α/β:", self.alpha_beta_label)
+        # Khu vực biểu đồ
+        plot_panel = QWidget()
+        plot_layout = QVBoxLayout(plot_panel)
 
-        details_layout.addWidget(params_group)
+        # Biểu đồ chính
+        self.figure = Figure(figsize=(8, 5), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        plot_layout.addWidget(self.canvas)
 
-        # Thêm khoảng trống co giãn ở dưới
-        details_layout.addStretch(1)
+        # Kết quả tính toán
+        result_panel = QGroupBox("Kết quả phân tích độ nhạy")
+        result_layout = QVBoxLayout(result_panel)
 
-        self.results_tabs.addTab(details_tab, "Chi tiết")
+        self.result_text = QLabel("Chọn cấu trúc và tham số để phân tích độ nhạy")
+        self.result_text.setWordWrap(True)
+        result_layout.addWidget(self.result_text)
 
-        # Tab so sánh - nếu có nhiều kế hoạch
-        comparison_tab = QWidget()
-        comparison_layout = QVBoxLayout(comparison_tab)
-        comparison_layout.addWidget(
-            QLabel("Tính năng so sánh kế hoạch sẽ có trong phiên bản tới.")
-        )
-        self.results_tabs.addTab(comparison_tab, "So sánh")
+        # Thêm các panel vào layout chính
+        layout.addWidget(control_panel)
+        layout.addWidget(plot_panel, 3)
+        layout.addWidget(result_panel)
 
-        right_layout.addWidget(self.results_tabs)
+        # Kết nối tín hiệu
+        self.structure_combo.currentTextChanged.connect(self._on_structure_changed)
+        self.parameter_combo.currentTextChanged.connect(self._on_parameter_changed)
+        self.value_slider.valueChanged.connect(self._on_value_changed)
 
-        # Thêm các panel vào splitter
-        main_splitter.addWidget(left_panel)
-        main_splitter.addWidget(right_panel)
-
-        # Thiết lập kích thước ban đầu cho các panel
-        main_splitter.setSizes([int(self.width() * 0.3), int(self.width() * 0.7)])
-
-        main_layout.addWidget(main_splitter)
-
-        # Thêm panel thông tin trạng thái ở dưới cùng
-        status_layout = QHBoxLayout()
-        self.status_label = QLabel("Sẵn sàng")
-        status_layout.addWidget(self.status_label)
-        status_layout.addStretch(1)
-
-        # Thêm nhãn phiên bản phía bên phải
-        version_label = QLabel("v2.0")
-        version_label.setAlignment(Qt.AlignRight)
-        status_layout.addWidget(version_label)
-
-        main_layout.addLayout(status_layout)
+        # Biến lưu trữ dữ liệu
+        self.dvh_data = {}
+        self.structure_types = {}
+        self.current_parameters = {}
+        self.default_parameters = {}
+        self.sensitivity_results = {}
 
     def set_dvh_data(
         self,
@@ -671,67 +754,433 @@ class BiologicalMetricsWidget(QWidget):
         structure_types: Dict[str, str],
     ):
         """
-        Thiết lập dữ liệu DVH cho tính toán chỉ số sinh học.
+        Đặt dữ liệu DVH cho phân tích.
 
         Parameters
         ----------
         dvh_data : Dict[str, Dict[str, List[float]]]
-            Dữ liệu DVH, với format:
-            {
-                structure_name: {
-                    'dose_bins': List[float],  # Liều (Gy)
-                    'volume_bins': List[float],  # Thể tích (cm³)
-                    'cum_dvh': List[float]  # DVH tích lũy (%)
-                }
-            }
+            Dữ liệu DVH cho mỗi cấu trúc
         structure_types : Dict[str, str]
-            Từ điển map tên cấu trúc với loại: 'TARGET' hoặc 'OAR'
+            Loại của mỗi cấu trúc (TARGET/OAR)
         """
-        if not dvh_data:
-            self.clear_data()
-            return
-
         self.dvh_data = dvh_data
         self.structure_types = structure_types
 
         # Cập nhật combobox cấu trúc
-        self.structure_combo.blockSignals(True)
         self.structure_combo.clear()
+        if dvh_data:
+            self.structure_combo.addItems(sorted(dvh_data.keys()))
 
-        # Sắp xếp cấu trúc: targets trước, OARs sau
-        targets = [
-            (name, "TARGET")
-            for name, type_ in structure_types.items()
-            if type_.upper() == "TARGET"
-        ]
-        oars = [
-            (name, "OAR")
-            for name, type_ in structure_types.items()
-            if type_.upper() != "TARGET"
-        ]
+    def _on_structure_changed(self, structure_name):
+        """Xử lý khi lựa chọn cấu trúc thay đổi."""
+        if not structure_name or not HAS_BIO_MODULE:
+            return
 
-        # Thêm vào combo box với phân nhóm rõ ràng
-        if targets:
-            self.structure_combo.addItem("--- MỤC TIÊU (TARGETS) ---", None)
-            for name, _ in sorted(targets, key=lambda x: x[0]):
-                self.structure_combo.addItem(name, name)
+        # Xác định loại cấu trúc (TARGET/OAR)
+        structure_type = self.structure_types.get(structure_name, "OAR")
+        is_target = (
+            "TARGET" in structure_type
+            or "PTV" in structure_type
+            or "CTV" in structure_type
+        )
 
-        if oars:
-            self.structure_combo.addItem("--- CƠ QUAN NGUY CẤP (OARs) ---", None)
-            for name, _ in sorted(oars, key=lambda x: x[0]):
-                self.structure_combo.addItem(name, name)
+        # Tải tham số cho cơ quan
+        self.default_parameters = get_organ_specific_parameters(
+            structure_name, is_target
+        )
+        self.current_parameters = self.default_parameters.copy()
 
-        self.structure_combo.blockSignals(False)
+        # Cập nhật giá trị tham số hiện tại
+        param_key = self._get_parameter_key()
+        if param_key in self.default_parameters:
+            self.value_slider.setValue(self.default_parameters[param_key])
 
-        # Chọn cấu trúc đầu tiên (bỏ qua các mục nhóm)
-        for i in range(self.structure_combo.count()):
-            data = self.structure_combo.itemData(i)
-            if data is not None:
-                self.structure_combo.setCurrentIndex(i)
-                break
+    def _on_parameter_changed(self, parameter_name):
+        """Xử lý khi lựa chọn tham số phân tích thay đổi."""
+        param_key = self._get_parameter_key()
+        if param_key in self.default_parameters:
+            self.value_slider.setValue(self.default_parameters[param_key])
 
-        # Tính toán các chỉ số sinh học cho tất cả cấu trúc
-        self._calculate_all_metrics()
+    def _on_value_changed(self, value):
+        """Xử lý khi giá trị tham số thay đổi."""
+        param_key = self._get_parameter_key()
+        if param_key:
+            self.current_parameters[param_key] = value
+
+    def _get_parameter_key(self) -> str:
+        """Lấy khóa tham số từ lựa chọn trong combobox."""
+        param_text = self.parameter_combo.currentText()
+
+        # Mapping từ text hiển thị sang khóa tham số
+        mapping = {
+            "a (TCP)": "a",
+            "TCD50 (TCP)": "tcd50",
+            "gamma50 (TCP)": "gamma50",
+            "n (NTCP)": "n",
+            "m (NTCP)": "m",
+            "TD50 (NTCP)": "td50",
+            "a/b (BED)": "alpha_beta",
+        }
+
+        return mapping.get(param_text, "")
+
+    def _on_analyze_clicked(self):
+        """Thực hiện phân tích độ nhạy."""
+        if not HAS_BIO_MODULE:
+            self.result_text.setText("Module phân tích sinh học không khả dụng.")
+            return
+
+        structure_name = self.structure_combo.currentText()
+        if not structure_name or structure_name not in self.dvh_data:
+            self.result_text.setText("Vui lòng chọn cấu trúc hợp lệ.")
+            return
+
+        param_key = self._get_parameter_key()
+        if not param_key:
+            self.result_text.setText("Vui lòng chọn tham số cần phân tích.")
+            return
+
+        # Lấy dữ liệu DVH của cấu trúc
+        dvh = self.dvh_data.get(structure_name, {})
+        if not dvh:
+            self.result_text.setText(
+                f"Không có dữ liệu DVH cho cấu trúc {structure_name}."
+            )
+            return
+
+        # Thực hiện phân tích độ nhạy
+        self._perform_sensitivity_analysis(structure_name, param_key)
+
+    def _perform_sensitivity_analysis(self, structure_name, param_key):
+        """
+        Thực hiện phân tích độ nhạy cho tham số được chọn.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        param_key : str
+            Khóa tham số cần phân tích
+        """
+        # Lấy loại cấu trúc
+        structure_type = self.structure_types.get(structure_name, "OAR")
+        is_target = (
+            "TARGET" in structure_type
+            or "PTV" in structure_type
+            or "CTV" in structure_type
+        )
+
+        # Lấy dữ liệu DVH
+        dvh_data = self.dvh_data[structure_name]
+        doses = np.array(dvh_data.get("doses", []))
+        volumes = np.array(dvh_data.get("volumes", []))
+
+        if len(doses) == 0 or len(volumes) == 0:
+            self.result_text.setText(f"Dữ liệu DVH không hợp lệ cho {structure_name}.")
+            return
+
+        # Tạo dải giá trị tham số để phân tích
+        base_value = self.default_parameters.get(param_key, 1.0)
+        variation = 0.5  # +/- 50%
+
+        param_values = np.linspace(
+            base_value * (1 - variation), base_value * (1 + variation), 20
+        )
+
+        # Tính toán các giá trị chỉ số với mỗi giá trị tham số
+        results = []
+        labels = []
+
+        # Xác định chỉ số cần phân tích dựa trên loại tham số
+        if param_key in ["a", "tcd50", "gamma50"]:
+            metric = "TCP"
+        elif param_key in ["n", "m", "td50"]:
+            metric = "NTCP"
+        else:
+            metric = "BED"
+
+        for value in param_values:
+            # Tạo bộ tham số mới với giá trị thay đổi
+            params = self.default_parameters.copy()
+            params[param_key] = value
+
+            # Tính toán chỉ số sinh học
+            metrics = calculate_biological_metrics(
+                doses, volumes, structure_name, is_target, params
+            )
+
+            # Lưu kết quả
+            results.append(metrics.get(metric, 0.0))
+            labels.append(f"{value:.2f}")
+
+        # Vẽ biểu đồ
+        self._plot_sensitivity_results(param_key, param_values, results, metric)
+
+        # Hiển thị kết quả
+        base_result = results[len(results) // 2]  # Giá trị cơ sở ở giữa
+        min_result = min(results)
+        max_result = max(results)
+
+        result_text = (
+            f"<b>Phân tích độ nhạy cho {structure_name}</b><br>"
+            f"Tham số: <b>{param_key}</b> (Giá trị cơ sở: {base_value:.2f})<br>"
+            f"Chỉ số phân tích: <b>{metric}</b><br>"
+            f"Giá trị cơ sở: {base_result:.2f}<br>"
+            f"Phạm vi biến thiên: {min_result:.2f} - {max_result:.2f}<br>"
+            f"Độ biến thiên tương đối: {(max_result - min_result) / base_result * 100:.1f}%<br>"
+            f"Kết luận: Độ nhạy {'<span style="color:red;">CAO</span>' if (max_result - min_result) / base_result > 0.2 else '<span style="color:green;">THẤP</span>'}"
+        )
+
+        self.result_text.setText(result_text)
+
+    def _plot_sensitivity_results(self, param_key, param_values, results, metric):
+        """
+        Vẽ biểu đồ kết quả phân tích độ nhạy.
+
+        Parameters
+        ----------
+        param_key : str
+            Khóa tham số
+        param_values : List[float]
+            Các giá trị tham số
+        results : List[float]
+            Các giá trị chỉ số tính được
+        metric : str
+            Tên chỉ số đang phân tích
+        """
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+
+        # Vẽ biểu đồ đường
+        ax.plot(param_values, results, "o-", linewidth=2)
+
+        # Đánh dấu giá trị cơ sở
+        base_idx = len(param_values) // 2
+        ax.plot([param_values[base_idx]], [results[base_idx]], "ro", markersize=8)
+
+        # Thiết lập nhãn trục
+        ax.set_xlabel(f"Giá trị tham số ({param_key})")
+        ax.set_ylabel(f"{metric}")
+        ax.set_title(f"Phân tích độ nhạy: Ảnh hưởng của {param_key} lên {metric}")
+
+        # Thêm lưới
+        ax.grid(True, linestyle="--", alpha=0.7)
+
+        self.canvas.draw()
+
+
+class BiologicalMetricsWidget(QWidget):
+    """Widget chính hiển thị các chỉ số sinh học."""
+
+    structureSelectionChanged = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        if not HAS_QT:
+            return
+        self._init_ui()
+
+    def _init_ui(self):
+        """Khởi tạo giao diện người dùng."""
+        # Layout chính
+        main_layout = QVBoxLayout(self)
+
+        # TabWidget chính
+        self.tab_widget = QTabWidget()
+
+        # Tab 1: Chỉ số chính
+        self.metrics_tab = QWidget()
+        self._setup_metrics_tab()
+        self.tab_widget.addTab(self.metrics_tab, "Chỉ số chính")
+
+        # Tab 2: Biểu đồ
+        self.chart_tab = QWidget()
+        self._setup_chart_tab()
+        self.tab_widget.addTab(self.chart_tab, "Biểu đồ")
+
+        # Tab 3: Biểu đồ radar
+        self.radar_tab = QWidget()
+        self._setup_radar_tab()
+        self.tab_widget.addTab(self.radar_tab, "Radar")
+
+        # Tab 4: Phân tích độ nhạy
+        self.sensitivity_tab = SensitivityAnalysisTab()
+        self.tab_widget.addTab(self.sensitivity_tab, "Độ nhạy")
+
+        # Tab 5: Chi tiết
+        self.detail_tab = QWidget()
+        self._setup_detail_tab()
+        self.tab_widget.addTab(self.detail_tab, "Chi tiết")
+
+        # Thêm TabWidget vào layout chính
+        main_layout.addWidget(self.tab_widget)
+
+    def _setup_metrics_tab(self):
+        """Thiết lập tab hiển thị các chỉ số sinh học chính."""
+        layout = QVBoxLayout(self.metrics_tab)
+
+        # Tạo splitter
+        splitter = QSplitter(Qt.Vertical)
+
+        # Widget chọn cấu trúc và các tham số
+        top_widget = QWidget()
+        top_layout = QHBoxLayout(top_widget)
+
+        # Phần bên trái: Chọn cấu trúc
+        left_panel = QGroupBox("Cấu trúc")
+        left_layout = QVBoxLayout(left_panel)
+
+        self.structure_combo = QComboBox()
+        self.structure_combo.currentIndexChanged.connect(self._on_structure_changed)
+        left_layout.addWidget(QLabel("Chọn cấu trúc:"))
+        left_layout.addWidget(self.structure_combo)
+
+        # Phần bên phải: Tham số mô hình
+        right_panel = QGroupBox("Tham số mô hình")
+        right_layout = QVBoxLayout(right_panel)
+
+        self.use_default_params = QCheckBox("Sử dụng tham số mặc định")
+        self.use_default_params.setChecked(True)
+        self.use_default_params.stateChanged.connect(self._on_default_params_toggled)
+        right_layout.addWidget(self.use_default_params)
+
+        # Thêm panel tham số mô hình
+        self.parameter_widget = ModelParametersWidget()
+        self.parameter_widget.setEnabled(False)  # Mặc định sử dụng tham số mặc định
+        self.parameter_widget.parametersChanged.connect(self._on_parameters_changed)
+        right_layout.addWidget(self.parameter_widget)
+
+        # Thêm các panel vào layout
+        top_layout.addWidget(left_panel)
+        top_layout.addWidget(right_panel)
+
+        # Widget hiển thị kết quả
+        bottom_widget = QWidget()
+        bottom_layout = QVBoxLayout(bottom_widget)
+
+        self.metrics_table = BiologicalMetricsTable()
+        bottom_layout.addWidget(self.metrics_table)
+
+        # Thêm widgets vào splitter
+        splitter.addWidget(top_widget)
+        splitter.addWidget(bottom_widget)
+        splitter.setSizes([200, 400])  # Thiết lập kích thước ban đầu
+
+        layout.addWidget(splitter)
+
+    def _setup_chart_tab(self):
+        """Thiết lập tab hiển thị các biểu đồ."""
+        layout = QVBoxLayout(self.chart_tab)
+
+        # Tạo widget hiển thị đồ thị TCP/NTCP
+        self.tcp_ntcp_plot = TCPNTCPPlot()
+        layout.addWidget(self.tcp_ntcp_plot)
+
+    def _setup_radar_tab(self):
+        """Thiết lập tab hiển thị biểu đồ radar."""
+        layout = QVBoxLayout(self.radar_tab)
+
+        # Tạo biểu đồ radar
+        self.radar_chart = RadarChart()
+        layout.addWidget(self.radar_chart)
+
+        # Thêm ghi chú giải thích
+        note_label = QLabel(
+            "<b>Biểu đồ radar</b> hiển thị trực quan đánh giá toàn diện kế hoạch xạ trị dựa trên "
+            "nhiều chỉ số sinh học và vật lý. Các vòng tròn đồng tâm biểu thị mức đánh giá từ kém "
+            "(bên trong) đến xuất sắc (bên ngoài)."
+        )
+        note_label.setWordWrap(True)
+        layout.addWidget(note_label)
+
+    def _setup_detail_tab(self):
+        """Thiết lập tab hiển thị thông tin chi tiết."""
+        layout = QVBoxLayout(self.detail_tab)
+
+        # Tạo widget hiển thị chi tiết
+        self.detail_display = QLabel("Chọn một cấu trúc để xem thông tin chi tiết.")
+        self.detail_display.setWordWrap(True)
+        self.detail_display.setTextFormat(Qt.RichText)
+
+        # Đặt trong ScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(self.detail_display)
+
+        layout.addWidget(scroll_area)
+
+    def refresh_all_views(self):
+        """Làm mới tất cả các view."""
+        # Tính toán lại tất cả các chỉ số
+        all_metrics = self._calculate_all_metrics()
+
+        # Cập nhật bảng
+        self.metrics_table.update_metrics(all_metrics)
+
+        # Cập nhật biểu đồ
+        self.tcp_ntcp_plot.plot_data(all_metrics)
+
+        # Cập nhật biểu đồ radar
+        self.radar_chart.plot_radar(all_metrics, self.structure_types)
+
+        # Cập nhật hiển thị chi tiết
+        self._update_detail_display(all_metrics)
+
+    def _calculate_all_metrics(self):
+        """Tính toán các chỉ số sinh học cho tất cả cấu trúc."""
+        if not HAS_BIO_MODULE or not self.dvh_data:
+            return {}
+
+        all_metrics = {}
+        for struct_name, dvh in self.dvh_data.items():
+            # Xác định loại cấu trúc
+            is_target = (
+                struct_name in self.structure_types
+                and self.structure_types[struct_name].upper() == "TARGET"
+            )
+
+            # Lấy tham số đặc thù cho cơ quan nếu sử dụng tham số mặc định
+            struct_params = self.parameter_widget.get_current_parameters()
+            if self.use_default_params.isChecked():
+                struct_params = get_organ_specific_parameters(struct_name, is_target)
+
+            # Lấy dữ liệu liều và thể tích
+            dose_bins = dvh.get("dose_bins", [])
+            cum_dvh = dvh.get("cum_dvh", [])
+
+            if not dose_bins or not cum_dvh or len(dose_bins) != len(cum_dvh):
+                logger.warning(f"Dữ liệu DVH không hợp lệ cho cấu trúc {struct_name}")
+                continue
+
+            # Tính toán các chỉ số sinh học
+            metrics = calculate_biological_metrics(
+                dose_bins, cum_dvh, struct_params, is_target=is_target
+            )
+
+            # Thêm thông tin loại cấu trúc
+            metrics["type"] = "TARGET" if is_target else "OAR"
+
+            # Thêm vào từ điển kết quả
+            all_metrics[struct_name] = metrics
+
+        return all_metrics
+
+    def _update_detail_display(self, all_metrics):
+        """Cập nhật hiển thị chi tiết cho cấu trúc hiện tại."""
+        if not self.structure_combo.currentText():
+            return
+
+        metrics = all_metrics.get(self.structure_combo.currentText(), {})
+        if not metrics:
+            return
+
+        self.detail_display.setText(
+            f"EUD: {metrics.get('EUD', 0.0):.2f} Gy<br>"
+            f"TCP: {metrics.get('TCP', 0.0):.2f}%<br>"
+            f"NTCP: {metrics.get('NTCP', 0.0):.2f}%<br>"
+            f"gEUD: {metrics.get('gEUD', 0.0):.2f} Gy<br>"
+            f"BED: {metrics.get('BED', 0.0):.2f} Gy"
+        )
 
     def _on_structure_changed(self, index):
         """Xử lý khi người dùng thay đổi lựa chọn cấu trúc."""
@@ -755,10 +1204,12 @@ class BiologicalMetricsWidget(QWidget):
 
         # Cập nhật tham số dựa trên cấu trúc nếu đang sử dụng tham số mặc định
         if self.use_default_params.isChecked():
-            self.params_widget.load_organ_parameters(self.current_structure, is_target)
+            self.parameter_widget.load_organ_parameters(
+                self.current_structure, is_target
+            )
 
         # Cập nhật hiển thị chi tiết
-        self._update_detail_display()
+        self._update_detail_display(self._calculate_all_metrics())
 
         # Phát tín hiệu thay đổi cấu trúc
         self.structureSelectionChanged.emit(self.current_structure)
@@ -766,12 +1217,12 @@ class BiologicalMetricsWidget(QWidget):
     def _on_parameters_changed(self, params):
         """Xử lý khi người dùng thay đổi tham số mô hình."""
         # Cập nhật hiển thị chi tiết
-        self._update_detail_display()
+        self._update_detail_display(self._calculate_all_metrics())
 
     def _on_default_params_toggled(self, state):
         """Xử lý khi người dùng bật/tắt sử dụng tham số mặc định."""
         use_default = state == Qt.Checked
-        self.params_widget.setEnabled(not use_default)
+        self.parameter_widget.setEnabled(not use_default)
 
         # Nếu bật tham số mặc định, cập nhật tham số theo cấu trúc hiện tại
         if use_default and self.current_structure:
@@ -780,204 +1231,9 @@ class BiologicalMetricsWidget(QWidget):
                 is_target = (
                     self.structure_types[self.current_structure].upper() == "TARGET"
                 )
-            self.params_widget.load_organ_parameters(self.current_structure, is_target)
-
-    def _calculate_all_metrics(self, params=None):
-        """
-        Tính toán các chỉ số sinh học cho tất cả cấu trúc.
-
-        Parameters
-        ----------
-        params : Dict, optional
-            Tham số sinh học, nếu không cung cấp sẽ sử dụng tham số hiện tại
-        """
-        if not HAS_BIO_MODULE or not self.dvh_data:
-            self.status_label.setText(
-                "Không thể tính toán chỉ số sinh học. Module sinh học không khả dụng."
+            self.parameter_widget.load_organ_parameters(
+                self.current_structure, is_target
             )
-            return
-
-        self.status_label.setText("Đang tính toán chỉ số sinh học...")
-
-        # Lấy tham số từ widget nếu không được cung cấp
-        if params is None:
-            params = self.params_widget.get_current_parameters()
-
-        try:
-            # Tính toán chỉ số sinh học cho từng cấu trúc
-            all_metrics = {}
-
-            for struct_name, dvh in self.dvh_data.items():
-                # Xác định loại cấu trúc
-                is_target = (
-                    struct_name in self.structure_types
-                    and self.structure_types[struct_name].upper() == "TARGET"
-                )
-
-                # Lấy tham số đặc thù cho cơ quan nếu sử dụng tham số mặc định
-                struct_params = params
-                if self.use_default_params.isChecked():
-                    struct_params = get_organ_specific_parameters(
-                        struct_name, is_target
-                    )
-
-                # Lấy dữ liệu liều và thể tích
-                dose_bins = dvh.get("dose_bins", [])
-                cum_dvh = dvh.get("cum_dvh", [])
-
-                if not dose_bins or not cum_dvh or len(dose_bins) != len(cum_dvh):
-                    logger.warning(
-                        f"Dữ liệu DVH không hợp lệ cho cấu trúc {struct_name}"
-                    )
-                    continue
-
-                # Tính toán các chỉ số sinh học
-                metrics = calculate_biological_metrics(
-                    dose_bins, cum_dvh, struct_params, is_target=is_target
-                )
-
-                # Thêm thông tin loại cấu trúc
-                metrics["type"] = "TARGET" if is_target else "OAR"
-
-                # Thêm vào từ điển kết quả
-                all_metrics[struct_name] = metrics
-
-            # Cập nhật bảng chỉ số
-            self.metrics_table.update_metrics(all_metrics)
-
-            # Cập nhật biểu đồ TCP/NTCP
-            self.tcp_ntcp_plot.plot_data(all_metrics)
-
-            # Cập nhật hiển thị chi tiết cho cấu trúc hiện tại
-            self._update_detail_display(all_metrics)
-
-            self.status_label.setText(
-                f"Hoàn tất tính toán cho {len(all_metrics)} cấu trúc"
-            )
-
-        except Exception as e:
-            logger.error(f"Lỗi khi tính toán chỉ số sinh học: {str(e)}")
-            self.status_label.setText(f"Lỗi: {str(e)}")
-
-    def _update_detail_display(self, all_metrics=None):
-        """
-        Cập nhật hiển thị chi tiết cho cấu trúc hiện tại.
-
-        Parameters
-        ----------
-        all_metrics : Dict[str, Dict[str, Any]], optional
-            Từ điển chứa các chỉ số sinh học đã tính, nếu không cung cấp thì sẽ tính lại
-        """
-        if not self.current_structure:
-            return
-
-        # Nếu không có metrics sẵn, thực hiện tính toán
-        if all_metrics is None:
-            params = self.params_widget.get_current_parameters()
-            struct_dvh = self.dvh_data.get(self.current_structure, {})
-
-            # Xác định loại cấu trúc
-            is_target = (
-                self.current_structure in self.structure_types
-                and self.structure_types[self.current_structure].upper() == "TARGET"
-            )
-
-            # Lấy tham số đặc thù cho cơ quan nếu sử dụng tham số mặc định
-            if self.use_default_params.isChecked():
-                params = get_organ_specific_parameters(
-                    self.current_structure, is_target
-                )
-
-            # Lấy dữ liệu liều và thể tích
-            dose_bins = struct_dvh.get("dose_bins", [])
-            cum_dvh = struct_dvh.get("cum_dvh", [])
-
-            if not dose_bins or not cum_dvh or len(dose_bins) != len(cum_dvh):
-                return
-
-            # Tính toán các chỉ số sinh học
-            metrics = calculate_biological_metrics(
-                dose_bins, cum_dvh, params, is_target=is_target
-            )
-        else:
-            # Sử dụng metrics đã có
-            metrics = all_metrics.get(self.current_structure, {})
-
-        if not metrics:
-            return
-
-        # Cập nhật nhãn chi tiết
-        self.eud_label.setText(f"{metrics.get('EUD', 0.0):.2f} Gy")
-        self.tcp_label.setText(f"{metrics.get('TCP', 0.0):.2f}%")
-        self.ntcp_label.setText(f"{metrics.get('NTCP', 0.0):.2f}%")
-        self.geud_label.setText(f"{metrics.get('gEUD', 0.0):.2f} Gy")
-        self.bed_label.setText(f"{metrics.get('BED', 0.0):.2f} Gy")
-
-        # Thêm màu sắc cho TCP/NTCP dựa trên giá trị
-        tcp = metrics.get("TCP", 0.0)
-        ntcp = metrics.get("NTCP", 0.0)
-
-        # Màu sắc cho TCP (cao là tốt)
-        if tcp >= 95.0:
-            self.tcp_label.setStyleSheet("color: green; font-weight: bold;")
-        elif tcp >= 80.0:
-            self.tcp_label.setStyleSheet("color: orange; font-weight: bold;")
-        else:
-            self.tcp_label.setStyleSheet("color: red; font-weight: bold;")
-
-        # Màu sắc cho NTCP (thấp là tốt)
-        if ntcp <= 5.0:
-            self.ntcp_label.setStyleSheet("color: green; font-weight: bold;")
-        elif ntcp <= 15.0:
-            self.ntcp_label.setStyleSheet("color: orange; font-weight: bold;")
-        else:
-            self.ntcp_label.setStyleSheet("color: red; font-weight: bold;")
-
-        # Cập nhật nhãn tham số
-        params = self.params_widget.get_current_parameters()
-        self.a_param_label.setText(f"{params.get('a', 0.0)}")
-        self.n_param_label.setText(f"{params.get('n', 0.0)}")
-        self.m_param_label.setText(f"{params.get('m', 0.0)}")
-        self.td50_label.setText(f"{params.get('td50', 0.0):.2f} Gy")
-        self.gamma50_label.setText(f"{params.get('gamma50', 0.0):.2f}")
-        self.alpha_beta_label.setText(f"{params.get('alpha_beta', 0.0):.2f} Gy")
-
-    def clear_data(self):
-        """Xóa tất cả dữ liệu hiển thị."""
-        self.dvh_data = {}
-        self.structure_types = {}
-        self.current_structure = None
-
-        # Xóa combobox cấu trúc
-        self.structure_combo.clear()
-
-        # Xóa bảng metrics
-        self.metrics_table.clear_data()
-
-        # Xóa biểu đồ
-        if HAS_MPL:
-            self.tcp_ntcp_plot.figure.clear()
-            if hasattr(self.tcp_ntcp_plot, "canvas"):
-                self.tcp_ntcp_plot.canvas.draw()
-
-        # Đặt lại nhãn chi tiết
-        self.eud_label.setText("0.00 Gy")
-        self.tcp_label.setText("0.00%")
-        self.ntcp_label.setText("0.00%")
-        self.geud_label.setText("0.00 Gy")
-        self.bed_label.setText("0.00 Gy")
-
-        self.a_param_label.setText("0.0")
-        self.n_param_label.setText("0.0")
-        self.m_param_label.setText("0.0")
-        self.td50_label.setText("0.0 Gy")
-        self.gamma50_label.setText("0.0")
-        self.alpha_beta_label.setText("0.0 Gy")
-
-        self.tcp_label.setStyleSheet("")
-        self.ntcp_label.setStyleSheet("")
-
-        self.status_label.setText("Không có dữ liệu")
 
 
 # Hàm tiện ích để tạo widget

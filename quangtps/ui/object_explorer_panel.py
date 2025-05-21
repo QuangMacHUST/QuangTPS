@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
 Object Explorer Panel - Panel quản lý đối tượng theo phong cách Eclipse.
 
@@ -9,6 +12,9 @@ import os
 import enum
 import logging
 from typing import List, Dict, Any, Optional, Tuple, Union
+
+# Khởi tạo logger cho module này
+logger = logging.getLogger(__name__)
 
 # Thử import PyQt5, sử dụng cơ chế dự phòng nếu không khả dụng
 try:
@@ -318,23 +324,15 @@ class ObjectExplorerPanel(QWidget):
         try:
             from quangtps.ui.dialogs import PatientPropertiesDialog
 
-            dialog = PatientPropertiesDialog(patient, parent=self)
-            if dialog.exec_() == QDialog.Accepted:
-                # Cập nhật hiển thị sau khi chỉnh sửa
-                for i in range(self.patient_root.childCount()):
-                    patient_item = self.patient_root.child(i)
-                    if patient_item.data(0, Qt.UserRole) == patient:
-                        patient_item.setText(0, patient.name)
-                        break
-
-                # Phát tín hiệu thông báo cập nhật
-                self.patientSelected.emit(patient)
-        except ImportError:
-            logging.warning("PatientPropertiesDialog not available")
-            QMessageBox.information(
+            dialog = PatientPropertiesDialog(patient, self)
+            if dialog.exec() == QDialog.Accepted:
+                self.refresh()
+        except ImportError as e:
+            logger.error(f"Không thể import PatientPropertiesDialog: {e}")
+            QMessageBox.warning(
                 self,
-                "Feature Not Available",
-                "Patient properties dialog is not available in this version.",
+                "Module không khả dụng",
+                "Dialog thuộc tính bệnh nhân không khả dụng.",
             )
 
     def _show_structure_properties_dialog(self, structure):
@@ -342,19 +340,15 @@ class ObjectExplorerPanel(QWidget):
         try:
             from quangtps.ui.dialogs import StructurePropertiesDialog
 
-            dialog = StructurePropertiesDialog(structure, parent=self)
-            if dialog.exec_() == QDialog.Accepted:
-                # Cập nhật hiển thị sau khi chỉnh sửa
+            dialog = StructurePropertiesDialog(structure, self)
+            if dialog.exec() == QDialog.Accepted:
                 self.refresh()
-
-                # Phát tín hiệu thông báo cập nhật
-                self.structureSelected.emit(structure)
-        except ImportError:
-            logging.warning("StructurePropertiesDialog not available")
-            QMessageBox.information(
+        except ImportError as e:
+            logger.error(f"Không thể import StructurePropertiesDialog: {e}")
+            QMessageBox.warning(
                 self,
-                "Feature Not Available",
-                "Structure properties dialog is not available in this version.",
+                "Module không khả dụng",
+                "Dialog thuộc tính cấu trúc không khả dụng.",
             )
 
     def _show_plan_properties_dialog(self, plan):
@@ -362,28 +356,15 @@ class ObjectExplorerPanel(QWidget):
         try:
             from quangtps.ui.dialogs import PlanPropertiesDialog
 
-            dialog = PlanPropertiesDialog(plan, parent=self)
-            if dialog.exec_() == QDialog.Accepted:
-                # Cập nhật hiển thị sau khi chỉnh sửa
-                for i in range(self.patient_root.childCount()):
-                    patient_item = self.patient_root.child(i)
-                    for j in range(patient_item.childCount()):
-                        plan_item = patient_item.child(j)
-                        if (
-                            plan_item.data(0, Qt.UserRole) == plan
-                            and plan_item.data(0, Qt.UserRole + 1) == ObjectType.PLAN
-                        ):
-                            plan_item.setText(0, plan.name)
-                            break
-
-                # Phát tín hiệu thông báo cập nhật
-                self.planSelected.emit(plan)
-        except ImportError:
-            logging.warning("PlanPropertiesDialog not available")
-            QMessageBox.information(
+            dialog = PlanPropertiesDialog(plan, self)
+            if dialog.exec() == QDialog.Accepted:
+                self.refresh()
+        except ImportError as e:
+            logger.error(f"Không thể import PlanPropertiesDialog: {e}")
+            QMessageBox.warning(
                 self,
-                "Feature Not Available",
-                "Plan properties dialog is not available in this version.",
+                "Module không khả dụng",
+                "Dialog thuộc tính kế hoạch không khả dụng.",
             )
 
     def _show_structure_set_properties_dialog(self, structure_set):
@@ -391,55 +372,52 @@ class ObjectExplorerPanel(QWidget):
         try:
             from quangtps.ui.dialogs import StructureSetPropertiesDialog
 
-            dialog = StructureSetPropertiesDialog(structure_set, parent=self)
-            if dialog.exec_() == QDialog.Accepted:
-                # Cập nhật hiển thị sau khi chỉnh sửa
+            dialog = StructureSetPropertiesDialog(structure_set, self)
+            if dialog.exec() == QDialog.Accepted:
                 self.refresh()
-
-                # Phát tín hiệu thông báo cập nhật
-                self.structureSetSelected.emit(structure_set)
-        except ImportError:
-            logging.warning("StructureSetPropertiesDialog not available")
-            QMessageBox.information(
+        except ImportError as e:
+            logger.error(f"Không thể import StructureSetPropertiesDialog: {e}")
+            QMessageBox.warning(
                 self,
-                "Feature Not Available",
-                "Structure set properties dialog is not available in this version.",
+                "Module không khả dụng",
+                "Dialog thuộc tính bộ cấu trúc không khả dụng.",
             )
 
     def _show_context_menu(self, position: QPoint):
         """
-        Hiển thị menu ngữ cảnh tại vị trí chuột.
+        Hiển thị menu ngữ cảnh khi người dùng nhấp chuột phải lên một mục.
 
         Args:
-            position: Vị trí chuột trên tree widget.
+            position: Vị trí chuột
         """
         item = self.tree_widget.itemAt(position)
         if not item:
             return
 
-        # Lấy thông tin loại đối tượng và đối tượng
-        object_type = item.data(0, Qt.UserRole + 1)
-        obj = item.data(0, Qt.UserRole)
+        # Tạo menu ngữ cảnh
+        menu = QMenu(self)
 
-        if not object_type or not obj:
+        # Lấy đối tượng và loại đối tượng từ mục
+        obj, obj_type = self._get_object_from_item(item)
+        if not obj or not obj_type:
             return
 
-        # Tạo menu ngữ cảnh
-        menu = QMenu(self.tree_widget)
-
-        if object_type == ObjectType.PATIENT:
+        # Chọn hàm tạo menu phù hợp với loại đối tượng
+        if obj_type == ObjectType.PATIENT:
             self._create_patient_context_menu(menu, obj, item)
-        elif object_type == ObjectType.STRUCTURE:
+        elif obj_type == ObjectType.STRUCTURE:
             self._create_structure_context_menu(menu, obj, item)
-        elif object_type == ObjectType.PLAN:
+        elif obj_type == ObjectType.PLAN:
             self._create_plan_context_menu(menu, obj, item)
-        elif object_type == ObjectType.STRUCTURE_SET:
+        elif obj_type == ObjectType.STRUCTURE_SET:
             self._create_structure_set_context_menu(menu, obj, item)
 
-        # Hiển thị menu ngữ cảnh nếu có hành động
-        if not menu.isEmpty():
-            global_pos = self.tree_widget.viewport().mapToGlobal(position)
-            menu.exec_(global_pos)
+        # Phát tín hiệu yêu cầu menu ngữ cảnh
+        global_pos = self.tree_widget.viewport().mapToGlobal(position)
+        self.objectContextMenuRequested.emit(global_pos, obj, obj_type)
+
+        # Hiển thị menu tại vị trí chuột phải
+        menu.exec(global_pos)
 
     def _create_patient_context_menu(self, menu: QMenu, patient, item: QTreeWidgetItem):
         """Tạo menu ngữ cảnh cho bệnh nhân."""
@@ -1066,21 +1044,19 @@ class ObjectExplorerPanel(QWidget):
         self.objectContextMenuRequested.emit(global_point, obj, obj_type)
 
     def _on_new_button_clicked(self):
-        """Xử lý khi nhấn nút tạo mới."""
-        # Tạo menu popup với các lựa chọn
+        """Xử lý khi người dùng nhấn nút New."""
+        # Tạo menu với các tùy chọn tạo mới
         menu = QMenu(self)
-        create_structure_action = QAction("Tạo cấu trúc mới", self)
-        create_plan_action = QAction("Tạo kế hoạch mới", self)
 
-        menu.addAction(create_structure_action)
-        menu.addAction(create_plan_action)
+        # Thêm các hành động tạo mới
+        new_structure_action = menu.addAction("New Structure")
+        new_structure_action.triggered.connect(self._create_new_structure)
 
-        # Kết nối các hành động
-        create_structure_action.triggered.connect(self._create_new_structure)
-        create_plan_action.triggered.connect(self._create_new_plan)
+        new_plan_action = menu.addAction("New Plan")
+        new_plan_action.triggered.connect(self._create_new_plan)
 
-        # Hiển thị menu tại vị trí nút
-        menu.exec_(self.new_button.mapToGlobal(QPoint(0, self.new_button.height())))
+        # Hiển thị menu dưới nút New
+        menu.exec(self.new_button.mapToGlobal(QPoint(0, self.new_button.height())))
 
     def _create_new_structure(self):
         """Tạo cấu trúc mới."""

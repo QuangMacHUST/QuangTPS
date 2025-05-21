@@ -1382,111 +1382,158 @@ class MainWindow(QMainWindow):
 
     def calculate_dose(self):
         """Tính toán và hiển thị phân phối liều cho kế hoạch hiện tại."""
-        if not self.current_plan:
+        if not hasattr(self, "current_plan") or self.current_plan is None:
             QMessageBox.warning(
                 self,
-                "Warning",
-                "No plan is currently loaded. Please load a plan first.",
+                "Cảnh báo",
+                "Không có kế hoạch nào được tải. Vui lòng tải một kế hoạch trước.",
             )
             return
 
         # Khai báo và kiểm tra current_beam_set trước khi sử dụng
         current_beam_set = None
 
-        # Check if the plan has beam sets
+        # Kiểm tra nếu kế hoạch có beam sets
         if hasattr(self.current_plan, "beam_sets") and self.current_plan.beam_sets:
             current_beam_set = self.current_plan.beam_sets[0]  # Lấy beam set đầu tiên
+            logger.info(
+                f"Sử dụng beam set có sẵn: {current_beam_set.name if hasattr(current_beam_set, 'name') else 'Unnamed'}"
+            )
         else:
             # Tạo beam set mới nếu không có
             try:
                 from quangtps.treatment.beams import BeamSet
 
+                logger.info("Tạo beam set mới cho kế hoạch")
+
                 if hasattr(self.current_plan, "add_beam_set"):
                     current_beam_set = BeamSet(name="BeamSet1")
                     self.current_plan.add_beam_set(current_beam_set)
+                    logger.info(f"Đã tạo beam set mới: {current_beam_set.name}")
                 else:
-                    logger.error("Plan object does not have add_beam_set method")
+                    logger.error("Đối tượng kế hoạch không có phương thức add_beam_set")
                     QMessageBox.warning(
-                        self, "Error", "Cannot add beam set to the current plan."
+                        self, "Lỗi", "Không thể thêm beam set vào kế hoạch hiện tại."
                     )
                     return
             except Exception as e:
-                logger.error(f"Error creating beam set: {e}")
-                QMessageBox.warning(self, "Error", f"Error creating beam set: {str(e)}")
+                logger.error(f"Lỗi khi tạo beam set: {e}")
+                QMessageBox.warning(self, "Lỗi", f"Lỗi khi tạo beam set: {str(e)}")
                 return
+
+        # Kiểm tra beam set tồn tại trước khi tiếp tục
+        if current_beam_set is None:
+            logger.error("Không thể tạo hoặc lấy beam set")
+            QMessageBox.warning(
+                self, "Lỗi", "Không thể thực hiện tính toán liều vì không có beam set."
+            )
+            return
+
+        # Kiểm tra cấu trúc để tính toán liều
+        if (
+            not hasattr(self, "current_structure_set")
+            or self.current_structure_set is None
+        ):
+            logger.warning("Không có cấu trúc để tính toán liều")
+            QMessageBox.warning(
+                self,
+                "Cảnh báo",
+                "Không có cấu trúc để tính toán liều. Kết quả có thể không chính xác.",
+            )
 
         # Tiếp tục với tính toán liều
         try:
+            # Hiển thị thanh tiến trình
             self.progress_bar = QProgressBar()
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(0)
             self.statusBar().addPermanentWidget(self.progress_bar)
 
             # Kiểm tra nếu dose_calculator có sẵn và có các phương thức cần thiết
-            if not hasattr(self, "dose_calculator"):
-                logger.error("Dose calculator not initialized")
+            if not hasattr(self, "dose_calculator") or self.dose_calculator is None:
+                logger.error("Không khởi tạo được dose calculator")
                 QMessageBox.warning(
                     self,
-                    "Error",
-                    "Dose calculator not initialized. Cannot calculate dose.",
+                    "Lỗi",
+                    "Dose calculator chưa được khởi tạo. Không thể tính liều.",
                 )
                 return
 
-            # Kiểm tra nếu DoseCalculator có các phương thức cần thiết
+            # Kiểm tra nếu DoseCalculator có phương thức progress_updated
             if hasattr(self.dose_calculator, "progress_updated"):
+                try:
+                    # Kết nối tín hiệu tiến độ với phương thức cập nhật
+                    self.dose_calculator.progress_updated.disconnect()  # Ngắt kết nối cũ nếu có
+                except Exception:
+                    pass  # Bỏ qua nếu chưa có kết nối
+
                 try:
                     self.dose_calculator.progress_updated.connect(
                         self.update_dose_progress
                     )
+                    logger.info("Đã kết nối tín hiệu cập nhật tiến độ tính toán liều")
                 except Exception as e:
-                    logger.warning(f"Could not connect progress signal: {e}")
+                    logger.warning(f"Không thể kết nối tín hiệu tiến độ: {e}")
             else:
-                logger.warning("DoseCalculator does not have progress_updated method")
+                logger.warning("DoseCalculator không có phương thức progress_updated")
 
+            # Kiểm tra nếu có phương thức calculate trước khi gọi
             if hasattr(self.dose_calculator, "calculate"):
-                logger.info("Starting dose calculation...")
+                logger.info("Bắt đầu tính toán liều...")
                 try:
                     dose = self.dose_calculator.calculate(
-                        current_beam_set, self.current_structure_set
+                        current_beam_set,
+                        self.current_structure_set
+                        if hasattr(self, "current_structure_set")
+                        else None,
                     )
+                    logger.info("Đã hoàn thành tính toán liều")
 
                     # Cập nhật phân phối liều trong kế hoạch
                     if hasattr(self.current_plan, "set_dose"):
                         self.current_plan.set_dose(dose)
+                        logger.info("Đã cập nhật phân phối liều cho kế hoạch")
+                    else:
+                        logger.warning("Kế hoạch không có phương thức set_dose")
 
                     # Cập nhật tabs hiển thị phân phối liều
                     self._update_ui_state()
+                    logger.info("Đã cập nhật giao diện với phân phối liều mới")
 
                     # Chuyển đến tab đánh giá
                     review_tab_index = self._get_tab_by_name("Review")
                     if review_tab_index is not None:
                         self.main_tab_widget.setCurrentIndex(review_tab_index)
+                        logger.info("Đã chuyển đến tab Review")
 
                     QMessageBox.information(
-                        self, "Success", "Dose calculation completed successfully."
+                        self, "Thành công", "Tính toán liều hoàn thành thành công."
                     )
                 except Exception as e:
-                    logger.error(f"Error during dose calculation: {e}")
+                    logger.error(f"Lỗi trong quá trình tính toán liều: {e}")
                     QMessageBox.critical(
-                        self, "Dose Calculation Error", f"An error occurred: {str(e)}"
+                        self, "Lỗi tính toán liều", f"Đã xảy ra lỗi: {str(e)}"
                     )
             else:
-                logger.warning("DoseCalculator does not have calculate method")
+                logger.warning("DoseCalculator không có phương thức calculate")
                 QMessageBox.warning(
                     self,
-                    "Method Not Available",
-                    "Cannot calculate dose because the calculate method does not exist.",
+                    "Phương thức không khả dụng",
+                    "Không thể tính toán liều vì phương thức calculate không tồn tại.",
                 )
                 return
         except Exception as e:
-            logger.error(f"Error in dose calculation process: {e}")
-            QMessageBox.critical(
-                self, "Dose Calculation Error", f"An error occurred: {str(e)}"
-            )
+            logger.error(f"Lỗi trong quá trình tính toán liều: {e}")
+            QMessageBox.critical(self, "Lỗi tính toán liều", f"Đã xảy ra lỗi: {str(e)}")
         finally:
             # Đảm bảo dọn dẹp widget progress bar
-            if hasattr(self, "progress_bar"):
-                self.statusBar().removeWidget(self.progress_bar)
+            if hasattr(self, "progress_bar") and self.progress_bar is not None:
+                try:
+                    self.statusBar().removeWidget(self.progress_bar)
+                    self.progress_bar = None
+                    logger.info("Đã xóa thanh tiến độ sau khi tính toán xong")
+                except Exception as e:
+                    logger.error(f"Lỗi khi xóa thanh tiến độ: {e}")
 
     def update_dose_progress(self, progress):
         """Cập nhật tiến trình tính toán liều."""

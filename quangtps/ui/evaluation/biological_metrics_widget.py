@@ -869,71 +869,65 @@ class BiologicalMetricsWidget(QWidget):
         ax = self.radar_figure.add_subplot(111, projection="polar")
 
         # Chuẩn bị dữ liệu
-        metrics = []
+        categories = []
         values = []
+        normalized_values = []  # Giá trị chuẩn hóa để hiển thị trên cùng biểu đồ
         colors = []
-        markers = []
+        optimal_directions = []  # Hướng tối ưu (max hoặc min) cho mỗi chỉ số
 
-        # Xác định giá trị tối ưu dựa vào loại cấu trúc
+        # Chuẩn bị thang chuẩn hóa để hiển thị các giá trị trên cùng biểu đồ
+        normalization_ranges = {
+            "TCP (%)": (0, 100),
+            "NTCP (%)": (0, 100),
+            "EUD (Gy)": (0, 80),
+            "gEUD (Gy)": (0, 80),
+            "BED (Gy)": (0, 120),
+            "Max Dose (Gy)": (0, 100),
+            "Mean Dose (Gy)": (0, 80),
+            "CI": (0, 1),
+            "HI": (0, 2),
+        }
+
+        # Tạo dict chỉ số theo loại cấu trúc
         if structure_type == "TARGET":
-            # Đối với TARGET, chỉ số TCP cao là tốt, EUD cao là tốt
-            metrics_to_display = {
-                "tcp": {"display": "TCP (%)", "opt_dir": "max", "scale": 100},
-                "eud": {"display": "EUD (Gy)", "opt_dir": "max", "scale": 1},
-                "bed": {"display": "BED (Gy)", "opt_dir": "max", "scale": 1},
-                "conformity": {"display": "CI", "opt_dir": "max", "scale": 1},
-                "homogeneity": {"display": "HI", "opt_dir": "min", "scale": 1},
+            metric_info = {
+                "TCP (%)": {"optimal": "max", "weight": 1.0, "color": "#1a9641"},
+                "EUD (Gy)": {"optimal": "max", "weight": 0.8, "color": "#91cf60"},
+                "BED (Gy)": {"optimal": "max", "weight": 0.7, "color": "#a6d96a"},
+                "CI": {"optimal": "max", "weight": 0.6, "color": "#ffffbf"},
+                "HI": {"optimal": "min", "weight": 0.6, "color": "#fc8d59"},
             }
-        else:
-            # Đối với OAR, chỉ số NTCP thấp là tốt, EUD thấp là tốt
-            metrics_to_display = {
-                "ntcp": {"display": "NTCP (%)", "opt_dir": "min", "scale": 100},
-                "eud": {"display": "EUD (Gy)", "opt_dir": "min", "scale": 1},
-                "bed": {"display": "BED (Gy)", "opt_dir": "min", "scale": 1},
-                "max_dose": {"display": "Max Dose (Gy)", "opt_dir": "min", "scale": 1},
-                "mean_dose": {
-                    "display": "Mean Dose (Gy)",
-                    "opt_dir": "min",
-                    "scale": 1,
-                },
+        else:  # OAR
+            metric_info = {
+                "NTCP (%)": {"optimal": "min", "weight": 1.0, "color": "#d7191c"},
+                "EUD (Gy)": {"optimal": "min", "weight": 0.8, "color": "#fdae61"},
+                "BED (Gy)": {"optimal": "min", "weight": 0.7, "color": "#fee08b"},
+                "Max Dose (Gy)": {"optimal": "min", "weight": 0.9, "color": "#e6f598"},
+                "Mean Dose (Gy)": {"optimal": "min", "weight": 0.9, "color": "#abdda4"},
             }
 
-        # Thu thập dữ liệu từ metrics_data
-        for metric_key, info in metrics_to_display.items():
-            if metric_key in metrics_data and metrics_data[metric_key] is not None:
-                metric_value = metrics_data[metric_key].get("value", 0)
+        # Lọc các chỉ số có trong dữ liệu
+        available_metrics = {}
+        for metric_name, info in metric_info.items():
+            base_name = metric_name.split(" ")[0]  # Lấy phần đầu của tên chỉ số
+            for key in metrics_data:
+                if base_name.lower() in key.lower():
+                    if isinstance(metrics_data[key], dict):
+                        value = metrics_data[key].get("value")
+                    else:
+                        value = metrics_data[key]
 
-                # Áp dụng hệ số nhân
-                display_value = metric_value * info["scale"]
-
-                # Thêm vào danh sách
-                metrics.append(info["display"])
-                values.append(display_value)
-
-                # Xác định màu sắc dựa trên đánh giá (lấy từ metrics_data nếu có)
-                evaluation = metrics_data[metric_key].get("evaluation", "unknown")
-
-                if evaluation == "excellent":
-                    colors.append("#1a9641")  # Xanh đậm
-                    markers.append("o")
-                elif evaluation == "good":
-                    colors.append("#91cf60")  # Xanh lá
-                    markers.append("o")
-                elif evaluation == "acceptable":
-                    colors.append("#fecc5c")  # Vàng
-                    markers.append("s")  # Vuông
-                elif evaluation == "marginal":
-                    colors.append("#fd8d3c")  # Cam
-                    markers.append("s")
-                elif evaluation == "poor":
-                    colors.append("#d7191c")  # Đỏ
-                    markers.append("X")  # Chữ X
-                else:
-                    colors.append("#7570b3")  # Tím (không xác định)
-                    markers.append("o")
+                    if value is not None:
+                        available_metrics[metric_name] = {
+                            "value": value,
+                            "optimal": info["optimal"],
+                            "weight": info["weight"],
+                            "color": info["color"],
+                        }
+                    break
 
         # Nếu không có dữ liệu
-        if not metrics:
+        if not available_metrics:
             ax.text(
                 0,
                 0,
@@ -942,159 +936,139 @@ class BiologicalMetricsWidget(QWidget):
                 va="center",
                 fontsize=12,
             )
+            self.radar_figure.tight_layout()
             self.radar_canvas.draw()
             return
 
+        # Thu thập dữ liệu và chuẩn hóa
+        for metric_name, info in available_metrics.items():
+            categories.append(metric_name)
+            raw_value = info["value"]
+            values.append(raw_value)
+
+            # Chuẩn hóa giá trị để hiển thị trên cùng biểu đồ
+            min_val, max_val = normalization_ranges.get(metric_name, (0, 1))
+            normalized_value = (
+                (raw_value - min_val) / (max_val - min_val)
+                if max_val > min_val
+                else 0.5
+            )
+
+            # Đảo ngược giá trị nếu tối ưu là min (số càng thấp càng tốt)
+            if info["optimal"] == "min":
+                normalized_value = 1 - normalized_value
+
+            normalized_values.append(normalized_value)
+            colors.append(info["color"])
+            optimal_directions.append(info["optimal"])
+
         # Số lượng chỉ số
-        N = len(metrics)
+        N = len(categories)
         if N < 3:
             # Biểu đồ radar cần ít nhất 3 chiều, thêm chiều giả nếu cần
-            metrics.extend([""] * (3 - N))
-            values.extend([0] * (3 - N))
-            colors.extend(["#cccccc"] * (3 - N))
-            markers.extend([""] * (3 - N))
-            N = len(metrics)
+            dummy_count = 3 - N
+            categories.extend([""] * dummy_count)
+            values.extend([0] * dummy_count)
+            normalized_values.extend([0] * dummy_count)
+            colors.extend(["#cccccc"] * dummy_count)
+            optimal_directions.extend(["max"] * dummy_count)
+            N = 3
 
-        # Tạo các góc cho biểu đồ radar (đảm bảo khép kín)
+        # Tạo các góc cho biểu đồ radar
         angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
 
         # Khép kín biểu đồ
-        values_closed = values + [values[0]]
-        angles_closed = angles + [angles[0]]
+        categories = categories + [categories[0]]
+        normalized_values = normalized_values + [normalized_values[0]]
+        values = values + [values[0]]
+        angles = angles + [angles[0]]
 
-        # Vẽ biểu đồ radar
+        # Vẽ biểu đồ radar với giá trị chuẩn hóa
         ax.plot(
-            angles_closed, values_closed, "o-", linewidth=2, color="#5c9dc2", alpha=0.8
+            angles, normalized_values, "o-", linewidth=2, color="#5c9dc2", alpha=0.8
         )
-        ax.fill(angles_closed, values_closed, color="#5c9dc2", alpha=0.2)
+        ax.fill(angles, normalized_values, color="#5c9dc2", alpha=0.2)
 
-        # Vẽ điểm với màu sắc tương ứng với đánh giá
-        for i, (angle, value, color, marker) in enumerate(
-            zip(angles, values, colors, markers)
+        # Đặt nhãn cho các trục
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories[:-1])
+
+        # Thêm thông tin giá trị thực tế lên đồ thị
+        for i, (angle, value, normalized, category) in enumerate(
+            zip(angles[:-1], values[:-1], normalized_values[:-1], categories[:-1])
         ):
-            if marker:  # Chỉ vẽ marker nếu có
-                ax.plot(
-                    angle,
-                    value,
-                    marker=marker,
-                    color=color,
-                    markersize=8,
-                    markeredgecolor="black",
-                    markeredgewidth=0.5,
+            if category:  # Chỉ hiển thị cho các trục có tên
+                # Tính toán vị trí văn bản dựa trên góc
+                ha = "left" if -np.pi / 2 <= angle <= np.pi / 2 else "right"
+                va = "center"
+                offset = 0.1
+                text_angle = angle
+
+                # Hiển thị giá trị thực tế
+                if "%" in category:
+                    value_text = f"{value:.1f}%"
+                elif "Gy" in category:
+                    value_text = f"{value:.1f} Gy"
+                else:
+                    value_text = f"{value:.2f}"
+
+                ax.text(
+                    text_angle,
+                    normalized + offset,
+                    value_text,
+                    ha=ha,
+                    va=va,
+                    fontsize=8,
+                    bbox=dict(facecolor="white", alpha=0.7, boxstyle="round,pad=0.3"),
                 )
 
-        # Đặt tên cho các trục
-        ax.set_xticks(angles)
-        ax.set_xticklabels(metrics, fontsize=10)
+        # Vẽ vòng tròn nền
+        self._draw_background_circles(ax)
 
-        # Tùy chỉnh vòng tròn grid
-        ax.set_rgrids([])  # Xóa vòng tròn bán kính
+        # Cài đặt giới hạn trục và tiêu đề
+        ax.set_ylim(0, 1.2)  # Giới hạn cho giá trị chuẩn hóa
+        ax.set_title(f"Radar Chart: {structure_name} ({structure_type})", fontsize=12)
+        self.radar_figure.tight_layout()
 
-        # Thêm vòng tròn và nhãn tùy chỉnh
-        r_max = max(values) * 1.2 if values else 100  # Đảm bảo có một giá trị mặc định
+        # Hiển thị biểu đồ
+        self.radar_canvas.draw()
 
-        # Số vòng tròn grid
-        num_circles = 5
-        for i in range(num_circles + 1):
-            r = r_max * i / num_circles
+    def _draw_background_circles(self, ax):
+        """
+        Vẽ các vòng tròn nền cho biểu đồ radar.
+
+        Args:
+            ax: Trục matplotlib để vẽ vòng tròn
+        """
+        # Vẽ vòng tròn nền
+        r_max = 1.0
+        for i in range(5):
+            r = r_max * i / 4
             circle = plt.Circle(
                 (0, 0),
                 r,
                 transform=ax.transData._b,
                 fill=False,
-                color="gray",
+                edgecolor="gray",
                 alpha=0.3,
+                linestyle=":",
             )
-            ax.add_patch(circle)
+            ax.add_artist(circle)
 
-            # Thêm nhãn cho vòng tròn ở phía trên
-            if i > 0:  # Bỏ qua nhãn cho vòng tròn ở tâm
+            # Thêm nhãn giá trị cho vòng tròn
+            if i > 0:  # Không hiển thị giá trị 0
+                # Hiển thị giá trị dưới dạng phần trăm
+                label = f"{i / 4 * 100:.0f}%"
                 ax.text(
                     0,
                     r,
-                    f"{r:.1f}",
-                    ha="left",
+                    label,
+                    ha="center",
                     va="bottom",
-                    fontsize=8,
-                    alpha=0.6,
-                    transform=ax.transData,
+                    fontsize=7,
+                    color="gray",
+                    bbox=dict(facecolor="white", alpha=0.7, boxstyle="round,pad=0.1"),
                 )
-
-        # Đặt tiêu đề
-        title_text = f"Đánh giá sinh học: {structure_name}"
-        subtitle_text = f"Loại: {structure_type}"
-
-        self.radar_figure.suptitle(title_text, fontsize=14, fontweight="bold")
-        ax.set_title(subtitle_text, fontsize=10)
-
-        # Căn chỉnh biểu đồ
-        self.radar_figure.tight_layout()
-
-        # Thêm chú giải màu
-        legend_elements = [
-            plt.Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor="#1a9641",
-                markeredgecolor="black",
-                markersize=8,
-                label="Xuất sắc",
-            ),
-            plt.Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor="#91cf60",
-                markeredgecolor="black",
-                markersize=8,
-                label="Tốt",
-            ),
-            plt.Line2D(
-                [0],
-                [0],
-                marker="s",
-                color="w",
-                markerfacecolor="#fecc5c",
-                markeredgecolor="black",
-                markersize=8,
-                label="Chấp nhận được",
-            ),
-            plt.Line2D(
-                [0],
-                [0],
-                marker="s",
-                color="w",
-                markerfacecolor="#fd8d3c",
-                markeredgecolor="black",
-                markersize=8,
-                label="Giới hạn",
-            ),
-            plt.Line2D(
-                [0],
-                [0],
-                marker="X",
-                color="w",
-                markerfacecolor="#d7191c",
-                markeredgecolor="black",
-                markersize=8,
-                label="Kém",
-            ),
-        ]
-
-        ax.legend(
-            handles=legend_elements,
-            loc="lower center",
-            bbox_to_anchor=(0.5, -0.15),
-            ncol=5,
-            fontsize=8,
-            frameon=True,
-        )
-
-        # Hiển thị biểu đồ
-        self.radar_canvas.draw()
 
     def _update_detail_display(self, all_metrics=None):
         """Cập nhật hiển thị chi tiết thông số cho cấu trúc đã chọn."""

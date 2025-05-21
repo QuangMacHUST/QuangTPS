@@ -5,6 +5,38 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-09-20
+
+### Cải tiến
+- **Nâng cao hiển thị biểu đồ Radar trong BiologicalMetricsWidget:**
+  - Cải thiện phương thức _draw_radar_chart với khả năng chuẩn hóa dữ liệu giữa các đơn vị khác nhau
+  - Thêm hiển thị giá trị thực tế lên biểu đồ với định dạng đúng đơn vị (%, Gy)
+  - Tạo mới phương thức _draw_background_circles để tạo lưới tham chiếu rõ ràng
+  - Phân biệt màu sắc và thông tin theo loại cấu trúc (TARGET/OAR)
+
+- **Cải thiện xử lý ngoại lệ trong calculate_dose:**
+  - Kiểm tra đầy đủ beam_set tồn tại trước khi sử dụng
+  - Thêm kiểm tra và log chi tiết cho quá trình tính toán liều
+  - Cải thiện thông báo lỗi với hướng dẫn rõ ràng bằng tiếng Việt
+  - Xử lý đúng cách khi các thành phần không khả dụng
+
+- **Nâng cao tương thích với phiên bản PyQt mới:**
+  - Thay thế menu.exec_() bằng menu.exec() trong Object Explorer Panel
+  - Cập nhật các phương thức dialog.exec_() thành dialog.exec() để tương thích
+  - Đảm bảo tương thích xuyên suốt trong ứng dụng
+
+### Sửa lỗi
+- Khắc phục lỗi "Access to member 'current_beam_set' before its definition line" trong main_window.py
+- Sửa lỗi trong object_explorer_panel.py khi gọi menu.exec_() không đúng
+- Khắc phục lỗi Undefined variable 'logger' bằng cách khởi tạo đúng logger cho module
+- Cải thiện xử lý ngoại lệ khi gọi dialog.exec() trong các phương thức hiển thị dialog
+- Khắc phục vấn đề tương thích với các phiên bản PyQt khác nhau
+
+### Tài liệu
+- Cập nhật tất cả các docstring trong các phương thức đã sửa đổi
+- Thêm thông tin logging chi tiết để theo dõi quá trình tính toán liều
+- Cải thiện thông báo lỗi cho người dùng bằng tiếng Việt
+
 ## [0.11.1] - 2026-09-15
 
 ### Cải tiến
