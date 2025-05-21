@@ -37,6 +37,7 @@ try:
         QGroupBox,
         QCheckBox,
         QApplication,
+        QDialog,
     )
     from PyQt5.QtCore import (
         Qt,
@@ -79,6 +80,10 @@ except ImportError:
 
         def emit(self, *args, **kwargs):
             pass
+
+    class QDialog:
+        Accepted = 1
+        Rejected = 0
 
 
 # Import các module của hệ thống QuangTPS
@@ -209,66 +214,496 @@ class ObjectExplorerPanel(QWidget):
 
     def _init_ui(self):
         """Khởi tạo giao diện người dùng."""
-        # Layout chính
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(2, 2, 2, 2)
-        main_layout.setSpacing(2)
+        # Thiết lập layout chính
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+
+        # Layout tìm kiếm
+        search_layout = QHBoxLayout()
+        search_label = QLabel("Search:")
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search objects...")
+        self.search_edit.textChanged.connect(self._on_search_text_changed)
+        self._filter_text = ""
+
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_edit)
+
+        layout.addLayout(search_layout)
+
+        # Thiết lập tree widget
+        self._setup_tree_widget()
 
         # Thanh công cụ
         toolbar_layout = QHBoxLayout()
-        toolbar_layout.setContentsMargins(0, 0, 0, 0)
-        toolbar_layout.setSpacing(2)
 
-        # Nút làm mới
-        self.refresh_button = QToolButton(self)
-        self.refresh_button.setIcon(QIcon("quangtps/ui/icons/refresh.png"))
-        self.refresh_button.setToolTip("Làm mới")
-        toolbar_layout.addWidget(self.refresh_button)
+        self.new_button = QPushButton("New")
+        self.new_button.clicked.connect(self._on_new_button_clicked)
 
-        # Nút tạo mới
-        self.new_button = QToolButton(self)
-        self.new_button.setIcon(QIcon("quangtps/ui/icons/new.png"))
-        self.new_button.setToolTip("Tạo mới")
+        self.edit_button = QPushButton("Edit")
+        self.edit_button.clicked.connect(self._on_edit_button_clicked)
+
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.clicked.connect(self._on_delete_button_clicked)
+
         toolbar_layout.addWidget(self.new_button)
+        toolbar_layout.addWidget(self.edit_button)
+        toolbar_layout.addWidget(self.delete_button)
 
-        # Ô tìm kiếm
-        self.search_input = QLineEdit(self)
-        self.search_input.setPlaceholderText("Tìm kiếm...")
-        self.search_input.setClearButtonEnabled(True)
-        toolbar_layout.addWidget(self.search_input)
+        layout.addLayout(toolbar_layout)
 
-        # Thêm thanh công cụ vào layout chính
-        main_layout.addLayout(toolbar_layout)
+        # Áp dụng phong cách Eclipse
+        apply_eclipse_theme_to_widget(self)
 
-        # Tree view hiển thị các đối tượng
-        self.tree_widget = QTreeWidget(self)
-        self.tree_widget.setHeaderHidden(True)
-        self.tree_widget.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree_widget.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tree_widget.setExpandsOnDoubleClick(True)
-        self.tree_widget.setAnimated(True)
-        self.tree_widget.setIndentation(20)
+    def _setup_tree_widget(self):
+        """Thiết lập tree widget cho explorer."""
+        main_layout = self.layout()
+
+        # Tạo tree widget
+        self.tree_widget = QTreeWidget()
+        self.tree_widget.setHeaderHidden(True)  # Ẩn header
+        self.tree_widget.setExpandsOnDoubleClick(
+            False
+        )  # Không mở rộng khi double-click
+        self.tree_widget.setContextMenuPolicy(
+            Qt.CustomContextMenu
+        )  # Cho phép menu ngữ cảnh
+        self.tree_widget.customContextMenuRequested.connect(self._show_context_menu)
+        self.tree_widget.itemChanged.connect(self._on_item_changed)
+        self.tree_widget.itemDoubleClicked.connect(self._on_item_double_clicked)
+
+        # Thiết lập chọn nhiều item
+        self.tree_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
+        # Thiết lập kéo thả
+        self.tree_widget.setDragEnabled(True)
+        self.tree_widget.setAcceptDrops(True)
+        self.tree_widget.setDropIndicatorShown(True)
+
+        # Thiết lập kết cấu cơ bản
+        self.patient_root = QTreeWidgetItem(self.tree_widget)
+        self.patient_root.setText(0, "Patients")
+        self.patient_root.setIcon(0, QIcon("quangtps/ui/icons/patients.png"))
+
+        # Thêm vào layout
         main_layout.addWidget(self.tree_widget)
 
-        # Control panel với các thao tác nhanh
-        control_layout = QHBoxLayout()
-        control_layout.setContentsMargins(0, 0, 0, 0)
-        control_layout.setSpacing(5)
+    def _on_item_double_clicked(self, item: QTreeWidgetItem, column: int):
+        """
+        Xử lý khi người dùng nhấp đúp vào một item.
 
-        # Nút sửa đổi thuộc tính
-        self.edit_button = QPushButton("Thuộc tính", self)
-        self.edit_button.setEnabled(False)
-        control_layout.addWidget(self.edit_button)
+        Args:
+            item: Item được nhấp đúp.
+            column: Cột được nhấp đúp.
+        """
+        # Lấy thông tin loại đối tượng và đối tượng
+        object_type = item.data(0, Qt.UserRole + 1)
+        obj = item.data(0, Qt.UserRole)
 
-        # Nút xóa đối tượng
-        self.delete_button = QPushButton("Xóa", self)
-        self.delete_button.setEnabled(False)
-        control_layout.addWidget(self.delete_button)
+        if not obj:
+            return
 
-        main_layout.addLayout(control_layout)
+        # Mở dialog tương ứng với loại đối tượng
+        if object_type == ObjectType.PATIENT:
+            self._show_patient_properties_dialog(obj)
+        elif object_type == ObjectType.STRUCTURE:
+            self._show_structure_properties_dialog(obj)
+        elif object_type == ObjectType.PLAN:
+            self._show_plan_properties_dialog(obj)
+        elif object_type == ObjectType.STRUCTURE_SET:
+            self._show_structure_set_properties_dialog(obj)
 
-        # Thiết lập kích thước mặc định
-        self.setMinimumWidth(250)
+    def _show_patient_properties_dialog(self, patient):
+        """Hiển thị dialog thuộc tính bệnh nhân."""
+        try:
+            from quangtps.ui.dialogs import PatientPropertiesDialog
+
+            dialog = PatientPropertiesDialog(patient, parent=self)
+            if dialog.exec_() == QDialog.Accepted:
+                # Cập nhật hiển thị sau khi chỉnh sửa
+                for i in range(self.patient_root.childCount()):
+                    patient_item = self.patient_root.child(i)
+                    if patient_item.data(0, Qt.UserRole) == patient:
+                        patient_item.setText(0, patient.name)
+                        break
+
+                # Phát tín hiệu thông báo cập nhật
+                self.patientSelected.emit(patient)
+        except ImportError:
+            logging.warning("PatientPropertiesDialog not available")
+            QMessageBox.information(
+                self,
+                "Feature Not Available",
+                "Patient properties dialog is not available in this version.",
+            )
+
+    def _show_structure_properties_dialog(self, structure):
+        """Hiển thị dialog thuộc tính cấu trúc."""
+        try:
+            from quangtps.ui.dialogs import StructurePropertiesDialog
+
+            dialog = StructurePropertiesDialog(structure, parent=self)
+            if dialog.exec_() == QDialog.Accepted:
+                # Cập nhật hiển thị sau khi chỉnh sửa
+                self.refresh()
+
+                # Phát tín hiệu thông báo cập nhật
+                self.structureSelected.emit(structure)
+        except ImportError:
+            logging.warning("StructurePropertiesDialog not available")
+            QMessageBox.information(
+                self,
+                "Feature Not Available",
+                "Structure properties dialog is not available in this version.",
+            )
+
+    def _show_plan_properties_dialog(self, plan):
+        """Hiển thị dialog thuộc tính kế hoạch."""
+        try:
+            from quangtps.ui.dialogs import PlanPropertiesDialog
+
+            dialog = PlanPropertiesDialog(plan, parent=self)
+            if dialog.exec_() == QDialog.Accepted:
+                # Cập nhật hiển thị sau khi chỉnh sửa
+                for i in range(self.patient_root.childCount()):
+                    patient_item = self.patient_root.child(i)
+                    for j in range(patient_item.childCount()):
+                        plan_item = patient_item.child(j)
+                        if (
+                            plan_item.data(0, Qt.UserRole) == plan
+                            and plan_item.data(0, Qt.UserRole + 1) == ObjectType.PLAN
+                        ):
+                            plan_item.setText(0, plan.name)
+                            break
+
+                # Phát tín hiệu thông báo cập nhật
+                self.planSelected.emit(plan)
+        except ImportError:
+            logging.warning("PlanPropertiesDialog not available")
+            QMessageBox.information(
+                self,
+                "Feature Not Available",
+                "Plan properties dialog is not available in this version.",
+            )
+
+    def _show_structure_set_properties_dialog(self, structure_set):
+        """Hiển thị dialog thuộc tính bộ cấu trúc."""
+        try:
+            from quangtps.ui.dialogs import StructureSetPropertiesDialog
+
+            dialog = StructureSetPropertiesDialog(structure_set, parent=self)
+            if dialog.exec_() == QDialog.Accepted:
+                # Cập nhật hiển thị sau khi chỉnh sửa
+                self.refresh()
+
+                # Phát tín hiệu thông báo cập nhật
+                self.structureSetSelected.emit(structure_set)
+        except ImportError:
+            logging.warning("StructureSetPropertiesDialog not available")
+            QMessageBox.information(
+                self,
+                "Feature Not Available",
+                "Structure set properties dialog is not available in this version.",
+            )
+
+    def _show_context_menu(self, position: QPoint):
+        """
+        Hiển thị menu ngữ cảnh tại vị trí chuột.
+
+        Args:
+            position: Vị trí chuột trên tree widget.
+        """
+        item = self.tree_widget.itemAt(position)
+        if not item:
+            return
+
+        # Lấy thông tin loại đối tượng và đối tượng
+        object_type = item.data(0, Qt.UserRole + 1)
+        obj = item.data(0, Qt.UserRole)
+
+        if not object_type or not obj:
+            return
+
+        # Tạo menu ngữ cảnh
+        menu = QMenu(self.tree_widget)
+
+        if object_type == ObjectType.PATIENT:
+            self._create_patient_context_menu(menu, obj, item)
+        elif object_type == ObjectType.STRUCTURE:
+            self._create_structure_context_menu(menu, obj, item)
+        elif object_type == ObjectType.PLAN:
+            self._create_plan_context_menu(menu, obj, item)
+        elif object_type == ObjectType.STRUCTURE_SET:
+            self._create_structure_set_context_menu(menu, obj, item)
+
+        # Hiển thị menu ngữ cảnh nếu có hành động
+        if not menu.isEmpty():
+            global_pos = self.tree_widget.viewport().mapToGlobal(position)
+            menu.exec_(global_pos)
+
+    def _create_patient_context_menu(self, menu: QMenu, patient, item: QTreeWidgetItem):
+        """Tạo menu ngữ cảnh cho bệnh nhân."""
+        # Thêm kế hoạch mới
+        add_plan_action = menu.addAction("Add New Plan...")
+        add_plan_action.triggered.connect(lambda: self._create_new_plan(patient))
+
+        # Thêm bộ cấu trúc mới
+        add_structure_set_action = menu.addAction("Add New Structure Set...")
+        add_structure_set_action.triggered.connect(
+            lambda: self._create_new_structure_set(patient)
+        )
+
+        menu.addSeparator()
+
+        # Thuộc tính bệnh nhân
+        properties_action = menu.addAction("Properties...")
+        properties_action.triggered.connect(
+            lambda: self._show_patient_properties_dialog(patient)
+        )
+
+        menu.addSeparator()
+
+        # Xóa bệnh nhân
+        delete_action = menu.addAction("Delete Patient")
+        delete_action.triggered.connect(lambda: self._delete_patient(patient))
+
+    def _create_structure_context_menu(
+        self, menu: QMenu, structure, item: QTreeWidgetItem
+    ):
+        """Tạo menu ngữ cảnh cho cấu trúc."""
+        # Hiển thị/ẩn cấu trúc
+        toggle_visibility_action = menu.addAction(
+            "Hide Structure" if structure.visible else "Show Structure"
+        )
+        toggle_visibility_action.triggered.connect(
+            lambda: self._toggle_structure_visibility(structure, item)
+        )
+
+        menu.addSeparator()
+
+        # Thuộc tính cấu trúc
+        properties_action = menu.addAction("Properties...")
+        properties_action.triggered.connect(
+            lambda: self._show_structure_properties_dialog(structure)
+        )
+
+        menu.addSeparator()
+
+        # Xóa cấu trúc
+        delete_action = menu.addAction("Delete Structure")
+        delete_action.triggered.connect(lambda: self._delete_structure(structure))
+
+    def _create_plan_context_menu(self, menu: QMenu, plan, item: QTreeWidgetItem):
+        """Tạo menu ngữ cảnh cho kế hoạch."""
+        # Tính toán liều
+        calculate_dose_action = menu.addAction("Calculate Dose...")
+        calculate_dose_action.triggered.connect(
+            lambda: self._calculate_dose_for_plan(plan)
+        )
+
+        # Tạo báo cáo kế hoạch
+        create_report_action = menu.addAction("Create Plan Report...")
+        create_report_action.triggered.connect(lambda: self._create_plan_report(plan))
+
+        menu.addSeparator()
+
+        # So sánh với kế hoạch khác
+        compare_plans_action = menu.addAction("Compare with Other Plans...")
+        compare_plans_action.triggered.connect(
+            lambda: self._compare_with_other_plans(plan)
+        )
+
+        menu.addSeparator()
+
+        # Thuộc tính kế hoạch
+        properties_action = menu.addAction("Properties...")
+        properties_action.triggered.connect(
+            lambda: self._show_plan_properties_dialog(plan)
+        )
+
+        menu.addSeparator()
+
+        # Xóa kế hoạch
+        delete_action = menu.addAction("Delete Plan")
+        delete_action.triggered.connect(lambda: self._delete_plan(plan))
+
+    def _create_structure_set_context_menu(
+        self, menu: QMenu, structure_set, item: QTreeWidgetItem
+    ):
+        """Tạo menu ngữ cảnh cho bộ cấu trúc."""
+        # Thêm cấu trúc mới
+        add_structure_action = menu.addAction("Add New Structure...")
+        add_structure_action.triggered.connect(
+            lambda: self._create_new_structure(structure_set)
+        )
+
+        menu.addSeparator()
+
+        # Thuộc tính bộ cấu trúc
+        properties_action = menu.addAction("Properties...")
+        properties_action.triggered.connect(
+            lambda: self._show_structure_set_properties_dialog(structure_set)
+        )
+
+        menu.addSeparator()
+
+        # Xóa bộ cấu trúc
+        delete_action = menu.addAction("Delete Structure Set")
+        delete_action.triggered.connect(
+            lambda: self._delete_structure_set(structure_set)
+        )
+
+    def _toggle_structure_visibility(self, structure, item: QTreeWidgetItem):
+        """
+        Bật/tắt hiển thị cấu trúc.
+
+        Args:
+            structure: Đối tượng cấu trúc.
+            item: Item trên tree widget.
+        """
+        structure.visible = not structure.visible
+        item.setCheckState(0, Qt.Checked if structure.visible else Qt.Unchecked)
+
+        # Phát tín hiệu thông báo cập nhật
+        self.structureVisibilityChanged.emit(structure, structure.visible)
+
+    def _calculate_dose_for_plan(self, plan):
+        """Tính toán liều cho kế hoạch."""
+        # Thông báo kế hoạch được chọn cho tính liều
+        self.planSelected.emit(plan)
+
+        # Gửi thông báo đến MainWindow hoặc thành phần quản lý tính toán liều
+        QMessageBox.information(
+            self,
+            "Calculate Dose",
+            f"Initiating dose calculation for plan: {plan.name}.\n"
+            "The calculation will be handled by the main application.",
+        )
+
+    def _create_plan_report(self, plan):
+        """Tạo báo cáo cho kế hoạch."""
+        try:
+            from quangtps.ui.dialogs import PlanReportDialog
+
+            dialog = PlanReportDialog(plan, parent=self)
+            dialog.exec_()
+        except ImportError:
+            logging.warning("PlanReportDialog not available")
+            QMessageBox.information(
+                self,
+                "Feature Not Available",
+                "Plan report generation is not available in this version.",
+            )
+
+    def _compare_with_other_plans(self, plan):
+        """So sánh với các kế hoạch khác."""
+        try:
+            from quangtps.ui.dialogs import PlanComparisonDialog
+
+            dialog = PlanComparisonDialog(plan, self._patients, parent=self)
+            dialog.exec_()
+        except ImportError:
+            logging.warning("PlanComparisonDialog not available")
+            QMessageBox.information(
+                self,
+                "Feature Not Available",
+                "Plan comparison is not available in this version.",
+            )
+
+    def _delete_patient(self, patient):
+        """Xóa bệnh nhân khỏi hệ thống."""
+        reply = QMessageBox.question(
+            self,
+            "Delete Patient",
+            f"Are you sure you want to delete patient {patient.name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            # Tìm và xóa bệnh nhân khỏi danh sách
+            if patient in self._patients:
+                self._patients.remove(patient)
+
+            # Cập nhật hiển thị
+            self.refresh()
+
+            # Reset các biến hiện tại nếu cần
+            if self._current_patient == patient:
+                self._current_patient = None
+                self._current_plan = None
+                self._current_structure_set = None
+                self._current_structure = None
+
+    def _delete_structure(self, structure):
+        """Xóa cấu trúc khỏi structure set."""
+        reply = QMessageBox.question(
+            self,
+            "Delete Structure",
+            f"Are you sure you want to delete structure {structure.name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            # Tìm structure set chứa cấu trúc
+            structure_set = self._find_structure_set_for_structure(structure)
+            if structure_set and structure in structure_set.structures:
+                structure_set.structures.remove(structure)
+
+                # Cập nhật hiển thị
+                self.refresh()
+
+                # Reset biến hiện tại nếu cần
+                if self._current_structure == structure:
+                    self._current_structure = None
+
+    def _delete_plan(self, plan):
+        """Xóa kế hoạch khỏi bệnh nhân."""
+        reply = QMessageBox.question(
+            self,
+            "Delete Plan",
+            f"Are you sure you want to delete plan {plan.name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            # Tìm bệnh nhân chứa kế hoạch
+            patient = self._find_patient_for_object(plan)
+            if patient and plan in patient.plans:
+                patient.plans.remove(plan)
+
+                # Cập nhật hiển thị
+                self.refresh()
+
+                # Reset biến hiện tại nếu cần
+                if self._current_plan == plan:
+                    self._current_plan = None
+
+    def _delete_structure_set(self, structure_set):
+        """Xóa structure set khỏi bệnh nhân."""
+        reply = QMessageBox.question(
+            self,
+            "Delete Structure Set",
+            f"Are you sure you want to delete structure set {structure_set.name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            # Tìm bệnh nhân chứa structure set
+            patient = self._find_patient_for_object(structure_set)
+            if patient and structure_set in patient.structure_sets:
+                patient.structure_sets.remove(structure_set)
+
+                # Cập nhật hiển thị
+                self.refresh()
+
+                # Reset biến hiện tại nếu cần
+                if self._current_structure_set == structure_set:
+                    self._current_structure_set = None
+                    self._current_structure = None
 
     def _connect_signals(self):
         """Kết nối các tín hiệu và khe cắm."""
@@ -280,11 +715,10 @@ class ObjectExplorerPanel(QWidget):
         )
 
         # Kết nối các nút điều khiển
-        self.refresh_button.clicked.connect(self.refresh)
         self.new_button.clicked.connect(self._on_new_button_clicked)
         self.edit_button.clicked.connect(self._on_edit_button_clicked)
         self.delete_button.clicked.connect(self._on_delete_button_clicked)
-        self.search_input.textChanged.connect(self._on_search_text_changed)
+        self.search_edit.textChanged.connect(self._on_search_text_changed)
 
     def add_patient(self, patient: Patient):
         """
@@ -407,6 +841,34 @@ class ObjectExplorerPanel(QWidget):
         structure_item.setCheckState(
             0, Qt.Checked if structure.visible else Qt.Unchecked
         )
+
+        # Tạo tooltip thông tin chi tiết
+        tooltip = f"<b>{structure.name}</b><br>"
+        if hasattr(structure, "structure_type") and structure.structure_type:
+            tooltip += f"Type: {structure.structure_type.name}<br>"
+        if hasattr(structure, "color"):
+            r, g, b = structure.color
+            tooltip += f"Color: RGB({r}, {g}, {b})<br>"
+        if hasattr(structure, "volume") and structure.volume is not None:
+            volume = structure.volume
+            if volume < 0.1:
+                volume_str = f"{volume * 1000:.2f} cc³"
+            else:
+                volume_str = f"{volume:.2f} cc"
+            tooltip += f"Volume: {volume_str}<br>"
+
+        # Thêm thông tin về số lát cắt có chứa cấu trúc
+        if hasattr(structure, "contours") and structure.contours:
+            num_slices = len(structure.contours)
+            tooltip += f"Number of slices: {num_slices}<br>"
+
+        # Thêm thông tin về thuộc tính của cấu trúc
+        if hasattr(structure, "is_empty") and structure.is_empty:
+            tooltip += "<i>Empty structure</i><br>"
+        if hasattr(structure, "is_external") and structure.is_external:
+            tooltip += "<i>External contour</i><br>"
+
+        structure_item.setToolTip(0, tooltip)
 
     def _add_plan_to_tree(self, plan: Plan, parent_item: QTreeWidgetItem):
         """
@@ -740,66 +1202,111 @@ class ObjectExplorerPanel(QWidget):
         Args:
             text: Văn bản tìm kiếm mới.
         """
-        self._filter_text = text.lower()
-        self._apply_filter()
+        self._filter_text = text.strip().lower()
+        if self._filter_text:
+            self._apply_filter()
+        else:
+            self._show_all_items()
 
     def _apply_filter(self):
-        """Áp dụng bộ lọc vào tree widget."""
+        """Áp dụng bộ lọc tìm kiếm vào tree widget."""
         if not self._filter_text:
-            # Hiển thị tất cả
             self._show_all_items()
             return
 
-        # Duyệt qua tất cả các item
+        # Thông báo debug về filter (sử dụng logging thay vì logger)
+        if HAS_PYQT5:  # Chỉ log khi PyQt5 khả dụng
+            logging.debug(f"Applying filter: {self._filter_text}")
+
+        # Duyệt qua tất cả các items và ẩn/hiện theo bộ lọc
         iterator = QTreeWidgetItemIterator(self.tree_widget)
         while iterator.value():
             item = iterator.value()
-            self._filter_item(item, self._filter_text)
+            if self._filter_item(item, self._filter_text):
+                # Hiển thị item này và tất cả các cha của nó
+                current_item = item
+                while current_item:
+                    current_item.setHidden(False)
+                    current_item = current_item.parent()
+            else:
+                # Chỉ ẩn item này nếu không có con nào thỏa mãn
+                has_matching_child = False
+                for i in range(item.childCount()):
+                    child = item.child(i)
+                    if self._filter_item(child, self._filter_text, recursive=True):
+                        has_matching_child = True
+                        break
+                item.setHidden(not has_matching_child)
             iterator += 1
 
-        # Mở rộng tất cả các item khớp với bộ lọc
+        # Mở rộng các item có con phù hợp với bộ lọc
         self._expand_matching_items()
 
-    def _filter_item(self, item: QTreeWidgetItem, filter_text: str) -> bool:
+    def _filter_item(
+        self, item: QTreeWidgetItem, filter_text: str, recursive: bool = False
+    ) -> bool:
         """
-        Lọc một item dựa vào văn bản tìm kiếm.
+        Kiểm tra xem một item có phù hợp với bộ lọc hay không.
 
         Args:
-            item: Item cần lọc.
-            filter_text: Văn bản tìm kiếm.
+            item: Item cần kiểm tra.
+            filter_text: Văn bản bộ lọc.
+            recursive: Có kiểm tra con của item không.
 
         Returns:
-            True nếu item khớp với bộ lọc, False nếu không.
+            True nếu item phù hợp với bộ lọc, ngược lại False.
         """
-        # Kiểm tra xem item có khớp với bộ lọc không
-        item_text = item.text(0).lower()
-        matches = filter_text in item_text
+        # Kiểm tra văn bản của item
+        if filter_text.lower() in item.text(0).lower():
+            return True
 
-        # Kiểm tra các item con
-        has_matching_child = False
-        for i in range(item.childCount()):
-            child_matches = self._filter_item(item.child(i), filter_text)
-            has_matching_child = has_matching_child or child_matches
+        # Kiểm tra đối tượng liên kết (nếu có)
+        obj = item.data(0, Qt.UserRole)
+        if obj:
+            # Kiểm tra tên đối tượng
+            if hasattr(obj, "name") and filter_text.lower() in obj.name.lower():
+                return True
 
-        # Hiển thị item nếu nó khớp hoặc có con khớp
-        item.setHidden(not (matches or has_matching_child))
+            # Kiểm tra ID đối tượng (đối với bệnh nhân)
+            if hasattr(obj, "id") and filter_text.lower() in str(obj.id).lower():
+                return True
 
-        return matches or has_matching_child
+            # Kiểm tra mô tả đối tượng (đối với kế hoạch)
+            if (
+                hasattr(obj, "description")
+                and filter_text.lower() in obj.description.lower()
+            ):
+                return True
+
+            # Kiểm tra loại cấu trúc (đối với cấu trúc)
+            if (
+                hasattr(obj, "structure_type")
+                and obj.structure_type
+                and filter_text.lower() in str(obj.structure_type).lower()
+            ):
+                return True
+
+        # Kiểm tra con của item nếu yêu cầu
+        if recursive:
+            for i in range(item.childCount()):
+                if self._filter_item(item.child(i), filter_text, recursive=True):
+                    return True
+
+        return False
 
     def _show_all_items(self):
-        """Hiển thị tất cả các item trong tree."""
+        """Hiển thị tất cả các items trong tree widget."""
         iterator = QTreeWidgetItemIterator(self.tree_widget)
         while iterator.value():
-            item = iterator.value()
-            item.setHidden(False)
+            iterator.value().setHidden(False)
             iterator += 1
 
     def _expand_matching_items(self):
-        """Mở rộng tất cả các item khớp với bộ lọc."""
+        """Mở rộng các items phù hợp với bộ lọc."""
         iterator = QTreeWidgetItemIterator(self.tree_widget)
         while iterator.value():
             item = iterator.value()
-            if not item.isHidden():
+            if not item.isHidden() and item.childCount() > 0:
                 item.setExpanded(True)
             iterator += 1
 

@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.9.2-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.10.2-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -64,23 +64,29 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
 
 ### Cải tiến trong phiên bản 0.9.2
 
-- **Nâng cấp độ ổn định của module MCO (Multi-Criteria Optimization)**:
-  - Khắc phục lỗi indentation gây trở ngại trong việc import module
-  - Cải thiện phương thức lựa chọn giải pháp Pareto tối ưu
-  - Tăng cường xử lý ngoại lệ khi các thành phần không khả dụng
-  - Tích hợp liền mạch với quy trình lập kế hoạch ngược
+- **Phân tích sinh học nâng cao**:
+  - Đánh giá kế hoạch sử dụng các mô hình sinh học tiên tiến như TCP, NTCP và EUD
+  - Tính toán xác suất kiểm soát khối u và biến chứng mô lành với dữ liệu tham số đặc trưng theo cơ quan
+  - Trực quan hóa các chỉ số sinh học với biểu đồ màu sắc và bảng so sánh
+  - Đánh giá liều tương đương sinh học khi thay đổi phương pháp phân liều
 
-- **Tối ưu hóa tích hợp KBP (Knowledge-Based Planning)**:
-  - Chuẩn hóa hệ thống biểu tượng với hàm create_eclipse_icon
-  - Khắc phục lỗi import trong kbp_dialog.py cho tăng tính tương thích
-  - Cải thiện quy trình xử lý đề xuất KBP vào kế hoạch hiện tại
-  - Đồng bộ hóa giữa KBP và hệ thống tối ưu hóa ngược
+- **Đánh giá độ bền vững của kế hoạch xạ trị**:
+  - Phân tích tác động của sai số thiết lập trên phân bố liều
+  - Đánh giá độ bền vững với sự không chắc chắn về phạm vi trong xạ trị proton/ion
+  - Mô phỏng ảnh hưởng của biến thiên ngẫu nhiên và hệ thống
+  - Trực quan hóa dải DVH cho các kịch bản bền vững khác nhau
 
-- **Tăng cường tính ổn định toàn hệ thống**:
-  - Cập nhật cơ chế import trong hệ thống dialog với cơ chế dự phòng
-  - Cải thiện hệ thống thông báo lỗi với chi tiết và hướng dẫn khắc phục
-  - Đảm bảo khả năng hoạt động khi thiếu các thành phần không thiết yếu
-  - Tăng cường truy vết lỗi và logging để dễ dàng gỡ lỗi
+- **Cải thiện module MCO và KBP**:
+  - Khắc phục lỗi indentation trong mco_engine.py gây lỗi import
+  - Tích hợp liền mạch KBP với quy trình tối ưu hóa lập kế hoạch
+  - Cải thiện chức năng đánh giá và lựa chọn giải pháp tối ưu
+  - Nâng cao độ ổn định của các module đặc biệt trong điều kiện hạn chế
+
+- **Nâng cấp hệ thống và hiệu suất**:
+  - Tối ưu hóa hiệu suất các thuật toán tính toán chỉ số chất lượng kế hoạch
+  - Cải thiện khả năng phục hồi lỗi và xử lý ngoại lệ
+  - Bổ sung tài liệu và ghi chú mã nguồn cho việc phát triển và bảo trì dễ dàng
+  - Nâng cao tính tương thích với nhiều định dạng dữ liệu y tế khác nhau
 
 ### Cải tiến trong phiên bản 0.9.0
 
@@ -176,6 +182,28 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
   - Sửa nhiều lỗi linter và khắc phục các vấn đề tiềm ẩn
   - Xử lý các trường hợp ngoại lệ toàn diện
 
+### Cải tiến trong phiên bản 0.10.2
+
+- **Phân tích độ bền vững (Robustness Analysis) nâng cao**:
+  - Đánh giá chi tiết tác động của sai số thiết lập và bất định phạm vi với giao diện trực quan
+  - Hiển thị dải DVH (DVH bands) với thiết kế màu sắc thẩm mỹ và thông tin biên độ dao động
+  - Đánh dấu trực quan các cấu trúc đã phân tích với dấu "*" và màu nổi bật
+  - Tooltip phong phú hiển thị thông tin biến động chi tiết cho từng chỉ số đánh giá
+  - Mã màu thông minh đánh giá độ ổn định (xanh lá: rất ổn định, xanh dương: ổn định, vàng: chấp nhận, đỏ: không ổn định)
+
+- **Cải thiện quy trình phân tích độ bền vững**:
+  - Xử lý toàn diện các trường hợp đặc biệt và dữ liệu đầu vào không đầy đủ
+  - Báo cáo tiến trình chi tiết trong quá trình phân tích với thông báo trạng thái rõ ràng
+  - Tự động chuyển đổi dữ liệu thành numpy array để xử lý hiệu quả hơn
+  - Tính toán tự động các chỉ số thống kê về độ biến động (biên độ trung bình, biên độ lớn nhất)
+  - Tích hợp liền mạch kết quả phân tích với các thành phần khác của hệ thống
+
+- **Giao diện người dùng trực quan**:
+  - Hiển thị đánh giá độ ổn định của kế hoạch với mã màu trực quan
+  - Đánh dấu và làm nổi bật các cấu trúc đã được phân tích độ bền vững
+  - Hiển thị thông tin chi tiết về phạm vi biến động trong tooltip của các chỉ số
+  - Tương tác mượt mà giữa dialog phân tích và các thành phần hiển thị kết quả
+
 ## Cài đặt
 
 ### Yêu cầu
@@ -226,3 +254,31 @@ QuangTPS được phát hành dưới [Giấy phép MIT](LICENSE).
 ## Liên hệ
 
 Nếu bạn có câu hỏi hoặc góp ý, vui lòng tạo issue hoặc liên hệ qua email: example@example.com.
+
+## Cải tiến trong phiên bản 0.9.3
+
+Phiên bản 0.9.3 mang đến nhiều cải tiến đáng kể trong đánh giá kế hoạch xạ trị:
+
+### Phân tích sinh học (Biological Analysis)
+- Tính toán các chỉ số sinh học quan trọng: TCP, NTCP, EUD và BED
+- Cơ sở dữ liệu tham số sinh học cho nhiều loại cơ quan
+- Giao diện trực quan hiển thị các chỉ số sinh học với màu sắc trực quan
+- Biểu đồ so sánh TCP/NTCP cho các cấu trúc
+
+### Đánh giá độ bền vững (Robustness)
+- Phân tích ảnh hưởng của sai số thiết lập (setup error)
+- Đánh giá tác động của độ không chắc chắn phạm vi (range uncertainty) cho xạ trị proton
+- Tạo báo cáo tóm tắt với các chỉ số đánh giá độ bền vững
+- Biểu đồ trực quan cho kết quả phân tích độ bền vững
+
+### Giao diện người dùng
+- Tích hợp các công cụ phân tích sinh học vào tab đánh giá kế hoạch
+- Cải thiện hiển thị DVH với các chỉ số lâm sàng
+- Sửa lỗi và cải thiện hiệu suất trong nhiều module
+
+## Cải tiến trong phiên bản 0.9.2
+
+- Nâng cấp module MCO (Multi-Criteria Optimization) cho hoạt động ổn định hơn
+- Cải thiện giao diện External Beam Planning tab theo phong cách Eclipse
+- Tích hợp hoàn chỉnh hiển thị liều 3D vào External Beam Planning tab
+- Nâng cấp module DVH với các chỉ số đánh giá kế hoạch tự động

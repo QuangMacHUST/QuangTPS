@@ -1,25 +1,93 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-QuangTPS - Hệ thống lập kế hoạch xạ trị mã nguồn mở.
+QuangTPS: Hệ thống lập kế hoạch xạ trị mã nguồn mở.
 
-Hệ thống lập kế hoạch xạ trị cung cấp đầy đủ các công cụ để tạo,
-tối ưu hóa và đánh giá kế hoạch điều trị xạ trị cho bệnh nhân.
+QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở được thiết kế để hỗ trợ
+quá trình lập kế hoạch xạ trị trong điều trị ung thư.
+
+Phát triển bởi một nhóm các chuyên gia vật lý y học và kỹ sư phần mềm,
+QuangTPS cung cấp các tính năng từ cơ bản đến nâng cao cho việc lập kế hoạch
+xạ trị, bao gồm:
+
+- Phân đoạn cấu trúc giải phẫu
+- Lập kế hoạch trị liệu
+- Tối ưu hóa kế hoạch
+- Tính toán liều
+- Đánh giá kế hoạch
+- Đảm bảo chất lượng
+
+Phiên bản 0.9.3 cải thiện các chức năng phân tích sinh học và đánh giá độ bền vững
+để cung cấp các công cụ nâng cao cho đánh giá kế hoạch xạ trị.
 """
 
-__version__ = "0.8.0"
+__title__ = "QuangTPS"
+__description__ = "Hệ thống lập kế hoạch xạ trị mã nguồn mở"
+__version__ = "0.9.3"
+__author__ = "Quang Team"
+__author_email__ = "quangmacdang@gmail.com"
+
+# Cập nhật phiên bản lên 0.9.2
+__version__ = "0.9.2"
+
+# Import các module chính
+from quangtps import core
+from quangtps import utils
+from quangtps import ui
+
+# Thiết lập logging
+import os
+import logging
+from quangtps.utils.logging_config import setup_logging
+
+# Thư mục mặc định cho log
+LOG_DIR = os.path.join(os.path.expanduser("~"), ".quangtps", "logs")
+DEFAULT_LOG_LEVEL = logging.INFO
+
+# Thiết lập logging
+setup_logging(log_dir=LOG_DIR, log_level=DEFAULT_LOG_LEVEL)
+
+# Logger cho module này
+logger = logging.getLogger(__name__)
+logger.info(f"QuangTPS version {__version__} starting up")
+
 __author__ = "QuangTPS Team"
 __license__ = "MIT"
-__description__ = "Hệ thống Lập kế hoạch Xạ trị Mã nguồn Mở"
+__copyright__ = "Copyright 2023, QuangTPS Team"
 
-# Import commonly used modules for easier access
+# Version details
+VERSION_MAJOR = 0
+VERSION_MINOR = 9
+VERSION_PATCH = 2
+
+# Platform detection
+import platform
+
+PLATFORM = platform.system().lower()
+IS_WINDOWS = PLATFORM == "windows"
+IS_LINUX = PLATFORM == "linux"
+IS_MACOS = PLATFORM == "darwin"
+
+# Define path constants
+import sys
+from pathlib import Path
+
+# Get application base dir
+if getattr(sys, "frozen", False):
+    # We're running in a bundle
+    BASE_DIR = Path(sys.executable).parent
+else:
+    # We're running in a normal Python environment
+    BASE_DIR = Path(__file__).parent.parent
+
+# Import essential components
+from quangtps.core.types import Plan, Treatment, Structure
+from quangtps.core.patient import Patient
 from quangtps.core.logging import get_logger, setup_logging
 
-import os
 import sys
 import time
-import logging
 from pathlib import Path
 from enum import Enum
 from typing import Dict, List, Optional, Any, Tuple
@@ -95,7 +163,7 @@ try:
 
         if _main_window is None:
             try:
-        from quangtps.ui.main_window import MainWindow
+                from quangtps.ui.main_window import MainWindow
 
                 _main_window = MainWindow(*args, **kwargs)
             except Exception as e:
@@ -407,6 +475,39 @@ def configure_logging(log_level=logging.INFO, log_to_file=True):
         root_logger.addHandler(file_handler)
 
         logger.info(f"Log file được tạo tại: {log_file}")
+
+
+# Initialize app function
+def initialize():
+    """
+    Initialize the application.
+
+    Returns
+    -------
+    bool
+        True if initialization was successful, False otherwise.
+    """
+    logger.info("Initializing QuangTPS...")
+    try:
+        # Verify critical components
+        from quangtps.core.verification import verify_critical_components
+
+        if not verify_critical_components():
+            logger.error("Failed to verify critical components.")
+            return False
+
+        # Setup configuration
+        from quangtps.config import load_configuration
+
+        if not load_configuration():
+            logger.error("Failed to load configuration.")
+            return False
+
+        logger.info("QuangTPS initialized successfully.")
+        return True
+    except Exception as e:
+        logger.error(f"Error during initialization: {str(e)}")
+        return False
 
 
 if __name__ == "__main__":

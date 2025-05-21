@@ -654,13 +654,33 @@ class DVHWidget(QWidget):
 
     def on_volume_display_changed(self, index):
         """
-        Xử lý khi kiểu hiển thị thể tích thay đổi.
+        Xử lý khi chọn hiển thị thể tích tương đối hoặc tuyệt đối.
 
         Parameters:
-            index: Chỉ số của loại hiển thị được chọn
+            index: Chỉ số lựa chọn từ combo box
         """
-        self.display_volumes = self.volume_combo.itemData(index)
+        # Lưu lại chế độ hiển thị
+        self.display_volumes = index == 0  # 0: Tương đối (%), 1: Tuyệt đối (cc)
+
+        # Cập nhật hiển thị đơn vị thể tích trong header của bảng thống kê
+        if self.display_volumes:
+            # Cập nhật header cho hiển thị phần trăm
+            self.stats_table.horizontalHeaderItem(5).setText("V20 (%)")
+            self.stats_table.horizontalHeaderItem(6).setText("V30 (%)")
+        else:
+            # Cập nhật header cho hiển thị thể tích tuyệt đối
+            self.stats_table.horizontalHeaderItem(5).setText("V20 (cc)")
+            self.stats_table.horizontalHeaderItem(6).setText("V30 (cc)")
+
+        # Cập nhật biểu đồ DVH
         self.update_dvh_plot()
+
+        # Cập nhật bảng thống kê liều
+        self.update_stats_table()
+
+        logger.debug(
+            f"Chế độ hiển thị thể tích: {'Tương đối (%)' if self.display_volumes else 'Tuyệt đối (cc)'}"
+        )
 
     def on_normalization_changed(self, text):
         """
@@ -797,9 +817,14 @@ class DVHWidget(QWidget):
         self.ax.clear()
 
         # Thiết lập tiêu đề và nhãn trục
+        volume_label = "Thể tích (%)" if self.display_volumes else "Thể tích (cc)"
+        dvh_type_label = (
+            "Tích lũy" if self.dvh_type == DVHType.CUMULATIVE else "Vi phân"
+        )
+
         self.ax.set_xlabel(f"Liều ({self.dose_unit})")
-        self.ax.set_ylabel("Thể tích (%)" if self.display_volumes else "Thể tích (cc)")
-        self.ax.set_title("Biểu đồ liều-thể tích (DVH)")
+        self.ax.set_ylabel(volume_label)
+        self.ax.set_title(f"Biểu đồ {dvh_type_label} liều-thể tích (DVH)")
         self.ax.grid(True)
 
         # Kiểm tra xem có kế hoạch và cấu trúc được chọn không
@@ -808,7 +833,78 @@ class DVHWidget(QWidget):
             return
 
         # Vẽ DVH cho từng cấu trúc được chọn
-        for i, structure_name in enumerate(sorted(self.selected_structures)):
+        # Sắp xếp để các TARGET (PTV) hiển thị trước, sau đó là OAR, cuối cùng là các cấu trúc khác
+        structure_types = {}
+
+        # Phân loại các cấu trúc theo loại
+        for structure_name in self.selected_structures:
+            plan = self.plans.get(self.current_plan_name)
+            if not plan:
+                continue
+
+            # Lấy thông tin cấu trúc từ kế hoạch
+            structure_set = getattr(plan, "structure_set", None)
+            if not structure_set:
+                continue
+
+            # Tìm cấu trúc trong tập cấu trúc
+            structure = None
+            for s in getattr(structure_set, "structures", []):
+                if getattr(s, "name", "") == structure_name:
+                    structure = s
+                    break
+
+            if structure:
+                structure_type = getattr(structure, "structure_type", None)
+                if structure_type in (StructureType.PTV, "PTV", "TARGET", "GTV", "CTV"):
+                    structure_types[structure_name] = "TARGET"
+                elif structure_type in (StructureType.OAR, "OAR", "ORGAN"):
+                    structure_types[structure_name] = "OAR"
+                else:
+                    structure_types[structure_name] = "OTHER"
+            else:
+                # Thử phỏng đoán loại cấu trúc từ tên
+                if any(
+                    kw in structure_name.upper()
+                    for kw in ["PTV", "GTV", "CTV", "TARGET"]
+                ):
+                    structure_types[structure_name] = "TARGET"
+                elif any(kw in structure_name.upper() for kw in ["OAR", "ORGAN"]):
+                    structure_types[structure_name] = "OAR"
+                else:
+                    structure_types[structure_name] = "OTHER"
+
+        # Sắp xếp cấu trúc theo loại: TARGET trước, sau đó OAR, cuối cùng là OTHER
+        sorted_structures = sorted(
+            self.selected_structures,
+            key=lambda x: (
+                0
+                if structure_types.get(x) == "TARGET"
+                else 1
+                if structure_types.get(x) == "OAR"
+                else 2,
+                x,
+            ),
+        )
+
+        # Đếm số lượng mỗi loại để lựa chọn style line phù hợp
+        target_count = sum(
+            1 for x in sorted_structures if structure_types.get(x) == "TARGET"
+        )
+        oar_count = sum(1 for x in sorted_structures if structure_types.get(x) == "OAR")
+
+        # Chuẩn bị danh sách style cho các loại cấu trúc khác nhau
+        target_line_styles = ["-", "--", "-.", ":"]
+        oar_line_styles = ["-", "--", "-.", ":"]
+        target_line_width = 2.5
+        oar_line_width = 2.0
+        other_line_width = 1.5
+
+        target_index = 0
+        oar_index = 0
+        other_index = 0
+
+        for structure_name in sorted_structures:
             # Lấy dữ liệu DVH
             key = (self.current_plan_name, structure_name)
             if key not in self.calculated_dvhs:
@@ -824,13 +920,48 @@ class DVHWidget(QWidget):
 
             # Lấy màu cho cấu trúc
             color = self.get_structure_color(structure_name)
+            structure_type = structure_types.get(structure_name, "OTHER")
+
+            # Quyết định style line dựa trên loại cấu trúc
+            line_style = "-"  # Mặc định
+            line_width = other_line_width
+
+            if structure_type == "TARGET":
+                line_style = target_line_styles[target_index % len(target_line_styles)]
+                line_width = target_line_width
+                target_index += 1
+            elif structure_type == "OAR":
+                line_style = oar_line_styles[oar_index % len(oar_line_styles)]
+                line_width = oar_line_width
+                oar_index += 1
+            else:
+                line_style = ":"  # Đường chấm cho các cấu trúc khác
+                line_width = other_line_width
+                other_index += 1
 
             # Vẽ đường DVH chính
-            label = f"{structure_name}"
             dose = dvh_data.get("dose", [])
             volume = dvh_data.get("volume", [])
 
-            self.ax.plot(dose, volume, color=color, label=label, linewidth=2)
+            # Chuyển đổi thể tích nếu cần
+            if not self.display_volumes and "absolute_volume" in dvh_data:
+                # Sử dụng thể tích tuyệt đối (cc) thay vì phần trăm
+                volume = dvh_data.get("absolute_volume", [])
+
+            # Thêm thông tin cấu trúc vào nhãn
+            label = f"{structure_name}"
+            if "volume_cc" in dvh_data:
+                total_volume = dvh_data.get("volume_cc", 0)
+                label = f"{structure_name} ({total_volume:.1f}cc)"
+
+            self.ax.plot(
+                dose,
+                volume,
+                color=color,
+                label=label,
+                linewidth=line_width,
+                linestyle=line_style,
+            )
 
             # Vẽ dải DVH nếu được bật và có dữ liệu
             if self.show_robustness_bands and structure_name in self.robustness_results:
@@ -846,6 +977,13 @@ class DVHWidget(QWidget):
                     max_dose = max_dvh.get("dose", [])
                     max_volume = max_dvh.get("volume", [])
 
+                    # Chuyển đổi thể tích nếu hiển thị thể tích tuyệt đối
+                    if not self.display_volumes:
+                        if "absolute_volume" in min_dvh:
+                            min_volume = min_dvh.get("absolute_volume", [])
+                        if "absolute_volume" in max_dvh:
+                            max_volume = max_dvh.get("absolute_volume", [])
+
                     # Vẽ vùng giữa min và max
                     self.ax.fill_between(
                         min_dose,
@@ -856,9 +994,22 @@ class DVHWidget(QWidget):
                         label=f"{structure_name} (độ bền vững)",
                     )
 
-        # Thêm legend
+        # Thêm legend với vị trí tự động
         if self.selected_structures:
-            self.ax.legend(loc="best")
+            self.ax.legend(
+                loc="upper right", bbox_to_anchor=(1.02, 1), fontsize="small"
+            )
+
+        # Thiết lập giới hạn trục y phù hợp
+        if self.display_volumes:
+            # Với thể tích tương đối, mặc định từ 0-105%
+            self.ax.set_ylim(0, 105)
+        else:
+            # Với thể tích tuyệt đối, để tự động điều chỉnh dựa trên dữ liệu
+            self.ax.set_ylim(bottom=0)  # Bắt đầu từ 0, để giới hạn trên tự động
+
+        # Thiết lập giới hạn trục x, luôn bắt đầu từ 0
+        self.ax.set_xlim(0, None)  # Bắt đầu từ 0, để giới hạn trên tự động
 
         # Cập nhật biểu đồ
         self.canvas.draw()

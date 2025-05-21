@@ -52,6 +52,8 @@
 - [x] Enhance synchronization between ObjectExplorerPanel and all tabs
 - [x] Implement inverse planning algorithms for IMRT/VMAT optimization
 - [x] Create comprehensive documentation system
+- [x] Implement radiobiology modeling for TCP/NTCP in plan evaluation
+- [x] Implement robust analysis tools for treatment plan evaluation
 
 ## In Progress
 - [ ] Implement machine learning dose prediction module
@@ -119,6 +121,16 @@
 - [ ] Develop uncertainty analysis tools for multi-institutional studies
 - [ ] Add distributed Monte Carlo computation across multiple workstations
 - [ ] Implement anatomically constrained dose painting for biologically guided RT
+- [ ] Develop comprehensive auto-segmentation module
+- [ ] Integrate with external treatment planning systems
+- [ ] Implement real-time plan quality checks
+- [ ] Create automation scripts for routine planning tasks
+- [ ] Develop AI assistant for treatment planning
+- [ ] Add support for multi-modality image registration
+- [ ] Create interface for external beam calibration data
+- [ ] Implement brachytherapy planning module
+- [ ] Add radiation biology models for treatment optimization
+- [ ] Develop 4D dose calculation and optimization
 
 ## High Priority
 
@@ -165,3 +177,43 @@
 - [ ] Implement integration with commercial PACS systems
 - [ ] Create web-based robustness analysis viewer for remote plan evaluation
 - [ ] Add machine-specific robustness models based on QA measurement data
+
+## Đánh giá kế hoạch
+
+- [x] Cải thiện module DVH để tính toán các chỉ số đánh giá kế hoạch tự động
+- [x] Triển khai module phân tích sinh học (TCP, NTCP, EUD)
+- [x] Tạo giao diện hiển thị các chỉ số sinh học trong tab đánh giá kế hoạch
+- [x] Phát triển module đánh giá độ bền vững (robustness) của kế hoạch
+- [ ] Cải thiện giao diện so sánh kế hoạch với khả năng so sánh nhiều kế hoạch cùng lúc
+- [ ] Thêm khả năng xuất báo cáo đánh giá kế hoạch theo mẫu có thể tùy chỉnh
+
+## Tối ưu hóa kế hoạch
+
+- [x] Sửa lỗi trong module MCO (Multi-Criteria Optimization)
+- [x] Cải thiện giao diện điều hướng Pareto trong MCO
+- [ ] Thêm các thuật toán tối ưu hóa mới (ví dụ: IPOPT, SLSQP)
+- [ ] Cải thiện hiệu suất tính toán trong quá trình tối ưu hóa
+- [ ] Thêm khả năng tối ưu hóa dựa trên các chỉ số sinh học (TCP, NTCP)
+
+## Tính toán liều
+
+- [ ] Cải thiện thuật toán tính toán liều để tăng tốc độ và độ chính xác
+- [ ] Thêm khả năng tính toán liều Monte Carlo cho các kế hoạch phức tạp
+- [ ] Phát triển module tính toán liều cho xạ trị proton và ion nặng
+- [ ] Cải thiện thuật toán tính toán liều cho các kỹ thuật VMAT và IMRT phức tạp
+
+## Giao diện người dùng
+
+- [x] Cải thiện giao diện External Beam Planning tab theo phong cách Eclipse
+- [x] Tích hợp hiển thị liều 3D vào External Beam Planning tab
+- [ ] Cải thiện hiệu suất hiển thị 3D cho các bộ dữ liệu lớn
+- [ ] Thêm khả năng tùy chỉnh giao diện người dùng theo sở thích
+- [ ] Cải thiện trải nghiệm người dùng với các hướng dẫn và tooltips
+
+## Khác
+
+- [ ] Cải thiện hệ thống quản lý dữ liệu bệnh nhân
+- [ ] Thêm khả năng nhập/xuất dữ liệu từ các hệ thống khác (ARIA, RayStation, etc.)
+- [ ] Phát triển module đảm bảo chất lượng (QA) cho kế hoạch xạ trị
+- [ ] Cải thiện tài liệu và hướng dẫn sử dụng
+- [ ] Tối ưu hóa hiệu suất tổng thể của hệ thống

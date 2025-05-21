@@ -13,6 +13,7 @@ import logging
 import importlib
 from typing import Dict, List, Any, Optional, Type, Set, Union
 import numpy as np
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ ALGORITHM_NAME_MAPPING = {
     "Fast Superposition": "fast_superposition",
     "Monte Carlo (GPU)": "monte_carlo_gpu",  # Thêm Monte Carlo GPU
 }
+
+# Dictionary lưu trữ các thuật toán tính liều đã đăng ký
+_registered_algorithms = {}
 
 
 # Classes for algorithm and result management
@@ -415,110 +419,95 @@ def register_algorithm(
 
 
 def get_best_available_algorithm() -> Optional[DoseCalculationAlgorithm]:
-    """
-    Trả về thuật toán tính liều tốt nhất hiện có dựa trên phần cứng có sẵn.
+    """Trả về thuật toán tính liều tốt nhất có sẵn trên hệ thống.
 
-    Thứ tự ưu tiên:
-    1. Monte Carlo GPU nếu có GPU với CUDA
-    2. Collapsed Cone nếu có nhiều lõi CPU
-    3. Pencil Beam cho các trường hợp khác
-
-    Returns
-    -------
-    Optional[DoseCalculationAlgorithm]
-        Thuật toán tốt nhất hiện có, hoặc None nếu không có thuật toán nào
+    Returns:
+        Thuật toán tính liều hoặc None nếu không có thuật toán nào khả dụng.
     """
-    # Kiểm tra GPU với CUDA
+    # Đầu tiên thử sử dụng thuật toán Monte Carlo GPU nếu có GPU
     has_gpu = False
-    gpu_info = None
 
+    # Thử phát hiện GPU bằng nhiều cách khác nhau
     try:
         # Thử phát hiện GPU qua CuPy
-        import cupy as cp
-
-        num_gpus = cp.cuda.runtime.getDeviceCount()
-        if num_gpus > 0:
-            device = cp.cuda.Device(0)
-            mem_info = device.mem_info
-            gpu_name = device.attributes.get("name", b"Unknown").decode("utf-8")
-            free_memory = mem_info[0] / (1024**3)  # GB
-            total_memory = mem_info[1] / (1024**3)  # GB
-
-            has_gpu = True
-            gpu_info = {
-                "name": gpu_name,
-                "count": num_gpus,
-                "free_memory": free_memory,
-                "total_memory": total_memory,
-                "detected_by": "cupy",
-            }
-    except:
         try:
-            # Thử phát hiện GPU qua PyCUDA
-            import pycuda.driver as cuda
-            import pycuda.autoinit
+            import cupy as cp
 
-            num_gpus = cuda.Device.count()
-            if num_gpus > 0:
-                device = cuda.Device(0)
-                gpu_name = device.name()
-                total_memory = device.total_memory() / (1024**3)  # GB
-                free_memory = (device.total_memory() - device.used_memory()) / (
-                    1024**3
-                )  # GB
+            num_gpus = cp.cuda.runtime.getDeviceCount()
+            has_gpu = num_gpus > 0
+            if has_gpu:
+                logger.info(f"Phát hiện {num_gpus} GPU thông qua CuPy.")
+        except ImportError:
+            logger.debug("CuPy không khả dụng. Thử phương pháp khác.")
+        except Exception as e:
+            logger.debug(f"Lỗi khi kiểm tra GPU qua CuPy: {e}")
 
+        # Nếu CuPy không xác định được GPU, thử với PyCUDA
+        if not has_gpu:
+            try:
+                import pycuda.driver as cuda
+                import pycuda.autoinit
+
+                num_gpus = cuda.Device.count()
+                has_gpu = num_gpus > 0
+                if has_gpu:
+                    logger.info(f"Phát hiện {num_gpus} GPU thông qua PyCUDA.")
+            except ImportError:
+                logger.debug("PyCUDA không khả dụng. Thử phương pháp khác.")
+            except Exception as e:
+                logger.debug(f"Lỗi khi kiểm tra GPU qua PyCUDA: {e}")
+
+        # Nếu cả CuPy và PyCUDA không hoạt động, thử kiểm tra CUDA_VISIBLE_DEVICES
+        if not has_gpu:
+            cuda_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+            if cuda_devices and cuda_devices != "-1":
+                logger.info(
+                    f"Phát hiện GPU qua biến môi trường CUDA_VISIBLE_DEVICES={cuda_devices}"
+                )
                 has_gpu = True
-                gpu_info = {
-                    "name": gpu_name,
-                    "count": num_gpus,
-                    "free_memory": free_memory,
-                    "total_memory": total_memory,
-                    "detected_by": "pycuda",
-                }
-        except:
-            # Không tìm thấy GPU với CUDA
-            pass
+    except Exception as e:
+        logger.warning(f"Lỗi khi phát hiện GPU: {e}")
+        has_gpu = False
 
-    # Kiểm tra số lõi CPU
-    import multiprocessing
-
-    num_cores = multiprocessing.cpu_count()
-
-    # Log thông tin phần cứng phát hiện được
-    logger = logging.getLogger(__name__)
-
+    # Nếu có GPU, thử tạo thuật toán Monte Carlo GPU
     if has_gpu:
-        logger.info(
-            f"Phát hiện {gpu_info['count']} GPU: {gpu_info['name']} với {gpu_info['free_memory']:.2f}GB/{gpu_info['total_memory']:.2f}GB bộ nhớ (qua {gpu_info['detected_by']})"
-        )
-    else:
-        logger.info(f"Không phát hiện GPU. Sẽ sử dụng tính toán CPU ({num_cores} lõi).")
+        try:
+            monte_carlo_gpu = create_algorithm("monte_carlo_gpu")
+            if monte_carlo_gpu:
+                logger.info("Sử dụng thuật toán Monte Carlo GPU")
+                return monte_carlo_gpu
+        except Exception as e:
+            logger.warning(f"Không thể tạo thuật toán Monte Carlo GPU: {e}")
 
-    # Chọn thuật toán tốt nhất dựa trên phần cứng
-    available_algorithms = get_available_algorithms()
+    # Thử tạo thuật toán Monte Carlo CPU
+    try:
+        monte_carlo = create_algorithm("monte_carlo")
+        if monte_carlo:
+            logger.info("Sử dụng thuật toán Monte Carlo CPU")
+            return monte_carlo
+    except Exception as e:
+        logger.warning(f"Không thể tạo thuật toán Monte Carlo: {e}")
 
-    # Ưu tiên Monte Carlo GPU nếu có GPU
-    if has_gpu and "monte_carlo_gpu" in available_algorithms:
-        logger.info("Chọn thuật toán Monte Carlo GPU (nhanh nhất)")
-        return create_algorithm("monte_carlo_gpu")
+    # Thử tạo thuật toán Collapsed Cone
+    try:
+        collapsed_cone = create_algorithm("collapsed_cone")
+        if collapsed_cone:
+            logger.info("Sử dụng thuật toán Collapsed Cone")
+            return collapsed_cone
+    except Exception as e:
+        logger.warning(f"Không thể tạo thuật toán Collapsed Cone: {e}")
 
-    # Ưu tiên Collapsed Cone nếu có nhiều lõi CPU
-    if num_cores >= 4 and "collapsed_cone" in available_algorithms:
-        logger.info(f"Chọn thuật toán Collapsed Cone (tối ưu cho {num_cores} lõi CPU)")
-        return create_algorithm("collapsed_cone")
+    # Cuối cùng, thử tạo thuật toán Pencil Beam
+    try:
+        pencil_beam = create_algorithm("pencil_beam")
+        if pencil_beam:
+            logger.info("Sử dụng thuật toán Pencil Beam")
+            return pencil_beam
+    except Exception as e:
+        logger.warning(f"Không thể tạo thuật toán Pencil Beam: {e}")
 
-    # Sử dụng Pencil Beam cho các trường hợp khác
-    if "pencil_beam" in available_algorithms:
-        logger.info("Chọn thuật toán Pencil Beam (thuật toán cơ bản)")
-        return create_algorithm("pencil_beam")
-
-    # Sử dụng bất kỳ thuật toán nào có sẵn
-    if available_algorithms:
-        algo_name = available_algorithms[0]
-        logger.info(f"Chọn thuật toán {algo_name} (thuật toán mặc định)")
-        return create_algorithm(algo_name)
-
-    logger.error("Không tìm thấy thuật toán tính liều nào. Kiểm tra cài đặt.")
+    # Không tìm thấy thuật toán nào khả dụng
+    logger.error("Không tìm thấy thuật toán tính liều nào khả dụng.")
     return None
 
 
@@ -534,7 +523,7 @@ def _import_monte_carlo_gpu():
         )
 
         # Đăng ký thuật toán
-        register_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+        register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
         logger.info("Đã đăng ký thuật toán Monte Carlo GPU thành công")
 
         # Thêm tên hiển thị
@@ -550,14 +539,169 @@ def _import_monte_carlo_gpu():
 _import_monte_carlo_gpu()
 
 
+# Hàm đăng ký và lấy thuật toán
+
+
+def register_dose_algorithm(
+    algorithm_id: str, algorithm_class: Type[DoseCalculationAlgorithm]
+) -> None:
+    """
+    Đăng ký một thuật toán tính liều mới.
+
+    Parameters
+    ----------
+    algorithm_id : str
+        ID định danh thuật toán, thường là tên thuật toán dạng snake_case
+    algorithm_class : Type[DoseCalculationAlgorithm]
+        Lớp của thuật toán kế thừa từ DoseCalculationAlgorithm
+
+    Returns
+    -------
+    None
+    """
+    if algorithm_id in _registered_algorithms:
+        logger.warning(f"Thuật toán '{algorithm_id}' đã tồn tại và sẽ bị ghi đè")
+
+    _registered_algorithms[algorithm_id] = algorithm_class
+    logger.info(f"Đã đăng ký thuật toán '{algorithm_id}' thành công")
+
+
+def get_dose_algorithm(
+    algorithm_id: str, **kwargs
+) -> Optional[DoseCalculationAlgorithm]:
+    """
+    Lấy instance của thuật toán tính liều theo ID.
+
+    Parameters
+    ----------
+    algorithm_id : str
+        ID của thuật toán đã đăng ký
+    **kwargs
+        Các tham số bổ sung để khởi tạo thuật toán
+
+    Returns
+    -------
+    Optional[DoseCalculationAlgorithm]
+        Instance của thuật toán hoặc None nếu không tìm thấy
+    """
+    if algorithm_id not in _registered_algorithms:
+        logger.error(f"Không tìm thấy thuật toán '{algorithm_id}'")
+        return None
+
+    try:
+        algorithm = _registered_algorithms[algorithm_id](**kwargs)
+        return algorithm
+    except Exception as e:
+        logger.error(f"Lỗi khi khởi tạo thuật toán '{algorithm_id}': {str(e)}")
+        return None
+
+
+def get_registered_algorithms() -> Dict[str, Type[DoseCalculationAlgorithm]]:
+    """
+    Lấy danh sách tất cả các thuật toán tính liều đã đăng ký.
+
+    Returns
+    -------
+    Dict[str, Type[DoseCalculationAlgorithm]]
+        Dictionary chứa ID và lớp thuật toán
+    """
+    return _registered_algorithms.copy()
+
+
+# Import các thuật toán cụ thể với xử lý ngoại lệ
+try:
+    from .pencil_beam import PencilBeamAlgorithm
+except ImportError:
+    logger.warning("Không thể import PencilBeamAlgorithm")
+
+    class MockPencilBeamAlgorithm(DoseCalculationAlgorithm):
+        """Đối tượng giả cho PencilBeamAlgorithm khi không thể import."""
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.description = "Pencil Beam Algorithm - KHÔNG KHẢ DỤNG"
+            logger.warning(
+                "Đang sử dụng PencilBeamAlgorithm giả. Chức năng sẽ bị hạn chế."
+            )
+
+    # Gắn lớp mock vào tên gốc để tránh lỗi import từ những nơi khác
+    PencilBeamAlgorithm = MockPencilBeamAlgorithm
+
+
+try:
+    from .collapsed_cone import CollapsedConeAlgorithm
+except ImportError:
+    logger.warning("Không thể import CollapsedConeAlgorithm")
+
+    class MockCollapsedConeAlgorithm(DoseCalculationAlgorithm):
+        """Đối tượng giả cho CollapsedConeAlgorithm khi không thể import."""
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.description = "Collapsed Cone Algorithm - KHÔNG KHẢ DỤNG"
+            logger.warning(
+                "Đang sử dụng CollapsedConeAlgorithm giả. Chức năng sẽ bị hạn chế."
+            )
+
+    # Gắn lớp mock vào tên gốc để tránh lỗi import từ những nơi khác
+    CollapsedConeAlgorithm = MockCollapsedConeAlgorithm
+
+
+try:
+    from .monte_carlo import MonteCarloAlgorithm
+except ImportError:
+    logger.warning("Không thể import MonteCarloAlgorithm")
+
+    class MockMonteCarloAlgorithm(DoseCalculationAlgorithm):
+        """Đối tượng giả cho MonteCarloAlgorithm khi không thể import."""
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.description = "Monte Carlo Algorithm - KHÔNG KHẢ DỤNG"
+            logger.warning(
+                "Đang sử dụng MonteCarloAlgorithm giả. Chức năng sẽ bị hạn chế."
+            )
+
+    # Gắn lớp mock vào tên gốc để tránh lỗi import từ những nơi khác
+    MonteCarloAlgorithm = MockMonteCarloAlgorithm
+
+
+try:
+    from .improvements.monte_carlo_gpu_algorithm import MonteCarloGPUAlgorithm
+except ImportError:
+    logger.warning("Không thể import MonteCarloGPUAlgorithm")
+
+    class MockMonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
+        """Đối tượng giả cho MonteCarloGPUAlgorithm khi không thể import."""
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.description = "Monte Carlo GPU Algorithm - KHÔNG KHẢ DỤNG"
+            logger.warning(
+                "Đang sử dụng MonteCarloGPUAlgorithm giả. Chức năng sẽ bị hạn chế."
+            )
+
+    # Gắn lớp mock vào tên gốc để tránh lỗi import từ những nơi khác
+    MonteCarloGPUAlgorithm = MockMonteCarloGPUAlgorithm
+
+
+# Đăng ký các thuật toán có sẵn
+register_dose_algorithm("pencil_beam", PencilBeamAlgorithm)
+register_dose_algorithm("collapsed_cone", CollapsedConeAlgorithm)
+register_dose_algorithm("monte_carlo", MonteCarloAlgorithm)
+register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+
+# Export
 __all__ = [
     "DoseCalculationAlgorithm",
     "DoseCalculationResult",
+    "register_dose_algorithm",
+    "get_dose_algorithm",
     "get_available_algorithms",
-    "get_algorithm_display_names",
-    "create_algorithm",
-    "register_algorithm",
-    "get_best_available_algorithm",
+    "PencilBeamAlgorithm",
+    "CollapsedConeAlgorithm",
+    "MonteCarloAlgorithm",
+    "MonteCarloGPUAlgorithm",
 ]
 
 # Version of the algorithms module

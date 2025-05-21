@@ -5,6 +5,75 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-09-15
+
+### Cải tiến
+- **Nâng cấp Object Explorer Panel phong cách Eclipse:**
+  - Thiết kế lại hoàn toàn giao diện người dùng với layout hiện đại và thân thiện hơn
+  - Thêm tính năng tìm kiếm nâng cao với khả năng lọc theo nhiều thuộc tính (tên, ID, loại cấu trúc)
+  - Tạo tooltip phong phú cho các cấu trúc hiển thị thông tin chi tiết (loại, màu sắc, thể tích, số lát cắt)
+  - Thêm menu ngữ cảnh (context menu) đầy đủ cho tất cả các loại đối tượng
+  - Hỗ trợ đúp chuột để mở dialog thuộc tính tương ứng với từng loại đối tượng
+  - Cải thiện khả năng tương tác với các đối tượng (bệnh nhân, kế hoạch, cấu trúc)
+
+- **Tạo mới LeftPanel module với thiết kế theo phong cách Eclipse:**
+  - Triển khai hoàn chỉnh LeftPanel chứa ObjectExplorerPanel trong tab "Object Explorer"
+  - Thêm PatientBrowser trong tab "Patients" để quản lý và xem nhanh danh sách bệnh nhân
+  - Thiết kế bố cục thống nhất và khả năng mở rộng trong tương lai
+  - Tích hợp hoàn chỉnh với MainWindow và các thành phần chức năng khác
+  - Xử lý ngoại lệ toàn diện khi các thành phần con không khả dụng
+
+- **Nâng cao khả năng phục hồi trước lỗi:**
+  - Cải thiện phương thức calculate_dose() trong main_window.py với xử lý ngoại lệ toàn diện
+  - Kiểm tra đầy đủ current_beam_set trước khi sử dụng để tránh lỗi "Access before definition"
+  - Thêm cơ chế kiểm tra dose_calculator tồn tại và có các phương thức cần thiết
+  - Xử lý thông minh các trường hợp thiếu module hoặc thành phần không khả dụng
+
+### Sửa lỗi
+- Khắc phục lỗi "Access to member 'current_beam_set' before its definition line" trong main_window.py
+- Sửa lỗi không thể tạo beam_set mới khi plan.add_beam_set không tồn tại
+- Cải thiện xử lý khi dose_calculator.progress_updated không tồn tại
+- Khắc phục vấn đề các dialog thuộc tính không khả dụng trong Object Explorer
+- Sửa lỗi không hiển thị menu ngữ cảnh đầy đủ cho các đối tượng
+
+### Tài liệu
+- Cập nhật docstring cho các phương thức mới trong ObjectExplorerPanel và LeftPanel
+- Thêm hướng dẫn sử dụng Object Explorer với các tính năng mới
+- Cải thiện thông tin debug và log để dễ dàng khắc phục sự cố
+
+## [0.9.3] - 2023-11-15
+
+### Thêm mới
+- Triển khai hoàn chỉnh module phân tích sinh học (biological_models.py):
+  - Tính toán EUD với các tham số đặc trưng cho từng loại mô
+  - Tính toán TCP và NTCP dựa trên các mô hình Niemierko và LKB
+  - Cơ sở dữ liệu tham số sinh học cho nhiều loại cơ quan
+  - Các hàm BED và EQD2 cho đánh giá phân liều
+
+- Hoàn thiện module đánh giá độ bền vững (robustness):
+  - Class RobustnessAnalyzer với khả năng phân tích nhiều kịch bản
+  - Class RobustnessResult để lưu trữ và truy xuất kết quả phân tích
+  - Phân tích sai số thiết lập và bất định phạm vi
+  - Tích hợp với DVH và các chỉ số lâm sàng
+
+### Cải tiến
+- Tích hợp phân tích sinh học vào giao diện đánh giá kế hoạch:
+  - Tab "Phân tích sinh học" trong PlanEvaluationTab
+  - Kết nối dữ liệu DVH với module phân tích sinh học
+  - Hiển thị các chỉ số TCP, NTCP và EUD cho từng cấu trúc
+
+- Cải thiện cấu trúc và tài liệu:
+  - Docstring chuẩn cho tất cả các hàm mới
+  - File __init__.py đầy đủ thông tin và export
+  - Phiên bản 0.9.3 với thông tin về các tính năng mới
+
+### Sửa lỗi
+- Khắc phục lỗi indentation trong mco_engine.py
+- Sửa các lỗi import trong các module robustness và biological
+- Cải thiện xử lý ngoại lệ khi thiếu thư viện phụ thuộc
+- Đảm bảo tương thích với Python 3.8 và 3.9
+- Sửa lỗi trong set_dvh_data với dữ liệu không chuẩn
+
 ## [0.9.2] - 2023-11-01
 
 ### Cải tiến
@@ -20,17 +89,30 @@ và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.
   - Tối ưu hóa xử lý ngoại lệ trong quá trình áp dụng đề xuất KBP
   - Cải thiện tương thích giữa KBP và quy trình tối ưu hóa
 
+- Phát triển module phân tích sinh học cho đánh giá kế hoạch:
+  - Thêm các mô hình TCP (Tumor Control Probability) và NTCP (Normal Tissue Complication Probability)
+  - Tích hợp tính toán EUD (Equivalent Uniform Dose) và BED (Biologically Effective Dose)
+  - Hỗ trợ cơ sở dữ liệu tham số sinh học cho nhiều loại cơ quan khác nhau
+  - Tạo giao diện hiển thị trực quan các chỉ số sinh học trong tab đánh giá kế hoạch
+
+- Bổ sung module đánh giá độ bền vững (Robustness Evaluation):
+  - Phân tích ảnh hưởng của sai số thiết lập (setup errors)
+  - Đánh giá tác động của sự không chắc chắn về phạm vi (range uncertainty) cho kế hoạch proton/ion
+  - Mô phỏng ảnh hưởng của các phương pháp phân liều khác nhau (fractionation effect)
+  - Hỗ trợ trực quan hóa dải DVH (DVH bands) để đánh giá độ bền vững của kế hoạch
+
 - Ổn định hệ thống:
   - Cập nhật cơ chế import trong module dialogs để đảm bảo tính nhất quán
-  - Cải thiện khả năng phục hồi khi thiếu các module không bắt buộc
-  - Đảm bảo các tác vụ chính vẫn hoạt động ngay cả khi thiếu một số thành phần phụ
-  - Tăng cường kiểm soát lỗi với thông báo chi tiết hơn
+  - Cải thiện khả năng phục hồi lỗi khi các thành phần không khả dụng
+  - Tối ưu hóa hiệu suất trong quá trình tính toán chỉ số chất lượng kế hoạch
+  - Bổ sung tài liệu và ghi chú mã nguồn cho dễ dàng bảo trì
 
 ### Sửa lỗi
-- Khắc phục lỗi "expected an indented block after 'if' statement" trong mco_engine.py
-- Sửa lỗi import của create_eclipse_icon trong kbp_dialog.py
-- Cải thiện xử lý lỗi khi một số module KBP hoặc MCO không khả dụng
-- Đảm bảo Dialog KBP hoạt động đúng với các loại import khác nhau
+- Khắc phục sự cố MCO module không hoạt động do lỗi cú pháp trong mco_engine.py
+- Sửa lỗi import trong ui/dialogs/kbp_dialog.py
+- Sửa lỗi thiếu hàm _format_params trong external_beam_planning_tab.py
+- Khắc phục lỗi biến toàn cục gây sự cố trong quá trình tính toán MCO
+- Sửa lỗi xử lý không đúng khi áp dụng đề xuất KBP vào kế hoạch hiện tại
 
 ## [0.9.1] - 2023-10-25
 

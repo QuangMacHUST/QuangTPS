@@ -35,6 +35,8 @@ def calculate_gamma_3d(
     voxel_size: Tuple[float, float, float] = (1.0, 1.0, 1.0),
     max_gamma: float = 5.0,
     local_normalization: bool = False,
+    dose_percent: float = None,  # Tham số bổ sung cho tương thích
+    distance_mm: float = None,  # Tham số bổ sung cho tương thích
 ) -> np.ndarray:
     """
     Tính chỉ số gamma 3D giữa hai phân phối liều.
@@ -60,17 +62,41 @@ def calculate_gamma_3d(
         Giá trị gamma tối đa, các giá trị cao hơn sẽ được gán bằng giá trị này
     local_normalization : bool, optional
         Nếu True, sử dụng chuẩn hóa cục bộ (liều tham chiếu tại mỗi điểm)
+    dose_percent : float, optional
+        Tham số thay thế cho dd_percent để đảm bảo tính tương thích
+    distance_mm : float, optional
+        Tham số thay thế cho dta_mm để đảm bảo tính tương thích
 
     Returns
     -------
     np.ndarray
         Mảng 3D chứa giá trị gamma tại mỗi voxel
     """
+    # Xử lý tham số thay thế để đảm bảo tương thích ngược
+    if dose_percent is not None:
+        logger.info(
+            f"Sử dụng tham số dose_percent ({dose_percent}%) thay thế cho dd_percent"
+        )
+        dd_percent = dose_percent
+
+    if distance_mm is not None:
+        logger.info(
+            f"Sử dụng tham số distance_mm ({distance_mm}mm) thay thế cho dta_mm"
+        )
+        dta_mm = distance_mm
+
+    # Ghi log các tham số chính để dễ dàng gỡ lỗi
+    logger.debug(
+        f"Phân tích gamma với tham số: dta_mm={dta_mm}mm, dd_percent={dd_percent}%, "
+        f"threshold={threshold}, max_gamma={max_gamma}, "
+        f"local_normalization={local_normalization}"
+    )
+
     # Kiểm tra kích thước mảng đầu vào
     if reference.shape != evaluation.shape:
-        raise ValueError(
-            f"Kích thước mảng không khớp: reference {reference.shape}, evaluation {evaluation.shape}"
-        )
+        error_msg = f"Kích thước mảng không khớp: reference {reference.shape}, evaluation {evaluation.shape}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     logger.info(f"Bắt đầu tính toán gamma 3D với tiêu chí {dta_mm}mm/{dd_percent}%")
     start_time = time.time()

@@ -30,7 +30,7 @@ class ValidationMetric(Enum):
 
 
 class ValidationResult:
-    """Kết quả của quá trình kiểm tra mô hình."""
+    """Kết quả kiểm tra tính hợp lệ của mô hình dự đoán."""
 
     def __init__(self):
         """Khởi tạo đối tượng kết quả kiểm tra."""

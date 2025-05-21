@@ -152,6 +152,110 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Kiểm tra các module khả dụng
+# Kiểm tra module so sánh kế hoạch
+try:
+    from quangtps.ui.plan_comparison_dialog import PlanComparisonDialog
+
+    HAS_COMPARISON_MODULE = True
+    logging.info("Module PlanComparisonDialog đã được import thành công")
+except ImportError:
+    HAS_COMPARISON_MODULE = False
+    logging.warning("Module PlanComparisonDialog không khả dụng")
+
+# Kiểm tra VTK cho hiển thị 3D
+try:
+    import vtk
+    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+
+    HAS_VTK = True
+    logging.info("VTK đã được import thành công")
+except ImportError:
+    HAS_VTK = False
+    logging.warning("VTK không khả dụng, hiển thị 3D bị vô hiệu hóa")
+
+# Kiểm tra module MCO (Multi-Criteria Optimization)
+try:
+    from quangtps.optimization.mco.mco_navigator import MCONavigator
+
+    HAS_MCO_MODULE = True
+    logging.info("Module MCO đã được import thành công")
+except ImportError:
+    HAS_MCO_MODULE = False
+    logging.warning("Module MCO không khả dụng")
+
+# Import tất cả các module Qt cần thiết với try-except
+try:
+    from PyQt5.QtWidgets import (
+        QMainWindow,
+        QWidget,
+        QApplication,
+        QVBoxLayout,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QAction,
+        QMenu,
+        QMenuBar,
+        QToolBar,
+        QStatusBar,
+        QFileDialog,
+        QMessageBox,
+        QTabWidget,
+        QSplitter,
+        QTreeWidget,
+        QTreeWidgetItem,
+        QDialog,
+        QComboBox,
+    )
+    from PyQt5.QtCore import Qt, QSize, pyqtSignal, QSettings, QTimer
+    from PyQt5.QtGui import QIcon, QPixmap, QFont, QPalette, QColor
+
+    HAS_QT = True
+except ImportError as e:
+    logging.error(f"Không thể import PyQt5: {str(e)}")
+    HAS_QT = False
+
+# Kiểm tra VTK
+try:
+    import vtk
+    from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+
+    HAS_VTK = True
+    logging.info("VTK đã được import thành công")
+except ImportError as e:
+    logging.warning(f"Không thể import VTK: {str(e)}")
+    HAS_VTK = False
+
+# Kiểm tra module so sánh kế hoạch
+try:
+    from quangtps.ui.dialogs.plan_comparison_dialog import PlanComparisonDialog
+
+    HAS_COMPARISON_MODULE = True
+    logging.info("Module so sánh kế hoạch đã được import thành công")
+except ImportError as e:
+    logging.warning(f"Không thể import module so sánh kế hoạch: {str(e)}")
+    HAS_COMPARISON_MODULE = False
+
+# Kiểm tra module MCO
+try:
+    from quangtps.optimization.mco.mco_navigator import MCONavigator
+
+    HAS_MCO_MODULE = True
+    logging.info("Module MCO đã được import thành công")
+except ImportError as e:
+    logging.warning(f"Không thể import module MCO: {str(e)}")
+    HAS_MCO_MODULE = False
+
+# Import các module từ hệ thống QuangTPS
+try:
+    from quangtps.ui.object_explorer_panel import ObjectExplorerPanel
+
+    HAS_OBJECT_EXPLORER = True
+except ImportError:
+    logging.warning("Không thể import ObjectExplorerPanel")
+    HAS_OBJECT_EXPLORER = False
+
 
 class LeftPanel(QWidget):
     """Left panel của giao diện chính chứa Object Explorer và các công cụ khác."""
@@ -1286,7 +1390,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Declare current_beam_set first to avoid "access before definition" error
+        # Khai báo và kiểm tra current_beam_set trước khi sử dụng
         current_beam_set = None
 
         # Check if the plan has beam sets
@@ -1294,9 +1398,9 @@ class MainWindow(QMainWindow):
             current_beam_set = self.current_plan.beam_sets[0]  # Lấy beam set đầu tiên
         else:
             # Tạo beam set mới nếu không có
-            from quangtps.treatment.beams import BeamSet
-
             try:
+                from quangtps.treatment.beams import BeamSet
+
                 if hasattr(self.current_plan, "add_beam_set"):
                     current_beam_set = BeamSet(name="BeamSet1")
                     self.current_plan.add_beam_set(current_beam_set)
@@ -1317,6 +1421,16 @@ class MainWindow(QMainWindow):
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(0)
             self.statusBar().addPermanentWidget(self.progress_bar)
+
+            # Kiểm tra nếu dose_calculator có sẵn và có các phương thức cần thiết
+            if not hasattr(self, "dose_calculator"):
+                logger.error("Dose calculator not initialized")
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Dose calculator not initialized. Cannot calculate dose.",
+                )
+                return
 
             # Kiểm tra nếu DoseCalculator có các phương thức cần thiết
             if hasattr(self.dose_calculator, "progress_updated"):
@@ -1766,67 +1880,194 @@ class MainWindow(QMainWindow):
             )
 
     def create_tabs(self):
-        """Tạo các tab chức năng cho giao diện chính."""
-        self.main_tab_widget.clear()
-        self.main_tab_widget.setDocumentMode(True)
-        self.main_tab_widget.setTabPosition(QTabWidget.North)
-        self.main_tab_widget.currentChanged.connect(self._on_tab_changed)
-
-        # Tab 1: Contouring/Structure tab
-        self.contouring_tab = ContouringView()
-        self.main_tab_widget.addTab(self.contouring_tab, "Structure")
-
-        # Tab 2: External Beam Planning tab
-        self.planning_tab = PlanningView()
-        self.main_tab_widget.addTab(self.planning_tab, "Planning")
-
-        # Tab 3: Evaluation tab
-        self.evaluation_tab = EvaluationView()
-        self.main_tab_widget.addTab(self.evaluation_tab, "Evaluation")
-
-        # Tab 4: Plan Evaluation Report tab
-        # Cố gắng tạo tab Plan Evaluation Report nếu có sẵn
+        """Tạo các tab chính trong cửa sổ chính."""
         try:
-            from quangtps.ui.plan_evaluation_report_tab import PlanEvaluationReportTab
+            self.tabs = QTabWidget()
+            self.tabs.setDocumentMode(True)
+            self.tabs.setTabPosition(QTabWidget.South)
+            self.tabs.setTabShape(QTabWidget.Rounded)
 
-            self.plan_evaluation_report_tab = PlanEvaluationReportTab()
-            self.main_tab_widget.addTab(
-                self.plan_evaluation_report_tab, "Plan Evaluation"
+            # Tạo tab External Beam Planning
+            self.external_beam_tab = self._create_external_beam_tab()
+            self.tabs.addTab(
+                self.external_beam_tab,
+                QIcon("icons/beam.png"),
+                "External Beam Planning",
             )
-            logger.info("Successfully added Plan Evaluation Report tab")
-        except ImportError:
-            logger.warning("PlanEvaluationReportTab not available")
-            self.plan_evaluation_report_tab = None
 
-        # Tab 5: Robustness Analysis tab
-        # Cố gắng tạo tab Robust Analysis nếu có sẵn
-        try:
-            from quangtps.ui.robust_analysis_tab import RobustAnalysisTab
-
-            self.robust_analysis_tab = RobustAnalysisTab()
-            self.main_tab_widget.addTab(self.robust_analysis_tab, "Robustness")
-            logger.info("Successfully added Robustness Analysis tab")
-        except ImportError:
-            logger.warning("RobustAnalysisTab not available")
-            self.robust_analysis_tab = None
-
-        # Tab 6: MCO Navigator tab (hidden by default)
-        try:
-            from quangtps.ui.mco_navigator_widget import MCONavigatorWidget
-
-            self.mco_navigator_tab = MCONavigatorWidget()
-            self.mco_tab_index = self.main_tab_widget.addTab(
-                self.mco_navigator_tab, "MCO Navigator"
+            # Tạo tab Plan Evaluation
+            self.plan_evaluation_tab = self._create_plan_evaluation_tab()
+            self.tabs.addTab(
+                self.plan_evaluation_tab,
+                QIcon("icons/evaluation.png"),
+                "Plan Evaluation",
             )
-            self.main_tab_widget.setTabVisible(
-                self.mco_tab_index, False
-            )  # Ẩn tab mặc định
-            logger.info("Successfully added MCO Navigator tab (hidden)")
-        except ImportError:
-            logger.warning("MCONavigatorWidget not available")
-            self.mco_navigator_tab = None
-            self.mco_tab_index = -1
 
-        # Tab 7: Review tab
-        self.review_tab = ReviewView()
-        self.main_tab_widget.addTab(self.review_tab, "Review")
+            # Tạo tab Plan Comparison (nếu có)
+            if HAS_COMPARISON_MODULE:
+                self.plan_comparison_tab = self._create_plan_comparison_tab()
+                self.tabs.addTab(
+                    self.plan_comparison_tab,
+                    QIcon("icons/compare.png"),
+                    "Plan Comparison",
+                )
+
+            # Tạo tab 3D Viewer (nếu có)
+            if HAS_VTK:
+                self.viewer_3d_tab = self._create_3d_viewer_tab()
+                self.tabs.addTab(self.viewer_3d_tab, QIcon("icons/3d.png"), "3D Viewer")
+
+            # Tạo tab Report (nếu có)
+            self.report_tab = self._create_report_tab()
+            self.tabs.addTab(self.report_tab, QIcon("icons/report.png"), "Report")
+
+            # Tạo tab Plan Checker
+            try:
+                self.plan_checker_tab = self._create_plan_checker_tab()
+                self.tabs.addTab(
+                    self.plan_checker_tab, QIcon("icons/check.png"), "Plan Checker"
+                )
+                logger.info("Đã thêm Plan Checker tab vào giao diện chính")
+            except Exception as e:
+                logger.error(f"Không thể tạo tab Plan Checker: {str(e)}")
+
+            # Tạo tab MCO Navigator (mặc định ẩn nếu có)
+            if HAS_MCO_MODULE:
+                self.mco_tab = self._create_mco_tab()
+                # Tab MCO sẽ được thêm vào khi cần
+
+            # Kết nối sự kiện chuyển tab
+            self.tabs.currentChanged.connect(self._on_tab_changed)
+
+            return self.tabs
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo tabs: {str(e)}")
+            # Tạo một widget trống nếu có lỗi
+            return QWidget()
+
+    def _create_plan_evaluation_tab(self):
+        """Tạo tab Plan Evaluation với các widget liên quan."""
+        try:
+            # Import các module cần thiết
+            from quangtps.ui.plan_evaluation_tab import PlanEvaluationTab
+            from quangtps.ui.dvh_widget import DVHWidget
+            from quangtps.ui.metrics_widget import MetricsWidget
+
+            # Import biological metrics widget
+            try:
+                from quangtps.ui.evaluation.biological_metrics_widget import (
+                    create_biological_metrics_widget,
+                    BiologicalMetricsWidget,
+                )
+
+                HAS_BIO_WIDGET = True
+                logger.info("Đã tìm thấy module biological_metrics_widget")
+            except ImportError:
+                # Thử import từ thư mục cũ nếu không tìm thấy module từ thư mục mới
+                try:
+                    from quangtps.ui.biological_metrics_widget import (
+                        create_biological_metrics_widget,
+                    )
+
+                    HAS_BIO_WIDGET = True
+                    logger.info("Đã tìm thấy module biological_metrics_widget (legacy)")
+                except ImportError:
+                    logger.warning("Không thể import biological_metrics_widget")
+                    HAS_BIO_WIDGET = False
+
+            # Import robustness widget
+            try:
+                from quangtps.ui.evaluation.robustness_widget import (
+                    create_robustness_widget,
+                    RobustnessWidget,
+                )
+
+                HAS_ROBUSTNESS_WIDGET = True
+                logger.info("Đã tìm thấy module robustness_widget")
+            except ImportError:
+                # Thử import từ thư mục cũ nếu không tìm thấy module từ thư mục mới
+                try:
+                    from quangtps.ui.robustness_widget import (
+                        create_robustness_widget,
+                    )
+
+                    HAS_ROBUSTNESS_WIDGET = True
+                    logger.info("Đã tìm thấy module robustness_widget (legacy)")
+                except ImportError:
+                    logger.warning("Không thể import robustness_widget")
+                    HAS_ROBUSTNESS_WIDGET = False
+
+            # Tạo tab đánh giá kế hoạch
+            plan_evaluation_tab = PlanEvaluationTab()
+
+            # Tạo widget DVH
+            dvh_widget = DVHWidget()
+            plan_evaluation_tab.set_dvh_widget(dvh_widget)
+
+            # Tạo widget chỉ số đánh giá
+            metrics_widget = MetricsWidget()
+            plan_evaluation_tab.set_metrics_widget(metrics_widget)
+
+            # Tạo và thiết lập widget chỉ số sinh học nếu có
+            if HAS_BIO_WIDGET:
+                try:
+                    biological_metrics_widget = create_biological_metrics_widget()
+                    if biological_metrics_widget:
+                        plan_evaluation_tab.set_biological_metrics_widget(
+                            biological_metrics_widget
+                        )
+                        logger.info(
+                            "Đã thêm biological metrics widget vào PlanEvaluationTab"
+                        )
+                except Exception as e:
+                    logger.error(f"Lỗi khi tạo biological metrics widget: {str(e)}")
+
+            # Tạo và thiết lập widget phân tích độ bền vững nếu có
+            if HAS_ROBUSTNESS_WIDGET:
+                try:
+                    robustness_widget = create_robustness_widget()
+                    if robustness_widget:
+                        plan_evaluation_tab.set_robustness_widget(robustness_widget)
+                        logger.info("Đã thêm robustness widget vào PlanEvaluationTab")
+                except Exception as e:
+                    logger.error(f"Lỗi khi tạo robustness widget: {str(e)}")
+
+            # Thiết lập kế hoạch hiện tại nếu có
+            if hasattr(self, "current_plan") and self.current_plan:
+                plan_evaluation_tab.set_plan(self.current_plan)
+
+            return plan_evaluation_tab
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo Plan Evaluation tab: {str(e)}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            # Tạo một widget trống nếu có lỗi
+            return QWidget()
+
+    def _create_plan_checker_tab(self):
+        """Tạo tab Plan Checker với widget kiểm tra kế hoạch."""
+        try:
+            # Import module cần thiết
+            from quangtps.ui.plan_checker_tab import create_plan_checker_tab
+
+            # Tạo tab Plan Checker
+            plan_checker_tab = create_plan_checker_tab(self, self)
+
+            # Thiết lập kế hoạch hiện tại nếu có
+            if hasattr(self, "current_plan") and self.current_plan:
+                plan_checker_tab.set_patient(self.current_patient)
+
+            # Kết nối sự kiện
+            if hasattr(plan_checker_tab, "planSelected"):
+                plan_checker_tab.planSelected.connect(self._on_plan_selected)
+
+            return plan_checker_tab
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo Plan Checker tab: {str(e)}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            # Tạo một widget trống nếu có lỗi
+            return QWidget()

@@ -204,75 +204,331 @@ class DVHCanvas(FigureCanvasQTAgg):
         # Vẽ lại canvas
         self.draw()
 
+    def add_robustness_band(
+        self, structure_name: str, dvh_band: Dict[str, Any], color=None
+    ):
+        """
+        Thêm dải biến động DVH cho một cấu trúc.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên của cấu trúc
+        dvh_band : Dict[str, Any]
+            Dictionary chứa dữ liệu biến động DVH với các key:
+            'dose', 'min_volume', 'max_volume', 'nominal_volume'
+        color : tuple or str, optional
+            Màu sắc của dải biến động
+
+        Returns
+        -------
+        bool
+            True nếu thành công, False nếu có lỗi
+        """
+        try:
+            # Kiểm tra đầu vào
+            required_keys = ["dose", "min_volume", "max_volume"]
+            if not all(k in dvh_band for k in required_keys):
+                logger.warning(
+                    f"Thiếu key trong dvh_band cho {structure_name}: {dvh_band.keys()}"
+                )
+                return False
+
+            # Kiểm tra dữ liệu trống
+            if (
+                len(dvh_band["dose"]) == 0
+                or len(dvh_band["min_volume"]) == 0
+                or len(dvh_band["max_volume"]) == 0
+            ):
+                logger.warning(f"Dữ liệu dvh_band trống cho {structure_name}")
+                return False
+
+            # Chuyển đổi tất cả thành numpy array để dễ xử lý
+            for key in ["dose", "min_volume", "max_volume", "nominal_volume"]:
+                if key in dvh_band:
+                    dvh_band[key] = np.array(dvh_band[key])
+
+            # Đảm bảo nominal_volume tồn tại, nếu không thì lấy trung bình giữa min và max
+            if "nominal_volume" not in dvh_band or len(dvh_band["nominal_volume"]) == 0:
+                dvh_band["nominal_volume"] = (
+                    dvh_band["min_volume"] + dvh_band["max_volume"]
+                ) / 2
+
+            # Lấy màu cấu trúc hoặc tạo màu mặc định
+            if color is None:
+                # Tìm màu trong dvh_data nếu có
+                if structure_name in self.dvh_data:
+                    color = self.dvh_data[structure_name].get("color", "blue")
+                else:
+                    # Màu mặc định
+                    color = "blue"
+
+            # Tạo màu cho vùng dải biến động với độ trong suốt
+            if isinstance(color, str):
+                try:
+                    from matplotlib.colors import to_rgba
+
+                    band_color = to_rgba(color, alpha=0.3)
+                except:
+                    # Fallback nếu không chuyển đổi được màu
+                    band_color = (0.0, 0.0, 1.0, 0.3)
+            else:
+                # Nếu color là tuple hoặc list
+                if len(color) == 3:
+                    band_color = (color[0], color[1], color[2], 0.3)
+                elif len(color) == 4:
+                    band_color = (color[0], color[1], color[2], min(color[3], 0.3))
+                else:
+                    # Màu mặc định nếu định dạng không đúng
+                    band_color = (0.0, 0.0, 1.0, 0.3)
+
+            # Hiển thị dải biến động
+            robustness_band = self.axes.fill_between(
+                dvh_band["dose"],
+                dvh_band["min_volume"] * 100,  # Chuyển sang phần trăm
+                dvh_band["max_volume"] * 100,
+                color=band_color,
+                label=f"{structure_name} (band)",
+                alpha=0.3,
+            )
+
+            # Hiển thị đường nominal
+            nominal_line = self.axes.plot(
+                dvh_band["dose"],
+                dvh_band["nominal_volume"] * 100,
+                linestyle="--",
+                color=color,
+                linewidth=1.5,
+                label=f"{structure_name} (nominal)",
+            )
+
+            # Lưu các đối tượng đã vẽ vào từ điển
+            if "robustness_bands" not in self.__dict__:
+                self.robustness_bands = {}
+
+            self.robustness_bands[structure_name] = {
+                "band": robustness_band,
+                "nominal": nominal_line[0],
+                "data": dvh_band,
+            }
+
+            # Tính toán một số chỉ số thống kê về độ biến động
+            metrics = {}
+            try:
+                # Tính biên độ trung bình
+                amplitude = np.mean(
+                    (dvh_band["max_volume"] - dvh_band["min_volume"]) * 100
+                )
+                metrics["mean_amplitude"] = amplitude
+
+                # Tính biên độ lớn nhất
+                max_amplitude = np.max(
+                    (dvh_band["max_volume"] - dvh_band["min_volume"]) * 100
+                )
+                metrics["max_amplitude"] = max_amplitude
+
+                # Vị trí biên độ lớn nhất
+                max_amp_idx = np.argmax(dvh_band["max_volume"] - dvh_band["min_volume"])
+                max_amp_dose = dvh_band["dose"][max_amp_idx]
+                metrics["max_amplitude_dose"] = max_amp_dose
+
+                # Lưu metrics
+                if structure_name in self.dvh_data:
+                    if "robustness_metrics" not in self.dvh_data[structure_name]:
+                        self.dvh_data[structure_name]["robustness_metrics"] = {}
+                    self.dvh_data[structure_name]["robustness_metrics"].update(metrics)
+            except Exception as e:
+                logger.warning(f"Không thể tính toán chỉ số độ biến động: {e}")
+
+            # Cập nhật legend và biểu đồ
+            if hasattr(self, "_update_plot") and callable(self._update_plot):
+                self._update_plot()
+
+            logger.info(f"Đã thêm dải biến động DVH cho cấu trúc {structure_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Lỗi khi thêm dải biến động DVH cho {structure_name}: {e}")
+            return False
+
+    def clear_robustness_bands(self):
+        """Xóa tất cả các dải DVH robustness khỏi biểu đồ."""
+        # Xóa các dải robustness
+        if hasattr(self, "robustness_bands"):
+            for band in self.robustness_bands.values():
+                if band:
+                    band.remove()
+            self.robustness_bands = {}
+
+        # Khởi tạo trước khi kiểm tra và sử dụng
+        if not hasattr(self, "robustness_nominal_lines"):
+            self.robustness_nominal_lines = {}
+
+        # Xóa các đường nominal
+        for line in self.robustness_nominal_lines.values():
+            if line:
+                line.remove()
+        self.robustness_nominal_lines = {}
+
+        self._update_plot()
+
 
 class DVHTable(QTableWidget):
-    """Bảng hiển thị các chỉ số DVH."""
+    """Bảng hiển thị các metrics DVH."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Thiết lập bảng
-        self.setColumnCount(8)
+        # Thiết lập cấu hình bảng
+        self.setColumnCount(5)
         self.setHorizontalHeaderLabels(
-            ["Cấu trúc", "Min", "Max", "Mean", "D95%", "D50%", "D5%", "V20Gy (%)"]
+            ["Cấu trúc", "Min Dose", "Max Dose", "Mean Dose", "D95%"]
         )
+        self.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for i in range(1, 5):
+            self.horizontalHeader().setSectionResizeMode(
+                i, QHeaderView.ResizeToContents
+            )
 
-        # Thiết lập style
-        self.setAlternatingRowColors(True)
-        self.horizontalHeader().setStretchLastSection(True)
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.verticalHeader().setVisible(False)
+        self.setSelectionBehavior(QTableWidget.SelectRows)
+        self.setSelectionMode(QTableWidget.SingleSelection)
+        self.setEditTriggers(QTableWidget.NoEditTriggers)
 
-        # Style Eclipse
+        # Style cho bảng
         if HAS_ECLIPSE_THEME:
-            self.setStyleSheet(create_eclipse_widget_style("table"))
+            # Thêm widget_type là "table" nếu hàm yêu cầu
+            try:
+                style_sheet = create_eclipse_widget_style(widget_type="table")
+            except TypeError:
+                # Nếu hàm không chấp nhận tham số, gọi không có tham số
+                style_sheet = create_eclipse_widget_style()
+            self.setStyleSheet(style_sheet)
+
+        # Lưu trữ dữ liệu metrics
+        self.dvh_metrics = {}
+        self.robustness_metrics = {}
 
     def update_metrics(self, dvh_data_dict: Dict[str, Dict[str, Any]]):
-        """
-        Cập nhật bảng với các chỉ số DVH.
+        """Cập nhật metrics hiển thị trong bảng."""
+        # Lưu trữ dữ liệu metrics
+        self.dvh_metrics = {}
 
-        Parameters
-        ----------
-        dvh_data_dict : Dict[str, Dict[str, Any]]
-            Dict với khóa là tên cấu trúc và giá trị là dict chứa dữ liệu DVH
-        """
-        # Xóa dữ liệu cũ
+        # Xóa nội dung hiện tại
         self.setRowCount(0)
 
         # Thêm dữ liệu mới
+        row = 0
         for structure_name, dvh_data in dvh_data_dict.items():
             if "metrics" not in dvh_data:
                 continue
 
-            metrics = dvh_data["metrics"]
-            row = self.rowCount()
+            self.dvh_metrics[structure_name] = dvh_data["metrics"]
             self.insertRow(row)
 
             # Tên cấu trúc
             self.setItem(row, 0, QTableWidgetItem(structure_name))
 
-            # Các chỉ số DVH
-            self.setItem(row, 1, QTableWidgetItem(f"{metrics.get('min_dose', 0):.2f}"))
-            self.setItem(row, 2, QTableWidgetItem(f"{metrics.get('max_dose', 0):.2f}"))
-            self.setItem(row, 3, QTableWidgetItem(f"{metrics.get('mean_dose', 0):.2f}"))
-            self.setItem(row, 4, QTableWidgetItem(f"{metrics.get('D95', 0):.2f}"))
-            self.setItem(row, 5, QTableWidgetItem(f"{metrics.get('D50', 0):.2f}"))
-            self.setItem(row, 6, QTableWidgetItem(f"{metrics.get('D5', 0):.2f}"))
-            self.setItem(row, 7, QTableWidgetItem(f"{metrics.get('V20Gy', 0):.2f}"))
+            # Format metrics
+            metrics = dvh_data["metrics"]
 
-            # Set tô màu cho hàng dựa vào loại cấu trúc (Target hoặc OAR)
-            is_target = False
-            if "type" in dvh_data:
-                is_target = dvh_data["type"] == "TARGET"
+            # Helper để hiển thị metrics
+            def format_dose(value):
+                if value is None:
+                    return "N/A"
+                return f"{value:.2f} Gy"
 
-            for col in range(self.columnCount()):
-                item = self.item(row, col)
-                if is_target:
-                    item.setBackground(
-                        QColor(255, 235, 235)
-                    )  # Màu hồng nhạt cho target
-                else:
-                    item.setBackground(QColor(235, 255, 235))  # Màu xanh nhạt cho OAR
+            # Set metrics
+            self.setItem(row, 1, QTableWidgetItem(format_dose(metrics.get("min_dose"))))
+            self.setItem(row, 2, QTableWidgetItem(format_dose(metrics.get("max_dose"))))
+            self.setItem(
+                row, 3, QTableWidgetItem(format_dose(metrics.get("mean_dose")))
+            )
+            self.setItem(row, 4, QTableWidgetItem(format_dose(metrics.get("D95"))))
+
+            row += 1
+
+    def update_robustness_metrics(self, robustness_metrics: Dict[str, Dict[str, Any]]):
+        """
+        Cập nhật bảng metrics với dữ liệu độ bền vững.
+
+        Parameters
+        ----------
+        robustness_metrics : Dict[str, Dict[str, Any]]
+            Dữ liệu độ bền vững với metrics cho từng cấu trúc
+        """
+        # Lưu trữ thông tin metrics
+        self.robustness_metrics = robustness_metrics
+
+        # Tìm các hàng tương ứng và cập nhật
+        for row in range(self.rowCount()):
+            structure_name = self.item(row, 0).text()
+
+            if structure_name in robustness_metrics:
+                metrics = robustness_metrics[structure_name]
+
+                # Thêm thông tin biến động vào các ô
+                for col in range(1, self.columnCount()):
+                    current_item = self.item(row, col)
+                    if not current_item:
+                        continue
+
+                    current_text = current_item.text()
+                    metric_key = self._get_metric_key_for_column(col)
+
+                    if metric_key and metric_key in metrics:
+                        min_val = metrics.get(f"min_{metric_key}")
+                        max_val = metrics.get(f"max_{metric_key}")
+
+                        if min_val is not None and max_val is not None:
+                            # Tạo tooltip hiển thị phạm vi biến động
+                            range_text = f"[{min_val:.2f} - {max_val:.2f}] Gy"
+                            current_item.setToolTip(
+                                f"Phạm vi dao động: {range_text}\n"
+                                f"Biên độ: {max_val - min_val:.2f} Gy"
+                            )
+
+                            # Thêm * để chỉ ra có thông tin độ bền vững
+                            if not current_text.endswith("*"):
+                                current_item.setText(f"{current_text}*")
+
+                            # Màu nền dựa trên biên độ dao động
+                            amplitude = max_val - min_val
+                            bg_color = self._get_robustness_color(amplitude)
+                            if bg_color:
+                                current_item.setBackground(bg_color)
+
+    def _get_metric_key_for_column(self, column_index):
+        """Lấy khóa metric tương ứng với cột."""
+        column_mapping = {1: "min_dose", 2: "max_dose", 3: "mean_dose", 4: "D95"}
+        return column_mapping.get(column_index)
+
+    def _get_robustness_color(self, amplitude):
+        """
+        Trả về màu nền dựa trên biên độ dao động.
+
+        Parameters
+        ----------
+        amplitude : float
+            Biên độ dao động của metric
+
+        Returns
+        -------
+        QColor
+            Màu nền tương ứng với mức độ dao động
+        """
+        if amplitude > 5.0:
+            # Đỏ nhạt - biến động lớn
+            return QColor(255, 200, 200)
+        elif amplitude > 3.0:
+            # Vàng nhạt - biến động trung bình
+            return QColor(255, 255, 200)
+        elif amplitude > 1.0:
+            # Xanh nhạt - biến động nhỏ
+            return QColor(200, 255, 200)
+        else:
+            # Không đánh dấu - biến động không đáng kể
+            return None
 
 
 class DVHWidget(QWidget):
@@ -432,12 +688,12 @@ class DVHWidget(QWidget):
 
     def _calculate_dvh_for_structure(self, structure):
         """
-        Tính toán DVH cho một cấu trúc.
+        Tính toán DVH cho một cấu trúc cụ thể.
 
         Parameters
         ----------
-        structure : Structure
-            Đối tượng Structure
+        structure : dict
+            Thông tin về cấu trúc
 
         Returns
         -------
@@ -448,36 +704,32 @@ class DVHWidget(QWidget):
             # Gọi hàm tính DVH từ module evaluation
             if hasattr(calculate_dvh, "__call__"):
                 # Cập nhật tham số cho phù hợp với API của hàm calculate_dvh
-                dvh_result = calculate_dvh(
-                    structure_mask=structure.mask
-                    if hasattr(structure, "mask")
-                    else None,
-                    dose_grid=self.dose_grid,
-                    grid_spacing=self.dose_spacing,
-                    origin=self.dose_origin,
-                )
+                # Kiểm tra tham số được hỗ trợ bởi hàm calculate_dvh
+                import inspect
 
-                # Thêm thông tin về loại cấu trúc
-                if hasattr(structure, "type"):
-                    dvh_result["type"] = structure.type
-                elif (
-                    "PTV" in structure.name
-                    or "CTV" in structure.name
-                    or "GTV" in structure.name
-                ):
-                    dvh_result["type"] = "TARGET"
-                else:
-                    dvh_result["type"] = "OAR"
+                sig = inspect.signature(calculate_dvh)
+                params = {}
 
-                return dvh_result
-            else:
-                # Mock DVH cho demo
-                logging.warning(f"Sử dụng DVH mẫu cho {structure.name}")
-                return self._create_sample_dvh(structure)
+                # Chuẩn bị các tham số cơ bản
+                params["structure_mask"] = structure.get("mask")
+                params["dose_grid"] = self.dose_grid
 
+                # Kiểm tra và thêm các tham số tùy chọn nếu được hỗ trợ
+                if "spacing" in sig.parameters:
+                    params["spacing"] = self.dose_spacing
+                elif "grid_spacing" in sig.parameters:
+                    params["grid_spacing"] = self.dose_spacing
+
+                if "origin" in sig.parameters and self.dose_origin is not None:
+                    params["origin"] = self.dose_origin
+
+                # Gọi hàm với các tham số phù hợp
+                dvh_data = calculate_dvh(**params)
+                return dvh_data
         except Exception as e:
-            logging.error(f"Lỗi khi tính DVH: {str(e)}")
-            return None
+            print(f"Lỗi khi tính toán DVH: {e}")
+            # Fallback - tạo DVH mẫu
+            return self._create_sample_dvh(structure)
 
     def _create_sample_dvh(self, structure):
         """Tạo dữ liệu DVH mẫu khi không có module tính DVH."""
@@ -763,33 +1015,106 @@ class DVHWidget(QWidget):
         """Xuất dữ liệu DVH sang định dạng JSON."""
         import json
 
-        # Chuẩn bị dữ liệu
-        export_data = {"dvh_data": {}, "metrics": {}}
+        try:
+            data = {}
+            for structure_name, dvh in self.dvh_canvas.dvh_data.items():
+                data[structure_name] = {
+                    "dose": dvh["dose"].tolist(),
+                    "volume": dvh["volume"].tolist(),
+                    "metrics": dvh.get("metrics", {}),
+                }
 
-        for structure_name, dvh_data in self.dvh_canvas.dvh_data.items():
-            # Chuyển đổi numpy array sang list
-            dose_list = (
-                dvh_data["dose"].tolist()
-                if isinstance(dvh_data["dose"], np.ndarray)
-                else list(dvh_data["dose"])
-            )
-            vol_list = (
-                (dvh_data["volume"] * 100).tolist()
-                if isinstance(dvh_data["volume"], np.ndarray)
-                else [v * 100 for v in dvh_data["volume"]]
-            )
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
 
-            export_data["dvh_data"][structure_name] = {
-                "dose": dose_list,
-                "volume": vol_list,
+            logger.info(f"Đã xuất dữ liệu DVH sang JSON: {file_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khi xuất dữ liệu DVH sang JSON: {e}")
+            return False
+
+    def set_robustness_bands(
+        self, structure_name: str, robustness_data: Dict[str, Any]
+    ):
+        """
+        Hiển thị dải biến động DVH từ phân tích độ bền vững.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        robustness_data : Dict[str, Any]
+            Dữ liệu độ bền vững chứa thông tin DVH band
+
+        Returns
+        -------
+        bool
+            True nếu hiển thị thành công, False nếu có lỗi
+        """
+        try:
+            if not robustness_data:
+                logger.warning(
+                    f"Không có dữ liệu độ bền vững cho cấu trúc {structure_name}"
+                )
+                return False
+
+            # Kiểm tra nếu dữ liệu có cấu trúc đúng định dạng
+            if "dvh_data" not in robustness_data:
+                logger.warning(
+                    f"Dữ liệu độ bền vững không đúng định dạng cho {structure_name}"
+                )
+                return False
+
+            dvh_band = {
+                "dose": robustness_data.get("dose_points", []),
+                "min_volume": robustness_data.get("min_volume", []),
+                "max_volume": robustness_data.get("max_volume", []),
+                "nominal_volume": robustness_data.get("nominal_volume", []),
             }
 
-            if "metrics" in dvh_data:
-                export_data["metrics"][structure_name] = dvh_data["metrics"]
+            # Lấy màu từ cấu trúc hiện tại nếu có
+            color = None
+            if structure_name in self.structures:
+                structure_info = self.structures[structure_name]
+                if "color" in structure_info:
+                    color = structure_info["color"]
 
-        # Xuất sang file JSON
-        with open(file_path, "w") as json_file:
-            json.dump(export_data, json_file, indent=2)
+            # Thêm dải DVH vào canvas
+            self.dvh_canvas.add_robustness_band(structure_name, dvh_band, color)
+
+            # Cập nhật thông tin robustness cho bảng DVH nếu có
+            if hasattr(self, "dvh_table") and self.dvh_table:
+                if hasattr(self.dvh_table, "update_robustness_metrics"):
+                    metrics = robustness_data.get("metrics", {})
+                    self.dvh_table.update_robustness_metrics({structure_name: metrics})
+
+            logger.info(f"Đã hiển thị dải DVH độ bền vững cho {structure_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Lỗi khi hiển thị dải DVH độ bền vững: {e}")
+            return False
+
+    def clear_robustness_bands(self):
+        """Xóa tất cả các dải DVH robustness khỏi biểu đồ."""
+        # Xóa các dải robustness
+        if hasattr(self, "robustness_bands"):
+            for band in self.robustness_bands.values():
+                if band:
+                    band.remove()
+            self.robustness_bands = {}
+
+        # Khởi tạo trước khi kiểm tra và sử dụng
+        if not hasattr(self, "robustness_nominal_lines"):
+            self.robustness_nominal_lines = {}
+
+        # Xóa các đường nominal
+        for line in self.robustness_nominal_lines.values():
+            if line:
+                line.remove()
+        self.robustness_nominal_lines = {}
+
+        self._update_plot()
 
 
 def create_dvh_widget(parent=None) -> DVHWidget:

@@ -386,60 +386,50 @@ class MCOEngine:
         Optional[Dict[str, Any]]
             Giải pháp tốt nhất, hoặc None nếu không tìm thấy
         """
-        if not self.pareto_surface or not self.pareto_surface.solutions:
-            logger.warning("No Pareto solutions available to select from")
+        if not self.solutions:
+            logger.warning("Không có giải pháp nào để lựa chọn")
             return None
 
-        try:
-            # Tạo vector trọng số nếu không được cung cấp
-            if weights is None:
-                weights = {obj_id: 1.0 for obj_id in objectives.keys()}
+        # Nếu không có trọng số, sử dụng trọng số bằng nhau cho tất cả các mục tiêu
+        if weights is None:
+            weights = {obj_id: 1.0 for obj_id in objectives.keys()}
 
-            # Tính điểm cho mỗi giải pháp
-            solution_scores = {}
+        best_score = -float("inf")
+        best_solution = None
 
-            for sol_id, solution in self.pareto_surface.solutions.items():
-                score = 0.0
+        # Đánh giá từng giải pháp dựa trên các mục tiêu và trọng số
+        for solution in self.solutions:
+            total_score = 0.0
 
-                # Tính điểm dựa trên mức độ đáp ứng mục tiêu
-                for structure, structure_objectives in objectives.items():
-                    if structure not in solution.objective_values:
-                        continue
+            # Tính điểm tổng hợp cho giải pháp này
+            for structure_name, structure_objs in objectives.items():
+                # Lấy metrics của cấu trúc này trong giải pháp hiện tại
+                metrics = solution.get("metrics", {}).get(structure_name, {})
 
-                    for obj_type, params in structure_objectives.items():
-                        # Lấy trọng số cho mục tiêu này
-                        weight = weights.get(f"{structure}_{obj_type}", 1.0)
+                if not metrics:
+                    continue
 
-                        # Tính điểm cho mục tiêu cụ thể
-                        obj_score = self._calculate_objective_score(
-                            solution.objective_values[structure], obj_type, params
-                        )
+                for obj_type, params in structure_objs.items():
+                    # Tạo ID duy nhất cho mục tiêu này
+                    obj_id = f"{structure_name}_{obj_type}"
 
-                        # Cộng vào điểm tổng
-                        score += obj_score * weight
+                    # Lấy trọng số cho mục tiêu này
+                    weight = weights.get(obj_id, 1.0)
 
-                solution_scores[sol_id] = score
+                    # Tính điểm cho mục tiêu này
+                    obj_score = self._calculate_objective_score(
+                        metrics, obj_type, params
+                    )
 
-            # Chọn giải pháp có điểm cao nhất
-            if not solution_scores:
-                logger.warning("Không thể tính điểm cho bất kỳ giải pháp nào")
-                return None
+                    # Thêm vào tổng điểm với trọng số
+                    total_score += obj_score * weight
 
-            best_solution_id = max(solution_scores, key=solution_scores.get)
-            logger.info(
-                f"Đã chọn giải pháp {best_solution_id} với điểm {solution_scores[best_solution_id]}"
-            )
+            # Cập nhật giải pháp tốt nhất nếu cần
+            if total_score > best_score:
+                best_score = total_score
+                best_solution = solution
 
-            return self.pareto_surface.solutions.get(best_solution_id)
-
-        except Exception as e:
-            logger.error(f"Lỗi khi chọn giải pháp theo mục tiêu: {e}")
-            # Trả về giải pháp đầu tiên trong trường hợp lỗi
-            if self.pareto_surface.solutions:
-                first_solution_id = next(iter(self.pareto_surface.solutions))
-                logger.warning(f"Trả về giải pháp {first_solution_id} do lỗi xử lý")
-                return self.pareto_surface.solutions.get(first_solution_id)
-            return None
+        return best_solution
 
     def get_current_plan(self) -> Optional[Plan]:
         """
@@ -678,69 +668,96 @@ class MCOEngine:
             if obj_type == "max_dose":
                 target = params.get("dose", 0.0)
                 actual = metrics.get("max_dose", 0.0)
-
-                # Nếu là OAR, thì thấp hơn mục tiêu là tốt
-                if params.get("is_oar", True):
-                    return 100.0 if actual <= target else 100.0 * (target / actual)
-                # Nếu là PTV, thì gần với mục tiêu là tốt
-                else:
-                    return 100.0 / (1.0 + abs(actual - target) / target)
+                # Điểm càng cao khi giá trị thực tế thấp hơn mục tiêu (đối với OAR)
+                return (
+                    10.0 * (target - actual)
+                    if target > actual
+                    else -5.0 * (actual - target)
+                )
 
             elif obj_type == "mean_dose":
                 target = params.get("dose", 0.0)
                 actual = metrics.get("mean_dose", 0.0)
+                # Điểm càng cao khi giá trị thực tế thấp hơn mục tiêu (đối với OAR)
+                return (
+                    5.0 * (target - actual)
+                    if target > actual
+                    else -3.0 * (actual - target)
+                )
 
-                # Nếu là OAR, thì thấp hơn mục tiêu là tốt
-                if params.get("is_oar", True):
-                    return 100.0 if actual <= target else 100.0 * (target / actual)
-                # Nếu là PTV, thì gần với mục tiêu là tốt
-                else:
-                    return 100.0 / (1.0 + abs(actual - target) / target)
+            elif obj_type == "min_dose":
+                target = params.get("dose", 0.0)
+                actual = metrics.get("min_dose", 0.0)
+                # Điểm càng cao khi giá trị thực tế cao hơn mục tiêu (đối với PTV)
+                return (
+                    8.0 * (actual - target)
+                    if actual > target
+                    else -4.0 * (target - actual)
+                )
 
             elif obj_type == "dvh":
-                dose = params.get("dose", 0.0)
                 volume = params.get("volume", 0.0)
-                relation = params.get("relation", "less")  # "less" hoặc "more"
+                dose = params.get("dose", 0.0)
+                key = f"D{volume:.1f}"
+                actual = metrics.get(key, 0.0)
 
-                # Lấy giá trị DVH thực tế
-                dvh_data = metrics.get("dvh", {})
-                actual_volume = None
+                # Xác định loại mục tiêu (PTV hay OAR) dựa trên param
+                is_ptv = params.get("is_ptv", False)
 
-                # Tìm điểm DVH gần nhất
-                if dvh_data and "doses" in dvh_data and "volumes" in dvh_data:
-                    doses = dvh_data["doses"]
-                    volumes = dvh_data["volumes"]
-
-                    # Tìm điểm gần nhất với dose
-                    closest_idx = min(
-                        range(len(doses)), key=lambda i: abs(doses[i] - dose)
-                    )
-                    actual_volume = volumes[closest_idx]
-
-                if actual_volume is None:
-                    return 0.0
-
-                # Tính điểm
-                if relation == "less":  # V20Gy < 30% (OAR)
+                if is_ptv:
+                    # Với PTV: Điểm càng cao khi liều thực tế gần với liều mục tiêu
+                    diff = abs(actual - dose)
+                    return 10.0 * (1.0 - min(diff / dose, 1.0))
+                else:
+                    # Với OAR: Điểm càng cao khi liều thực tế thấp hơn liều giới hạn
                     return (
-                        100.0
-                        if actual_volume <= volume
-                        else 100.0 * (volume / actual_volume)
-                    )
-                else:  # V95% > 98% (PTV)
-                    return (
-                        100.0
-                        if actual_volume >= volume
-                        else 100.0 * (actual_volume / volume)
+                        5.0 * (dose - actual)
+                        if dose > actual
+                        else -3.0 * (actual - dose)
                     )
 
-            # Các loại mục tiêu khác
+            elif obj_type == "volume_at_dose":
+                volume = params.get("volume", 0.0)
+                dose = params.get("dose", 0.0)
+                key = f"V{dose:.1f}"
+                actual = metrics.get(key, 0.0)
+
+                # Xác định loại mục tiêu (PTV hay OAR)
+                is_ptv = params.get("is_ptv", False)
+
+                if is_ptv:
+                    # Với PTV: Điểm càng cao khi thể tích thực tế cao hơn mục tiêu
+                    return (
+                        8.0 * (actual - volume)
+                        if actual > volume
+                        else -5.0 * (volume - actual)
+                    )
+                else:
+                    # Với OAR: Điểm càng cao khi thể tích thực tế thấp hơn giới hạn
+                    return (
+                        6.0 * (volume - actual)
+                        if volume > actual
+                        else -4.0 * (actual - volume)
+                    )
+
+            elif obj_type == "conformity_index":
+                target = params.get("value", 1.0)
+                actual = metrics.get("conformity_index", 1.0)
+                # Điểm càng cao khi CI gần với 1.0
+                return 5.0 / (1.0 + abs(actual - target))
+
+            elif obj_type == "homogeneity_index":
+                target = params.get("value", 1.0)
+                actual = metrics.get("homogeneity_index", 1.0)
+                # Điểm càng cao khi HI gần với 1.0
+                return 5.0 / (1.0 + abs(actual - target))
+
             else:
-                logger.warning(f"Loại mục tiêu không được hỗ trợ: {obj_type}")
+                logger.warning(f"Không hỗ trợ loại mục tiêu: {obj_type}")
                 return 0.0
 
         except Exception as e:
-            logger.error(f"Lỗi khi tính điểm mục tiêu {obj_type}: {e}")
+            logger.error(f"Lỗi khi tính điểm mục tiêu {obj_type}: {str(e)}")
             return 0.0
 
 
@@ -798,27 +815,27 @@ if __name__ == "__main__":
         "oar_sparing": DummyObjective("oar_sparing"),
     }
 
+    # Test saving and loading
     engine = MCOEngine()
 
-    # Test saving and loading
+    # Create test solutions
     engine.solutions = {
         "Solution_1": MCOSolution(
-            id="Solution_1",
-            objective_values={"ptv_coverage": 1.0, "oar_sparing": 0.0},
             plan=plan,
-            weight_vector={"ptv_coverage": 1.0, "oar_sparing": 0.0},
+            objective_values={"ptv_coverage": 1.0, "oar_sparing": 0.0},
+            weights={"ptv_coverage": 1.0, "oar_sparing": 0.0},
+            solution_id="Solution_1",
         ),
         "Solution_2": MCOSolution(
-            id="Solution_2",
-            objective_values={"ptv_coverage": 0.0, "oar_sparing": 1.0},
             plan=plan,
-            weight_vector={"ptv_coverage": 0.0, "oar_sparing": 1.0},
+            objective_values={"ptv_coverage": 0.0, "oar_sparing": 1.0},
+            weights={"ptv_coverage": 0.0, "oar_sparing": 1.0},
+            solution_id="Solution_2",
         ),
     }
 
-    engine.save_current_solution("Test Solution 1")
-    print("Saved current solution")
-
-    engine.current_solution_id = None
-    engine.load_solutions("test_solutions.json")
-    print(f"Loaded {len(engine.solutions)} solutions")
+    # Uncomment to test save/load functionality
+    # engine.save_current_solution("Test Solution 1")
+    # print("Saved current solution")
+    # engine.load_solutions("test_solutions.json")
+    # print(f"Loaded {len(engine.solutions)} solutions")
