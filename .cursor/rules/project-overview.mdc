@@ -1,0 +1,66 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# QuangTPS Project Overview
+
+QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở được thiết kế để cung cấp đầy đủ tính năng như hệ thống Eclipse của Varian.
+
+## Cấu trúc dự án chính
+
+### Core Modules
+- **[quangtps/core/](mdc:quangtps/core)**: Các thành phần cốt lõi của hệ thống
+  - [patient/](mdc:quangtps/core/patient): Quản lý thông tin bệnh nhân và hình ảnh y tế
+  - [exceptions.py](mdc:quangtps/core/exceptions.py): Định nghĩa các exception tùy chỉnh
+  - [config.py](mdc:quangtps/core/config.py): Cấu hình hệ thống
+  - [logging.py](mdc:quangtps/core/logging.py): Hệ thống logging với hỗ trợ UTF-8
+
+### DICOM Processing
+- **[quangtps/dicom/](mdc:quangtps/dicom)**: Xử lý dữ liệu DICOM
+  - [dicom_importer.py](mdc:quangtps/dicom/dicom_importer.py): Nhập dữ liệu DICOM
+  - [dicom_exporter.py](mdc:quangtps/dicom/dicom_exporter.py): Xuất dữ liệu DICOM
+  - [dicom_factory.py](mdc:quangtps/dicom/dicom_factory.py): Factory pattern cho tạo DICOM objects
+
+### Dose Calculation
+- **[quangtps/dose/](mdc:quangtps/dose)**: Tính toán liều xạ trị
+  - [dose_grid.py](mdc:quangtps/dose/dose_grid.py): Quản lý lưới liều 3D
+  - [dose_engine.py](mdc:quangtps/dose/dose_engine.py): Engine tính toán liều
+  - [algorithms/](mdc:quangtps/dose/algorithms): Các thuật toán tính liều
+
+### Treatment Planning
+- **[quangtps/optimization/](mdc:quangtps/optimization)**: Tối ưu hóa kế hoạch xạ trị
+  - [objectives.py](mdc:quangtps/optimization/objectives.py): Định nghĩa hàm mục tiêu
+  - [optimizer.py](mdc:quangtps/optimization/optimizer.py): Engine tối ưu hóa
+  - [mco/](mdc:quangtps/optimization/mco): Multi-Criteria Optimization
+
+### Evaluation & Analysis
+- **[quangtps/evaluation/](mdc:quangtps/evaluation)**: Đánh giá kế hoạch xạ trị
+  - [dvh/](mdc:quangtps/evaluation/dvh): Dose Volume Histogram analysis
+  - [metrics/](mdc:quangtps/evaluation/metrics): Các metrics đánh giá
+  - [biological/](mdc:quangtps/evaluation/biological): Đánh giá sinh học
+
+### User Interface
+- **[quangtps/ui/](mdc:quangtps/ui)**: Giao diện người dùng
+  - [main_window.py](mdc:quangtps/ui/main_window.py): Cửa sổ chính
+  - [3d_viewer.py](mdc:quangtps/ui/3d_viewer.py): Hiển thị 3D
+  - [styles/](mdc:quangtps/ui/styles): Eclipse-style theming
+
+### Segmentation
+- **[quangtps/segmentation/](mdc:quangtps/segmentation)**: Phân đoạn cấu trúc
+  - [contour/](mdc:quangtps/segmentation/contour): Xử lý contour
+  - [auto/](mdc:quangtps/segmentation/auto): Auto-segmentation với AI
+  - [manual_segmentation/](mdc:quangtps/segmentation/manual_segmentation): Công cụ vẽ thủ công
+
+## Key Files
+- [requirements.txt](mdc:requirements.txt): Python dependencies
+- [setup.py](mdc:setup.py): Package installation script
+- [changelog.txt](mdc:changelog.txt): Detailed change log
+- [test_system_modules.py](mdc:test_system_modules.py): System-wide testing script
+
+## Development Guidelines
+1. Luôn cập nhật [changelog.txt](mdc:changelog.txt) khi có thay đổi
+2. Sử dụng logging với UTF-8 encoding cho tiếng Việt
+3. Implement proper error handling với custom exceptions
+4. Follow Eclipse TPS design patterns và UI conventions
+5. Ensure compatibility với existing medical imaging standards (DICOM, etc.)

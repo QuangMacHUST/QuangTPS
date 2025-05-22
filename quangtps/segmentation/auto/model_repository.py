@@ -216,7 +216,7 @@ class ModelRepository:
                 os.remove(temp_file)
 
                 logger.info("Đã cập nhật cơ sở dữ liệu mô hình từ kho lưu trữ từ xa")
-        except Exception as e:
+            except Exception as e:
                 logger.error(f"Lỗi khi cập nhật cơ sở dữ liệu mô hình: {str(e)}")
 
     def get_model(
@@ -509,7 +509,7 @@ class ModelRepository:
         local_models = self._get_local_models()
         if model_id not in local_models:
             logger.error(f"Không tìm thấy mô hình {model_id} cục bộ để cập nhật")
-        return False
+            return False
 
         # Cập nhật cơ sở dữ liệu từ xa
         self._update_model_database_if_needed(force=True)

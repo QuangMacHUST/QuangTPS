@@ -27,44 +27,32 @@ try:
 
     logger.info("Đã import DeformableAnatomyPredictor thành công")
 except ImportError as e:
-    logger.error(f"Không thể import DeformableAnatomyPredictor: {str(e)}")
+    logger.warning(f"Không thể import DeformableAnatomyPredictor: {str(e)}")
 
-    # Tạo lớp giả để đảm bảo hệ thống vẫn hoạt động
+    # Tạo các lớp giả để tránh lỗi khi import
     class DeformableAnatomyPredictor:
-        """Lớp giả mạch cho DeformableAnatomyPredictor khi không thể import."""
+        """Lớp giả cho DeformableAnatomyPredictor khi không thể import."""
 
         def __init__(self, *args, **kwargs):
-            logger.warning(
-                "Sử dụng DeformableAnatomyPredictor giả mạch - chức năng sẽ bị hạn chế"
-            )
-            self.available = False
-
-        def predict(self, *args, **kwargs):
-            logger.error("DeformableAnatomyPredictor thực không khả dụng")
-            return {}
-
-        def predict_multiple_timepoints(self, *args, **kwargs):
-            logger.error("DeformableAnatomyPredictor thực không khả dụng")
-            return {}
+            logger.error("DeformableAnatomyPredictor không khả dụng")
 
     class DeformationModel:
-        """Lớp giả mạch cho DeformationModel."""
+        """Lớp giả cho DeformationModel khi không thể import."""
 
         def __init__(self, *args, **kwargs):
-            pass
+            logger.error("DeformationModel không khả dụng")
 
     class DeformationModelType:
-        """Lớp giả mạch cho DeformationModelType."""
+        """Lớp giả cho DeformationModelType khi không thể import."""
 
         LINEAR = "linear"
-        BSPLINE = "bspline"
-        DIFFEOMORPHIC = "diffeomorphic"
+        CUSTOM = "custom"
 
     class DeformationVectorAnalysis:
-        """Lớp giả mạch cho DeformationVectorAnalysis."""
+        """Lớp giả cho DeformationVectorAnalysis khi không thể import."""
 
         def __init__(self, *args, **kwargs):
-            pass
+            logger.error("DeformationVectorAnalysis không khả dụng")
 
 
 try:
@@ -75,58 +63,78 @@ try:
         predict_anatomy_changes,
     )
 
-    logger.info("Đã import AnatomyPrediction và AnatomyPredictor thành công")
+    logger.info("Đã import AnatomyPredictor thành công")
 except ImportError as e:
-    logger.error(f"Không thể import AnatomyPrediction: {str(e)}")
+    logger.warning(f"Không thể import AnatomyPredictor: {str(e)}")
 
-    # Tạo lớp giả mạch
+    # Tạo các lớp giả để tránh lỗi khi import
     class AnatomyPrediction:
-        """Lớp giả mạch cho AnatomyPrediction khi không thể import."""
+        """Lớp giả cho AnatomyPrediction khi không thể import."""
 
         def __init__(self, *args, **kwargs):
-            logger.warning(
-                "Sử dụng AnatomyPrediction giả mạch - chức năng sẽ bị hạn chế"
-            )
+            logger.error("AnatomyPrediction không khả dụng")
 
     class AnatomyPredictor:
-        """Lớp giả mạch cho AnatomyPredictor khi không thể import."""
+        """Lớp giả cho AnatomyPredictor khi không thể import."""
 
         def __init__(self, *args, **kwargs):
-            logger.warning(
-                "Sử dụng AnatomyPredictor giả mạch - chức năng sẽ bị hạn chế"
-            )
+            logger.error("AnatomyPredictor không khả dụng")
 
     class PredictionMethod:
-        """Lớp giả mạch cho PredictionMethod khi không thể import."""
+        """Lớp giả cho PredictionMethod khi không thể import."""
 
-        LINEAR = "linear"
-        EXPONENTIAL = "exponential"
-        SPLINE = "spline"
-        MACHINE_LEARNING = "machine_learning"
+        LINEAR = 1
+        SPLINE = 2
 
     def predict_anatomy_changes(*args, **kwargs):
-        """Hàm giả mạch cho predict_anatomy_changes khi không thể import."""
-        logger.error("Hàm predict_anatomy_changes thực không khả dụng")
+        """Hàm giả cho predict_anatomy_changes khi không thể import."""
+        logger.error("predict_anatomy_changes không khả dụng")
         return None
 
 
-# Định nghĩa các lớp cơ sở cho toàn bộ module
-class DeformableAnatomyPredictor:
-    """Export DeformableAnatomyPredictor."""
+# Import module mới StatisticalPredictor
+try:
+    from quangtps.adaptive.prediction.statistical_predictor import (
+        StatisticalPredictor,
+        StatisticalModelType,
+        predict_statistical_changes,
+    )
 
-    pass
+    logger.info("Đã import StatisticalPredictor thành công")
+except ImportError as e:
+    logger.warning(f"Không thể import StatisticalPredictor: {str(e)}")
+
+    # Tạo các lớp giả để tránh lỗi khi import
+    class StatisticalPredictor:
+        """Lớp giả cho StatisticalPredictor khi không thể import."""
+
+        def __init__(self, *args, **kwargs):
+            logger.error("StatisticalPredictor không khả dụng")
+
+    class StatisticalModelType:
+        """Lớp giả cho StatisticalModelType khi không thể import."""
+
+        LINEAR = 1
+        GRADIENT_BOOSTING = 2
+
+    def predict_statistical_changes(*args, **kwargs):
+        """Hàm giả cho predict_statistical_changes khi không thể import."""
+        logger.error("predict_statistical_changes không khả dụng")
+        return {}
 
 
-# Export các lớp và hàm quan trọng
 __all__ = [
     "DeformableAnatomyPredictor",
-    "AnatomyPrediction",
-    "AnatomyPredictor",
     "DeformationModel",
     "DeformationModelType",
     "DeformationVectorAnalysis",
+    "AnatomyPrediction",
+    "AnatomyPredictor",
     "PredictionMethod",
     "predict_anatomy_changes",
+    "StatisticalPredictor",
+    "StatisticalModelType",
+    "predict_statistical_changes",
 ]
 
 __version__ = "0.7.7"

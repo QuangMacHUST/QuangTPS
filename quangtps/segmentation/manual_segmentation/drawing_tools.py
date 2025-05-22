@@ -592,3 +592,181 @@ class FreehandTool(DrawingTool):
             cv2.fillPoly(result, [pts], 1)
 
         return result
+
+
+class PencilTool(DrawingTool):
+    """Công cụ bút chì cho phép vẽ với pixel đơn lẻ."""
+
+    def __init__(self):
+        """Khởi tạo công cụ bút chì."""
+        super().__init__(DrawingToolType.PENCIL)
+        self.size = 1  # Bút chì luôn có size = 1
+
+    def apply(
+        self, image: np.ndarray, position: Tuple[int, int], value: int = 1
+    ) -> np.ndarray:
+        """
+        Vẽ một pixel tại vị trí chỉ định.
+
+        Parameters:
+            image (np.ndarray): Hình ảnh đầu vào
+            position (Tuple[int, int]): Vị trí (x, y) vẽ
+            value (int, optional): Giá trị để đặt pixel. Mặc định là 1.
+
+        Returns:
+            np.ndarray: Hình ảnh sau khi vẽ
+        """
+        # Tạo bản sao để không thay đổi đầu vào
+        result = image.copy()
+
+        # Đảm bảo vị trí trong giới hạn hình ảnh
+        x, y = position
+        if x < 0 or y < 0 or x >= image.shape[1] or y >= image.shape[0]:
+            return result
+
+        # Đặt giá trị cho pixel
+        result[y, x] = value
+
+        return result
+
+
+class PaintBucketTool(DrawingTool):
+    """Công cụ tô màu (paint bucket) để tô vùng liền kề."""
+
+    def __init__(self):
+        """Khởi tạo công cụ tô màu."""
+        super().__init__(DrawingToolType.FILL)
+        self.tolerance = 0  # Độ dung sai màu
+
+    def set_tolerance(self, tolerance: int):
+        """Đặt độ dung sai cho việc tô màu."""
+        self.tolerance = tolerance
+
+    def apply(
+        self, image: np.ndarray, position: Tuple[int, int], value: int = 1
+    ) -> np.ndarray:
+        """
+        Tô màu vùng liền kề từ vị trí chỉ định.
+
+        Parameters:
+            image (np.ndarray): Hình ảnh đầu vào
+            position (Tuple[int, int]): Vị trí (x, y) bắt đầu tô
+            value (int, optional): Giá trị để tô. Mặc định là 1.
+
+        Returns:
+            np.ndarray: Hình ảnh sau khi tô
+        """
+        import cv2
+
+        result = image.copy()
+        x, y = position
+
+        if x < 0 or y < 0 or x >= image.shape[1] or y >= image.shape[0]:
+            return result
+
+        # Sử dụng floodFill của OpenCV
+        h, w = image.shape[:2]
+        mask = np.zeros((h + 2, w + 2), np.uint8)
+
+        cv2.floodFill(result, mask, (x, y), value)
+
+        return result
+
+
+class SplineTool(DrawingTool):
+    """Công cụ vẽ đường cong spline mượt."""
+
+    def __init__(self):
+        """Khởi tạo công cụ spline."""
+        super().__init__(DrawingToolType.FREEHAND)
+        self.points = []
+
+    def add_point(self, point: Tuple[int, int]):
+        """Thêm điểm điều khiển cho spline."""
+        self.points.append(point)
+
+    def reset(self):
+        """Reset danh sách điểm."""
+        self.points = []
+
+    def apply(self, image: np.ndarray, *args, **kwargs) -> np.ndarray:
+        """
+        Vẽ đường cong spline từ các điểm điều khiển.
+
+        Parameters:
+            image (np.ndarray): Hình ảnh đầu vào
+
+        Returns:
+            np.ndarray: Hình ảnh sau khi vẽ spline
+        """
+        result = image.copy()
+
+        if len(self.points) < 2:
+            return result
+
+        # Đơn giản hóa: vẽ đường polyline
+        import cv2
+
+        points_array = np.array(self.points, dtype=np.int32)
+        cv2.polylines(result, [points_array], False, 1, 1)
+
+        return result
+
+
+class ContourRefinementTool(DrawingTool):
+    """Công cụ tinh chỉnh contour."""
+
+    def __init__(self):
+        """Khởi tạo công cụ tinh chỉnh."""
+        super().__init__(DrawingToolType.INTERPOLATE)
+
+    def smooth_contour(self, contour: np.ndarray, factor: float = 0.1) -> np.ndarray:
+        """
+        Làm mượt contour.
+
+        Parameters:
+            contour (np.ndarray): Contour đầu vào
+            factor (float): Hệ số làm mượt
+
+        Returns:
+            np.ndarray: Contour đã được làm mượt
+        """
+        import cv2
+
+        # Áp dụng Gaussian blur để làm mượt
+        epsilon = factor * cv2.arcLength(contour, True)
+        smoothed = cv2.approxPolyDP(contour, epsilon, True)
+
+        return smoothed
+
+    def apply(
+        self,
+        image: np.ndarray,
+        contour: np.ndarray,
+        operation: str = "smooth",
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Áp dụng tinh chỉnh contour.
+
+        Parameters:
+            image (np.ndarray): Hình ảnh đầu vào
+            contour (np.ndarray): Contour cần tinh chỉnh
+            operation (str): Loại thao tác ('smooth', 'simplify', ...)
+
+        Returns:
+            np.ndarray: Hình ảnh với contour đã tinh chỉnh
+        """
+        result = image.copy()
+
+        if operation == "smooth":
+            refined_contour = self.smooth_contour(contour, kwargs.get("factor", 0.1))
+        else:
+            refined_contour = contour
+
+        # Vẽ contour đã tinh chỉnh
+        import cv2
+
+        cv2.drawContours(result, [refined_contour], -1, 1, -1)
+
+        return result

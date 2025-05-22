@@ -545,8 +545,7 @@ class DoseCalculator:
         self.beam_set = beam_set
         self.is_calculated = False
         logger.info(
-        return True
-
+            f"Beam set with {len(beam_set.beams)} beams set for dose calculation"
         )
         return True
 

@@ -128,16 +128,16 @@ def calculate_gamma_3d(
                 local_normalization,
             )
         else:
-        gamma = _calculate_gamma_3d_cpu(
-            reference,
-            evaluation,
-            mask,
-            dd_percent,
-            dta_mm,
-            voxel_size,
-            max_gamma,
-            local_normalization,
-        )
+            gamma = _calculate_gamma_3d_cpu(
+                reference,
+                evaluation,
+                mask,
+                dd_percent,
+                dta_mm,
+                voxel_size,
+                max_gamma,
+                local_normalization,
+            )
 
     elapsed_time = time.time() - start_time
     logger.info(f"Hoàn thành tính gamma 3D trong {elapsed_time:.2f} giây")
@@ -152,7 +152,7 @@ def _calculate_gamma_3d_cpu(
     dd: float,
     dta_mm: float,
     voxel_size: Tuple[float, float, float],
-        max_gamma: float,
+    max_gamma: float,
     local_normalization: bool,
 ) -> np.ndarray:
     """Phiên bản CPU của phân tích gamma 3D."""
@@ -182,7 +182,7 @@ def _calculate_gamma_3d_cpu(
                 k_max = min(shape[2] - 1, k + search_range[2])
 
                 # Tìm giá trị gamma nhỏ nhất trong vùng tìm kiếm
-                    min_gamma = np.inf
+                min_gamma = np.inf
 
                 for ni in range(i_min, i_max + 1):
                     for nj in range(j_min, j_max + 1):
@@ -226,7 +226,7 @@ def _calculate_gamma_3d_gpu(
     dd: float,
     dta_mm: float,
     voxel_size: Tuple[float, float, float],
-        max_gamma: float,
+    max_gamma: float,
     local_normalization: bool,
 ) -> np.ndarray:
     """Phiên bản GPU của phân tích gamma 3D sử dụng CuPy."""
@@ -334,10 +334,10 @@ def _calculate_gamma_3d_gpu(
                 int(search_range[1]),
                 int(search_range[2]),
                 local_normalization,
-                    ),
-                )
+            ),
+        )
 
-                # Chuyển kết quả về CPU
+        # Chuyển kết quả về CPU
         gamma = cp.asnumpy(gamma_gpu)
 
         # Giải phóng bộ nhớ GPU

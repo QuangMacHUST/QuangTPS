@@ -1,0 +1,378 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Testing and Quality Assurance Guidelines
+
+QuangTPS sử dụng comprehensive testing strategy để đảm bảo chất lượng và độ tin cậy của hệ thống lập kế hoạch xạ trị.
+
+## Testing Structure
+
+### System-wide Testing
+[test_system_modules.py](mdc:test_system_modules.py) là script chính để test toàn bộ hệ thống:
+
+```python
+# Chạy tất cả test modules
+python test_system_modules.py
+
+# Output format:
+# ✓ Module thành công
+# ✗ Module lỗi: thông báo chi tiết
+```
+
+### Unit Testing Structure
+```
+tests/
+├── unit/
+│   ├── core/
+│   │   ├── test_patient.py
+│   │   └── test_exceptions.py
+│   ├── dose/
+│   │   ├── test_dose_grid.py
+│   │   └── test_algorithms.py
+│   ├── evaluation/
+│   │   └── test_dvh.py
+│   └── ui/
+│       └── test_widgets.py
+├── integration/
+│   ├── test_dicom_workflow.py
+│   └── test_dose_calculation.py
+└── fixtures/
+    ├── dicom_samples/
+    ├── patient_samples/
+    └── plan_samples/
+```
+
+## Testing Patterns
+
+### 1. Module Import Testing
+```python
+def test_import_modules():
+    """Test import các module cơ bản"""
+    modules_to_test = [
+        'quangtps.core.patient',
+        'quangtps.dicom.dicom_exporter',
+        'quangtps.dose.dose_grid',
+        'quangtps.optimization.objectives'
+    ]
+
+    for module_name in modules_to_test:
+        try:
+            exec(f"import {module_name}")
+            print(f"✓ {module_name}")
+        except Exception as e:
+            print(f"✗ {module_name}: {str(e)}")
+```
+
+### 2. Functional Testing với Mock Data
+```python
+def test_dose_calculations():
+    """Test tính toán liều với dữ liệu giả"""
+    try:
+        from quangtps.dose.dose_grid import DoseGrid
+        from quangtps.dose.dose_engine import DoseEngine
+
+        # Tạo mock data
+        dose_data = np.random.rand(50, 50, 30) * 60
+        dose_grid = DoseGrid(
+            grid_data=dose_data,
+            origin=(0, 0, 0),
+            spacing=(2.0, 2.0, 3.0)
+        )
+
+        # Verify basic functionality
+        assert dose_grid.get_shape() == (50, 50, 30)
+        min_dose, max_dose = dose_grid.get_min_max()
+        assert 0 <= min_dose <= max_dose <= 60
+
+        print(f"✓ Dose calculations: {min_dose:.2f} - {max_dose:.2f} Gy")
+
+    except Exception as e:
+        print(f"✗ Dose calculations failed: {str(e)}")
+        raise
+```
+
+### 3. Error Handling Testing
+```python
+def test_error_handling():
+    """Test xử lý lỗi với các exception tùy chỉnh"""
+    from quangtps.core.exceptions import ValidationError, DicomError
+
+    # Test ValidationError
+    try:
+        raise ValidationError("Test validation error", field="test_field")
+    except ValidationError as e:
+        assert e.field == "test_field"
+        print("✓ ValidationError handling works")
+
+    # Test DicomError
+    try:
+        raise DicomError("Test DICOM error")
+    except DicomError as e:
+        assert "DICOM" in str(e)
+        print("✓ DicomError handling works")
+```
+
+## Quality Assurance Practices
+
+### 1. Code Quality Checks
+```python
+def check_code_quality():
+    """Kiểm tra chất lượng code"""
+
+    # Check import structure
+    try:
+        import quangtps
+        print("✓ Main package imports successfully")
+
+        # Check for critical modules
+        critical_modules = [
+            'quangtps.core',
+            'quangtps.dose',
+            'quangtps.optimization',
+            'quangtps.ui'
+        ]
+
+        for module in critical_modules:
+            try:
+                __import__(module)
+                print(f"✓ Critical module: {module}")
+            except ImportError as e:
+                print(f"✗ Missing critical module {module}: {e}")
+
+    except Exception as e:
+        print(f"✗ Package import failed: {e}")
+```
+
+### 2. Performance Testing
+```python
+def test_performance():
+    """Test hiệu suất của các operations quan trọng"""
+    import time
+
+    # Test dose calculation performance
+    start_time = time.time()
+
+    # Simulate dose calculation
+    dose_data = np.random.rand(100, 100, 50) * 60
+    dose_grid = DoseGrid(grid_data=dose_data)
+
+    calculation_time = time.time() - start_time
+    print(f"✓ Dose grid creation: {calculation_time:.3f}s")
+
+    # Performance thresholds
+    if calculation_time > 5.0:
+        print("⚠ Performance warning: Dose calculation too slow")
+
+    # Memory usage check
+    import psutil
+    memory_usage = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+    print(f"✓ Memory usage: {memory_usage:.1f} MB")
+```
+
+### 3. Integration Testing
+```python
+def test_integration():
+    """Test tích hợp giữa các modules"""
+
+    # Test DICOM -> Patient -> Dose workflow
+    try:
+        # Mock patient creation
+        from quangtps.core.patient.patient import Patient, PatientGender
+        from datetime import date
+
+        patient = Patient(
+            id="TEST001",
+            name="Test Patient",
+            birth_date=date(1980, 1, 1),
+            gender=PatientGender.MALE
+        )
+
+        # Test patient operations
+        age = patient.get_age()
+        assert 40 <= age <= 50  # Reasonable age range
+
+        print(f"✓ Patient workflow: Age {age}")
+
+        # Test serialization
+        patient_dict = patient.to_dict()
+        restored_patient = Patient.from_dict(patient_dict)
+        assert restored_patient.name == patient.name
+
+        print("✓ Patient serialization works")
+
+    except Exception as e:
+        print(f"✗ Integration test failed: {str(e)}")
+```
+
+## Medical Data Validation
+
+### 1. DICOM Compliance Testing
+```python
+def test_dicom_compliance():
+    """Test tuân thủ chuẩn DICOM"""
+    try:
+        from quangtps.dicom.dicom_exporter import DicomExporter
+
+        exporter = DicomExporter()
+        exporter.set_uids()
+
+        # Verify UID format
+        assert exporter.study_uid.startswith("1.2.826")
+        assert len(exporter.study_uid) > 20
+
+        print("✓ DICOM UID generation compliant")
+
+    except Exception as e:
+        print(f"✗ DICOM compliance test failed: {str(e)}")
+```
+
+### 2. Dose Calculation Validation
+```python
+def test_dose_validation():
+    """Test validation của tính toán liều"""
+
+    # Test với reference dose distribution
+    reference_dose = np.ones((10, 10, 5)) * 50  # 50 Gy uniform
+    calculated_dose = np.ones((10, 10, 5)) * 49  # 49 Gy calculated
+
+    # Gamma analysis
+    try:
+        from quangtps.evaluation.metrics.gamma_analysis import calculate_gamma_3d
+
+        gamma_result = calculate_gamma_3d(
+            reference_dose=reference_dose,
+            evaluated_dose=calculated_dose,
+            distance_mm=3.0,
+            dose_percent=3.0
+        )
+
+        pass_rate = (gamma_result <= 1.0).sum() / gamma_result.size
+        print(f"✓ Gamma pass rate: {pass_rate:.1%}")
+
+        # Medical acceptance criteria
+        if pass_rate >= 0.95:  # 95% pass rate
+            print("✓ Dose calculation meets clinical criteria")
+        else:
+            print("⚠ Dose calculation below clinical threshold")
+
+    except Exception as e:
+        print(f"✗ Dose validation failed: {str(e)}")
+```
+
+## Continuous Integration Testing
+
+### 1. Automated Test Runner
+```python
+def run_ci_tests():
+    """Run comprehensive CI test suite"""
+
+    test_functions = [
+        test_import_modules,
+        test_patient_management,
+        test_contour_operations,
+        test_dose_calculations,
+        test_optimization,
+        test_dvh_analysis,
+        test_dicom_export,
+        test_3d_viewer
+    ]
+
+    passed = 0
+    failed = 0
+
+    for test_func in test_functions:
+        try:
+            test_func()
+            passed += 1
+        except Exception as e:
+            print(f"✗ {test_func.__name__} failed: {str(e)}")
+            failed += 1
+
+    print(f"\nTest Results: {passed} passed, {failed} failed")
+    return failed == 0
+```
+
+### 2. Regression Testing
+```python
+def test_regression():
+    """Test để phát hiện regression trong chức năng"""
+
+    # Load baseline results nếu có
+    baseline_file = "tests/baseline_results.json"
+
+    if os.path.exists(baseline_file):
+        with open(baseline_file, 'r') as f:
+            baseline = json.load(f)
+
+        # Compare current results với baseline
+        current_results = generate_test_results()
+
+        for key, expected in baseline.items():
+            actual = current_results.get(key)
+            if abs(actual - expected) > 0.01:  # 1% tolerance
+                print(f"⚠ Regression detected in {key}: {actual} vs {expected}")
+            else:
+                print(f"✓ Regression check passed for {key}")
+    else:
+        print("ℹ No baseline found, creating new baseline")
+        current_results = generate_test_results()
+        with open(baseline_file, 'w') as f:
+            json.dump(current_results, f, indent=2)
+```
+
+## Changelog Integration
+
+Khi test fail, cập nhật [changelog.txt](mdc:changelog.txt):
+
+```
+### Sửa lỗi
+- Khắc phục test failure trong [test_name]
+- Cải thiện [specific functionality] để pass regression test
+- Thêm validation cho [medical criteria]
+
+### Testing
+- Thêm test cases cho [new functionality]
+- Cải thiện test coverage từ X% lên Y%
+- Thêm performance benchmarks cho [critical operations]
+```
+
+## Test Data Management
+
+### 1. Mock Data Generation
+```python
+def create_mock_ct_volume():
+    """Tạo CT volume giả cho testing"""
+    # Tạo phantom với density variations
+    volume = np.ones((64, 64, 32)) * -100  # Air baseline
+
+    # Add tissue regions
+    volume[20:44, 20:44, 10:22] = 50   # Soft tissue
+    volume[28:36, 28:36, 14:18] = 1000  # Bone
+
+    return volume.astype(np.int16)
+```
+
+### 2. Fixture Management
+```python
+@pytest.fixture
+def sample_patient():
+    """Fixture cung cấp patient data cho tests"""
+    return Patient(
+        id="TEST001",
+        name="Test Patient",
+        birth_date=date(1980, 1, 1),
+        gender=PatientGender.MALE
+    )
+
+@pytest.fixture
+def sample_dose_grid():
+    """Fixture cung cấp dose grid cho tests"""
+    dose_data = np.random.rand(32, 32, 16) * 60
+    return DoseGrid(
+        grid_data=dose_data,
+        origin=(0, 0, 0),
+        spacing=(2.0, 2.0, 3.0)
+    )
+```

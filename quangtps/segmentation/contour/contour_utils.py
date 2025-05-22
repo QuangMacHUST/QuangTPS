@@ -223,97 +223,204 @@ class ContourUtils:
         pixel_spacing: Tuple[float, float] = (1.0, 1.0),
     ) -> List[np.ndarray]:
         """
-        Chuyển đổi một mặt nạ nhị phân thành danh sách các contour.
+        Chuyển đổi mask 3D thành danh sách các contour 2D.
 
         Parameters
         ----------
         mask : np.ndarray
-            Mặt nạ nhị phân 3D (z, y, x)
+            Mask 3D với các giá trị 0/1
         slice_thickness : float, optional
-            Độ dày lát cắt theo mm, mặc định 1.0
+            Độ dày lát cắt (mm), mặc định là 1.0
         pixel_spacing : Tuple[float, float], optional
-            Khoảng cách pixel theo mm trong mặt phẳng xy, mặc định (1.0, 1.0)
+            Khoảng cách pixel (mm) theo (row, col), mặc định là (1.0, 1.0)
 
         Returns
         -------
         List[np.ndarray]
-            Danh sách các contour 3D
+            Danh sách các contour theo lát cắt
         """
-        contours = []
+        try:
+            # Kiểm tra tính hợp lệ của mask
+            if mask is None:
+                logger.error("Mask không được là None")
+                return []
 
-        if HAS_OPENCV:
-            try:
-                # Xử lý từng lát cắt
-                for z in range(mask.shape[0]):
-                    if not np.any(mask[z]):
-                        continue  # Bỏ qua lát cắt trống
+            if not isinstance(mask, np.ndarray):
+                logger.error(f"Mask phải là numpy array, nhưng có kiểu {type(mask)}")
+                return []
 
-                    # Chuyển đổi thành định dạng phù hợp cho OpenCV
-                    slice_mask = mask[z].astype(np.uint8)
+            if mask.size == 0:
+                logger.error("Mask trống")
+                return []
 
-                    # Tìm contour
-                    contour_results = cv2.findContours(
-                        slice_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-                    )
-                    # Xử lý khác biệt giữa các phiên bản OpenCV
-                    if len(contour_results) == 3:
-                        _, cv_contours, _ = contour_results
-                    else:
-                        cv_contours, _ = contour_results
+            if mask.ndim < 2 or mask.ndim > 3:
+                logger.error(f"Mask phải là 2D hoặc 3D, nhưng có chiều {mask.ndim}")
+                return []
 
-                    # Xử lý mỗi contour tìm được
-                    for cv_contour in cv_contours:
-                        # Loại bỏ contour quá nhỏ (dưới 3 điểm)
-                        if len(cv_contour) < 3:
-                            continue
+            # Thêm thông tin chi tiết về mask để debug
+            logger.debug(
+                f"Mask shape: {mask.shape}, dtype: {mask.dtype}, min: {mask.min()}, max: {mask.max()}"
+            )
 
-                        # Chuyển đổi sang định dạng numpy
-                        contour_2d = cv_contour.reshape(-1, 2)
+            # Kiểm tra xem mask có chứa giá trị khác 0 không
+            if not np.any(mask):
+                logger.warning(
+                    "Mask không chứa vùng cần phân đoạn (toàn bộ giá trị là 0)"
+                )
+                return []
 
-                        # Áp dụng pixel spacing
-                        contour_2d = contour_2d * np.array(
-                            [pixel_spacing[1], pixel_spacing[0]]
+            # Đảm bảo mask chỉ chứa các giá trị 0 và 1
+            # Chuyển đổi các giá trị khác 0 thành 1
+            binary_mask = (mask > 0).astype(np.uint8)
+
+            # Xử lý mask 2D và 3D
+            if mask.ndim == 2:
+                mask_3d = binary_mask.reshape(1, *binary_mask.shape)
+            else:
+                mask_3d = binary_mask
+
+            contours_by_slice = []
+
+            # Xử lý từng lát cắt
+            for z in range(mask_3d.shape[0]):
+                slice_mask = mask_3d[z]
+
+                # Kiểm tra nếu lát cắt trống
+                if not np.any(slice_mask):
+                    contours_by_slice.append([])
+                    continue
+
+                try:
+                    # Tìm contours với OpenCV
+                    import cv2
+
+                    # Đảm bảo slice_mask có định dạng uint8 cho findContours
+                    if slice_mask.dtype != np.uint8:
+                        slice_mask = slice_mask.astype(np.uint8)
+
+                    # Sử dụng cv2.findContours với xử lý tương thích cho nhiều phiên bản OpenCV
+                    try:
+                        contours, _ = cv2.findContours(
+                            slice_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+                        )
+                    except ValueError:
+                        # Phiên bản OpenCV cũ trả về 3 giá trị
+                        _, contours, _ = cv2.findContours(
+                            slice_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
                         )
 
-                        # Thêm tọa độ z
-                        z_coord = z * slice_thickness
-                        z_column = np.full((len(contour_2d), 1), z_coord)
-                        contour_3d = np.hstack((contour_2d, z_column))
+                    # Chuyển đổi contours về định dạng cần thiết
+                    slice_contours = []
+                    for contour in contours:
+                        # Bỏ qua contour quá nhỏ (có thể là nhiễu)
+                        if len(contour) < 3:
+                            continue
 
-                        contours.append(contour_3d)
-            except Exception as e:
-                logger.error(
-                    f"Lỗi khi chuyển đổi mask thành contours với OpenCV: {str(e)}"
-                )
-                # Thử sử dụng phương pháp thay thế
+                        # Chuyển contour từ định dạng OpenCV sang numpy array
+                        # và áp dụng pixel spacing
+                        if contour.size > 0:
+                            points = contour.squeeze()
+
+                            # Xử lý trường hợp contour chỉ có 1 điểm
+                            if len(points.shape) == 1:
+                                continue
+
+                            # Kiểm tra xem points có đủ số điểm không
+                            if points.shape[0] < 3:
+                                continue
+
+                            # Áp dụng pixel spacing
+                            points = points.astype(np.float32)
+                            points[:, 0] = points[:, 0] * pixel_spacing[1]  # cols -> x
+                            points[:, 1] = points[:, 1] * pixel_spacing[0]  # rows -> y
+
+                            # Thêm tọa độ z
+                            z_coord = z * slice_thickness
+                            points_3d = np.column_stack(
+                                [points, np.full(len(points), z_coord)]
+                            )
+
+                            slice_contours.append(points_3d)
+
+                    contours_by_slice.append(slice_contours)
+
+                except ImportError:
+                    logger.warning(
+                        "Không tìm thấy thư viện OpenCV, sử dụng phương pháp thay thế"
+                    )
+                    # Sử dụng phương pháp thay thế nếu không có OpenCV
+                    alt_contours = ContourUtils._convert_mask_to_contours_alternative(
+                        slice_mask,
+                        slice_thickness,
+                        pixel_spacing,
+                        z_position=z * slice_thickness,
+                    )
+                    contours_by_slice.append(alt_contours)
+                except Exception as e:
+                    logger.error(f"Lỗi khi tìm contours cho lát cắt {z}: {str(e)}")
+                    # Log traceback để debug
+                    import traceback
+
+                    logger.debug(f"Traceback: {traceback.format_exc()}")
+
+                    # Sử dụng phương pháp thay thế trong trường hợp lỗi
+                    alt_contours = ContourUtils._convert_mask_to_contours_alternative(
+                        slice_mask,
+                        slice_thickness,
+                        pixel_spacing,
+                        z_position=z * slice_thickness,
+                    )
+                    contours_by_slice.append(alt_contours)
+
+            # Kiểm tra xem có contour nào được tìm thấy không
+            if all(len(contours) == 0 for contours in contours_by_slice):
+                logger.warning("Không tìm thấy contour nào trong mask")
+                return []
+
+            # Làm phẳng danh sách contours từ tất cả các lát cắt
+            all_contours = []
+            for slice_contours in contours_by_slice:
+                if slice_contours:  # Nếu lát cắt có contours
+                    all_contours.extend(slice_contours)
+
+            return all_contours
+
+        except Exception as e:
+            logger.error(f"Lỗi khi chuyển đổi mask thành contours: {str(e)}")
+            # Log traceback để debug
+            import traceback
+
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+
+            # Thử phương pháp thay thế trong trường hợp lỗi
+            try:
                 return ContourUtils._convert_mask_to_contours_alternative(
                     mask, slice_thickness, pixel_spacing
                 )
-        else:
-            # Sử dụng phương pháp thay thế
-            return ContourUtils._convert_mask_to_contours_alternative(
-                mask, slice_thickness, pixel_spacing
-            )
-
-        return contours
+            except Exception as e2:
+                logger.error(f"Lỗi khi sử dụng phương pháp thay thế: {str(e2)}")
+                return []
 
     @staticmethod
     def _convert_mask_to_contours_alternative(
         mask: np.ndarray,
         slice_thickness: float = 1.0,
         pixel_spacing: Tuple[float, float] = (1.0, 1.0),
+        z_position: float = 0.0,
     ) -> List[np.ndarray]:
         """
-        Phương pháp thay thế để chuyển đổi mask thành contours khi không có OpenCV.
+        Phương pháp thay thế để chuyển đổi mask sang contours khi không có OpenCV.
 
         Parameters
         ----------
         mask : np.ndarray
-            Mặt nạ nhị phân 3D (z, y, x)
+            Mặt nạ nhị phân 3D (z, y, x) hoặc 2D (y, x)
         slice_thickness : float, optional
             Độ dày lát cắt theo mm, mặc định 1.0
         pixel_spacing : Tuple[float, float], optional
             Khoảng cách pixel theo mm trong mặt phẳng xy, mặc định (1.0, 1.0)
+        z_position : float, optional
+            Vị trí z của lát cắt, mặc định 0.0
 
         Returns
         -------
@@ -322,88 +429,113 @@ class ContourUtils:
         """
         contours = []
 
-        try:
-            if HAS_SCIPY:
-                # Xử lý từng lát cắt
-                for z in range(mask.shape[0]):
-                    if not np.any(mask[z]):
-                        continue  # Bỏ qua lát cắt trống
+        # Kiểm tra xem mask có hợp lệ không
+        if mask is None or mask.size == 0:
+            logger.warning(
+                "Mask không hợp lệ trong _convert_mask_to_contours_alternative"
+            )
+            return contours
 
-                    # Phát hiện cạnh bằng phép xói mòn (erosion)
-                    edges = ndimage.binary_erosion(mask[z]) ^ mask[z]
-
-                    # Lấy tọa độ của các điểm biên
-                    y_coords, x_coords = np.where(edges > 0)
-
-                    if len(y_coords) > 0:
-                        # Sắp xếp các điểm theo thứ tự
-                        points_2d = np.column_stack((x_coords, y_coords))
-
-                        # Sắp xếp các điểm biên theo đường viền
-                        # Thuật toán đơn giản để sắp xếp theo góc quanh tâm
-                        center = np.mean(points_2d, axis=0)
-                        angles = np.arctan2(
-                            points_2d[:, 1] - center[1], points_2d[:, 0] - center[0]
-                        )
-                        sorted_indices = np.argsort(angles)
-                        points_2d = points_2d[sorted_indices]
-
-                        # Áp dụng pixel spacing
-                        points_2d = points_2d * np.array(
-                            [pixel_spacing[1], pixel_spacing[0]]
-                        )
-
-                        # Thêm tọa độ z
-                        z_coord = z * slice_thickness
-                        z_column = np.full((len(points_2d), 1), z_coord)
-                        points_3d = np.hstack((points_2d, z_column))
-
-                        contours.append(points_3d)
+        # Làm việc với mask 2D hoặc lát cắt đơn từ mask 3D
+        mask_2d = mask
+        if mask.ndim == 3:
+            if mask.shape[0] == 1:
+                mask_2d = mask[0]
             else:
-                # Phương pháp đơn giản hơn nếu không có scipy
-                for z in range(mask.shape[0]):
-                    if not np.any(mask[z]):
-                        continue
+                logger.warning(
+                    "Phương pháp thay thế chỉ xử lý một lát cắt tại một thời điểm"
+                )
+                mask_2d = mask[0]
 
-                    # Tìm biên bằng phương pháp thủ công
-                    edges = np.zeros_like(mask[z])
-                    for i in range(1, mask[z].shape[0] - 1):
-                        for j in range(1, mask[z].shape[1] - 1):
-                            if mask[z, i, j] and not (
-                                mask[z, i - 1, j]
-                                and mask[z, i + 1, j]
-                                and mask[z, i, j - 1]
-                                and mask[z, i, j + 1]
-                            ):
-                                edges[i, j] = 1
+        # Đảm bảo mask là nhị phân
+        binary_mask = (mask_2d > 0).astype(np.uint8)
 
-                    # Lấy tọa độ biên
-                    y_coords, x_coords = np.where(edges > 0)
+        try:
+            from skimage import measure
 
-                    if len(y_coords) > 0:
-                        # Xử lý tương tự như trên
-                        points_2d = np.column_stack((x_coords, y_coords))
-                        center = np.mean(points_2d, axis=0)
-                        angles = np.arctan2(
-                            points_2d[:, 1] - center[1], points_2d[:, 0] - center[0]
-                        )
-                        sorted_indices = np.argsort(angles)
-                        points_2d = points_2d[sorted_indices]
+            # Sử dụng find_contours của scikit-image thay thế cho cv2.findContours
+            skimage_contours = measure.find_contours(binary_mask, 0.5)
 
-                        # Áp dụng pixel spacing
-                        points_2d = points_2d * np.array(
-                            [pixel_spacing[1], pixel_spacing[0]]
-                        )
+            for contour in skimage_contours:
+                # Bỏ qua contour quá nhỏ
+                if len(contour) < 3:
+                    continue
 
-                        # Thêm tọa độ z
-                        z_coord = z * slice_thickness
-                        z_column = np.full((len(points_2d), 1), z_coord)
-                        points_3d = np.hstack((points_2d, z_column))
+                # Chuyển đổi tọa độ từ (row, col) sang (x, y) và áp dụng pixel spacing
+                # Đảo ngược vì scikit-image trả về (row, col) trong khi ta cần (x, y)
+                contour_xy = np.flip(contour, axis=1).astype(np.float32)
+                contour_xy[:, 0] = (
+                    contour_xy[:, 0] * pixel_spacing[1]
+                )  # x = col * spacing_x
+                contour_xy[:, 1] = (
+                    contour_xy[:, 1] * pixel_spacing[0]
+                )  # y = row * spacing_y
 
-                        contours.append(points_3d)
+                # Thêm tọa độ z
+                contour_xyz = np.column_stack(
+                    [contour_xy, np.full(len(contour_xy), z_position)]
+                )
 
-        except Exception as e:
-            logger.error(f"Lỗi khi chuyển đổi mask thành contours: {str(e)}")
+                contours.append(contour_xyz)
+
+            return contours
+
+        except ImportError:
+            logger.warning("scikit-image không khả dụng")
+            # Thử cách thay thế khác nếu scikit-image không có sẵn
+            try:
+                # Phương pháp đơn giản: tìm các pixel biên
+                from scipy import ndimage
+
+                # Tìm biên bằng cách phát hiện sự thay đổi giữa trong và ngoài mask
+                edges = ndimage.binary_erosion(binary_mask) ^ binary_mask
+                edge_points = np.column_stack(np.where(edges))
+
+                if len(edge_points) < 3:
+                    logger.warning("Không đủ điểm biên để tạo contour")
+                    return contours
+
+                # Sắp xếp các điểm biên để tạo contour liên tục
+                # Đây là cách tiếp cận đơn giản, không hoàn hảo như OpenCV hay scikit-image
+                from scipy.spatial import distance
+
+                ordered_points = [edge_points[0]]
+                remaining_points = edge_points[1:].tolist()
+
+                while remaining_points:
+                    # Tìm điểm gần nhất với điểm cuối cùng
+                    last_point = ordered_points[-1]
+                    distances = [
+                        distance.euclidean(last_point, p) for p in remaining_points
+                    ]
+                    idx = np.argmin(distances)
+
+                    # Thêm điểm gần nhất vào danh sách
+                    ordered_points.append(remaining_points.pop(idx))
+
+                # Chuyển đổi từ (row, col) sang (x, y) và áp dụng pixel spacing
+                ordered_points = np.array(ordered_points, dtype=np.float32)
+                contour_xy = np.column_stack(
+                    [ordered_points[:, 1], ordered_points[:, 0]]
+                )  # (x=col, y=row)
+                contour_xy[:, 0] = (
+                    contour_xy[:, 0] * pixel_spacing[1]
+                )  # x = col * spacing_x
+                contour_xy[:, 1] = (
+                    contour_xy[:, 1] * pixel_spacing[0]
+                )  # y = row * spacing_y
+
+                # Thêm tọa độ z
+                contour_xyz = np.column_stack(
+                    [contour_xy, np.full(len(contour_xy), z_position)]
+                )
+
+                contours.append(contour_xyz)
+
+            except ImportError:
+                logger.warning("scipy không khả dụng, không thể tạo contour")
+            except Exception as e:
+                logger.error(f"Lỗi khi tạo contour thay thế: {str(e)}")
 
         return contours
 

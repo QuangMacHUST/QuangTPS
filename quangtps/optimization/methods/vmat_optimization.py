@@ -1303,69 +1303,165 @@ class VMATOptimizer(OptimizerBase):
 
     def _calculate_dose(self, plan=None):
         """
-        Tính toán phân bố liều cho kế hoạch hiện tại hoặc kế hoạch được chỉ định.
+        Tính phân phối liều cho kế hoạch hiện tại hoặc kế hoạch được chỉ định.
 
-        Phương thức này sử dụng dose_engine để tính toán phân bố liều dựa trên cấu hình
-        chùm tia và vị trí MLC trong kế hoạch.
+        Phương thức này gọi dose_engine để tính toán phân phối liều cho kế hoạch VMAT
+        và cập nhật kết quả vào đối tượng kế hoạch. Phân phối liều này sau đó sẽ được
+        sử dụng cho đánh giá chất lượng kế hoạch và hướng dẫn quá trình tối ưu hóa.
 
         Parameters
         ----------
-        plan : Dict[str, Any], optional
-            Kế hoạch cần tính liều, mặc định là kế hoạch hiện tại
+        plan : Dict, optional
+            Kế hoạch VMAT cần tính liều, mặc định là kế hoạch hiện tại
 
         Returns
         -------
-        np.ndarray
-            Phân bố liều 3D được tính toán, hoặc None nếu không thể tính
+        bool
+            True nếu tính toán thành công, False nếu có lỗi
         """
         if plan is None:
             plan = self.current_plan
 
-        if not plan:
-            logger.warning("Không có kế hoạch để tính toán liều")
-            return None
+        if plan is None:
+            logger.error("Không có kế hoạch để tính liều")
+            return False
 
-        if not self.dose_engine:
-            logger.warning("Không có dose_engine để tính toán liều")
-            return None
+        if self.dose_engine is None:
+            logger.error("Không có dose_engine để tính liều")
+            return False
 
         try:
-            logger.debug("Bắt đầu tính toán liều...")
-            start_time = time.perf_counter()
+            # Chuyển đổi kế hoạch sang định dạng phù hợp với dose_engine
+            dose_calc_input = self._convert_plan_to_dose_input(plan)
 
-            # Trích xuất cấu hình chùm tia từ kế hoạch
-            beam_config = {
-                "control_points": plan.get("control_points", []),
-                "total_mu": plan.get("total_mu", 0),
-                "prescription": plan.get("prescription", None),
-                "isocenter": plan.get("isocenter", [0, 0, 0]),
-            }
+            # Tính toán phân phối liều
+            logger.info("Đang tính toán phân phối liều...")
+            dose_result = self.dose_engine.calculate(dose_calc_input)
 
-            # Gọi dose_engine để tính toán
-            if hasattr(self.dose_engine, "calculate_dose"):
-                dose_grid = self.dose_engine.calculate_dose(beam_config)
-            elif hasattr(self.dose_engine, "calculate"):
-                dose_grid = self.dose_engine.calculate(beam_config)
+            if dose_result is None:
+                logger.error("Tính toán liều thất bại - kết quả rỗng")
+                return False
+
+            # Lưu kết quả vào kế hoạch
+            if hasattr(dose_result, "dose_grid"):
+                plan["dose_grid"] = dose_result.dose_grid
+            elif hasattr(dose_result, "data"):
+                plan["dose_grid"] = dose_result.data
             else:
-                logger.error(
-                    "Dose engine không có phương thức calculate_dose hoặc calculate"
-                )
-                return None
+                plan["dose_grid"] = dose_result
 
-            calc_time = time.perf_counter() - start_time
-            logger.debug(f"Đã tính toán liều trong {calc_time:.2f} giây")
+            # Tính toán DVH và các chỉ số phụ thuộc vào liều
+            self._calculate_dvh(plan)
 
-            # Lưu thông tin thời gian tính toán
-            if "dose_calculation_times" not in self.operation_times:
-                self.operation_times["dose_calculation_times"] = []
-
-            self.operation_times["dose_calculation_times"].append(calc_time)
-
-            return dose_grid
+            logger.info("Tính toán phân phối liều hoàn tất")
+            return True
 
         except Exception as e:
-            logger.error(f"Lỗi khi tính toán liều: {str(e)}")
+            logger.error(f"Lỗi khi tính toán phân phối liều: {str(e)}")
             import traceback
 
             logger.debug(f"Chi tiết lỗi: {traceback.format_exc()}")
-            return None
+            return False
+
+    def _convert_plan_to_dose_input(self, plan):
+        """
+        Chuyển đổi kế hoạch VMAT sang định dạng đầu vào cho dose_engine.
+
+        Parameters
+        ----------
+        plan : Dict
+            Kế hoạch VMAT cần chuyển đổi
+
+        Returns
+        -------
+        Any
+            Đầu vào phù hợp cho dose_engine
+        """
+        # Trích xuất thông tin cần thiết từ kế hoạch
+        arcs = plan.get("arcs", [])
+        control_points = plan.get("control_points", {})
+
+        # Tạo đối tượng đầu vào cho dose_engine
+        # Cấu trúc này phụ thuộc vào API của dose_engine thực tế được sử dụng
+        dose_input = {
+            "patient_data": self.patient_data,
+            "structures": self.structures,
+            "beam_model": self.beam_model,
+            "mlc_model": self.mlc_model,
+            "arcs": arcs,
+            "control_points": control_points,
+            "calculation_options": {
+                "algorithm": self.params.dose_calc_algorithm,
+                "threads": self.params.num_threads
+                if self.params.use_multithreading
+                else 1,
+                "use_gpu": self.params.use_gpu_acceleration,
+            },
+        }
+
+        return dose_input
+
+    def _calculate_dvh(self, plan):
+        """
+        Tính toán DVH dựa trên phân phối liều đã tính.
+
+        Parameters
+        ----------
+        plan : Dict
+            Kế hoạch VMAT với phân phối liều đã được tính
+
+        Returns
+        -------
+        bool
+            True nếu tính toán thành công, False nếu có lỗi
+        """
+        if "dose_grid" not in plan:
+            logger.error("Không thể tính DVH: không có phân phối liều")
+            return False
+
+        if self.structures is None:
+            logger.error("Không thể tính DVH: không có cấu trúc")
+            return False
+
+        try:
+            # Tạo đối tượng tính toán DVH
+            from quangtps.evaluation.dvh.dvh_calculator import calculate_dvh
+
+            # Tính DVH cho từng cấu trúc
+            dvh_data = {}
+            dose_grid = plan["dose_grid"]
+
+            for structure_id, structure in self.structures.items():
+                if hasattr(structure, "mask") and structure.mask is not None:
+                    # Tính DVH
+                    try:
+                        dose_bins, volume_bins = calculate_dvh(
+                            dose_grid=dose_grid,
+                            structure_mask=structure.mask,
+                            num_bins=100,
+                        )
+
+                        # Lưu kết quả
+                        dvh_data[structure_id] = {
+                            "dose": dose_bins,
+                            "volume": volume_bins,
+                            "name": structure.name
+                            if hasattr(structure, "name")
+                            else structure_id,
+                        }
+                    except Exception as dvh_error:
+                        logger.warning(
+                            f"Không thể tính DVH cho cấu trúc {structure_id}: {str(dvh_error)}"
+                        )
+
+            # Lưu kết quả vào kế hoạch
+            plan["dvh_data"] = dvh_data
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính toán DVH: {str(e)}")
+            import traceback
+
+            logger.debug(f"Chi tiết lỗi: {traceback.format_exc()}")
+            return False

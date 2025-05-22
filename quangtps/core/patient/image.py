@@ -540,7 +540,7 @@ class Image:
     def resample(
         self,
         new_spacing: Tuple[float, float, float],
-        interpolator: Optional[Union[sitk.InterpolatorEnum, int]] = None,
+        interpolator: Optional[int] = None,
     ) -> "Image":
         """
         Lấy mẫu lại hình ảnh với khoảng cách voxel mới.
@@ -549,7 +549,7 @@ class Image:
         ----------
         new_spacing : Tuple[float, float, float]
             Khoảng cách voxel mới (mm)
-        interpolator : Optional[Union[sitk.InterpolatorEnum, int]], optional
+            interpolator : Optional[int], optional
             Phương pháp nội suy, mặc định là None (sitk.sitkLinear)
 
         Returns

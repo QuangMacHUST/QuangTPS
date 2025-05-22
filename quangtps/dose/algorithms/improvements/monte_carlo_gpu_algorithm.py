@@ -447,11 +447,21 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
                 }
 
             # Trích xuất dữ liệu liều từ các đối tượng DoseGrid
-            ref_dose_grid = reference_dose_grid
+            ref_dose_grid = None
             if hasattr(reference_dose_grid, "dose_grid"):
                 ref_dose_grid = reference_dose_grid.dose_grid
             elif hasattr(reference_dose_grid, "data"):
                 ref_dose_grid = reference_dose_grid.data
+            else:
+                # Giả định reference_dose_grid đã là mảng numpy
+                ref_dose_grid = reference_dose_grid
+
+            if ref_dose_grid is None:
+                logger.error("Không thể trích xuất dữ liệu liều tham chiếu")
+                return {
+                    "status": "error",
+                    "message": "Không thể trích xuất dữ liệu liều tham chiếu",
+                }
 
             eval_dose_grid = self.dose_grid
             if eval_dose_grid is None:
@@ -462,16 +472,13 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
                 }
 
             # Kiểm tra kích thước của hai lưới liều
-            if (
-                np.array(ref_dose_grid.shape).size == 0
-                or np.array(eval_dose_grid.shape).size == 0
+            if not hasattr(ref_dose_grid, "shape") or not hasattr(
+                eval_dose_grid, "shape"
             ):
-                logger.error(
-                    f"Lưới liều không hợp lệ: ref={np.array(ref_dose_grid.shape)}, eval={np.array(eval_dose_grid.shape)}"
-                )
+                logger.error("Lưới liều không hợp lệ: không có thuộc tính shape")
                 return {
                     "status": "error",
-                    "message": "Lưới liều không có kích thước hợp lệ",
+                    "message": "Lưới liều không hợp lệ: không có thuộc tính shape",
                 }
 
             if ref_dose_grid.shape != eval_dose_grid.shape:
@@ -502,6 +509,16 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
                     "message": f"Không thể import các hàm phân tích gamma: {e}",
                 }
 
+            # Tìm hiểu tham số của hàm calculate_gamma_3d
+            import inspect
+
+            gamma_params_info = inspect.signature(calculate_gamma_3d).parameters
+            using_new_api = (
+                "distance_mm" in gamma_params_info
+                and "dose_percent" in gamma_params_info
+            )
+            logger.debug(f"Sử dụng API mới cho gamma: {using_new_api}")
+
             # Tính toán với mỗi tiêu chí gamma
             gamma_results = {}
             for criterion in evaluation_criteria["gamma_criteria"]:
@@ -511,7 +528,7 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
 
                 logger.info(f"Tính toán gamma với tiêu chí: {criterion_str}")
 
-                # Chuẩn bị tham số cho hàm calculate_gamma_3d
+                # Chuẩn bị tham số cơ bản cho hàm calculate_gamma_3d
                 gamma_params = {
                     "reference": ref_dose_grid,
                     "evaluation": eval_dose_grid,
@@ -524,18 +541,21 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
                 }
 
                 # Thêm tham số dựa trên phiên bản API của hàm calculate_gamma_3d
-                if (
-                    "dta_mm" in calculate_gamma_3d.__code__.co_varnames
-                    and "dd_percent" in calculate_gamma_3d.__code__.co_varnames
-                ):
-                    gamma_params["dta_mm"] = distance_param
-                    gamma_params["dd_percent"] = dose_param
-                else:
+                if using_new_api:
                     gamma_params["distance_mm"] = distance_param
                     gamma_params["dose_percent"] = dose_param
+                else:
+                    gamma_params["dta_mm"] = distance_param
+                    gamma_params["dd_percent"] = dose_param
 
-                # Gọi hàm tính gamma
-                gamma = calculate_gamma_3d(**gamma_params)
+                # Gọi hàm tính gamma với bắt lỗi riêng
+                try:
+                    gamma = calculate_gamma_3d(**gamma_params)
+                except Exception as gamma_error:
+                    logger.error(
+                        f"Lỗi khi tính gamma với tiêu chí {criterion_str}: {gamma_error}"
+                    )
+                    continue
 
                 # Kiểm tra kết quả gamma
                 if gamma is None or gamma.size == 0:
@@ -589,19 +609,27 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
             logger.debug(f"Chi tiết lỗi: {error_details}")
 
             # Thêm thông tin về các tham số đầu vào khi có lỗi
-            input_details = {
-                "reference_type": type(reference_dose_grid).__name__,
-                "reference_size": getattr(ref_dose_grid, "shape", "Unknown")
-                if "ref_dose_grid" in locals()
-                else "Unknown",
-                "evaluation_size": getattr(eval_dose_grid, "shape", "Unknown")
-                if "eval_dose_grid" in locals()
-                else "Unknown",
-                "evaluation_criteria": str(evaluation_criteria),
-                "voxel_size": str(voxel_size)
-                if "voxel_size" in locals()
-                else "Unknown",
-            }
+            input_details = {}
+            if "ref_dose_grid" in locals() and ref_dose_grid is not None:
+                if hasattr(ref_dose_grid, "shape"):
+                    input_details["reference_size"] = str(ref_dose_grid.shape)
+                else:
+                    input_details["reference_size"] = "Không có thuộc tính shape"
+
+            if "eval_dose_grid" in locals() and eval_dose_grid is not None:
+                if hasattr(eval_dose_grid, "shape"):
+                    input_details["evaluation_size"] = str(eval_dose_grid.shape)
+                else:
+                    input_details["evaluation_size"] = "Không có thuộc tính shape"
+
+            if "reference_dose_grid" in locals() and reference_dose_grid is not None:
+                input_details["reference_type"] = type(reference_dose_grid).__name__
+
+            if "evaluation_criteria" in locals() and evaluation_criteria is not None:
+                input_details["evaluation_criteria"] = str(evaluation_criteria)
+
+            if "voxel_size" in locals():
+                input_details["voxel_size"] = str(voxel_size)
 
             return {
                 "status": "error",

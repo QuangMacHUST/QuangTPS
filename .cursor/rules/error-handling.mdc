@@ -1,0 +1,151 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Error Handling Guidelines
+
+QuangTPS sử dụng hệ thống exception tùy chỉnh được định nghĩa trong [exceptions.py](mdc:quangtps/core/exceptions.py).
+
+## Custom Exception Hierarchy
+
+### Base Exception
+- `QuangTPSError`: Base exception cho tất cả lỗi trong hệ thống
+
+### Core Exceptions
+- `ValidationError`: Lỗi validation dữ liệu đầu vào
+- `IOError`: Lỗi đọc/ghi file
+- `ImageError`: Lỗi xử lý hình ảnh y tế
+- `DicomError`: Lỗi xử lý DICOM
+- `CalculationError`: Lỗi tính toán liều
+- `OptimizationError`: Lỗi tối ưu hóa
+
+### Specialized Exceptions
+- `AlgorithmError`: Lỗi thực thi thuật toán
+- `BeamDataError`: Lỗi dữ liệu chùm tia
+- `TreatmentDeliveryError`: Lỗi phân phối xạ trị
+- `AdaptivePlanningError`: Lỗi lập kế hoạch thích ứng
+
+## Exception Handling Best Practices
+
+### 1. Use Specific Exceptions
+```python
+from quangtps.core.exceptions import DicomError, ValidationError
+
+# Good
+try:
+    dicom_data = load_dicom_file(file_path)
+except DicomError as e:
+    logger.error(f"DICOM processing failed: {e}")
+    raise
+
+# Avoid generic exceptions
+except Exception as e:  # Too broad
+    pass
+```
+
+### 2. Logging với UTF-8 Support
+Sử dụng logging system trong [logging.py](mdc:quangtps/core/logging.py) để hỗ trợ tiếng Việt:
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+try:
+    # Operations
+    pass
+except QuangTPSError as e:
+    logger.error(f"Lỗi xử lý: {str(e)}")
+    # Thông báo có thể chứa ký tự Unicode
+```
+
+### 3. Error Recovery Patterns
+```python
+# Graceful fallback pattern
+try:
+    from quangtps.optional_module import AdvancedFeature
+    HAS_ADVANCED_FEATURE = True
+except ImportError:
+    HAS_ADVANCED_FEATURE = False
+    logger.warning("Advanced feature not available")
+
+if HAS_ADVANCED_FEATURE:
+    # Use advanced feature
+else:
+    # Use fallback implementation
+```
+
+### 4. Context-Specific Error Handling
+
+#### DICOM Processing
+```python
+from quangtps.core.exceptions import DicomError, DicomImportError
+
+try:
+    datasets = import_dicom_series(directory)
+except DicomImportError as e:
+    logger.error(f"Failed to import DICOM series: {e}")
+    # Show user-friendly error message
+```
+
+#### Dose Calculation
+```python
+from quangtps.core.exceptions import DoseCalculationError
+
+try:
+    dose_grid = calculate_dose(plan, beam_set)
+except DoseCalculationError as e:
+    logger.error(f"Dose calculation failed: {e}")
+    # Provide calculation alternatives
+```
+
+#### UI Error Handling
+```python
+from quangtps.core.exceptions import UIError, WidgetError
+
+try:
+    widget.update_display()
+except WidgetError as e:
+    logger.error(f"Widget update failed: {e}")
+    # Refresh widget or show error dialog
+```
+
+## Integration with Testing
+
+Trong [test_system_modules.py](mdc:test_system_modules.py), sử dụng try-except để handle lỗi:
+
+```python
+def test_module():
+    try:
+        # Test operations
+        result = module.function()
+        print(f"✓ Test passed: {result}")
+    except Exception as e:
+        print(f"✗ Test failed: {str(e)}")
+        traceback.print_exc()
+```
+
+## Hardware Resource Errors
+Xử lý lỗi tài nguyên phần cứng:
+
+```python
+from quangtps.core.exceptions import HardwareResourceError
+
+try:
+    # GPU computation
+    result = gpu_algorithm.calculate()
+except HardwareResourceError as e:
+    logger.warning(f"GPU not available: {e}")
+    # Fallback to CPU algorithm
+    result = cpu_algorithm.calculate()
+```
+
+## Changelog Integration
+Khi sửa lỗi, luôn cập nhật [changelog.txt](mdc:changelog.txt) với format:
+
+```
+### Sửa lỗi
+- Khắc phục [specific exception type] trong [module/file]
+- Cải thiện xử lý lỗi cho [specific scenario]
+- Thêm fallback mechanism khi [condition]
+```

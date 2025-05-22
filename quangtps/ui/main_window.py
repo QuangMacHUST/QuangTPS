@@ -588,9 +588,10 @@ class MainWindow(QMainWindow):
                     f"Could not connect objectContextMenuRequested signal: {e}"
                 )
 
-        # Create the main tab widget
-        self.main_tab_widget = QTabWidget()
-        self.main_splitter.addWidget(self.main_tab_widget)
+        # Create the main tab widget (right area)
+        self.right_area = QTabWidget()
+        self.main_tab_widget = self.right_area  # Alias for compatibility
+        self.main_splitter.addWidget(self.right_area)
 
         # Set initial sizes - left panel takes about 25% of the width
         self.main_splitter.setSizes([300, 900])
@@ -1294,7 +1295,7 @@ class MainWindow(QMainWindow):
 
         # Add beam set to plan
         if hasattr(plan, "add_beam_set"):
-        plan.add_beam_set(beam_set)
+            plan.add_beam_set(beam_set)
         else:
             # Dự phòng nếu không có phương thức add_beam_set
             if not hasattr(plan, "beam_sets"):
@@ -1538,7 +1539,7 @@ class MainWindow(QMainWindow):
     def update_dose_progress(self, progress):
         """Cập nhật tiến trình tính toán liều."""
         if hasattr(self, "progress_bar"):
-        self.progress_bar.setValue(int(progress * 100))
+            self.progress_bar.setValue(int(progress * 100))
 
     def show_protocols_dialog(self):
         """Show the clinical protocols dialog."""
@@ -1594,9 +1595,9 @@ class MainWindow(QMainWindow):
         # Update UI based on current tab
         if current_tab == self.contouring_tab:
             try:
-            self.statusBar().showMessage(
-                "Contouring tab: Use the tools to create and edit structures"
-            )
+                self.statusBar().showMessage(
+                    "Contouring tab: Use the tools to create and edit structures"
+                )
             except Exception as e:
                 logging.error(f"Lỗi khi hiển thị thông báo: {e}")
         elif current_tab == self.planning_tab:
@@ -1781,9 +1782,9 @@ class MainWindow(QMainWindow):
             except ImportError:
                 logging.error("Không thể import PlanComparisonDialog")
             QMessageBox.warning(
-                    self,
-                    "Module không khả dụng",
-                    "Module so sánh kế hoạch không khả dụng.",
+                self,
+                "Module không khả dụng",
+                "Module so sánh kế hoạch không khả dụng.",
             )
             return
 
@@ -1929,68 +1930,124 @@ class MainWindow(QMainWindow):
     def create_tabs(self):
         """Tạo các tab chính trong cửa sổ chính."""
         try:
-            self.tabs = QTabWidget()
-            self.tabs.setDocumentMode(True)
-            self.tabs.setTabPosition(QTabWidget.South)
-            self.tabs.setTabShape(QTabWidget.Rounded)
+            # Configure right area tab widget
+            self.right_area.setDocumentMode(True)
+            self.right_area.setTabPosition(QTabWidget.South)
+            self.right_area.setTabShape(QTabWidget.Rounded)
 
-            # Tạo tab External Beam Planning
-            self.external_beam_tab = self._create_external_beam_tab()
-            self.tabs.addTab(
-                self.external_beam_tab,
-                QIcon("icons/beam.png"),
-                "External Beam Planning",
-            )
+            # Create individual tabs
+            try:
+                from quangtps.ui.structure_tab import StructureTab
 
-            # Tạo tab Plan Evaluation
-            self.plan_evaluation_tab = self._create_plan_evaluation_tab()
-            self.tabs.addTab(
-                self.plan_evaluation_tab,
-                QIcon("icons/evaluation.png"),
-                "Plan Evaluation",
-            )
-
-            # Tạo tab Plan Comparison (nếu có)
-            if HAS_COMPARISON_MODULE:
-                self.plan_comparison_tab = self._create_plan_comparison_tab()
-                self.tabs.addTab(
-                    self.plan_comparison_tab,
-                    QIcon("icons/compare.png"),
-                    "Plan Comparison",
+                self.contouring_tab = StructureTab()
+                self.right_area.addTab(
+                    self.contouring_tab, QIcon("icons/contour.png"), "Contouring"
+                )
+            except ImportError:
+                self.contouring_tab = ContouringView()
+                self.right_area.addTab(
+                    self.contouring_tab, QIcon("icons/contour.png"), "Contouring"
                 )
 
-            # Tạo tab 3D Viewer (nếu có)
-            if HAS_VTK:
-                self.viewer_3d_tab = self._create_3d_viewer_tab()
-                self.tabs.addTab(self.viewer_3d_tab, QIcon("icons/3d.png"), "3D Viewer")
+            try:
+                from quangtps.ui.planning_tab import PlanningTab
 
-            # Tạo tab Report (nếu có)
-            self.report_tab = self._create_report_tab()
-            self.tabs.addTab(self.report_tab, QIcon("icons/report.png"), "Report")
+                self.planning_tab = PlanningTab()
+                self.right_area.addTab(
+                    self.planning_tab, QIcon("icons/plan.png"), "Planning"
+                )
+            except ImportError:
+                self.planning_tab = PlanningView()
+                self.right_area.addTab(
+                    self.planning_tab, QIcon("icons/plan.png"), "Planning"
+                )
+
+            try:
+                from quangtps.ui.evaluation_tab import EvaluationTab
+
+                self.evaluation_tab = EvaluationTab()
+                self.right_area.addTab(
+                    self.evaluation_tab, QIcon("icons/evaluation.png"), "Evaluation"
+                )
+            except ImportError:
+                self.evaluation_tab = EvaluationView()
+                self.right_area.addTab(
+                    self.evaluation_tab, QIcon("icons/evaluation.png"), "Evaluation"
+                )
+
+            try:
+                from quangtps.ui.optimization.optimizer_tab import OptimizerTab
+
+                self.optimization_tab = OptimizerTab()
+                self.right_area.addTab(
+                    self.optimization_tab, QIcon("icons/optimize.png"), "Optimization"
+                )
+            except ImportError:
+                self.optimization_tab = OptimizationView()
+                self.right_area.addTab(
+                    self.optimization_tab, QIcon("icons/optimize.png"), "Optimization"
+                )
+
+            # MCO tab (if available)
+            if HAS_MCO_MODULE:
+                try:
+                    from quangtps.ui.optimization.mco_panel import MCOPanel
+
+                    self.mco_tab = MCOPanel()
+                    self.right_area.addTab(self.mco_tab, QIcon("icons/mco.png"), "MCO")
+                except ImportError:
+                    logger.warning("Could not create MCO tab")
+
+            try:
+                self.review_tab = ReviewView()
+                self.right_area.addTab(
+                    self.review_tab, QIcon("icons/review.png"), "Review"
+                )
+            except Exception:
+                logger.warning("Could not create Review tab")
+
+            # Tạo tab External Beam Planning
+            try:
+                self.external_beam_tab = self._create_external_beam_tab()
+                self.right_area.addTab(
+                    self.external_beam_tab,
+                    QIcon("icons/beam.png"),
+                    "External Beam Planning",
+                )
+            except Exception as e:
+                logger.error(f"Could not create External Beam tab: {e}")
+
+            # Tạo tab Plan Evaluation
+            try:
+                self.plan_evaluation_tab = self._create_plan_evaluation_tab()
+                self.right_area.addTab(
+                    self.plan_evaluation_tab,
+                    QIcon("icons/evaluation.png"),
+                    "Plan Evaluation",
+                )
+            except Exception as e:
+                logger.error(f"Could not create Plan Evaluation tab: {e}")
 
             # Tạo tab Plan Checker
             try:
                 self.plan_checker_tab = self._create_plan_checker_tab()
-                self.tabs.addTab(
+                self.right_area.addTab(
                     self.plan_checker_tab, QIcon("icons/check.png"), "Plan Checker"
                 )
                 logger.info("Đã thêm Plan Checker tab vào giao diện chính")
             except Exception as e:
                 logger.error(f"Không thể tạo tab Plan Checker: {str(e)}")
 
-            # Tạo tab MCO Navigator (mặc định ẩn nếu có)
-            if HAS_MCO_MODULE:
-                self.mco_tab = self._create_mco_tab()
-                # Tab MCO sẽ được thêm vào khi cần
-
             # Kết nối sự kiện chuyển tab
-            self.tabs.currentChanged.connect(self._on_tab_changed)
+            self.right_area.currentChanged.connect(self._on_tab_changed)
 
-            return self.tabs
+            logger.info("Successfully created all tabs")
+
         except Exception as e:
             logger.error(f"Lỗi khi tạo tabs: {str(e)}")
-            # Tạo một widget trống nếu có lỗi
-            return QWidget()
+            import traceback
+
+            logger.error(traceback.format_exc())
 
     def _create_plan_evaluation_tab(self):
         """Tạo tab Plan Evaluation với các widget liên quan."""
@@ -2118,3 +2175,173 @@ class MainWindow(QMainWindow):
             logger.error(traceback.format_exc())
             # Tạo một widget trống nếu có lỗi
             return QWidget()
+
+    def _new_patient(self):
+        """Create a new patient."""
+        try:
+            from quangtps.ui.dialogs.new_patient_dialog import NewPatientDialog
+
+            dialog = NewPatientDialog(self)
+            if dialog.exec_() == QDialog.Accepted:
+                patient_data = dialog.get_patient_data()
+                # TODO: Create new patient with data
+                QMessageBox.information(
+                    self,
+                    "New Patient",
+                    f"New patient created: {patient_data.get('name', 'Unknown')}",
+                )
+        except ImportError:
+            QMessageBox.information(
+                self, "New Patient", "New patient dialog not yet implemented."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error creating new patient: {str(e)}")
+            logger.error(f"Error creating new patient: {e}")
+
+    def open_patient_dialog(self):
+        """Show dialog to open an existing patient."""
+        options = QFileDialog.Options()
+        folder_path = QFileDialog.getExistingDirectory(
+            self, "Open Patient Folder", self.last_directory, options=options
+        )
+
+        if folder_path:
+            # Update last directory
+            self.last_directory = folder_path
+
+            try:
+                # TODO: Load patient from folder
+                QMessageBox.information(
+                    self,
+                    "Open Patient",
+                    f"Opening patient from: {folder_path}\n(Not yet implemented)",
+                )
+                self.statusBar().showMessage(f"Opened patient from: {folder_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to open patient: {str(e)}")
+                logger.error(f"Failed to open patient: {e}")
+
+    def _create_external_beam_tab(self):
+        """Tạo tab External Beam Planning."""
+        try:
+            from quangtps.ui.external_beam_planning_tab import ExternalBeamPlanningTab
+
+            external_beam_tab = ExternalBeamPlanningTab()
+
+            # Set current plan if available
+            if hasattr(self, "current_plan") and self.current_plan:
+                external_beam_tab.set_plan(self.current_plan)
+
+            return external_beam_tab
+        except ImportError:
+            logger.warning("ExternalBeamPlanningTab không khả dụng")
+            return QWidget()
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo External Beam tab: {e}")
+            return QWidget()
+
+    def _create_plan_comparison_tab(self):
+        """Tạo tab Plan Comparison."""
+        try:
+            from quangtps.ui.plan_comparison_dialog import PlanComparisonDialog
+
+            # Create as a widget instead of dialog
+            plan_comparison_tab = QWidget()
+            layout = QVBoxLayout(plan_comparison_tab)
+
+            label = QLabel("Plan Comparison functionality not yet implemented")
+            layout.addWidget(label)
+
+            return plan_comparison_tab
+        except ImportError:
+            logger.warning("PlanComparisonDialog không khả dụng")
+            return QWidget()
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo Plan Comparison tab: {e}")
+            return QWidget()
+
+    def _create_3d_viewer_tab(self):
+        """Tạo tab 3D Viewer."""
+        try:
+            if HAS_VTK:
+                from quangtps.ui.dose_visualization_3d import DoseVisualization3D
+
+                viewer_3d_tab = DoseVisualization3D()
+                return viewer_3d_tab
+            else:
+                # Create placeholder if VTK not available
+                viewer_3d_tab = QWidget()
+                layout = QVBoxLayout(viewer_3d_tab)
+
+                label = QLabel("3D Viewer requires VTK which is not available")
+                layout.addWidget(label)
+
+                return viewer_3d_tab
+        except ImportError:
+            logger.warning("DoseVisualization3D không khả dụng")
+            return QWidget()
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo 3D Viewer tab: {e}")
+            return QWidget()
+
+    def _create_report_tab(self):
+        """Tạo tab Report."""
+        try:
+            from quangtps.ui.report_tab import ReportTab
+
+            report_tab = ReportTab()
+            return report_tab
+        except ImportError:
+            logger.warning("ReportTab không khả dụng")
+            # Create placeholder
+            report_tab = QWidget()
+            layout = QVBoxLayout(report_tab)
+
+            label = QLabel("Report functionality not yet implemented")
+            layout.addWidget(label)
+
+            return report_tab
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo Report tab: {e}")
+            return QWidget()
+
+    def _create_mco_tab(self):
+        """Tạo tab MCO Navigator."""
+        try:
+            if HAS_MCO_MODULE:
+                from quangtps.optimization.mco.mco_navigator import MCONavigator
+
+                mco_tab = MCONavigator()
+                return mco_tab
+            else:
+                # Create placeholder if MCO not available
+                mco_tab = QWidget()
+                layout = QVBoxLayout(mco_tab)
+
+                label = QLabel("MCO Navigator not available")
+                layout.addWidget(label)
+
+                return mco_tab
+        except ImportError:
+            logger.warning("MCONavigator không khả dụng")
+            return QWidget()
+        except Exception as e:
+            logger.error(f"Lỗi khi tạo MCO tab: {e}")
+            return QWidget()
+
+    def _save_settings(self):
+        """Save application settings."""
+        try:
+            settings = QSettings("QuangTPS", "Treatment Planning System")
+
+            # Save window geometry and state
+            settings.setValue("geometry", self.saveGeometry())
+            settings.setValue("windowState", self.saveState())
+
+            # Save last directory
+            if hasattr(self, "last_directory"):
+                settings.setValue("lastDirectory", self.last_directory)
+
+            logger.info("Settings saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving settings: {e}")

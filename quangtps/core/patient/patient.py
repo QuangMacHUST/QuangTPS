@@ -22,6 +22,34 @@ from quangtps.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+@dataclass
+class PatientMetadata:
+    """Metadata bổ sung cho bệnh nhân."""
+
+    original_id: str = ""  # ID gốc từ hệ thống cũ
+    import_source: str = ""  # Nguồn import dữ liệu
+    data_version: str = "1.0"  # Phiên bản dữ liệu
+    quality_flags: List[str] = field(default_factory=list)  # Các cờ chất lượng dữ liệu
+    custom_fields: Dict[str, Any] = field(default_factory=dict)  # Các trường tùy chỉnh
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Chuyển đổi sang dictionary."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PatientMetadata":
+        """Tạo đối tượng từ dictionary."""
+        if not data:
+            return cls()
+        return cls(
+            original_id=data.get("original_id", ""),
+            import_source=data.get("import_source", ""),
+            data_version=data.get("data_version", "1.0"),
+            quality_flags=data.get("quality_flags", []),
+            custom_fields=data.get("custom_fields", {}),
+        )
+
+
 class PatientGender(str, Enum):
     """Giới tính của bệnh nhân."""
 

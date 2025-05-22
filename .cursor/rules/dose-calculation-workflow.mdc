@@ -1,0 +1,222 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Dose Calculation Workflow
+
+Hệ thống tính liều trong QuangTPS được thiết kế theo kiến trúc modular với nhiều thuật toán khác nhau.
+
+## Core Components
+
+### Dose Grid Management
+[dose_grid.py](mdc:quangtps/dose/dose_grid.py) quản lý lưới liều 3D:
+
+```python
+from quangtps.dose.dose_grid import DoseGrid
+
+# Tạo dose grid
+dose_grid = DoseGrid(
+    grid_data=dose_data,
+    origin=(0, 0, 0),
+    spacing=(2.0, 2.0, 3.0)
+)
+
+# Tính toán metrics
+min_dose, max_dose = dose_grid.get_min_max()
+mean_dose = dose_grid.get_mean_dose(structure_mask)
+```
+
+### Dose Engine
+[dose_engine.py](mdc:quangtps/dose/dose_engine.py) là interface chính:
+
+```python
+from quangtps.dose.dose_engine import DoseEngine, DoseCalculationAlgorithm
+
+# Khởi tạo engine với thuật toán cụ thể
+engine = DoseEngine(DoseCalculationAlgorithm.CCC)
+
+# Tính toán liều
+dose_result = engine.calculate_dose(
+    patient_data=patient,
+    beam_set=beam_set,
+    dose_grid=dose_grid
+)
+```
+
+## Available Algorithms
+
+### 1. Pencil Beam Algorithm
+Thuật toán cơ bản với hiệu suất cao:
+
+```python
+from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
+
+algorithm = PencilBeamAlgorithm()
+algorithm.configure(
+    tissue_correction=True,
+    lateral_scatter=True
+)
+```
+
+### 2. Collapsed Cone Convolution (CCC)
+Thuật toán chính xác cao cho heterogeneous tissues:
+
+```python
+from quangtps.dose.algorithms.collapsed_cone import CollapsedConeAlgorithm
+
+algorithm = CollapsedConeAlgorithm()
+algorithm.set_kernel_size(2.0)  # mm
+```
+
+### 3. Monte Carlo
+Thuật toán chính xác nhất với tính toán statistical:
+
+```python
+from quangtps.dose.algorithms.monte_carlo import MonteCarloAlgorithm
+
+algorithm = MonteCarloAlgorithm()
+algorithm.configure(
+    number_of_histories=1e6,
+    statistical_uncertainty=0.02
+)
+```
+
+### 4. GPU-Accelerated Monte Carlo
+Tính toán Monte Carlo được tăng tốc với GPU:
+
+```python
+from quangtps.dose.algorithms.monte_carlo_gpu import MonteCarloGPUAlgorithm
+
+# Tự động phát hiện GPU
+algorithm = MonteCarloGPUAlgorithm()
+
+# Hoặc chỉ định backend cụ thể
+algorithm = MonteCarloGPUAlgorithm(backend='cuda')
+```
+
+## Algorithm Selection Strategy
+
+Trong [algorithms/__init__.py](mdc:quangtps/dose/algorithms/__init__.py):
+
+```python
+def get_best_available_algorithm():
+    """Chọn thuật toán tốt nhất dựa trên phần cứng có sẵn"""
+
+    # Ưu tiên GPU Monte Carlo nếu có
+    if has_gpu_support():
+        return MonteCarloGPUAlgorithm()
+
+    # Fallback to CPU Monte Carlo
+    elif has_sufficient_cpu():
+        return MonteCarloAlgorithm()
+
+    # Default to Collapsed Cone
+    else:
+        return CollapsedConeAlgorithm()
+```
+
+## Error Handling trong Dose Calculation
+
+```python
+from quangtps.core.exceptions import DoseCalculationError, HardwareResourceError
+
+try:
+    dose_result = engine.calculate_dose(patient, beam_set, dose_grid)
+
+except DoseCalculationError as e:
+    logger.error(f"Dose calculation failed: {e}")
+    # Try fallback algorithm
+
+except HardwareResourceError as e:
+    logger.warning(f"GPU not available: {e}")
+    # Switch to CPU algorithm
+```
+
+## Integration với Optimization
+
+Dose calculation được tích hợp với optimization trong [optimizer.py](mdc:quangtps/optimization/optimizer.py):
+
+```python
+class PlanOptimizer:
+    def __init__(self, dose_engine):
+        self.dose_engine = dose_engine
+
+    def optimize_plan(self, objectives):
+        """Tối ưu hóa kế hoạch với tính toán liều iterative"""
+
+        for iteration in range(max_iterations):
+            # Calculate current dose
+            current_dose = self.dose_engine.calculate_dose(
+                self.patient, self.beam_set, self.dose_grid
+            )
+
+            # Evaluate objectives
+            objective_values = self.evaluate_objectives(
+                current_dose, objectives
+            )
+
+            # Update beam parameters
+            self.update_beam_parameters(objective_values)
+```
+
+## Performance Optimization
+
+### 1. Memory Management
+```python
+# Sử dụng dose_grid với kích thước phù hợp
+dose_grid = DoseGrid.create_empty_grid(
+    shape=(128, 128, 64),  # Balanced resolution
+    spacing=(2.0, 2.0, 3.0)
+)
+```
+
+### 2. Multi-threading Support
+```python
+# Thuật toán hỗ trợ đa luồng
+algorithm.set_thread_count(cpu_count())
+```
+
+### 3. GPU Memory Management
+```python
+# Kiểm tra GPU memory trước khi tính toán
+if algorithm.check_gpu_memory(dose_grid.get_memory_requirement()):
+    result = algorithm.calculate_gpu(patient, beam_set, dose_grid)
+else:
+    # Fallback to CPU
+    result = algorithm.calculate_cpu(patient, beam_set, dose_grid)
+```
+
+## Testing Dose Calculations
+
+Trong [test_system_modules.py](mdc:test_system_modules.py):
+
+```python
+def test_dose_calculations():
+    try:
+        dose_engine = DoseEngine(DoseCalculationAlgorithm.CCC)
+        print(f"✓ Tạo dose engine: {dose_engine.algorithm.value}")
+
+        algorithms = dose_engine.get_available_algorithms()
+        print(f"✓ Các thuật toán khả dụng: {len(algorithms)}")
+
+    except Exception as e:
+        print(f"✗ Lỗi dose calculations: {str(e)}")
+```
+
+## Dose Calculation Validation
+
+```python
+# Gamma analysis để validation
+from quangtps.evaluation.metrics.gamma_analysis import calculate_gamma_3d
+
+gamma_result = calculate_gamma_3d(
+    reference_dose=reference_dose,
+    evaluated_dose=calculated_dose,
+    distance_mm=3.0,  # 3mm DTA
+    dose_percent=3.0  # 3% dose difference
+)
+
+pass_rate = (gamma_result <= 1.0).sum() / gamma_result.size
+print(f"Gamma pass rate: {pass_rate:.1%}")
+```

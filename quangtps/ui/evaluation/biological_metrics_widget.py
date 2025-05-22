@@ -246,9 +246,9 @@ class BiologicalMetricsWidget(QWidget):
             radar_widget_layout = QVBoxLayout(self.radar_widget)
 
             # Tạo figure và canvas cho biểu đồ radar
-            self.radar_figure = Figure(figsize=(6, 6))
-            self.radar_canvas = FigureCanvas(self.radar_figure)
-            radar_widget_layout.addWidget(self.radar_canvas)
+            self.figure = Figure(figsize=(6, 6))
+            self.chart_canvas = FigureCanvas(self.figure)
+            radar_widget_layout.addWidget(self.chart_canvas)
 
             # Thêm các widget vào splitter
             self.radar_splitter.addWidget(self.structure_list_widget)
@@ -688,189 +688,278 @@ class BiologicalMetricsWidget(QWidget):
         if not HAS_MATPLOTLIB:
             return
 
-        # Lấy cấu trúc được chọn
-        selected_structure = self.structures_combo.currentText()
-        if not selected_structure or not self.biological_metrics:
-            return
+        try:
+            # Lấy cấu trúc được chọn
+            selected_structure = self.structures_combo.currentText()
+            if not selected_structure or not self.biological_metrics:
+                logger.debug(
+                    "Không có cấu trúc được chọn hoặc không có dữ liệu metrics"
+                )
+                return
 
-        # Xóa biểu đồ cũ
-        self.radar_figure.clear()
+            # Xóa biểu đồ cũ để tránh chồng chất và rò rỉ bộ nhớ
+            self.figure.clear()
 
-        # Lấy thông tin cấu trúc
-        structure_type = self.structure_types.get(selected_structure, "OAR")
+            # Đảm bảo cấu trúc có trong dữ liệu
+            if selected_structure not in self.biological_metrics:
+                logger.warning(
+                    f"Không tìm thấy thông tin cho cấu trúc {selected_structure}"
+                )
+                return
 
-        # Vẽ biểu đồ radar mới
-        self._draw_radar_chart(
-            selected_structure, self.biological_metrics, structure_type
-        )
+            # Lấy thông tin cấu trúc
+            structure_type = self.structure_types.get(selected_structure, "OAR")
 
-        # Cập nhật canvas
-        self.radar_canvas.draw()
+            # Vẽ biểu đồ radar mới
+            self._draw_radar_chart(
+                selected_structure, self.biological_metrics, structure_type
+            )
+
+            # Cập nhật canvas
+            self.chart_canvas.draw()
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật biểu đồ radar: {str(e)}")
+            # Hiển thị thông báo lỗi trong biểu đồ
+            self.figure.clear()
+            ax = self.figure.add_subplot(111)
+            ax.text(
+                0.5,
+                0.5,
+                f"Lỗi khi vẽ biểu đồ: {str(e)}",
+                horizontalalignment="center",
+                verticalalignment="center",
+                transform=ax.transAxes,
+            )
+            ax.axis("off")
+            self.chart_canvas.draw()
 
     def _draw_radar_chart(self, structure_name, metrics_data, structure_type="OAR"):
         """
-        Vẽ biểu đồ radar cho một cấu trúc.
+        Vẽ biểu đồ radar (còn gọi là biểu đồ mạng nhện) để hiển thị các chỉ số sinh học.
 
-        Args:
-            structure_name: Tên cấu trúc
-            metrics_data: Dữ liệu chỉ số sinh học
-            structure_type: Loại cấu trúc (TARGET/OAR)
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        metrics_data : dict
+            Dữ liệu chỉ số sinh học
+        structure_type : str, optional
+            Loại cấu trúc ("TARGET" hoặc "OAR"), mặc định là "OAR"
         """
-        if not HAS_MATPLOTLIB or structure_name not in metrics_data:
-            return
+        try:
+            if not HAS_MATPLOTLIB:
+                return
 
-        # Lấy dữ liệu cho cấu trúc
-        metrics = metrics_data[structure_name]
+            # Tạo figure mới và xóa biểu đồ cũ
+            self.figure.clear()
+            ax = self.figure.add_subplot(111, polar=True)
 
-        # Tạo subplot với tọa độ cực
-        ax = self.radar_figure.add_subplot(111, polar=True)
+            # Xác định các chỉ số cần hiển thị dựa trên loại cấu trúc
+            if structure_type == "TARGET":
+                metrics = ["eud", "tcp", "qed", "coverage", "homogeneity_index"]
+                labels = ["EUD (Gy)", "TCP (%)", "qEUD (Gy)", "Coverage", "HI"]
+                # Bảng màu hiện đại cho TARGET
+                color = "#2196F3"  # Màu xanh dương hiện đại
+                fill_color = (
+                    "rgba(33, 150, 243, 0.3)"  # Màu xanh dương với độ trong suốt
+                )
+            else:  # OAR
+                metrics = ["eud", "ntcp", "qed", "mean_dose", "max_dose"]
+                labels = ["EUD (Gy)", "NTCP (%)", "qEUD (Gy)", "Mean (Gy)", "Max (Gy)"]
+                # Bảng màu hiện đại cho OAR
+                color = "#FF5722"  # Màu cam đỏ hiện đại
+                fill_color = "rgba(255, 87, 34, 0.3)"  # Màu cam đỏ với độ trong suốt
 
-        # Xác định các chỉ số sẽ hiển thị tùy theo loại cấu trúc
-        if structure_type == "TARGET":
-            # Các chỉ số cho cấu trúc mục tiêu
-            categories = ["TCP", "EUD", "CI", "HI", "Coverage"]
+            # Lấy các giá trị chỉ số từ metrics_data
+            values = []
+            for metric in metrics:
+                value = metrics_data.get(metric, 0)
 
-            # Lấy giá trị cho từng chỉ số
-            tcp = metrics.get("tcp", 0) * 100  # Chuyển sang phần trăm
-            eud = min(
-                metrics.get("eud", 0) / 80, 1.0
-            )  # Chuẩn hóa EUD (giả sử max 80Gy)
-            ci = min(
-                1.0 / max(metrics.get("conformity_index", 1), 0.5), 1.0
-            )  # CI càng gần 1 càng tốt
-            hi = min(
-                1.0 / max(metrics.get("homogeneity_index", 1), 0.5), 1.0
-            )  # HI càng gần 1 càng tốt
-            coverage = metrics.get("coverage", 0) * 100  # Chuyển sang phần trăm
+                # Xử lý giá trị None, NaN hoặc inf
+                if value is None or (
+                    isinstance(value, (int, float))
+                    and (np.isnan(value) or np.isinf(value))
+                ):
+                    value = 0
 
-            values = [tcp / 100, eud, ci, hi, coverage / 100]  # Chuẩn hóa về thang 0-1
+                values.append(value)
 
-            # Màu sắc cho TARGET (đỏ)
-            color = "red"
+            # Chuẩn hóa giá trị cho biểu đồ radar
+            normalized_values = []
+            displayed_values = []  # Giá trị gốc để hiển thị
 
-            # Giá trị hiển thị
-            display_values = [
-                f"{tcp:.1f}%",
-                f"{metrics.get('eud', 0):.1f}Gy",
-                f"{metrics.get('conformity_index', 1):.2f}",
-                f"{metrics.get('homogeneity_index', 1):.2f}",
-                f"{coverage:.1f}%",
-            ]
-        else:
-            # Các chỉ số cho cơ quan nguy cấp
-            categories = ["NTCP", "Mean Dose", "Max Dose", "EUD", "Sparing"]
+            for i, (metric, value) in enumerate(zip(metrics, values)):
+                displayed_values.append(value)
 
-            # Lấy giá trị cho từng chỉ số
-            ntcp = metrics.get("ntcp", 0) * 100  # Chuyển sang phần trăm
-            mean_dose = min(
-                metrics.get("mean_dose", 0) / 50, 1.0
-            )  # Chuẩn hóa mean dose (giả sử max 50Gy)
-            max_dose = min(
-                metrics.get("max_dose", 0) / 80, 1.0
-            )  # Chuẩn hóa max dose (giả sử max 80Gy)
-            eud = min(
-                metrics.get("eud", 0) / 50, 1.0
-            )  # Chuẩn hóa EUD (giả sử max 50Gy)
-            sparing = 1.0 - metrics.get(
-                "percent_volume_threshold", 0
-            )  # Phần thể tích được bảo vệ
+                # Chuẩn hóa dựa trên loại metric
+                if metric == "tcp":
+                    # TCP từ 0-100%
+                    normalized_values.append(value / 100 if value <= 100 else 1.0)
+                elif metric == "ntcp":
+                    # NTCP từ 0-100%, nhưng giá trị thấp là tốt nên đảo ngược
+                    normalized_values.append(
+                        1.0 - (value / 100 if value <= 100 else 1.0)
+                    )
+                elif metric == "homogeneity_index":
+                    # HI càng gần 1 càng tốt, chuẩn hóa giá trị từ 0-2 về 0-1
+                    # Áp dụng hàm phi tuyến để làm nổi bật giá trị gần 1
+                    hi_normalized = max(0, 1 - abs(value - 1) / 1)
+                    normalized_values.append(hi_normalized)
+                elif metric == "coverage":
+                    # Coverage từ 0-1
+                    normalized_values.append(
+                        value if 0 <= value <= 1 else (1.0 if value > 1 else 0.0)
+                    )
+                elif (
+                    metric == "eud"
+                    or metric == "qed"
+                    or metric == "mean_dose"
+                    or metric == "max_dose"
+                ):
+                    # Chuẩn hóa liều dựa trên loại cấu trúc
+                    if structure_type == "TARGET":
+                        # Với TARGET, liều cao hơn thường tốt hơn, nhưng không quá cao
+                        # Giả sử liều tham chiếu lý tưởng là 60Gy
+                        reference_dose = 60.0
+                        if value <= reference_dose:
+                            norm_value = value / reference_dose
+                        else:
+                            # Phạt nhẹ nếu liều quá cao
+                            norm_value = 1.0 - 0.2 * min(
+                                1, (value - reference_dose) / reference_dose
+                            )
+                        normalized_values.append(max(0, min(1, norm_value)))
+                    else:  # OAR
+                        # Với OAR, liều càng thấp càng tốt
+                        # Giả sử ngưỡng liều tối đa an toàn là 45Gy
+                        tolerance_dose = 45.0
+                        norm_value = 1.0 - min(1.0, value / tolerance_dose)
+                        normalized_values.append(max(0, norm_value))
+                else:
+                    # Cho các chỉ số khác, chuẩn hóa về thang 0-1
+                    normalized_values.append(min(1.0, max(0, value / 100)))
 
-            # Đảo ngược giá trị NTCP (thấp là tốt)
-            ntcp_inv = 1.0 - (ntcp / 100)
-            mean_dose_inv = 1.0 - mean_dose
-            max_dose_inv = 1.0 - max_dose
-            eud_inv = 1.0 - eud
+            # Thêm điểm đầu tiên vào cuối để tạo đa giác kín
+            if normalized_values:
+                normalized_values.append(normalized_values[0])
+                labels.append(labels[0])
+                displayed_values.append(displayed_values[0])
 
-            values = [
-                ntcp_inv,
-                mean_dose_inv,
-                max_dose_inv,
-                eud_inv,
-                sparing,
-            ]  # Chuẩn hóa về thang 0-1
+            # Tạo góc cho mỗi chỉ số
+            angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
 
-            # Màu sắc cho OAR (xanh lam)
-            color = "blue"
+            # Thêm góc đầu tiên vào cuối để tạo đa giác kín
+            angles.append(angles[0])
 
-            # Giá trị hiển thị
-            display_values = [
-                f"{ntcp:.1f}%",
-                f"{metrics.get('mean_dose', 0):.1f}Gy",
-                f"{metrics.get('max_dose', 0):.1f}Gy",
-                f"{metrics.get('eud', 0):.1f}Gy",
-                f"{sparing * 100:.1f}%",
-            ]
+            # Vẽ đường biểu đồ và tô màu
+            ax.plot(angles, normalized_values, "o-", linewidth=2, color=color)
+            ax.fill(angles, normalized_values, fill_color, alpha=0.6)
 
-        # Số lượng biến
-        N = len(categories)
+            # Thêm nhãn và grid
+            ax.set_thetagrids(np.degrees(angles[:-1]), labels[:-1])
 
-        # Góc cho mỗi trục
-        angles = [n / float(N) * 2 * np.pi for n in range(N)]
-        angles += angles[:1]  # Đóng đường
+            # Thiết lập các vòng tròn nền
+            self._draw_background_circles(ax)
 
-        # Thêm giá trị đầu tiên vào cuối để đóng đường
-        values += values[:1]
+            # Hiển thị giá trị thực tế với hộp chứa
+            for i, (angle, value, label) in enumerate(
+                zip(angles[:-1], displayed_values[:-1], labels[:-1])
+            ):
+                # Tính toán vị trí hiển thị giá trị
+                # Đẩy vị trí ra xa một chút so với điểm dữ liệu
+                radius = normalized_values[i] * 1.15
+                x = radius * np.cos(angle)
+                y = radius * np.sin(angle)
 
-        # Vẽ các đường tròn nền
-        self._draw_background_circles(ax)
+                # Định dạng giá trị hiển thị
+                if "%" in label:
+                    value_text = f"{value:.1f}%"
+                elif "Gy" in label:
+                    value_text = f"{value:.1f}Gy"
+                else:
+                    value_text = f"{value:.2f}"
 
-        # Vẽ đường biểu đồ
-        ax.plot(angles, values, linewidth=2, linestyle="solid", color=color)
-        ax.fill(angles, values, color=color, alpha=0.25)
+                # Hiển thị giá trị với hộp chứa
+                bbox_props = dict(
+                    boxstyle="round,pad=0.3", fc="white", ec=color, alpha=0.8
+                )
+                ax.text(
+                    angle,
+                    normalized_values[i] + 0.1,
+                    value_text,
+                    ha="center",
+                    va="center",
+                    bbox=bbox_props,
+                    fontsize=8,
+                )
 
-        # Thiết lập các trục
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories)
+            # Thiết lập layout và tiêu đề
+            ax.set_title(f"{structure_name} - Biological Metrics", pad=15)
+            self.figure.tight_layout()
 
-        # Thêm nhãn giá trị
-        for i, (angle, value, display) in enumerate(
-            zip(angles[:-1], values[:-1], display_values)
-        ):
-            # Tính toán vị trí để hiển thị giá trị
-            ha = "left" if 0 <= angle < np.pi else "right"
-            offset = 0.1 if 0 <= angle < np.pi else -0.1
+            # Cập nhật canvas
+            self.chart_canvas.draw()
 
-            # Hiển thị giá trị thực tế (không chuẩn hóa)
-            ax.text(angle, value + 0.1, display, ha=ha, va="center", fontsize=9)
-
-        # Thêm tiêu đề
-        title = f"Đánh giá sinh học: {structure_name}"
-        ax.set_title(title, fontsize=12, fontweight="bold", y=1.08)
-
-        # Đặt giới hạn trục r từ 0 đến 1
-        ax.set_ylim(0, 1)
-
-        # Ẩn nhãn giá trị trên trục r
-        ax.set_yticklabels([])
+        except Exception as e:
+            logger.error(f"Lỗi khi vẽ biểu đồ radar: {str(e)}")
+            self.figure.clear()
+            ax = self.figure.add_subplot(111)
+            ax.text(
+                0.5,
+                0.5,
+                f"Không thể vẽ biểu đồ radar\n{str(e)}",
+                ha="center",
+                va="center",
+                color="red",
+                fontsize=10,
+                transform=ax.transAxes,
+            )
+            self.chart_canvas.draw()
 
     def _draw_background_circles(self, ax):
         """
-        Vẽ các đường tròn nền cho biểu đồ radar.
+        Vẽ các vòng tròn nền để biểu đồ radar dễ đọc hơn.
 
-        Args:
-            ax: Trục biểu đồ
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Trục để vẽ các vòng tròn nền
         """
-        # Vẽ các đường tròn đồng tâm
-        circles = [0.2, 0.4, 0.6, 0.8, 1.0]
-        for circle in circles:
-            ax.plot(
-                np.linspace(0, 2 * np.pi, 100),
-                [circle] * 100,
-                color="gray",
-                linestyle="--",
-                linewidth=0.5,
-                alpha=0.7,
-            )
+        try:
+            # Tạo các vòng tròn đồng tâm ở các mức 0.2, 0.4, 0.6, 0.8
+            circles = np.array([0.2, 0.4, 0.6, 0.8])
 
-        # Tạo lưới từ tâm ra ngoài
-        ax.grid(True, color="gray", linestyle="--", linewidth=0.5, alpha=0.7)
+            # Vẽ các vòng tròn
+            for circle in circles:
+                ax.plot(
+                    np.linspace(0, 2 * np.pi, 100),
+                    np.ones(100) * circle,
+                    "-",
+                    color="gray",
+                    alpha=0.3,
+                )
 
-        # Thêm nhãn cho các đường tròn
-        labels = ["20%", "40%", "60%", "80%", "100%"]
-        for circle, label in zip(circles, labels):
-            ax.text(
-                0, circle, label, ha="center", va="bottom", color="gray", fontsize=8
-            )
+                # Thêm nhãn phần trăm cho mỗi vòng tròn
+                ax.text(
+                    0,
+                    circle,
+                    f"{int(circle * 100)}%",
+                    ha="center",
+                    va="bottom",
+                    color="gray",
+                    alpha=0.7,
+                    fontsize=7,
+                )
+
+            # Thiết lập giới hạn của trục r từ 0 đến 1.2
+            ax.set_ylim(0, 1.2)
+
+            # Ẩn các nhãn giá trị trên trục r
+            ax.set_yticklabels([])
+
+        except Exception as e:
+            logger.error(f"Lỗi khi vẽ vòng tròn nền: {str(e)}")
+            # Bỏ qua lỗi, vẫn hiển thị biểu đồ chính
 
     def _update_detail_display(self, all_metrics=None):
         """

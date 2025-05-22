@@ -36,24 +36,41 @@ class ManualSegmentationTools:
 
     def _initialize_tools(self):
         """Khởi tạo các công cụ vẽ."""
-        # Đăng ký các công cụ vẽ mặc định
-        from quangtps.segmentation.manual_segmentation.drawing_tools import (
-            PencilTool,
-            BrushTool,
-            SmartBrushTool,
-            EraserTool,
-            PaintBucketTool,
-            SplineTool,
-            ContourRefinementTool,
-        )
+        # Đăng ký các công cụ vẽ mặc định với try-except để tránh lỗi import
+        try:
+            from quangtps.segmentation.manual_segmentation.drawing_tools import (
+                PencilTool,
+                BrushTool,
+                SmartBrushTool,
+                EraserTool,
+                PaintBucketTool,
+                SplineTool,
+                ContourRefinementTool,
+            )
 
-        self.register_tool("pencil", PencilTool())
-        self.register_tool("brush", BrushTool())
-        self.register_tool("smart_brush", SmartBrushTool())
-        self.register_tool("eraser", EraserTool())
-        self.register_tool("paint_bucket", PaintBucketTool())
-        self.register_tool("spline", SplineTool())
-        self.register_tool("refinement", ContourRefinementTool())
+            self.register_tool("pencil", PencilTool())
+            self.register_tool("brush", BrushTool())
+            self.register_tool("smart_brush", SmartBrushTool())
+            self.register_tool("eraser", EraserTool())
+            self.register_tool("paint_bucket", PaintBucketTool())
+            self.register_tool("spline", SplineTool())
+            self.register_tool("refinement", ContourRefinementTool())
+
+            logger.info("Đã khởi tạo thành công tất cả các công cụ vẽ")
+        except ImportError as e:
+            logger.error(f"Lỗi import công cụ vẽ: {e}")
+            # Khởi tạo các công cụ cơ bản có sẵn
+            try:
+                from quangtps.segmentation.manual_segmentation.drawing_tools import (
+                    BrushTool,
+                    EraserTool,
+                )
+
+                self.register_tool("brush", BrushTool())
+                self.register_tool("eraser", EraserTool())
+                logger.info("Đã khởi tạo các công cụ vẽ cơ bản")
+            except ImportError:
+                logger.warning("Không thể khởi tạo công cụ vẽ nào")
 
     def register_tool(self, name: str, tool: DrawingTool):
         """

@@ -563,7 +563,7 @@ class MonteCarloGPUAlgorithm(MonteCarloGPU):
                 self.set_ct_data(patient_data.ct_data, patient_data.voxel_size)
                 self.calculation_status["initialized"] = True
                 logger.info("Khởi tạo thuật toán MonteCarloGPU thành công")
-            return True
+                return True
             else:
                 logger.error(
                     "Dữ liệu bệnh nhân không chứa thông tin CT hoặc voxel_size"
@@ -739,17 +739,17 @@ class MonteCarloGPUResult:
 
     def compare_with(self, other_result):
         """
-            So sánh kết quả này với kết quả khác.
+                So sánh kết quả này với kết quả khác.
 
-            Parameters
-            ----------
-            other_result : Any
-                Kết quả khác để so sánh
+                Parameters
+                ----------
+                other_result : Any
+                    Kết quả khác để so sánh
 
-    Returns
-    -------
-            Dict
-                Các chỉ số so sánh
+        Returns
+        -------
+                Dict
+                    Các chỉ số so sánh
         """
         if hasattr(other_result, "get_dose"):
             other_dose = other_result.get_dose()
@@ -760,17 +760,17 @@ class MonteCarloGPUResult:
 
     def _compare_doses(self, other_dose):
         """
-            So sánh phân bố liều này với phân bố liều khác.
+                So sánh phân bố liều này với phân bố liều khác.
 
-            Parameters
-            ----------
-            other_dose : np.ndarray
-                Phân bố liều khác để so sánh
+                Parameters
+                ----------
+                other_dose : np.ndarray
+                    Phân bố liều khác để so sánh
 
-    Returns
-    -------
-            Dict
-                Các chỉ số so sánh
+        Returns
+        -------
+                Dict
+                    Các chỉ số so sánh
         """
         try:
             # Sử dụng phương thức có sẵn từ lớp MonteCarloGPU

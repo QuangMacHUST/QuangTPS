@@ -1,0 +1,358 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# UI Development Patterns
+
+QuangTPS được thiết kế theo phong cách Eclipse Treatment Planning System với giao diện chuyên nghiệp và trực quan.
+
+## Core UI Architecture
+
+### Main Window Structure
+[main_window.py](mdc:quangtps/ui/main_window.py) là điểm khởi đầu chính:
+
+```python
+from quangtps.ui.main_window import MainWindow
+from PyQt5.QtWidgets import QApplication
+
+app = QApplication(sys.argv)
+main_window = MainWindow()
+main_window.show()
+```
+
+### 3D Visualization
+[3d_viewer.py](mdc:quangtps/ui/3d_viewer.py) cung cấp hiển thị 3D với fallback:
+
+```python
+from quangtps.ui import create_3d_viewer
+
+# Tự động chọn VTK hoặc Matplotlib viewer
+viewer = create_3d_viewer()
+viewer.set_image_data(ct_volume, spacing=(1.0, 1.0, 2.0))
+viewer.add_structure("PTV", structure_mask, color=(1.0, 0.0, 0.0))
+```
+
+## Eclipse Style Theming
+
+### Color Scheme
+Sử dụng màu sắc chuẩn Eclipse:
+
+```python
+ECLIPSE_COLORS = {
+    'background': '#2B2B2B',
+    'panel': '#3C3C3C',
+    'border': '#555555',
+    'text': '#CCCCCC',
+    'accent': '#4A90E2',
+    'warning': '#F5A623',
+    'error': '#D0021B'
+}
+```
+
+### Widget Styling
+```python
+def create_eclipse_widget_style(widget_type):
+    """Tạo stylesheet theo phong cách Eclipse"""
+
+    if widget_type == "button":
+        return """
+        QPushButton {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            padding: 5px;
+        }
+        QPushButton:hover {
+            background-color: #4A90E2;
+        }
+        """
+```
+
+## Widget Development Patterns
+
+### 1. DVH Widget Pattern
+Trong DVH widgets, sử dụng pattern này:
+
+```python
+class DVHWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        self.setup_connections()
+
+    def setup_ui(self):
+        """Thiết lập giao diện"""
+        layout = QVBoxLayout()
+
+        # Canvas cho DVH chart
+        self.canvas = DVHCanvas()
+        layout.addWidget(self.canvas)
+
+        # Control panel
+        self.control_panel = self.create_control_panel()
+        layout.addWidget(self.control_panel)
+
+        self.setLayout(layout)
+
+    def setup_connections(self):
+        """Kết nối signals và slots"""
+        self.structure_combo.currentTextChanged.connect(
+            self.on_structure_changed
+        )
+```
+
+### 2. Error Handling trong UI
+```python
+from quangtps.core.exceptions import UIError, WidgetError
+
+class SafeWidget(QWidget):
+    def update_display(self):
+        try:
+            # Update operations
+            self.refresh_data()
+
+        except WidgetError as e:
+            logger.error(f"Widget update failed: {e}")
+            self.show_error_message(str(e))
+
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            self.show_error_message("Đã xảy ra lỗi không xác định")
+
+    def show_error_message(self, message):
+        """Hiển thị thông báo lỗi theo style Eclipse"""
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Warning)
+        msg.setWindowTitle("QuangTPS")
+        msg.setText(message)
+        msg.exec_()
+```
+
+### 3. Progressive Loading Pattern
+```python
+class DataWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.loading_indicator = QProgressBar()
+        self.content_widget = QWidget()
+
+    def load_data_async(self):
+        """Load dữ liệu không đồng bộ với progress indicator"""
+        self.show_loading()
+
+        # Sử dụng QThread cho heavy operations
+        self.worker = DataWorker()
+        self.worker.finished.connect(self.on_data_loaded)
+        self.worker.progress.connect(self.update_progress)
+        self.worker.start()
+
+    def show_loading(self):
+        self.content_widget.hide()
+        self.loading_indicator.show()
+
+    def on_data_loaded(self, data):
+        self.loading_indicator.hide()
+        self.update_content(data)
+        self.content_widget.show()
+```
+
+## Icon và Resource Management
+
+### Eclipse-style Icons
+```python
+def create_eclipse_icon(icon_name, size=16):
+    """Tạo icon theo phong cách Eclipse"""
+
+    if icon_name == "plan":
+        # Tạo icon kế hoạch xạ trị
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Vẽ biểu tượng kế hoạch
+        painter.setPen(QPen(QColor("#4A90E2"), 2))
+        painter.drawEllipse(2, 2, size-4, size-4)
+
+        painter.end()
+        return QIcon(pixmap)
+```
+
+### Resource Loading với Fallback
+```python
+def load_ui_resource(resource_path, fallback=None):
+    """Load tài nguyên UI với fallback"""
+    try:
+        return QPixmap(resource_path)
+    except Exception as e:
+        logger.warning(f"Cannot load resource {resource_path}: {e}")
+        if fallback:
+            return fallback
+        else:
+            # Tạo placeholder
+            return create_placeholder_pixmap()
+```
+
+## Layout Patterns
+
+### Eclipse-style Tab Layout
+```python
+class MainTabWidget(QTabWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_tabs()
+
+    def setup_tabs(self):
+        # Patient tab
+        self.patient_tab = PatientTab()
+        self.addTab(self.patient_tab, "Patient")
+
+        # Planning tab
+        self.planning_tab = PlanningTab()
+        self.addTab(self.planning_tab, "Planning")
+
+        # Evaluation tab
+        self.evaluation_tab = EvaluationTab()
+        self.addTab(self.evaluation_tab, "Evaluation")
+
+        # Style tabs theo Eclipse
+        self.setStyleSheet("""
+        QTabWidget::pane {
+            border: 1px solid #555555;
+            background-color: #2B2B2B;
+        }
+        QTabBar::tab {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            padding: 8px 16px;
+        }
+        QTabBar::tab:selected {
+            background-color: #4A90E2;
+        }
+        """)
+```
+
+### Splitter Layout cho Multi-panel
+```python
+class PlanningView(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_layout()
+
+    def setup_layout(self):
+        # Main horizontal splitter
+        main_splitter = QSplitter(Qt.Horizontal)
+
+        # Left panel (object explorer, tools)
+        left_panel = self.create_left_panel()
+        main_splitter.addWidget(left_panel)
+
+        # Center area (3D view, dose display)
+        center_widget = self.create_center_widget()
+        main_splitter.addWidget(center_widget)
+
+        # Right panel (DVH, metrics)
+        right_panel = self.create_right_panel()
+        main_splitter.addWidget(right_panel)
+
+        # Set splitter proportions (20%, 60%, 20%)
+        main_splitter.setSizes([200, 600, 200])
+
+        layout = QHBoxLayout()
+        layout.addWidget(main_splitter)
+        self.setLayout(layout)
+```
+
+## Data Binding Patterns
+
+### Model-View Pattern
+```python
+class StructureListModel(QAbstractListModel):
+    def __init__(self, structures):
+        super().__init__()
+        self.structures = structures
+
+    def data(self, index, role):
+        if role == Qt.DisplayRole:
+            structure = self.structures[index.row()]
+            return structure.name
+        elif role == Qt.DecorationRole:
+            # Return structure color as icon
+            structure = self.structures[index.row()]
+            return self.create_color_icon(structure.color)
+
+    def rowCount(self, parent):
+        return len(self.structures)
+```
+
+### Signal-Slot Connections
+```python
+class PlanEvaluationTab(QWidget):
+    plan_changed = pyqtSignal(object)  # Emit khi plan thay đổi
+
+    def __init__(self):
+        super().__init__()
+        self.setup_connections()
+
+    def setup_connections(self):
+        # Kết nối với các widget con
+        self.plan_changed.connect(self.dvh_widget.set_plan)
+        self.plan_changed.connect(self.metrics_widget.update_metrics)
+        self.plan_changed.connect(self.biological_widget.calculate_tcp_ntcp)
+```
+
+## Testing UI Components
+
+Trong [test_system_modules.py](mdc:test_system_modules.py):
+
+```python
+def test_3d_viewer():
+    """Test 3D viewer functionality"""
+    try:
+        from quangtps.ui import create_3d_viewer
+
+        viewer = create_3d_viewer()
+        print(f"✓ Tạo 3D viewer: {type(viewer).__name__}")
+
+        # Test với mock data
+        test_image = np.random.rand(30, 64, 64) * 100
+        viewer.set_image_data(test_image, spacing=(1.0, 1.0, 2.0))
+        print(f"✓ Set image data: {test_image.shape}")
+
+    except Exception as e:
+        print(f"✗ Lỗi 3D viewer: {str(e)}")
+```
+
+## Performance Considerations
+
+### Lazy Loading cho Heavy Widgets
+```python
+class HeavyWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self._content_loaded = False
+
+    def showEvent(self, event):
+        """Load content khi widget được hiển thị"""
+        if not self._content_loaded:
+            self.load_content()
+            self._content_loaded = True
+        super().showEvent(event)
+```
+
+### Memory Management
+```python
+class ImageWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.cached_images = {}
+
+    def clear_cache(self):
+        """Xóa cache khi không cần thiết"""
+        for image in self.cached_images.values():
+            if hasattr(image, 'deleteLater'):
+                image.deleteLater()
+        self.cached_images.clear()
+```

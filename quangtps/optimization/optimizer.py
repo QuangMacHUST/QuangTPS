@@ -272,7 +272,7 @@ class PlanOptimizer:
         for i, obj in enumerate(self.objectives):
             if hasattr(obj, "evaluate"):
                 value = obj.evaluate(self.plan.dose)
-                else:
+            else:
                 # Sử dụng mô phỏng cho mục tiêu không có phương thức evaluate
                 value = 100.0 / (self.iteration + 1) * np.random.random()
 

@@ -546,84 +546,105 @@ class DVHMetrics:
 
 
 def calculate_dvh(
-    dose_grid: DoseGrid,
-    structure_mask: np.ndarray,
-    total_volume: float,
-    num_bins: int = 100,
-) -> Optional[DVHData]:
+    dose_grid: np.ndarray, structure_mask: np.ndarray, num_bins: int = 100
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Calculate DVH data for a structure from dose grid and structure mask.
+    Tính toán histogram thể tích liều đơn giản cho một cấu trúc.
 
-    Args:
-        dose_grid: Dose grid containing dose values
-        structure_mask: Binary mask of the structure (same shape as dose grid)
-        total_volume: Total volume of the structure in cc
-        num_bins: Number of dose bins to use
+    Parameters
+    ----------
+    dose_grid : np.ndarray
+        Mảng 3D chứa giá trị liều (Gy)
+    structure_mask : np.ndarray
+        Mảng 3D chứa mặt nạ nhị phân của cấu trúc
+    num_bins : int, optional
+        Số bin sử dụng cho histogram, mặc định là 100
 
-    Returns:
-        DVHData object containing the calculated DVH, or None if calculation fails
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Trả về mảng liều và mảng thể tích tương ứng
     """
-    try:
-        # Validate inputs
-        if dose_grid is None or structure_mask is None:
-            logger.error("Dose grid or structure mask is None")
-            return None
+    # Kiểm tra đầu vào
+    if dose_grid is None or structure_mask is None:
+        logger.error("Lỗi: dose_grid hoặc structure_mask là None")
+        return np.array([0]), np.array([0])
 
-        # Get structure ID
-        structure_id = getattr(structure_mask, "structure_id", "unknown")
-
-        # Extract dose values within the structure
-        dose_values = dose_grid.data[structure_mask > 0]
-
-        # If no voxels in structure, return empty DVH
-        if len(dose_values) == 0:
-            logger.warning(f"No dose values found in structure {structure_id}")
-            return DVHData.from_raw_data(structure_id, [0.0], [0.0], total_volume)
-
-        # Determine dose range
-        min_dose = 0.0  # Start from 0 Gy
-        max_dose = np.max(dose_values) * 1.05  # Add 5% margin for visualization
-
-        # Create dose bins
-        dose_bins = np.linspace(min_dose, max_dose, num_bins)
-
-        # Calculate differential DVH
-        hist, edges = np.histogram(dose_values, bins=dose_bins)
-
-        # Convert histogram counts to volume
-        if total_volume > 0 and len(dose_values) > 0:
-            # Convert counts to percentage of total structure volume
-            volume_percent = hist / len(dose_values) * 100.0
-        else:
-            volume_percent = np.zeros_like(hist, dtype=float)
-
-        # Calculate cumulative DVH (reverse sum)
-        cumulative_volume = np.zeros_like(dose_bins, dtype=float)
-        cumulative_volume[:-1] = 100.0 - np.cumsum(volume_percent)
-
-        # Create DVH data object
-        dvh = DVHData.from_raw_data(
-            structure_id, dose_bins.tolist(), cumulative_volume.tolist(), total_volume
+    # Kiểm tra kích thước có khớp nhau không
+    if dose_grid.shape != structure_mask.shape:
+        logger.error(
+            f"Lỗi: Kích thước không khớp: dose_grid {dose_grid.shape}, structure_mask {structure_mask.shape}"
         )
+        return np.array([0]), np.array([0])
 
-        # Set units
-        dvh.dose_unit = "Gy"
-        dvh.volume_unit = "%"
+    # Kiểm tra tính hợp lệ của num_bins
+    if num_bins <= 0:
+        logger.warning(
+            f"Giá trị num_bins không hợp lệ: {num_bins}, sử dụng giá trị mặc định 100"
+        )
+        num_bins = 100
 
-        # Calculate additional statistics
-        dvh.min_dose = float(np.min(dose_values))
-        dvh.max_dose = float(np.max(dose_values))
-        dvh.mean_dose = float(np.mean(dose_values))
+    try:
+        # Lấy các giá trị liều trong cấu trúc
+        mask_indices = structure_mask > 0
+        if not np.any(mask_indices):
+            logger.warning("Không có voxel nào trong cấu trúc")
+            return np.array([0]), np.array([0])
 
-        # Calculate median dose
-        if len(dose_values) > 0:
-            dvh.median_dose = float(np.median(dose_values))
+        doses_in_structure = dose_grid[mask_indices]
+        num_voxels = len(doses_in_structure)
 
-        return dvh
+        # Kiểm tra xem có voxel nào trong cấu trúc không
+        if num_voxels == 0:
+            logger.warning("Không có voxel nào trong cấu trúc sau khi áp dụng mask")
+            return np.array([0]), np.array([0])
+
+        # Kiểm tra xem liều có hợp lệ không
+        if np.all(doses_in_structure == 0):
+            logger.warning("Tất cả các giá trị liều trong cấu trúc đều bằng 0")
+            return np.array([0]), np.array([0])
+
+        # Xác định phạm vi liều
+        min_dose = 0.0  # Bắt đầu từ 0 Gy
+        max_dose = np.max(doses_in_structure)
+
+        # Thêm margin để đảm bảo hiển thị trực quan
+        max_dose = max_dose * 1.05 if max_dose > 0 else 0.1
+
+        # Kiểm tra xem liều có hợp lệ không
+        if np.isnan(max_dose) or np.isinf(max_dose) or max_dose <= 0:
+            logger.warning(f"Giá trị liều không hợp lệ: max_dose = {max_dose}")
+            return np.array([0]), np.array([0])
+
+        # Tạo bin liều
+        dose_bins = np.linspace(min_dose, max_dose, num_bins + 1)
+        bin_centers = (dose_bins[1:] + dose_bins[:-1]) / 2
+
+        # Tính histogram vi phân - tối ưu cho bộ nhớ sử dụng bincount nếu có thể
+        if (
+            len(doses_in_structure) > 1e6
+        ):  # Nếu có nhiều voxel, sử dụng phương pháp tiết kiệm bộ nhớ
+            hist, _ = np.histogram(doses_in_structure, bins=dose_bins)
+        else:
+            hist, _ = np.histogram(doses_in_structure, bins=dose_bins)
+
+        # Chuẩn hóa thể tích thành phần trăm
+        vol_percent = (hist / num_voxels) * 100.0
+
+        # Tính DVH tích lũy (từ cao đến thấp)
+        cumulative_volume = np.zeros_like(bin_centers)
+        for i in range(len(bin_centers)):
+            # Thể tích nhận được liều ít nhất bằng bin_centers[i]
+            cumulative_volume[i] = np.sum(vol_percent[i:])
+
+        return bin_centers, cumulative_volume
 
     except Exception as e:
-        logger.error(f"Error calculating DVH: {str(e)}")
-        return None
+        logger.error(f"Lỗi khi tính DVH: {str(e)}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
+        return np.array([0]), np.array([0])
 
 
 def calculate_dvh_from_3d_data(
@@ -715,59 +736,3 @@ def calculate_dvh_from_3d_data(
     except Exception as e:
         logger.error(f"Error calculating DVH from 3D data: {str(e)}")
         return None
-
-
-# Add this simple function to ensure it exists and can be imported
-def calculate_dvh(
-    dose_grid: np.ndarray, structure_mask: np.ndarray, num_bins: int = 100
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Calculate DVH data for a structure.
-
-    Parameters
-    ----------
-    dose_grid : np.ndarray
-        3D dose grid array
-    structure_mask : np.ndarray
-        3D binary mask of the structure (same shape as dose_grid)
-    num_bins : int, optional
-        Number of dose bins for the histogram
-
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        Tuple of (dose_bins, volume_bins) where dose_bins are the dose values
-        and volume_bins are the cumulative volume percentages
-    """
-    if dose_grid.shape != structure_mask.shape:
-        raise ValueError(
-            f"Dose grid shape {dose_grid.shape} does not match structure mask shape {structure_mask.shape}"
-        )
-
-    # Get dose values within the structure
-    structure_dose = dose_grid[structure_mask > 0]
-
-    # If no dose points, return empty arrays
-    if len(structure_dose) == 0:
-        return np.array([]), np.array([])
-
-    # Get total volume (number of voxels)
-    total_volume = np.sum(structure_mask > 0)
-
-    # Create dose bins
-    min_dose = 0.0  # Start from 0
-    max_dose = np.max(structure_dose) * 1.05  # Add 5% margin
-    dose_bins = np.linspace(min_dose, max_dose, num_bins)
-
-    # Calculate histogram
-    hist, _ = np.histogram(structure_dose, bins=dose_bins)
-
-    # Convert to cumulative histogram (reverse direction)
-    cum_hist = np.cumsum(hist[::-1])[::-1]
-
-    # Normalize to percentage
-    volume_percent = cum_hist / total_volume * 100.0
-
-    # Return dose bins (use bin centers) and volume percentages
-    bin_centers = (dose_bins[:-1] + dose_bins[1:]) / 2
-    return bin_centers, volume_percent

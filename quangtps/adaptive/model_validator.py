@@ -2,43 +2,72 @@
 # -*- coding: utf-8 -*-
 
 """
-Module kiểm tra hiệu suất và tính hợp lệ của các mô hình dự đoán.
+Module kiểm tra và đánh giá mô hình dự đoán trong QuangTPS.
 
-Module này cung cấp các lớp và hàm để đánh giá hiệu suất và tính hợp lệ
-của các mô hình dự đoán được sử dụng trong hệ thống lập kế hoạch thích ứng.
+Module này cung cấp các công cụ để kiểm tra tính hợp lệ và đánh giá hiệu suất
+của các mô hình dự đoán thay đổi giải phẫu và các mô hình khác trong hệ thống.
 """
 
+import os
 import logging
 import numpy as np
-from enum import Enum
+import pandas as pd
+import matplotlib.pyplot as plt
+from typing import Dict, List, Tuple, Union, Optional, Any, Callable
+from enum import Enum, auto
+from dataclasses import dataclass
 import datetime
-from typing import Dict, List, Any, Optional, Union, Tuple
+import json
+from sklearn.metrics import (
+    mean_squared_error,
+    mean_absolute_error,
+    r2_score,
+    explained_variance_score,
+)
+from scipy.stats import pearsonr
+from skimage.metrics import structural_similarity as ssim
+
+from quangtps.core.exceptions import ValidationError
+from quangtps.core.types import Patient, Image, Structure
+from quangtps.segmentation.contour.dice import calculate_dice_coefficient
+from quangtps.common.timer import Timer
 
 logger = logging.getLogger(__name__)
 
 
 class ValidationMetric(Enum):
-    """Các metric được hỗ trợ để đánh giá mô hình."""
+    """Các metric kiểm tra mô hình."""
 
-    MSE = "mean_squared_error"
-    MAE = "mean_absolute_error"
-    DICE = "dice_coefficient"
-    JACCARD = "jaccard_index"
-    HAUSDORFF = "hausdorff_distance"
-    SSIM = "structural_similarity"
-    CORRELATION = "correlation_coefficient"
+    MSE = auto()  # Mean Squared Error
+    MAE = auto()  # Mean Absolute Error
+    RMSE = auto()  # Root Mean Squared Error
+    R2 = auto()  # R-squared (coefficient of determination)
+    EXPLAINED_VARIANCE = auto()  # Explained variance
+    CORRELATION = auto()  # Pearson correlation
+    DICE = auto()  # Dice coefficient
+    JACCARD = auto()  # Jaccard index
+    HAUSDORFF = auto()  # Hausdorff distance
+    SSIM = auto()  # Structural Similarity Index
+    VOLUME_DIFF = auto()  # Volume difference (%)
+    CENTROID_DIST = auto()  # Centroid distance (mm)
 
 
+@dataclass
 class ValidationResult:
-    """Kết quả kiểm tra tính hợp lệ của mô hình dự đoán."""
+    """Kết quả của quá trình kiểm tra mô hình."""
 
-    def __init__(self):
-        """Khởi tạo đối tượng kết quả kiểm tra."""
-        self.is_valid = False
-        self.confidence = 0.0
-        self.metrics = {}
-        self.timestamp = datetime.datetime.now()
-        self.message = ""
+    is_valid: bool = False
+    confidence: float = 0.0
+    message: str = ""
+    metrics: Dict[str, float] = None
+    timestamp: datetime.datetime = None
+
+    def __post_init__(self):
+        """Khởi tạo sau khi tạo instance."""
+        if self.metrics is None:
+            self.metrics = {}
+        if self.timestamp is None:
+            self.timestamp = datetime.datetime.now()
 
     def set_valid(self, is_valid: bool, confidence: float):
         """
@@ -47,53 +76,65 @@ class ValidationResult:
         Parameters
         ----------
         is_valid : bool
-            Biểu thị kết quả dự đoán có hợp lệ không.
+            Trạng thái hợp lệ
         confidence : float
-            Độ tin cậy của kết quả kiểm tra (0.0 - 1.0).
+            Độ tin cậy từ 0 đến 1
         """
         self.is_valid = is_valid
-        self.confidence = confidence
-
-    def add_metric(self, name: str, value: float):
-        """
-        Thêm một metric vào kết quả.
-
-        Parameters
-        ----------
-        name : str
-            Tên của metric.
-        value : float
-            Giá trị của metric.
-        """
-        self.metrics[name] = value
+        self.confidence = max(0.0, min(1.0, confidence))
 
     def set_message(self, message: str):
         """
-        Thiết lập thông báo kết quả.
+        Thiết lập thông báo.
 
         Parameters
         ----------
         message : str
-            Thông báo mô tả kết quả kiểm tra.
+            Thông báo
         """
         self.message = message
 
+    def add_metric(self, name: str, value: float):
+        """
+        Thêm metric đánh giá.
+
+        Parameters
+        ----------
+        name : str
+            Tên metric
+        value : float
+            Giá trị metric
+        """
+        self.metrics[name] = value
+
     def get_summary(self) -> Dict[str, Any]:
         """
-        Tạo tóm tắt kết quả kiểm tra.
+        Lấy tóm tắt kết quả kiểm tra.
 
         Returns
         -------
         Dict[str, Any]
-            Từ điển chứa thông tin tóm tắt kết quả.
+            Từ điển chứa thông tin tóm tắt
         """
         return {
             "is_valid": self.is_valid,
             "confidence": self.confidence,
+            "message": self.message,
             "metrics": self.metrics,
             "timestamp": self.timestamp.isoformat(),
-            "message": self.message,
         }
+
+    def to_json(self) -> str:
+        """
+        Chuyển đổi kết quả sang chuỗi JSON.
+
+        Returns
+        -------
+        str
+            Chuỗi JSON chứa kết quả kiểm tra
+        """
+        summary = self.get_summary()
+        return json.dumps(summary, ensure_ascii=False, indent=2)
 
 
 class ModelValidator:
@@ -160,118 +201,88 @@ class ModelValidator:
 
     def set_default_metrics(self, metrics: List[ValidationMetric]):
         """
-        Thiết lập danh sách các metric mặc định.
+        Thiết lập danh sách metric mặc định.
 
         Parameters
         ----------
         metrics : List[ValidationMetric]
-            Danh sách các metric mặc định.
+            Danh sách metric mặc định mới.
         """
         self.default_metrics = metrics
-        logger.debug(f"Đã thiết lập {len(metrics)} metric mặc định")
+        logger.debug(f"Đã thiết lập metrics mặc định: {[m.name for m in metrics]}")
 
-    def calculate_metric(self, metric: ValidationMetric, predicted, reference) -> float:
+    def calculate_metric(
+        self, metric: ValidationMetric, predicted: np.ndarray, reference: np.ndarray
+    ) -> float:
         """
-        Tính giá trị của một metric cụ thể.
+        Tính toán một metric cụ thể.
 
         Parameters
         ----------
         metric : ValidationMetric
             Metric cần tính.
-        predicted : array_like
+        predicted : np.ndarray
             Dữ liệu dự đoán.
-        reference : array_like
+        reference : np.ndarray
             Dữ liệu tham chiếu.
 
         Returns
         -------
         float
-            Giá trị của metric.
+            Giá trị metric.
         """
         try:
-            # Chuyển đổi sang numpy array nếu cần
-            if not isinstance(predicted, np.ndarray):
-                predicted = np.array(predicted)
-            if not isinstance(reference, np.ndarray):
-                reference = np.array(reference)
-
-            # Kiểm tra kích thước
+            # Chuẩn hóa dữ liệu về cùng kích thước
             if predicted.shape != reference.shape:
                 logger.warning(
-                    f"Kích thước dự đoán {predicted.shape} và tham chiếu {reference.shape} không khớp nhau"
+                    f"Kích thước khác nhau: predicted={predicted.shape}, reference={reference.shape}. Metric có thể không chính xác."
                 )
-                return float("nan")
 
-            # Tính metric dựa trên loại
+            # Tính toán metric
             if metric == ValidationMetric.MSE:
-                return float(np.mean((predicted - reference) ** 2))
-
+                return mean_squared_error(reference.flatten(), predicted.flatten())
             elif metric == ValidationMetric.MAE:
-                return float(np.mean(np.abs(predicted - reference)))
-
-            elif metric == ValidationMetric.DICE:
-                # Giả định dữ liệu là nhị phân (masks)
-                intersection = np.sum(predicted * reference)
-                union = np.sum(predicted) + np.sum(reference)
-                if union == 0:
-                    return 1.0  # Cả hai mask đều trống
-                return float(2.0 * intersection / union)
-
-            elif metric == ValidationMetric.JACCARD:
-                # Giả định dữ liệu là nhị phân (masks)
-                intersection = np.sum(predicted * reference)
-                union = np.sum(predicted) + np.sum(reference) - intersection
-                if union == 0:
-                    return 1.0  # Cả hai mask đều trống
-                return float(intersection / union)
-
-            elif metric == ValidationMetric.HAUSDORFF:
-                # Để triển khai hausdorff distance hoàn chỉnh, cần thư viện chuyên biệt
-                # Đây là mô phỏng đơn giản
-                return float(np.max(np.abs(predicted - reference)))
-
-            elif metric == ValidationMetric.SSIM:
-                try:
-                    # Thử import skimage để tính SSIM
-                    from skimage.metrics import structural_similarity as ssim
-
-                    return float(
-                        ssim(
-                            reference,
-                            predicted,
-                            data_range=reference.max() - reference.min(),
-                        )
-                    )
-                except ImportError:
-                    # Fallback nếu không có skimage
-                    mean_pred = np.mean(predicted)
-                    mean_ref = np.mean(reference)
-                    var_pred = np.var(predicted)
-                    var_ref = np.var(reference)
-                    cov = np.mean((predicted - mean_pred) * (reference - mean_ref))
-                    c1 = (0.01 * np.max(reference)) ** 2
-                    c2 = (0.03 * np.max(reference)) ** 2
-                    return float(
-                        (2 * mean_pred * mean_ref + c1)
-                        * (2 * cov + c2)
-                        / (
-                            (mean_pred**2 + mean_ref**2 + c1)
-                            * (var_pred + var_ref + c2)
-                        )
-                    )
-
+                return mean_absolute_error(reference.flatten(), predicted.flatten())
+            elif metric == ValidationMetric.RMSE:
+                return np.sqrt(
+                    mean_squared_error(reference.flatten(), predicted.flatten())
+                )
+            elif metric == ValidationMetric.R2:
+                return r2_score(reference.flatten(), predicted.flatten())
+            elif metric == ValidationMetric.EXPLAINED_VARIANCE:
+                return explained_variance_score(
+                    reference.flatten(), predicted.flatten()
+                )
             elif metric == ValidationMetric.CORRELATION:
-                # Hệ số tương quan Pearson
-                pred_flat = predicted.flatten()
-                ref_flat = reference.flatten()
-                return float(np.corrcoef(pred_flat, ref_flat)[0, 1])
-
+                corr, _ = pearsonr(reference.flatten(), predicted.flatten())
+                return corr
+            elif metric == ValidationMetric.DICE:
+                return calculate_dice_coefficient(predicted, reference)
+            elif metric == ValidationMetric.JACCARD:
+                intersection = np.logical_and(predicted, reference)
+                union = np.logical_or(predicted, reference)
+                return np.sum(intersection) / np.sum(union)
+            elif metric == ValidationMetric.SSIM:
+                return ssim(predicted, reference)
+            elif metric == ValidationMetric.VOLUME_DIFF:
+                vol_pred = np.sum(predicted)
+                vol_ref = np.sum(reference)
+                return abs(vol_pred - vol_ref) / vol_ref * 100
+            elif metric == ValidationMetric.CENTROID_DIST:
+                # Tính tâm
+                pred_coords = np.argwhere(predicted)
+                ref_coords = np.argwhere(reference)
+                if len(pred_coords) == 0 or len(ref_coords) == 0:
+                    return float("inf")
+                pred_centroid = np.mean(pred_coords, axis=0)
+                ref_centroid = np.mean(ref_coords, axis=0)
+                return np.linalg.norm(pred_centroid - ref_centroid)
             else:
-                logger.error(f"Không hỗ trợ metric {metric}")
+                logger.error(f"Metric không được hỗ trợ: {metric}")
                 return float("nan")
 
         except Exception as e:
-            logger.error(f"Lỗi khi tính metric {metric.value}: {str(e)}")
+            logger.error(f"Lỗi khi tính metric {metric}: {str(e)}")
             return float("nan")
 
     def validate_prediction(
@@ -333,38 +344,38 @@ class ModelValidator:
                             f"Phạm vi giá trị bất thường: [{min_val}, {max_val}]"
                         )
             else:
-                # Thực hiện đánh giá đầy đủ với dữ liệu tham chiếu
+                # Đánh giá so với tham chiếu
                 confidence_scores = []
 
                 for metric in metrics:
-                    # Tính giá trị metric
-                    value = self.calculate_metric(metric, predicted, reference)
-                    result.add_metric(metric.value, value)
+                    metric_name = (
+                        metric.name if hasattr(metric, "name") else str(metric)
+                    )
+                    metric_value = self.calculate_metric(metric, predicted, reference)
+                    result.add_metric(metric_name, metric_value)
 
-                    # Xác định xem metric có vượt qua ngưỡng không
-                    threshold = self.thresholds.get(metric.value, 0.5)
+                    # So sánh với ngưỡng để xác định tính hợp lệ
+                    threshold = self.thresholds.get(metric.value, None)
                     weight = self.metric_weights.get(metric.value, 1.0)
 
-                    # Ngược lại nếu metric càng nhỏ càng tốt
-                    if metric in [
-                        ValidationMetric.MSE,
-                        ValidationMetric.MAE,
-                        ValidationMetric.HAUSDORFF,
-                    ]:
-                        passes_threshold = value <= threshold
-                        # Tính điểm tin cậy (1.0 khi bằng 0, 0.0 khi bằng hoặc lớn hơn 2*threshold)
-                        confidence_score = (
-                            max(0.0, 1.0 - value / (2.0 * threshold)) * weight
-                        )
-                    else:
-                        passes_threshold = value >= threshold
-                        # Tính điểm tin cậy (1.0 khi bằng 1.0, 0.0 khi bằng hoặc nhỏ hơn threshold/2)
-                        confidence_score = (
-                            max(0.0, (value - threshold / 2) / (1.0 - threshold / 2))
-                            * weight
-                        )
+                    if threshold is not None:
+                        # Tính độ tin cậy dựa trên sự khác biệt với ngưỡng
+                        if metric in [
+                            ValidationMetric.MSE,
+                            ValidationMetric.MAE,
+                            ValidationMetric.RMSE,
+                            ValidationMetric.HAUSDORFF,
+                            ValidationMetric.VOLUME_DIFF,
+                            ValidationMetric.CENTROID_DIST,
+                        ]:
+                            # Các metric mà giá trị càng thấp càng tốt
+                            confidence = max(0, 1 - (metric_value / threshold))
+                        else:
+                            # Các metric mà giá trị càng cao càng tốt
+                            confidence = max(0, metric_value / threshold)
 
-                    confidence_scores.append(confidence_score)
+                        confidence = min(1.0, confidence)
+                        confidence_scores.append(confidence * weight)
 
                 # Tính điểm tin cậy trung bình
                 if confidence_scores:
@@ -395,30 +406,6 @@ class ModelValidator:
             result.set_message(f"Lỗi kiểm tra: {str(e)}")
             self.validation_history.append(result)
             return False, 0.0
-
-    def get_last_validation_result(self) -> Optional[ValidationResult]:
-        """
-        Lấy kết quả kiểm tra gần nhất.
-
-        Returns
-        -------
-        Optional[ValidationResult]
-            Kết quả kiểm tra gần nhất hoặc None nếu không có.
-        """
-        if self.validation_history:
-            return self.validation_history[-1]
-        return None
-
-    def get_validation_history(self) -> List[ValidationResult]:
-        """
-        Lấy lịch sử kiểm tra.
-
-        Returns
-        -------
-        List[ValidationResult]
-            Danh sách các kết quả kiểm tra.
-        """
-        return self.validation_history
 
     def validate_predictions(
         self, predictions, ground_truth=None, metrics=None
@@ -520,7 +507,7 @@ class ModelValidator:
                     summary[f"{metric_name}_min"] = np.min(values)
                     summary[f"{metric_name}_max"] = np.max(values)
 
-            # Thêm thống kê vào kết quả
+            # Thêm thống kê tổng hợp vào kết quả
             results["summary"] = summary
 
             return results
@@ -533,77 +520,253 @@ class ModelValidator:
                 "valid_count": valid_count,
             }
 
-    def _calculate_position_error(self, predicted_mask, reference_mask):
+    def get_last_validation_result(self) -> Optional[ValidationResult]:
         """
-        Tính toán sai số vị trí giữa hai mask.
-
-        Phương thức này tính toán khoảng cách giữa tâm (centroid) của hai mask
-        đã cho để đánh giá sai số vị trí của cấu trúc dự đoán.
-
-        Parameters
-        ----------
-        predicted_mask : np.ndarray
-            Mask nhị phân của cấu trúc được dự đoán.
-        reference_mask : np.ndarray
-            Mask nhị phân của cấu trúc tham chiếu.
+        Lấy kết quả kiểm tra gần nhất.
 
         Returns
         -------
-        float
-            Khoảng cách Euclidean giữa tâm của hai mask.
+        Optional[ValidationResult]
+            Kết quả kiểm tra gần nhất hoặc None nếu không có.
+        """
+        if self.validation_history:
+            return self.validation_history[-1]
+        return None
+
+    def get_validation_history(self) -> List[ValidationResult]:
+        """
+        Lấy lịch sử kiểm tra.
+
+        Returns
+        -------
+        List[ValidationResult]
+            Danh sách các kết quả kiểm tra.
+        """
+        return self.validation_history
+
+    def plot_validation_history(self, metrics: List[str] = None, figsize=(10, 6)):
+        """
+        Vẽ biểu đồ lịch sử kiểm tra.
+
+        Parameters
+        ----------
+        metrics : List[str], optional
+            Danh sách các metric cần vẽ. Nếu None, vẽ tất cả các metric có sẵn.
+        figsize : tuple, optional
+            Kích thước hình vẽ.
+        """
+        if not self.validation_history:
+            logger.warning("Không có lịch sử kiểm tra để vẽ")
+            return
+
+        # Tạo DataFrame từ lịch sử kiểm tra
+        data = []
+        for result in self.validation_history:
+            row = {"timestamp": result.timestamp, "confidence": result.confidence}
+            row.update(result.metrics)
+            data.append(row)
+
+        df = pd.DataFrame(data)
+
+        # Nếu không chỉ định metrics, sử dụng tất cả các metric có sẵn
+        if metrics is None:
+            # Loại bỏ các cột không phải metric
+            metrics = [
+                col for col in df.columns if col not in ["timestamp", "confidence"]
+            ]
+
+        # Vẽ biểu đồ
+        plt.figure(figsize=figsize)
+
+        # Vẽ đường độ tin cậy
+        plt.plot(df["timestamp"], df["confidence"], "k-", label="Độ tin cậy")
+
+        # Vẽ các metric
+        for metric in metrics:
+            if metric in df.columns:
+                # Chuẩn hóa giá trị metric để hiển thị trên cùng đồ thị với độ tin cậy
+                values = df[metric].values
+                min_val = np.min(values)
+                max_val = np.max(values)
+                if max_val > min_val:
+                    normalized = (values - min_val) / (max_val - min_val)
+                    plt.plot(
+                        df["timestamp"], normalized, "--", label=f"{metric} (chuẩn hóa)"
+                    )
+                else:
+                    logger.warning(
+                        f"Metric {metric} có giá trị không đổi, không thể chuẩn hóa"
+                    )
+
+        plt.xlabel("Thời gian")
+        plt.ylabel("Giá trị (chuẩn hóa)")
+        plt.title("Lịch sử kiểm tra mô hình")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+
+        plt.show()
+
+    def save_results(self, filepath: str) -> bool:
+        """
+        Lưu kết quả kiểm tra vào file.
+
+        Parameters
+        ----------
+        filepath : str
+            Đường dẫn đến file lưu kết quả.
+
+        Returns
+        -------
+        bool
+            True nếu lưu thành công, False nếu không.
         """
         try:
-            # Xác minh rằng cả hai mask đều có thông tin
-            if predicted_mask is None or reference_mask is None:
-                logger.warning("Một hoặc cả hai mask là None")
-                return float("inf")
+            results = []
+            for result in self.validation_history:
+                results.append(result.get_summary())
 
-            if predicted_mask.sum() == 0 or reference_mask.sum() == 0:
-                logger.warning("Một hoặc cả hai mask không có pixel nào")
-                return float("inf")
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
 
-            # Tính tâm của các mask
-            pred_centroid = self._get_centroid(predicted_mask)
-            ref_centroid = self._get_centroid(reference_mask)
-
-            # Tính khoảng cách Euclidean
-            distance = np.sqrt(
-                np.sum((np.array(pred_centroid) - np.array(ref_centroid)) ** 2)
-            )
-            return float(distance)
+            logger.info(f"Đã lưu kết quả kiểm tra vào {filepath}")
+            return True
 
         except Exception as e:
-            logger.error(f"Lỗi khi tính toán sai số vị trí: {str(e)}")
-            return float("inf")
+            logger.error(f"Lỗi khi lưu kết quả kiểm tra: {str(e)}")
+            return False
 
-    def _get_centroid(self, mask):
+    def validate_structure_predictions(
+        self,
+        predicted_structures: Dict[str, Structure],
+        reference_structures: Dict[str, Structure],
+        metrics: List[ValidationMetric] = None,
+    ) -> Dict[str, Any]:
         """
-                Tính tâm (centroid) của mask nhị phân.
+        Đánh giá dự đoán cấu trúc.
 
         Parameters
         ----------
-                mask : np.ndarray
-                    Mask nhị phân 3D.
+        predicted_structures : Dict[str, Structure]
+            Từ điển các cấu trúc dự đoán, với khóa là tên cấu trúc.
+        reference_structures : Dict[str, Structure]
+            Từ điển các cấu trúc tham chiếu, với khóa là tên cấu trúc.
+        metrics : List[ValidationMetric], optional
+            Danh sách các metric cần sử dụng, mặc định sử dụng DICE và Hausdorff.
 
         Returns
         -------
-                tuple
-                    Tọa độ (x, y, z) của tâm.
+        Dict[str, Any]
+            Kết quả đánh giá, bao gồm kết quả cho từng cấu trúc và thống kê tổng hợp.
         """
-        if mask.sum() == 0:
-            return (0, 0, 0)
+        if metrics is None:
+            metrics = [
+                ValidationMetric.DICE,
+                ValidationMetric.HAUSDORFF,
+                ValidationMetric.VOLUME_DIFF,
+            ]
 
-        # Tìm tọa độ các điểm không phải 0
-        indices = np.where(mask > 0)
+        results = {}
+        structure_results = {}
 
-        # Tính trung bình các tọa độ để có tâm
-        centroid = []
-        for i in range(len(indices)):
-            centroid.append(float(indices[i].mean()))
+        # Tìm các cấu trúc xuất hiện trong cả hai tập
+        common_structures = set(predicted_structures.keys()) & set(
+            reference_structures.keys()
+        )
 
-        return tuple(centroid)
+        for struct_name in common_structures:
+            pred_struct = predicted_structures[struct_name]
+            ref_struct = reference_structures[struct_name]
 
+            # Lấy mask của cấu trúc
+            pred_mask = pred_struct.mask
+            ref_mask = ref_struct.mask
 
-if __name__ == "__main__":
-    # Mã để chạy thử và kiểm tra module
-    logger.info("Kiểm tra module model_validator.py")
+            # Đánh giá cho cấu trúc này
+            struct_result = ValidationResult()
+            confidence_scores = []
+
+            for metric in metrics:
+                try:
+                    metric_value = self.calculate_metric(metric, pred_mask, ref_mask)
+                    struct_result.add_metric(metric.name, metric_value)
+
+                    # Tính độ tin cậy dựa trên ngưỡng
+                    threshold = self.thresholds.get(metric.value, None)
+                    weight = self.metric_weights.get(metric.value, 1.0)
+
+                    if threshold is not None:
+                        if metric in [
+                            ValidationMetric.MSE,
+                            ValidationMetric.MAE,
+                            ValidationMetric.RMSE,
+                            ValidationMetric.HAUSDORFF,
+                            ValidationMetric.VOLUME_DIFF,
+                            ValidationMetric.CENTROID_DIST,
+                        ]:
+                            # Các metric mà giá trị càng thấp càng tốt
+                            confidence = max(0, 1 - (metric_value / threshold))
+                        else:
+                            # Các metric mà giá trị càng cao càng tốt
+                            confidence = max(0, metric_value / threshold)
+
+                        confidence = min(1.0, confidence)
+                        confidence_scores.append(confidence * weight)
+
+                except Exception as e:
+                    logger.error(
+                        f"Lỗi khi tính metric {metric} cho cấu trúc {struct_name}: {str(e)}"
+                    )
+
+            # Tính độ tin cậy trung bình
+            if confidence_scores:
+                avg_confidence = sum(confidence_scores) / sum(
+                    weight for weight in self.metric_weights.values() if weight > 0
+                )
+                struct_result.set_valid(avg_confidence >= 0.7, avg_confidence)
+
+                if struct_result.is_valid:
+                    struct_result.set_message(
+                        f"Cấu trúc {struct_name} đạt tiêu chí kiểm tra"
+                    )
+                else:
+                    struct_result.set_message(
+                        f"Cấu trúc {struct_name} không đạt tiêu chí kiểm tra"
+                    )
+            else:
+                struct_result.set_valid(False, 0.0)
+                struct_result.set_message(
+                    f"Không thể tính các metric cho cấu trúc {struct_name}"
+                )
+
+            # Lưu kết quả
+            structure_results[struct_name] = struct_result.get_summary()
+
+        # Tính toán thống kê tổng hợp
+        valid_structures = sum(
+            1 for result in structure_results.values() if result["is_valid"]
+        )
+        avg_confidence = np.mean(
+            [result["confidence"] for result in structure_results.values()]
+        )
+
+        # Tạo kết quả tổng hợp
+        results = {
+            "structures": structure_results,
+            "summary": {
+                "total_structures": len(common_structures),
+                "valid_structures": valid_structures,
+                "valid_percentage": (valid_structures / len(common_structures)) * 100
+                if common_structures
+                else 0,
+                "average_confidence": avg_confidence,
+                "missing_in_prediction": list(
+                    set(reference_structures.keys()) - set(predicted_structures.keys())
+                ),
+                "extra_in_prediction": list(
+                    set(predicted_structures.keys()) - set(reference_structures.keys())
+                ),
+            },
+        }
+
+        return results

@@ -33,6 +33,17 @@ class IOError(QuangTPSError):
         super().__init__(message_with_path)
 
 
+class ImageError(QuangTPSError):
+    """Lỗi khi xử lý hình ảnh y tế"""
+
+    def __init__(self, message="Image processing error", image_type=None):
+        self.image_type = image_type
+        message_with_type = message
+        if image_type:
+            message_with_type = f"{message} for image type '{image_type}'"
+        super().__init__(message_with_type)
+
+
 class DicomError(QuangTPSError):
     """Lỗi khi xử lý dữ liệu DICOM"""
 

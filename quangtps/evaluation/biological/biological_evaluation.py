@@ -2,58 +2,47 @@
 # -*- coding: utf-8 -*-
 
 """
-Module đánh giá sinh học (Biological Evaluation) cho kế hoạch xạ trị.
+Module đánh giá sinh học trong xạ trị.
 
-Module này đóng vai trò trung gian giữa các mô hình sinh học (TCP, NTCP, EUD)
-và giao diện người dùng, đảm bảo việc đánh giá kế hoạch xạ trị từ góc độ
-sinh học được thực hiện chính xác và hiệu quả.
+Module này tích hợp các mô hình sinh học khác nhau để đánh giá tác động
+của liều xạ trị lên các mô sinh học, bao gồm xác suất kiểm soát khối u (TCP)
+và xác suất biến chứng mô lành (NTCP).
 """
 
-import logging
-import numpy as np
-from typing import Dict, List, Tuple, Any, Optional, Union
 import re
+import numpy as np
+import logging
 from collections import defaultdict
 from datetime import datetime
+from typing import Dict, List, Tuple, Optional, Union, Any, Set
 
-# Import các module sinh học
+# Kiểm tra tính khả dụng của các module sinh học
 try:
-    # Import các module TCP/NTCP
     from quangtps.evaluation.biological.tcp import (
-        calculate_tcp_lq_poisson,
-        calculate_tcp_niemierko,
+        calculate_tcp_lq_poisson_dvh as calculate_poisson_tcp,
+        calculate_tcp_niemierko as calculate_lq_tcp,
         calculate_tcp_logistic,
         calculate_tcp_webb,
-        calculate_tcp_lq_poisson_dvh,
-        TCPModels,
     )
     from quangtps.evaluation.biological.ntcp import (
-        calculate_ntcp_lkb,
-        calculate_ntcp_relative_seriality,
-        calculate_ntcp_logit,
-        calculate_ntcp_poisson,
-        calculate_ntcp_for_dvh,
+        calculate_ntcp_for_dvh as calculate_lkb_ntcp,
+        calculate_ntcp_logit as calculate_logit_ntcp,
         get_ntcp_constraints,
-        NTCPModels,
     )
-
-    # Import module EQD2 và BED
     from quangtps.evaluation.biological.eqd2 import (
         calculate_eqd2,
         calculate_bed,
-        calculate_eqd2_from_dvh,
-        calculate_eqd2_for_volume,
+        bed_to_eqd2 as calculate_equivalent_dose,
         get_alpha_beta_ratio,
-        EQD2Calculator,
     )
-
-    # Import module Oxygen Effect nếu cần
-    from quangtps.evaluation.biological.oxygen_effect import OxygenEffect
 
     BIOLOGICAL_MODELS_AVAILABLE = True
 except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        f"Không tìm thấy mô hình sinh học đầy đủ. Một số tính năng sẽ bị hạn chế. Lỗi: {str(e)}"
+    )
     BIOLOGICAL_MODELS_AVAILABLE = False
-    logging.error(f"Không thể import các module sinh học: {str(e)}")
 
 logger = logging.getLogger(__name__)
 
@@ -303,9 +292,15 @@ class BiologicalEvaluation:
             # Thêm các cơ quan khác từ module NTCP nếu có
             if BIOLOGICAL_MODELS_AVAILABLE:
                 try:
-                    for organ in get_ntcp_constraints():
+                    # Lấy danh sách tất cả các cơ quan từ hàm get_ntcp_constraints
+                    organs = get_ntcp_constraints("all")
+
+                    # Thêm thông tin cho từng cơ quan
+                    for organ in organs:
                         if organ not in self.organ_parameters:
+                            # Lấy thông tin ràng buộc cho cơ quan
                             constraints = get_ntcp_constraints(organ)
+                            # Lấy tỷ lệ alpha/beta cho cơ quan
                             alpha_beta = get_alpha_beta_ratio(organ)
 
                             self.organ_parameters[organ] = {
@@ -638,867 +633,401 @@ class BiologicalEvaluation:
         structure_name : str
             Tên cấu trúc
         dvh : Dict[str, np.ndarray]
-            Dữ liệu DVH gồm 'dose' và 'volume'
+            Dữ liệu DVH của cấu trúc, format: {'dose': np.ndarray, 'volume': np.ndarray}
         num_fractions : int
             Số phân liều
         dose_per_fraction : float
             Liều mỗi phân liều (Gy)
         structure_type : str
-            Loại cấu trúc ('TARGET' hoặc 'OAR')
+            Loại cấu trúc ("TARGET", "OAR")
         params : Dict[str, Any]
-            Các tham số sinh học cho cấu trúc
+            Các tham số sinh học
 
         Returns
         -------
         Dict[str, Any]
-            Kết quả các chỉ số sinh học
+            Kết quả các chỉ số sinh học cho cấu trúc
         """
-        result = {}
+        if not BIOLOGICAL_MODELS_AVAILABLE:
+            return {}
 
         try:
-            # Dữ liệu DVH
-            doses = dvh.get("dose")
-            volumes = dvh.get("volume")
+            # Đảm bảo dữ liệu DVH hợp lệ
+            dose_array = dvh.get("dose")
+            volume_array = dvh.get("volume")
 
-            if doses is None or volumes is None or len(doses) == 0 or len(volumes) == 0:
-                logger.warning(f"DVH cho {structure_name} không hợp lệ hoặc rỗng")
-                return {"status": "error", "message": "DVH không hợp lệ"}
+            if dose_array is None or volume_array is None:
+                logger.warning(f"Thiếu dữ liệu DVH cho cấu trúc {structure_name}")
+                return {
+                    "name": structure_name,
+                    "type": structure_type,
+                    "error": "Thiếu dữ liệu DVH",
+                }
 
-            # Chuẩn hóa thể tích
-            if np.max(volumes) > 1.0:
-                volumes = volumes / 100.0  # Giả sử volumes đang ở định dạng phần trăm
+            if len(dose_array) == 0 or len(volume_array) == 0:
+                logger.warning(f"Dữ liệu DVH trống cho cấu trúc {structure_name}")
+                return {
+                    "name": structure_name,
+                    "type": structure_type,
+                    "error": "Dữ liệu DVH trống",
+                }
 
-            result["dvh_points"] = len(doses)
+            # Lấy thông số sinh học từ tham số
+            a_value = params.get("a", 1.0 if structure_type == "TARGET" else -10.0)
+            alpha_beta = params.get("alpha_beta", 10.0)
+            rho = params.get("rho", 1e7)
+            alpha = params.get("alpha", 0.3)
+            reference_dose = params.get("reference_dose", 2.0)
 
-            # Tính EUD (Equivalent Uniform Dose)
-            try:
-                if structure_type == "TARGET":
-                    a_value = params.get(
-                        "a_value", 10.0
-                    )  # Giá trị a tích cực cho TARGET
-                else:
-                    a_value = params.get("a_value", 4.0)  # Giá trị a tích cực cho OAR
-
-                # Tính EUD với nhiều giá trị a khác nhau
-                eud_values = {}
-
-                # Giá trị a tiêu chuẩn
-                eud = calculate_equivalent_uniform_dose(doses, volumes, a_value)
-                result["EUD"] = eud
-                eud_values[str(a_value)] = eud
-
-                # Tính EUD với các giá trị a khác nhau để phân tích độ nhạy
-                sensitivity_a_values = []
-                if structure_type == "TARGET":
-                    sensitivity_a_values = [1.0, 5.0, 10.0, 15.0, 20.0]
-                else:
-                    sensitivity_a_values = [1.0, 2.0, 4.0, 8.0, 12.0, 16.0]
-
-                for a in sensitivity_a_values:
-                    if a != a_value:  # Bỏ qua giá trị đã tính ở trên
-                        eud_a = calculate_equivalent_uniform_dose(doses, volumes, a)
-                        eud_values[str(a)] = eud_a
-
-                result["EUD_sensitivity"] = eud_values
-
-                # Tính gEUD2 (EUD normalized to 2Gy fractions)
-                alpha_beta = params.get(
-                    "alpha_beta", 10.0 if structure_type == "TARGET" else 3.0
-                )
-                geud2 = (
-                    eud * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-                )
-                result["gEUD2"] = geud2
-
-                # Tính BED (Biologically Effective Dose)
-                bed = eud * (1 + dose_per_fraction / alpha_beta)
-                result["BED"] = bed
-
-            except Exception as e:
-                logger.warning(f"Lỗi khi tính EUD cho {structure_name}: {str(e)}")
-                result["EUD_error"] = str(e)
-
-            # Tính TCP (Target Control Probability) cho TARGET
-            if structure_type == "TARGET":
-                try:
-                    tcp_model = params.get("tcp_model", "poisson")
-                    tcp_params = params.get("tcp_params", {})
-
-                    # Tính TCP với các mô hình khác nhau
-                    tcp_values = {}
-
-                    # Mô hình Poisson (LQ)
-                    if tcp_model == "poisson" or "poisson" in params.get(
-                        "alternate_models", {}
-                    ):
-                        alpha = tcp_params.get("alpha", 0.3)
-                        alpha_beta = tcp_params.get("alpha_beta", 10.0)
-                        clonogenic_density = tcp_params.get("clonogenic_density", 1e7)
-
-                        tcp_poisson = calculate_tcp_lq_poisson_dvh(
-                            dvh, num_fractions, alpha, alpha_beta, clonogenic_density
-                        )
-                        tcp_values["poisson"] = tcp_poisson
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if tcp_model == "poisson":
-                            result["TCP"] = tcp_poisson
-
-                    # Mô hình Niemierko
-                    niemierko_params = params.get("alternate_models", {}).get(
-                        "niemierko", {}
-                    )
-                    if tcp_model == "niemierko" or niemierko_params:
-                        tcd50 = niemierko_params.get("tcd50", 60.0)
-                        gamma50 = niemierko_params.get("gamma50", 2.0)
-
-                        tcp_niemierko = calculate_tcp_niemierko(
-                            result["EUD"], tcd50, gamma50
-                        )
-                        tcp_values["niemierko"] = tcp_niemierko
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if tcp_model == "niemierko":
-                            result["TCP"] = tcp_niemierko
-
-                    # Mô hình Webb (xem xét tính không đồng nhất của alpha)
-                    webb_params = params.get("alternate_models", {}).get("webb", {})
-                    if tcp_model == "webb" or webb_params:
-                        alpha_mean = webb_params.get("alpha_mean", 0.3)
-                        alpha_std = webb_params.get("alpha_std", 0.1)
-
-                        # Webb không thể tính trực tiếp từ DVH, bỏ qua hoặc xấp xỉ
-                        # Xấp xỉ ở đây dùng logistic function
-                        tcp_webb_approx = calculate_tcp_logistic(
-                            result["EUD"], 60.0, 2.0
-                        )
-                        tcp_values["webb"] = tcp_webb_approx
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if tcp_model == "webb":
-                            result["TCP"] = tcp_webb_approx
-
-                    # Lưu tất cả các giá trị TCP
-                    result["TCP_models"] = tcp_values
-
-                    # Nếu không có TCP chính nào được tính, sử dụng mô hình Poisson mặc định
-                    if "TCP" not in result and "poisson" in tcp_values:
-                        result["TCP"] = tcp_values["poisson"]
-
-                except Exception as e:
-                    logger.warning(f"Lỗi khi tính TCP cho {structure_name}: {str(e)}")
-                    result["TCP_error"] = str(e)
-
-            # Tính NTCP (Normal Tissue Complication Probability) cho OAR
-            elif structure_type == "OAR":
-                try:
-                    ntcp_model = params.get("ntcp_model", "lkb")
-                    ntcp_params = params.get("ntcp_params", {})
-
-                    # Tính NTCP với các mô hình khác nhau
-                    ntcp_values = {}
-
-                    # Mô hình LKB (Lyman-Kutcher-Burman)
-                    if ntcp_model == "lkb" or "lkb" in params.get(
-                        "alternate_models", {}
-                    ):
-                        # Tham số LKB
-                        td50 = ntcp_params.get("td50", 50.0)
-                        n = ntcp_params.get("n", 0.5)
-                        m = ntcp_params.get("m", 0.1)
-
-                        # Tính NTCP theo mô hình LKB
-                        ntcp_lkb = calculate_ntcp_for_dvh(
-                            dvh,
-                            "lkb",
-                            {"td50": td50, "n": n, "m": m},
-                            num_fractions,
-                            dose_per_fraction,
-                        )
-                        ntcp_values["lkb"] = ntcp_lkb
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if ntcp_model == "lkb":
-                            result["NTCP"] = ntcp_lkb
-
-                    # Mô hình Relative Seriality
-                    rs_params = params.get("alternate_models", {}).get(
-                        "relative_seriality", {}
-                    )
-                    if ntcp_model == "relative_seriality" or rs_params:
-                        s = rs_params.get("s", 0.5)
-                        gamma = rs_params.get("gamma", 2.0)
-                        d50 = rs_params.get("d50", 50.0)
-
-                        # Tính NTCP theo mô hình Relative Seriality
-                        ntcp_rs = calculate_ntcp_for_dvh(
-                            dvh,
-                            "relative_seriality",
-                            {"s": s, "gamma": gamma, "d50": d50},
-                            num_fractions,
-                            dose_per_fraction,
-                        )
-                        ntcp_values["relative_seriality"] = ntcp_rs
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if ntcp_model == "relative_seriality":
-                            result["NTCP"] = ntcp_rs
-
-                    # Mô hình Logit
-                    logit_params = params.get("alternate_models", {}).get("logit", {})
-                    if ntcp_model == "logit" or logit_params:
-                        d50 = logit_params.get("d50", 50.0)
-                        k = logit_params.get("k", 2.0)
-
-                        # Tính NTCP theo mô hình Logit
-                        ntcp_logit = calculate_ntcp_for_dvh(
-                            dvh,
-                            "logit",
-                            {"d50": d50, "k": k},
-                            num_fractions,
-                            dose_per_fraction,
-                        )
-                        ntcp_values["logit"] = ntcp_logit
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if ntcp_model == "logit":
-                            result["NTCP"] = ntcp_logit
-
-                    # Mô hình Poisson
-                    poisson_params = params.get("alternate_models", {}).get(
-                        "poisson", {}
-                    )
-                    if ntcp_model == "poisson" or poisson_params:
-                        d50 = poisson_params.get("d50", 50.0)
-                        gamma = poisson_params.get("gamma", 2.0)
-
-                        # Tính NTCP theo mô hình Poisson
-                        ntcp_poisson = calculate_ntcp_for_dvh(
-                            dvh,
-                            "poisson",
-                            {"d50": d50, "gamma": gamma},
-                            num_fractions,
-                            dose_per_fraction,
-                        )
-                        ntcp_values["poisson"] = ntcp_poisson
-
-                        # Nếu đây là mô hình chính, lưu vào kết quả chính
-                        if ntcp_model == "poisson":
-                            result["NTCP"] = ntcp_poisson
-
-                    # Lưu tất cả các giá trị NTCP
-                    result["NTCP_models"] = ntcp_values
-
-                    # Nếu không có NTCP chính nào được tính, sử dụng mô hình LKB mặc định
-                    if "NTCP" not in result and "lkb" in ntcp_values:
-                        result["NTCP"] = ntcp_values["lkb"]
-
-                except Exception as e:
-                    logger.warning(f"Lỗi khi tính NTCP cho {structure_name}: {str(e)}")
-                    result["NTCP_error"] = str(e)
-
-            # Thêm thông tin phân tích độ nhạy
-            result["sensitivity_analysis"] = self._perform_sensitivity_analysis(
-                structure_name,
-                structure_type,
-                dvh,
-                num_fractions,
-                dose_per_fraction,
-                params,
-            )
-
-            # Thêm thông tin đánh giá tổng quan
-            result["overall_evaluation"] = self._evaluate_metrics(
-                structure_name, structure_type, result
-            )
-
-            # Lưu các thông tin bổ sung
-            result["num_fractions"] = num_fractions
-            result["dose_per_fraction"] = dose_per_fraction
-            result["structure_type"] = structure_type
-            result["status"] = "success"
-
-            # Tính thống kê DVH cơ bản
-            result["dvh_stats"] = {
-                "min_dose": np.min(doses),
-                "max_dose": np.max(doses),
-                "mean_dose": np.sum(doses * volumes) / np.sum(volumes),
-                "median_dose": np.percentile(doses, 50),
+            # Chuẩn bị kết quả trả về
+            metrics = {
+                "name": structure_name,
+                "type": structure_type,
             }
 
-            return result
+            try:
+                # Tính EUD
+                try:
+                    eud = calculate_equivalent_uniform_dose(
+                        dose_array, volume_array, a_value
+                    )
+                    metrics["eud"] = eud
+                except Exception as e:
+                    logger.warning(f"Lỗi khi tính EUD cho {structure_name}: {str(e)}")
+                    metrics["eud"] = None
+
+                # Tính BED, qED
+                try:
+                    total_dose = dose_per_fraction * num_fractions
+                    bed = calculate_bed(total_dose, dose_per_fraction, alpha_beta)
+                    metrics["bed"] = bed
+                    qed = calculate_equivalent_dose(bed, alpha_beta)
+                    metrics["qed"] = qed
+                except Exception as e:
+                    logger.warning(
+                        f"Lỗi khi tính BED/qED cho {structure_name}: {str(e)}"
+                    )
+                    metrics["bed"] = None
+                    metrics["qed"] = None
+                    metrics["bed_error"] = str(e)
+
+                # Tính TCP cho cấu trúc mục tiêu
+                if structure_type == "TARGET":
+                    try:
+                        tcp_params = params.get("tcp_params", {})
+                        tcp_model = params.get("tcp_model", "poisson")
+
+                        if tcp_model == "poisson":
+                            tcp = calculate_poisson_tcp(
+                                dose_array,
+                                volume_array,
+                                alpha=tcp_params.get("alpha", alpha),
+                                rho=tcp_params.get("rho", rho),
+                                d50=tcp_params.get("d50", 45.0),
+                                gamma50=tcp_params.get("gamma50", 2.0),
+                            )
+                        else:  # LQ model
+                            tcp = calculate_lq_tcp(
+                                dose_array,
+                                volume_array,
+                                alpha=tcp_params.get("alpha", alpha),
+                                beta=tcp_params.get("beta", alpha / alpha_beta),
+                                rho=tcp_params.get("rho", rho),
+                                t_half=tcp_params.get("t_half", 3.0),
+                                t_k=tcp_params.get("t_k", 21.0),
+                                t_d=tcp_params.get("t_d", 2.5),
+                                n_k=tcp_params.get("n_k", 3),
+                            )
+
+                        metrics["tcp"] = tcp
+                    except Exception as e:
+                        logger.warning(
+                            f"Lỗi khi tính TCP cho {structure_name}: {str(e)}"
+                        )
+                        metrics["tcp"] = None
+                        metrics["tcp_error"] = str(e)
+                else:
+                    metrics["tcp"] = 0.0
+
+                # Tính NTCP cho cấu trúc mô lành
+                if structure_type == "OAR":
+                    try:
+                        ntcp_params = params.get("ntcp_params", {})
+                        ntcp_model = params.get("ntcp_model", "lkb")
+
+                        if ntcp_model == "lkb":
+                            ntcp = calculate_lkb_ntcp(
+                                dose_array,
+                                volume_array,
+                                td50=ntcp_params.get("td50", 40.0),
+                                n=ntcp_params.get("n", 0.12),
+                                m=ntcp_params.get("m", 0.15),
+                            )
+                        else:  # Logit model
+                            ntcp = calculate_logit_ntcp(
+                                dose_array,
+                                volume_array,
+                                td50=ntcp_params.get("td50", 40.0),
+                                gamma50=ntcp_params.get("gamma50", 2.3),
+                            )
+
+                        metrics["ntcp"] = ntcp
+                    except Exception as e:
+                        logger.warning(
+                            f"Lỗi khi tính NTCP cho {structure_name}: {str(e)}"
+                        )
+                        metrics["ntcp"] = None
+                        metrics["ntcp_error"] = str(e)
+                else:
+                    metrics["ntcp"] = 0.0
+
+                # Tính các chỉ số DVH cơ bản
+                try:
+                    # Liều cơ bản
+                    metrics["mean_dose"] = calculate_mean_dose(dose_array, volume_array)
+                    metrics["min_dose"] = (
+                        np.min(dose_array) if len(dose_array) > 0 else 0
+                    )
+                    metrics["max_dose"] = (
+                        np.max(dose_array) if len(dose_array) > 0 else 0
+                    )
+
+                    # Tính liều tham chiếu cho TARGET
+                    ref_dose = None
+                    if structure_type == "TARGET":
+                        if "prescription_dose" in params:
+                            ref_dose = params.get("prescription_dose")
+                        elif "d_ref" in params:
+                            ref_dose = params.get("d_ref")
+
+                    # Độ phủ và liều tương đối
+                    if ref_dose:
+                        metrics["coverage"] = calculate_coverage(
+                            dose_array, volume_array, ref_dose
+                        )
+                        metrics["homogeneity_index"] = calculate_homogeneity_index(
+                            dose_array, volume_array, ref_dose
+                        )
+                        metrics["conformity_index"] = params.get(
+                            "conformity_index", 1.0
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Lỗi khi tính chỉ số DVH cho {structure_name}: {str(e)}"
+                    )
+                    metrics["dvh_error"] = str(e)
+
+            except Exception as e:
+                logger.error(
+                    f"Lỗi khi tính toán chỉ số sinh học cho {structure_name}: {str(e)}"
+                )
+                metrics["error"] = str(e)
+
+            # Gắn thêm các thông tin bổ sung
+            metrics["endpoint"] = params.get("endpoint", "")
+            metrics["priority"] = params.get("priority", "medium")
+
+            return metrics
 
         except Exception as e:
             logger.error(
-                f"Lỗi khi tính toán chỉ số sinh học cho {structure_name}: {str(e)}"
+                f"Lỗi không xác định khi tính chỉ số sinh học cho {structure_name}: {str(e)}"
             )
-            import traceback
-
-            logger.debug(traceback.format_exc())
-            return {"status": "error", "message": str(e)}
-
-    def _perform_sensitivity_analysis(
-        self,
-        structure_name: str,
-        structure_type: str,
-        dvh: Dict[str, np.ndarray],
-        num_fractions: int,
-        dose_per_fraction: float,
-        params: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        Thực hiện phân tích độ nhạy cho các tham số sinh học.
-
-        Parameters
-        ----------
-        structure_name : str
-            Tên cấu trúc
-        structure_type : str
-            Loại cấu trúc ('TARGET' hoặc 'OAR')
-        dvh : Dict[str, np.ndarray]
-            Dữ liệu DVH
-        num_fractions : int
-            Số phân liều
-        dose_per_fraction : float
-            Liều mỗi phân liều (Gy)
-        params : Dict[str, Any]
-            Các tham số sinh học cho cấu trúc
-
-        Returns
-        -------
-        Dict[str, Any]
-            Kết quả phân tích độ nhạy
-        """
-        try:
-            result = {}
-
-            # Phân tích độ nhạy chỉ thực hiện khi có đủ dữ liệu
-            if "dose" not in dvh or "volume" not in dvh:
-                return result
-
-            # TARGET - Phân tích độ nhạy cho TCP
-            if structure_type == "TARGET":
-                # Độ nhạy đối với alpha
-                alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5]
-                alpha_results = {}
-
-                for alpha in alpha_values:
-                    try:
-                        tcp = calculate_tcp_lq_poisson_dvh(
-                            dvh,
-                            num_fractions,
-                            alpha=alpha,
-                            alpha_beta=params.get("tcp_params", {}).get(
-                                "alpha_beta", 10.0
-                            ),
-                            clonogenic_density=params.get("tcp_params", {}).get(
-                                "clonogenic_density", 1e7
-                            ),
-                        )
-                        alpha_results[str(alpha)] = tcp
-                    except Exception:
-                        continue
-
-                if alpha_results:
-                    result["alpha_sensitivity"] = alpha_results
-
-                # Độ nhạy đối với alpha/beta
-                ab_values = [3.0, 5.0, 10.0, 15.0, 20.0]
-                ab_results = {}
-
-                for ab in ab_values:
-                    try:
-                        tcp = calculate_tcp_lq_poisson_dvh(
-                            dvh,
-                            num_fractions,
-                            alpha=params.get("tcp_params", {}).get("alpha", 0.3),
-                            alpha_beta=ab,
-                            clonogenic_density=params.get("tcp_params", {}).get(
-                                "clonogenic_density", 1e7
-                            ),
-                        )
-                        ab_results[str(ab)] = tcp
-                    except Exception:
-                        continue
-
-                if ab_results:
-                    result["alpha_beta_sensitivity"] = ab_results
-
-            # OAR - Phân tích độ nhạy cho NTCP
-            elif structure_type == "OAR":
-                # Độ nhạy đối với TD50
-                td50_base = params.get("ntcp_params", {}).get("td50", 50.0)
-                td50_values = [
-                    td50_base * 0.8,
-                    td50_base * 0.9,
-                    td50_base,
-                    td50_base * 1.1,
-                    td50_base * 1.2,
-                ]
-                td50_results = {}
-
-                for td50 in td50_values:
-                    try:
-                        ntcp_params = dict(params.get("ntcp_params", {}))
-                        ntcp_params["td50"] = td50
-
-                        ntcp = calculate_ntcp_for_dvh(
-                            dvh,
-                            params.get("ntcp_model", "lkb"),
-                            ntcp_params,
-                            num_fractions,
-                            dose_per_fraction,
-                        )
-                        td50_results[str(td50)] = ntcp
-                    except Exception:
-                        continue
-
-                if td50_results:
-                    result["td50_sensitivity"] = td50_results
-
-                # Độ nhạy đối với n (LKB) hoặc s (Relative Seriality)
-                if params.get("ntcp_model", "lkb") == "lkb":
-                    n_base = params.get("ntcp_params", {}).get("n", 0.5)
-                    n_values = [
-                        n_base * 0.5,
-                        n_base * 0.75,
-                        n_base,
-                        n_base * 1.25,
-                        n_base * 1.5,
-                    ]
-                    n_results = {}
-
-                    for n in n_values:
-                        try:
-                            ntcp_params = dict(params.get("ntcp_params", {}))
-                            ntcp_params["n"] = n
-
-                            ntcp = calculate_ntcp_for_dvh(
-                                dvh,
-                                "lkb",
-                                ntcp_params,
-                                num_fractions,
-                                dose_per_fraction,
-                            )
-                            n_results[str(n)] = ntcp
-                        except Exception:
-                            continue
-
-                    if n_results:
-                        result["n_sensitivity"] = n_results
-
-                elif params.get("ntcp_model", "lkb") == "relative_seriality":
-                    s_base = params.get("ntcp_params", {}).get("s", 0.5)
-                    s_values = [
-                        s_base * 0.5,
-                        s_base * 0.75,
-                        s_base,
-                        s_base * 1.25,
-                        s_base * 1.5,
-                    ]
-                    s_results = {}
-
-                    for s in s_values:
-                        try:
-                            ntcp_params = dict(params.get("ntcp_params", {}))
-                            ntcp_params["s"] = s
-
-                            ntcp = calculate_ntcp_for_dvh(
-                                dvh,
-                                "relative_seriality",
-                                ntcp_params,
-                                num_fractions,
-                                dose_per_fraction,
-                            )
-                            s_results[str(s)] = ntcp
-                        except Exception:
-                            continue
-
-                    if s_results:
-                        result["s_sensitivity"] = s_results
-
-            return result
-
-        except Exception as e:
-            logger.warning(
-                f"Lỗi khi thực hiện phân tích độ nhạy cho {structure_name}: {str(e)}"
-            )
-            return {}
-
-    def _evaluate_metrics(
-        self, structure_name: str, structure_type: str, metrics: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Đánh giá tổng quan các chỉ số sinh học.
-
-        Parameters
-        ----------
-        structure_name : str
-            Tên cấu trúc
-        structure_type : str
-            Loại cấu trúc ('TARGET' hoặc 'OAR')
-        metrics : Dict[str, Any]
-            Các chỉ số sinh học đã tính
-
-        Returns
-        -------
-        Dict[str, Any]
-            Kết quả đánh giá tổng quan
-        """
-        result = {
-            "status": "ok",
-            "concerns": [],
-            "recommendations": [],
-            "confidence": "high",
-        }
-
-        # Đánh giá cho TARGET
-        if structure_type == "TARGET":
-            tcp = metrics.get("TCP")
-            eud = metrics.get("EUD")
-
-            if tcp is not None:
-                if tcp < 0.5:
-                    result["status"] = "warning"
-                    result["concerns"].append(f"TCP thấp ({tcp:.2f})")
-                    result["recommendations"].append(
-                        "Xem xét tăng liều hoặc số phân liều"
-                    )
-                    result["confidence"] = "medium"
-
-                if tcp < 0.3:
-                    result["status"] = "critical"
-                    result["confidence"] = "high"
-
-            if eud is not None:
-                if (
-                    eud < 50
-                ):  # Ngưỡng EUD thấp cho TARGET - cần điều chỉnh theo loại khối u
-                    result["concerns"].append(f"EUD thấp ({eud:.1f} Gy)")
-                    result["recommendations"].append("Kiểm tra phân bố liều trong PTV")
-
-        # Đánh giá cho OAR
-        elif structure_type == "OAR":
-            ntcp = metrics.get("NTCP")
-            eud = metrics.get("EUD")
-
-            if ntcp is not None:
-                if ntcp > 0.1:  # Ngưỡng cảnh báo NTCP - cần điều chỉnh theo cơ quan
-                    result["status"] = "warning"
-                    result["concerns"].append(f"NTCP cao ({ntcp:.2f})")
-                    result["recommendations"].append("Xem xét giảm liều cho OAR này")
-
-                if ntcp > 0.25:
-                    result["status"] = "critical"
-                    result["concerns"].append(f"NTCP rất cao ({ntcp:.2f})")
-                    result["recommendations"].append(
-                        "Cần tối ưu kế hoạch để giảm liều cho OAR này"
-                    )
-                    result["confidence"] = "high"
-
-            if eud is not None:
-                # Ngưỡng cần điều chỉnh theo từng cơ quan cụ thể
-                high_eud_threshold = 50  # Ngưỡng mặc định, nên điều chỉnh theo cơ quan
-
-                # Sử dụng các ngưỡng cụ thể cho từng cơ quan nếu có
-                organ_type = self.detect_organ_type(structure_name)
-                if organ_type in self.organ_parameters:
-                    organ_data = self.organ_parameters[organ_type]
-                    if "constraints" in organ_data:
-                        high_eud_threshold = organ_data["constraints"].get(
-                            "eud_max", high_eud_threshold
-                        )
-
-                if eud > high_eud_threshold:
-                    result["concerns"].append(f"EUD cao ({eud:.1f} Gy)")
-                    result["recommendations"].append("Xem xét kỹ DVH và phân bố liều")
-
-        return result
-
-    def get_radar_metrics(
-        self, results: Dict[str, Dict[str, Any]]
-    ) -> Dict[str, Dict[str, float]]:
-        """
-        Lấy và chuẩn hóa các chỉ số cho biểu đồ radar.
-
-        Parameters
-        ----------
-        results : Dict[str, Dict[str, Any]]
-            Kết quả đánh giá sinh học từ phương thức calculate_metrics
-
-        Returns
-        -------
-        Dict[str, Dict[str, float]]
-            Từ điển chứa các chỉ số đã chuẩn hóa cho biểu đồ radar
-        """
-        radar_metrics = {}
-
-        for struct_name, metrics in results.items():
-            structure_type = metrics.get("type", "OAR")
-
-            # Chọn các chỉ số hiển thị tùy theo loại cấu trúc
-            if structure_type == "TARGET":
-                # Các chỉ số quan trọng cho cấu trúc mục tiêu
-                radar_metrics[struct_name] = {
-                    "TCP": metrics.get("tcp", 0) * 100,  # Hiển thị dạng %
-                    "EUD": metrics.get("eud", 0),
-                    "CI": metrics.get("conformity_index", 1),
-                    "HI": metrics.get("homogeneity_index", 1),
-                    "Coverage": metrics.get("coverage", 0) * 100,  # Hiển thị dạng %
-                }
-            else:
-                # Các chỉ số quan trọng cho cơ quan nguy cấp
-                radar_metrics[struct_name] = {
-                    "NTCP": metrics.get("ntcp", 0) * 100,  # Hiển thị dạng %
-                    "Mean Dose": metrics.get("mean_dose", 0),
-                    "Max Dose": metrics.get("max_dose", 0),
-                    "EUD": metrics.get("eud", 0),
-                    "Sparing": 100
-                    - (
-                        metrics.get("percent_volume_threshold", 0) * 100
-                    ),  # Phần % thể tích được bảo vệ
-                }
-
-            # Thêm thông tin loại
-            radar_metrics[struct_name]["type"] = structure_type
-
-        return radar_metrics
-
-    def get_evaluation_summary(
-        self, results: Dict[str, Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Tóm tắt kết quả đánh giá sinh học.
-
-        Parameters
-        ----------
-        results : Dict[str, Dict[str, Any]]
-            Kết quả đánh giá sinh học từ phương thức calculate_metrics
-
-        Returns
-        -------
-        Dict[str, Any]
-            Từ điển chứa tóm tắt đánh giá
-        """
-        # Khởi tạo tóm tắt
-        summary = {
-            "timestamp": datetime.now(),
-            "total_structures": len(results),
-            "targets": 0,
-            "oars": 0,
-            "high_tcp_structures": 0,
-            "high_ntcp_structures": 0,
-            "average_tcp": 0.0,
-            "average_ntcp": 0.0,
-            "overall_score": 0.0,
-            "warnings": [],
-            "recommendations": [],
-        }
-
-        # Biến lưu trữ tạm thời
-        total_tcp = 0.0
-        total_ntcp = 0.0
-        targets_count = 0
-        oars_count = 0
-
-        # Xử lý từng cấu trúc
-        for struct_name, metrics in results.items():
-            structure_type = metrics.get("type", "OAR")
-
-            if structure_type == "TARGET":
-                summary["targets"] += 1
-                targets_count += 1
-
-                # Kiểm tra TCP
-                tcp = metrics.get("tcp", 0)
-                total_tcp += tcp
-
-                if tcp >= 0.95:  # TCP >= 95%
-                    summary["high_tcp_structures"] += 1
-                elif tcp < 0.5:  # TCP < 50%
-                    summary["warnings"].append(
-                        f"TCP thấp ({tcp * 100:.1f}%) cho cấu trúc mục tiêu {struct_name}"
-                    )
-                    summary["recommendations"].append(
-                        f"Xem xét tăng liều cho cấu trúc {struct_name}"
-                    )
-            else:
-                summary["oars"] += 1
-                oars_count += 1
-
-                # Kiểm tra NTCP
-                ntcp = metrics.get("ntcp", 0)
-                total_ntcp += ntcp
-
-                if ntcp >= 0.05:  # NTCP >= 5%
-                    summary["high_ntcp_structures"] += 1
-                    summary["warnings"].append(
-                        f"NTCP cao ({ntcp * 100:.1f}%) cho cơ quan nguy cấp {struct_name}"
-                    )
-                    summary["recommendations"].append(
-                        f"Xem xét giảm liều cho cơ quan {struct_name}"
-                    )
-
-        # Tính giá trị trung bình
-        summary["average_tcp"] = total_tcp / targets_count if targets_count > 0 else 0
-        summary["average_ntcp"] = total_ntcp / oars_count if oars_count > 0 else 0
-
-        # Tính điểm tổng thể (cao là tốt)
-        summary["overall_score"] = (0.7 * summary["average_tcp"] * 100) - (
-            0.3 * summary["average_ntcp"] * 100
-        )
-
-        return summary
-
-    def generate_biological_report(self, structure_name: str) -> Dict[str, Any]:
-        """
-        Tạo báo cáo đánh giá sinh học chi tiết cho một cấu trúc.
-
-        Parameters
-        ----------
-        structure_name : str
-            Tên cấu trúc cần tạo báo cáo
-
-        Returns
-        -------
-        Dict[str, Any]
-            Từ điển chứa báo cáo chi tiết
-        """
-        if structure_name not in self.latest_results:
             return {
-                "status": "error",
-                "message": f"Không tìm thấy kết quả đánh giá cho cấu trúc {structure_name}",
+                "name": structure_name,
+                "type": structure_type,
+                "error": f"Lỗi không xác định: {str(e)}",
             }
 
-        metrics = self.latest_results[structure_name]
-        structure_type = metrics.get("type", "OAR")
 
-        # Tạo báo cáo
-        report = {
-            "structure_name": structure_name,
-            "structure_type": structure_type,
-            "organ_type": metrics.get("organ_type", "unknown"),
-            "metrics": {},
-            "parameters": {},
-            "evaluation": {},
-            "recommendations": [],
-        }
-
-        # Thêm các chỉ số
-        report["metrics"]["eud"] = metrics.get("eud", 0)
-
-        if structure_type == "TARGET":
-            report["metrics"]["tcp"] = metrics.get("tcp", 0)
-            report["metrics"]["tcp_percent"] = metrics.get("tcp", 0) * 100
-            report["metrics"]["coverage"] = metrics.get("coverage", 0) * 100
-            report["metrics"]["conformity_index"] = metrics.get("conformity_index", 1)
-            report["metrics"]["homogeneity_index"] = metrics.get("homogeneity_index", 1)
-
-            # Thêm tham số
-            report["parameters"]["alpha"] = metrics.get("parameters", {}).get(
-                "alpha", 0.3
-            )
-            report["parameters"]["alpha_beta"] = metrics.get("parameters", {}).get(
-                "alpha_beta", 10.0
-            )
-            report["parameters"]["tcd50"] = metrics.get("parameters", {}).get(
-                "tcd50", 60.0
-            )
-            report["parameters"]["gamma50"] = metrics.get("parameters", {}).get(
-                "gamma50", 2.0
-            )
-
-            # Đánh giá
-            tcp = metrics.get("tcp", 0)
-            if tcp >= 0.95:
-                report["evaluation"]["tcp"] = "Rất tốt"
-                report["evaluation"]["color"] = "green"
-            elif tcp >= 0.9:
-                report["evaluation"]["tcp"] = "Tốt"
-                report["evaluation"]["color"] = "lightgreen"
-            elif tcp >= 0.8:
-                report["evaluation"]["tcp"] = "Chấp nhận được"
-                report["evaluation"]["color"] = "yellow"
-            elif tcp >= 0.5:
-                report["evaluation"]["tcp"] = "Thấp"
-                report["evaluation"]["color"] = "orange"
-                report["recommendations"].append("Xem xét tăng liều để cải thiện TCP")
-            else:
-                report["evaluation"]["tcp"] = "Rất thấp"
-                report["evaluation"]["color"] = "red"
-                report["recommendations"].append(
-                    "Cần tăng liều đáng kể để cải thiện TCP"
-                )
-        else:
-            report["metrics"]["ntcp"] = metrics.get("ntcp", 0)
-            report["metrics"]["ntcp_percent"] = metrics.get("ntcp", 0) * 100
-            report["metrics"]["mean_dose"] = metrics.get("mean_dose", 0)
-            report["metrics"]["max_dose"] = metrics.get("max_dose", 0)
-
-            # Thêm tham số
-            report["parameters"]["alpha_beta"] = metrics.get("parameters", {}).get(
-                "alpha_beta", 3.0
-            )
-            report["parameters"]["td50"] = metrics.get("parameters", {}).get("td50", 0)
-            report["parameters"]["n"] = metrics.get("parameters", {}).get("n", 0)
-            report["parameters"]["m"] = metrics.get("parameters", {}).get("m", 0)
-
-            # Đánh giá
-            ntcp = metrics.get("ntcp", 0)
-            if ntcp <= 0.01:
-                report["evaluation"]["ntcp"] = "Rất tốt"
-                report["evaluation"]["color"] = "green"
-            elif ntcp <= 0.03:
-                report["evaluation"]["ntcp"] = "Tốt"
-                report["evaluation"]["color"] = "lightgreen"
-            elif ntcp <= 0.05:
-                report["evaluation"]["ntcp"] = "Chấp nhận được"
-                report["evaluation"]["color"] = "yellow"
-            elif ntcp <= 0.1:
-                report["evaluation"]["ntcp"] = "Cao"
-                report["evaluation"]["color"] = "orange"
-                report["recommendations"].append("Xem xét giảm liều để cải thiện NTCP")
-            else:
-                report["evaluation"]["ntcp"] = "Rất cao"
-                report["evaluation"]["color"] = "red"
-                report["recommendations"].append(
-                    "Cần giảm liều đáng kể để cải thiện NTCP"
-                )
-
-        return report
-
-
-# Import hàm tính EUD từ module DVH để tránh lỗi circular import
-def calculate_equivalent_uniform_dose(dose_array, volume_array, a):
+def calculate_mean_dose(dose_array, volume_array):
     """
-    Tính toán Equivalent Uniform Dose (EUD).
-
-    EUD = (Σ v_i * D_i^a)^(1/a)
+    Tính liều trung bình cho một cấu trúc từ dữ liệu DVH.
 
     Parameters
     ----------
-    dose_array : array_like
-        Mảng giá trị liều
-    volume_array : array_like
-        Mảng giá trị thể tích tương ứng
-    a : float
-        Tham số a trong công thức EUD (âm cho cấu trúc song song, dương cho cấu trúc nối tiếp)
+    dose_array : np.ndarray
+        Mảng liều (Gy)
+    volume_array : np.ndarray
+        Mảng thể tích tương ứng (chuẩn hóa, tổng = 1 hoặc 100)
 
     Returns
     -------
     float
-        Giá trị EUD
+        Liều trung bình (Gy)
     """
-    # Chuẩn hóa volume_array để tổng bằng 1
-    volume_norm = volume_array / np.sum(volume_array)
+    if len(dose_array) == 0 or len(volume_array) == 0:
+        return 0.0
+
+    # Chuẩn hóa thể tích nếu cần
+    vol_norm = volume_array.copy()
+    if np.sum(vol_norm) > 0:
+        if np.max(vol_norm) > 1.1:  # Nếu đã là phần trăm (0-100)
+            vol_norm = vol_norm / 100.0
+        else:  # Đã là tỷ lệ (0-1)
+            pass
+
+    # Tính liều trung bình
+    mean_dose = (
+        np.sum(dose_array * vol_norm) / np.sum(vol_norm)
+        if np.sum(vol_norm) > 0
+        else 0.0
+    )
+
+    return float(mean_dose)
+
+
+def calculate_coverage(dose_array, volume_array, prescription_dose):
+    """
+    Tính độ phủ mục tiêu từ dữ liệu DVH.
+
+    Độ phủ = thể tích nhận ít nhất liều kê toa / tổng thể tích
+
+    Parameters
+    ----------
+    dose_array : np.ndarray
+        Mảng liều (Gy)
+    volume_array : np.ndarray
+        Mảng thể tích tương ứng (chuẩn hóa, tổng = 1 hoặc 100)
+    prescription_dose : float
+        Liều kê toa (Gy)
+
+    Returns
+    -------
+    float
+        Độ phủ (0-1)
+    """
+    if len(dose_array) == 0 or len(volume_array) == 0 or prescription_dose <= 0:
+        return 0.0
+
+    # Đảm bảo mảng được sắp xếp theo liều tăng dần
+    indices = np.argsort(dose_array)
+    sorted_doses = dose_array[indices]
+    sorted_volumes = volume_array[indices]
+
+    # Chuẩn hóa thể tích
+    vol_norm = sorted_volumes.copy()
+    vol_sum = np.sum(vol_norm)
+    if vol_sum > 0:
+        if np.max(vol_norm) > 1.1:  # Nếu đã là phần trăm (0-100)
+            vol_norm = vol_norm / 100.0
+
+    # Tìm thể tích nhận ít nhất liều kê toa
+    covered_volume = (
+        np.sum(vol_norm[sorted_doses >= prescription_dose]) if vol_sum > 0 else 0.0
+    )
+    total_volume = np.sum(vol_norm) if vol_sum > 0 else 1.0
+
+    # Tính độ phủ
+    coverage = covered_volume / total_volume if total_volume > 0 else 0.0
+
+    return float(coverage)
+
+
+def calculate_homogeneity_index(dose_array, volume_array, prescription_dose):
+    """
+    Tính chỉ số đồng nhất từ dữ liệu DVH.
+
+    HI = (D2% - D98%) / D50%
+
+    với D2%, D98%, D50% là liều bao phủ 2%, 98% và 50% thể tích tương ứng.
+
+    Parameters
+    ----------
+    dose_array : np.ndarray
+        Mảng liều (Gy)
+    volume_array : np.ndarray
+        Mảng thể tích tương ứng (chuẩn hóa, tổng = 1 hoặc 100)
+    prescription_dose : float
+        Liều kê toa (Gy), chỉ dùng để validate
+
+    Returns
+    -------
+    float
+        Chỉ số đồng nhất
+    """
+    if len(dose_array) == 0 or len(volume_array) == 0 or prescription_dose <= 0:
+        return 0.0
+
+    # Kiểm tra xem DVH có đủ điểm không
+    if len(dose_array) < 3:
+        return 0.0
+
+    try:
+        # Sắp xếp mảng theo thể tích giảm dần (cho DVH tích lũy)
+        # DVH tích lũy thường biểu diễn % thể tích nhận ít nhất một mức liều nhất định
+        indices = np.argsort(volume_array)[::-1]
+        sorted_volumes = volume_array[indices]
+        sorted_doses = dose_array[indices]
+
+        # Tìm liều tại 2%, 50% và 98% thể tích
+        d2 = (
+            np.interp(2.0, sorted_volumes, sorted_doses)
+            if np.max(sorted_volumes) > 2.0
+            else np.max(sorted_doses)
+        )
+        d50 = (
+            np.interp(50.0, sorted_volumes, sorted_doses)
+            if np.max(sorted_volumes) > 50.0
+            else np.median(sorted_doses)
+        )
+        d98 = (
+            np.interp(98.0, sorted_volumes, sorted_doses)
+            if np.max(sorted_volumes) > 98.0
+            else np.min(sorted_doses)
+        )
+
+        # Tính chỉ số đồng nhất
+        if d50 > 0:
+            hi = (d2 - d98) / d50
+        else:
+            hi = 0.0
+
+        return float(hi)
+    except Exception as e:
+        logger.warning(f"Lỗi khi tính chỉ số đồng nhất: {str(e)}")
+        return 0.0
+
+
+def calculate_equivalent_uniform_dose(dose_array, volume_array, a_param):
+    """
+    Tính liều đồng nhất tương đương (EUD).
+
+    Parameters
+    ----------
+    dose_array : np.ndarray
+        Mảng liều (Gy)
+    volume_array : np.ndarray
+        Mảng thể tích tích lũy (%)
+    a_param : float
+        Tham số a của mô (dương cho khối u, âm cho mô lành)
+
+    Returns
+    -------
+    float
+        Liều đồng nhất tương đương (Gy)
+    """
+    if len(dose_array) != len(volume_array) or len(dose_array) == 0:
+        return 0.0
+
+    # Chuyển từ DVH tích lũy sang DVH vi phân
+    diff_volume = np.zeros_like(volume_array)
+    diff_volume[0] = volume_array[0]
+    for i in range(1, len(volume_array)):
+        diff_volume[i] = volume_array[i - 1] - volume_array[i]
+
+    # Chuẩn hóa thể tích
+    diff_volume = diff_volume / 100.0  # Chuyển từ % sang tỷ lệ 0-1
 
     # Tính EUD
-    if abs(a) < 1e-6:  # a gần 0, sử dụng công thức EUD = exp(Σ v_i * ln(D_i))
-        return np.exp(
-            np.sum(volume_norm * np.log(dose_array + 1e-10))
-        )  # Thêm 1e-10 để tránh log(0)
+    if abs(a_param) < 1e-6:  # Trường hợp a gần 0, sử dụng ln
+        eud = np.exp(np.sum(diff_volume * np.log(dose_array + 1e-10)))
     else:
-        return np.power(np.sum(volume_norm * np.power(dose_array, a)), 1.0 / a)
+        eud = np.power(
+            np.sum(diff_volume * np.power(dose_array, a_param)), 1.0 / a_param
+        )
+
+    return eud
 
 
 def create_biological_evaluation() -> Optional[BiologicalEvaluation]:
