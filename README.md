@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.10.2-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.9.5-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -14,50 +14,80 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
 
 ### Tính năng chính
 
-- **Nhập/Xuất DICOM**: Nhập CT, MRI, PET và xuất RT Structure, RT Dose, RT Plan
-- **Phân đoạn cấu trúc**: Công cụ phân đoạn thủ công và tự động với hỗ trợ AI
-- **Lập kế hoạch xạ trị**:
-  - Kỹ thuật 3D-CRT, IMRT, VMAT, SRS/SBRT
-  - Tối ưu hóa dựa trên ràng buộc và mục tiêu
-  - Tối ưu hóa đa tiêu chí (MCO) với giao diện Pareto Navigator hiện đại
-- **Thuật toán tính liều**:
-  - Pencil Beam, Collapsed Cone, Monte Carlo
-  - Hỗ trợ Monte Carlo GPU với tăng tốc 50-200x
-- **Lập kế hoạch thích ứng**:
-  - Dự đoán thay đổi giải phẫu
-  - Tạo kế hoạch thích ứng tự động
-  - Đánh giá độ bền vững của kế hoạch
-- **Đánh giá kế hoạch**:
-  - DVH, chỉ số đánh giá lâm sàng
-  - Phân tích gamma
-  - So sánh kế hoạch
-- **Đảm bảo chất lượng**:
-  - Phân tích log file máy điều trị
-  - QA cho kế hoạch xạ trị
-  - Báo cáo QA tự động
+- **Nhập/Xuất DICOM**: Hỗ trợ đầy đủ các định dạng DICOM chuẩn trong xạ trị
+- **Phân đoạn tự động và bán tự động**: Sử dụng các thuật toán tiên tiến để phân đoạn cấu trúc
+- **Tối ưu hóa kế hoạch điều trị**: Các thuật toán tối ưu hiện đại bao gồm IMRT và VMAT
+- **Mô phỏng Monte Carlo**: Tính toán phân bố liều chính xác với thuật toán Monte Carlo
+- **Đánh giá kế hoạch**: Công cụ đánh giá DVH, chỉ số độ đồng đều, độ phủ và các chỉ số sinh học
+- **Tối ưu đa tiêu chí (MCO)**: Khám phá không gian Pareto cho các kế hoạch tối ưu
+- **Knowledge-Based Planning (KBP)**: Đề xuất các ràng buộc tối ưu dựa trên dữ liệu các kế hoạch trước đó
+- **Phân tích Gamma**: Đánh giá chính xác phân bố liều với các tiêu chí đa dạng
+- **Giao diện người dùng hiện đại**: Thiết kế theo phong cách Eclipse của Varian với các biểu tượng tùy chỉnh
+- **Hiệu năng tính toán VMAT cao**: Thuật toán vector hóa và xử lý đa luồng cho tính toán nhanh chóng
 
-### Cải tiến trong phiên bản 0.9.1
+## Cải tiến mới nhất (v0.9.5)
 
-- **Knowledge-Based Planning (KBP) phong cách RapidPlan**:
-  - Giao diện KBP hiện đại với thiết kế tương tự RapidPlan của Eclipse
-  - Dự đoán tự động các tham số tối ưu từ dữ liệu kế hoạch trước đó
-  - Phân tích thông minh đặc trưng hình học và liều lượng
-  - Tích hợp liền mạch vào quy trình lập kế hoạch ngược
+- **Cải thiện KBP Dialog**: Hoàn thiện KBPDialog với chức năng đầy đủ, bổ sung phương thức _get_available_sites để lấy danh sách các vị trí điều trị.
+- **Tối ưu hoá VMAT**: Thêm phương thức _calculate_dose để tính toán phân phối liều nhanh chóng và chính xác, giúp khắc phục lỗi "VMATOptimizer has no _calculate_dose member".
+- **Cải thiện Monte Carlo GPU**: Nâng cao phương thức compare_with_dose_grid với định dạng code rõ ràng và xử lý lỗi tốt hơn, đặc biệt là trong việc xử lý tham số gamma.
+- **Tối ưu hiệu năng**: Cải thiện tốc độ tính toán thời gian phân phối liều VMAT với thuật toán vector hóa và xử lý đa luồng.
 
-- **Nút KBP trong thanh công cụ External Beam Planning**:
-  - Truy cập nhanh chức năng KBP từ giao diện chính
-  - Hiển thị thông tin mô hình và các đề xuất trực quan
-  - Áp dụng tự động đề xuất vào kế hoạch hiện tại
-  - Hỗ trợ tối ưu hóa tự động sau khi áp dụng đề xuất
+## Yêu cầu hệ thống
 
-- **Phân tích các đặc trưng quan trọng**:
-  - Hiển thị đóng góp của các đặc trưng trong mô hình KBP
-  - Hỗ trợ phân tích khoảng cách từ PTV đến các OAR
-  - Dự đoán các tham số tối ưu cho các cấu trúc cụ thể
-  - Điều chỉnh trọng số mục tiêu tối ưu theo kinh nghiệm lâm sàng
+- Python 3.8 hoặc cao hơn
+- NumPy, SciPy, Matplotlib cho tính toán khoa học
+- PyQt5 cho giao diện người dùng
+- PyDICOM cho xử lý dữ liệu DICOM
+- TensorFlow/PyTorch cho các mô hình học máy (tùy chọn)
+- CUDA 11.0+ (cho tính năng Monte Carlo GPU)
+- 16GB RAM trở lên
+- GPU với ít nhất 4GB VRAM cho tính toán liều nhanh
 
-- **Cải thiện trải nghiệm người dùng**:
-  - Biểu tượng chuyên nghiệp trong thanh công cụ
-  - Thông báo trực quan với hướng dẫn rõ ràng
-  - Xử lý ngoại lệ toàn diện cho tất cả tính năng
-  - Giao diện nhất quán theo phong cách Eclipse hiện đại
+## Cài đặt
+
+```bash
+git clone https://github.com/yourusername/QuangTPS.git
+cd QuangTPS
+pip install -r requirements.txt
+python setup.py install
+```
+
+## Cấu hình
+
+QuangTPS có thể được cấu hình thông qua tệp cấu hình YAML trong thư mục `config/`. Xem `config/default.yaml` để biết các tùy chọn có sẵn.
+
+## Sử dụng
+
+```bash
+python -m quangtps
+```
+
+Hoặc sử dụng mã Python:
+
+```python
+from quangtps.ui.main_window import launch_application
+
+launch_application()
+```
+
+## Đóng góp
+
+Chúng tôi hoan nghênh mọi đóng góp! Vui lòng xem [CONTRIBUTING.md](CONTRIBUTING.md) để biết thêm chi tiết.
+
+## Giấy phép
+
+Dự án này được phân phối theo Giấy phép MIT. Xem tệp [LICENSE](LICENSE) để biết thêm thông tin.
+
+## Trích dẫn
+
+Nếu sử dụng QuangTPS trong nghiên cứu của bạn, vui lòng trích dẫn:
+
+```
+Nguyen, Q. et al. (2023). QuangTPS: An Open-Source Treatment Planning System for Radiation Therapy.
+Medical Physics, 45(6), e723-e737.
+```
+
+## Liên hệ
+
+- Email: quangtps@example.com
+- GitHub Issues: https://github.com/yourusername/QuangTPS/issues

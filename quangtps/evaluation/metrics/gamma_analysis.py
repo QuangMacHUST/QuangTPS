@@ -44,8 +44,8 @@ def calculate_gamma_3d(
     Chỉ số gamma là công cụ đánh giá định lượng sự khác biệt giữa hai phân phối liều,
     kết hợp cả tiêu chí sai khác khoảng cách không gian (DTA) và sai khác liều (DD).
 
-    Parameters
-    ----------
+        Parameters
+        ----------
     reference : np.ndarray
         Mảng 3D phân phối liều tham chiếu
     evaluation : np.ndarray
@@ -85,84 +85,62 @@ def calculate_gamma_3d(
         )
         dta_mm = distance_mm
 
-    # Ghi log các tham số chính để dễ dàng gỡ lỗi
-    logger.debug(
-        f"Phân tích gamma với tham số: dta_mm={dta_mm}mm, dd_percent={dd_percent}%, "
-        f"threshold={threshold}, max_gamma={max_gamma}, "
-        f"local_normalization={local_normalization}"
-    )
-
-    # Kiểm tra kích thước mảng đầu vào
+    # Kiểm tra dữ liệu đầu vào
     if reference.shape != evaluation.shape:
-        error_msg = f"Kích thước mảng không khớp: reference {reference.shape}, evaluation {evaluation.shape}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise ValueError(
+            f"Kích thước mảng không khớp: reference {reference.shape}, evaluation {evaluation.shape}"
+        )
 
-    logger.info(f"Bắt đầu tính toán gamma 3D với tiêu chí {dta_mm}mm/{dd_percent}%")
-    start_time = time.time()
-
-    # Chuẩn bị dữ liệu
-    reference = reference.astype(np.float32)
-    evaluation = evaluation.astype(np.float32)
-
+    # Tạo mask dựa trên ngưỡng
     ref_max = np.max(reference)
-
-    # Áp dụng ngưỡng
     mask = reference >= (threshold * ref_max)
 
-    # Khởi tạo mảng kết quả gamma
-    gamma = np.ones_like(reference) * np.inf
+    # Không tính gamma cho các vùng dưới ngưỡng
+    if np.sum(mask) == 0:
+        logger.warning("Không có voxel nào vượt ngưỡng để tính gamma")
+        return np.ones_like(reference) * np.inf
 
-    # Chuyển đổi dd_percent thành giá trị tuyệt đối
-    dd = dd_percent * ref_max / 100.0
+    start_time = time.time()
 
-    # Tạo lưới tọa độ
-    shape = reference.shape
-    x = np.arange(0, shape[0]) * voxel_size[0]
-    y = np.arange(0, shape[1]) * voxel_size[1]
-    z = np.arange(0, shape[2]) * voxel_size[2]
-
-    # Kiểm tra kích thước dữ liệu để quyết định phương pháp tính
-    total_voxels = np.prod(shape)
-    use_gpu = HAS_CUPY and total_voxels > 1e6  # Sử dụng GPU cho dữ liệu lớn
-
-    if use_gpu:
+    # Chọn phương thức tính toán (GPU hoặc CPU)
+    if HAS_CUPY and reference.size > 1000000:  # Chỉ sử dụng GPU cho dữ liệu lớn
         try:
             gamma = _calculate_gamma_3d_gpu(
                 reference,
                 evaluation,
                 mask,
-                dd,
+                dd_percent,
                 dta_mm,
                 voxel_size,
                 max_gamma,
                 local_normalization,
             )
         except Exception as e:
-            logger.error(f"Lỗi khi tính gamma trên GPU: {str(e)}. Chuyển sang CPU.")
-            use_gpu = False
-
-    if not use_gpu:
+            logger.warning(f"Lỗi khi tính gamma trên GPU: {e}, chuyển sang CPU")
+            gamma = _calculate_gamma_3d_cpu(
+                reference,
+                evaluation,
+                mask,
+                dd_percent,
+                dta_mm,
+                voxel_size,
+                max_gamma,
+                local_normalization,
+            )
+        else:
         gamma = _calculate_gamma_3d_cpu(
             reference,
             evaluation,
             mask,
-            dd,
+            dd_percent,
             dta_mm,
             voxel_size,
             max_gamma,
             local_normalization,
         )
 
-    end_time = time.time()
-    elapsed = end_time - start_time
-
-    # Thống kê
-    gamma_pass_rate = np.sum(gamma <= 1.0) / np.sum(mask) * 100
-    logger.info(
-        f"Hoàn tất phân tích gamma trong {elapsed:.2f} giây. "
-        f"Tỉ lệ đạt: {gamma_pass_rate:.2f}% ({dta_mm}mm/{dd_percent}%)"
-    )
+    elapsed_time = time.time() - start_time
+    logger.info(f"Hoàn thành tính gamma 3D trong {elapsed_time:.2f} giây")
 
     return gamma
 
@@ -174,7 +152,7 @@ def _calculate_gamma_3d_cpu(
     dd: float,
     dta_mm: float,
     voxel_size: Tuple[float, float, float],
-    max_gamma: float,
+        max_gamma: float,
     local_normalization: bool,
 ) -> np.ndarray:
     """Phiên bản CPU của phân tích gamma 3D."""
@@ -204,7 +182,7 @@ def _calculate_gamma_3d_cpu(
                 k_max = min(shape[2] - 1, k + search_range[2])
 
                 # Tìm giá trị gamma nhỏ nhất trong vùng tìm kiếm
-                min_gamma = np.inf
+                    min_gamma = np.inf
 
                 for ni in range(i_min, i_max + 1):
                     for nj in range(j_min, j_max + 1):
@@ -248,7 +226,7 @@ def _calculate_gamma_3d_gpu(
     dd: float,
     dta_mm: float,
     voxel_size: Tuple[float, float, float],
-    max_gamma: float,
+        max_gamma: float,
     local_normalization: bool,
 ) -> np.ndarray:
     """Phiên bản GPU của phân tích gamma 3D sử dụng CuPy."""
@@ -356,10 +334,10 @@ def _calculate_gamma_3d_gpu(
                 int(search_range[1]),
                 int(search_range[2]),
                 local_normalization,
-            ),
-        )
+                    ),
+                )
 
-        # Chuyển kết quả về CPU
+                # Chuyển kết quả về CPU
         gamma = cp.asnumpy(gamma_gpu)
 
         # Giải phóng bộ nhớ GPU
@@ -467,8 +445,8 @@ def plot_gamma_results(
     """
     Tạo hình ảnh của kết quả phân tích gamma.
 
-    Parameters
-    ----------
+        Parameters
+        ----------
     gamma : np.ndarray
         Mảng giá trị gamma
     mask : np.ndarray, optional
@@ -482,8 +460,8 @@ def plot_gamma_results(
     colormap : str, optional
         Bảng màu, mặc định là 'RdYlGn_r' (đỏ = không đạt, xanh = đạt)
 
-    Returns
-    -------
+        Returns
+        -------
     Any
         Đồ thị matplotlib được tạo
     """
@@ -556,8 +534,8 @@ def compare_dose_distributions(
     """
     So sánh hai phân phối liều với nhiều tiêu chí khác nhau.
 
-    Parameters
-    ----------
+        Parameters
+        ----------
     reference : np.ndarray
         Phân phối liều tham chiếu
     evaluation : np.ndarray
@@ -571,8 +549,8 @@ def compare_dose_distributions(
     global_normalization : bool, optional
         Nếu True, sử dụng chuẩn hóa toàn cục, ngược lại sử dụng chuẩn hóa cục bộ
 
-    Returns
-    -------
+        Returns
+        -------
     Dict[str, Any]
         Kết quả so sánh với các chỉ số khác nhau
     """

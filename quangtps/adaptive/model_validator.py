@@ -578,17 +578,17 @@ class ModelValidator:
 
     def _get_centroid(self, mask):
         """
-            Tính tâm (centroid) của mask nhị phân.
+                Tính tâm (centroid) của mask nhị phân.
 
         Parameters
         ----------
-            mask : np.ndarray
-                Mask nhị phân 3D.
+                mask : np.ndarray
+                    Mask nhị phân 3D.
 
         Returns
         -------
-            tuple
-                Tọa độ (x, y, z) của tâm.
+                tuple
+                    Tọa độ (x, y, z) của tâm.
         """
         if mask.sum() == 0:
             return (0, 0, 0)

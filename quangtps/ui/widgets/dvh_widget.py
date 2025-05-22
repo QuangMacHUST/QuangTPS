@@ -156,11 +156,26 @@ except ImportError as e:
             self.parent = parent
 
 
+# Kiểm tra Eclipse theme và import create_eclipse_widget_style
+HAS_ECLIPSE_THEME = False
+try:
+    from quangtps.ui.eclipse_style_theme import create_eclipse_widget_style
+
+    HAS_ECLIPSE_THEME = True
+except ImportError:
+    logging.debug("Không tìm thấy eclipse_style_theme, sử dụng style mặc định")
+
+    # Hàm giả để tránh lỗi khi gọi
+    def create_eclipse_widget_style(*args, **kwargs):
+        return ""
+
+
 try:
     # Import các module từ QuangTPS
     from quangtps.dose.dose_grid import DoseGrid
     from quangtps.structures.structure_set import StructureSet
     from quangtps.structures.structure import Structure, StructureType
+    from quangtps.evaluation.dvh.dvh_calculation import calculate_dvh
     from quangtps.evaluation.dvh.dvh_calculator import DVHCalculator, DVHType
     from quangtps.planning.plan import Plan
 except ImportError as e:
@@ -193,19 +208,44 @@ except ImportError as e:
         OAR = "OAR"
         OTHER = "OTHER"
 
-    class DVHCalculator:
-        def __init__(self):
-            pass
-
-        def calculate_dvh(self, structure, dose_grid, dvh_type, resolution=0.1):
+    # Hàm giả để tránh lỗi khi calculate_dvh không khả dụng
+    def calculate_dvh(*args, **kwargs):
+        logging.error("Hàm calculate_dvh không khả dụng!")
             return {
-                "dose": np.linspace(0, 70, 701),
-                "volume": np.exp(-np.linspace(0, 7, 701)),
+            "dose_bins": np.array([0]),
+            "differential_volume": np.array([0]),
+            "cumulative_volume": np.array([0]),
+            "min_dose": 0,
+            "max_dose": 0,
+            "mean_dose": 0,
+            "median_dose": 0,
+            "std_dose": 0,
+            "volume": 0,
             }
 
     class DVHType(enum.Enum):
         CUMULATIVE = "CUMULATIVE"
         DIFFERENTIAL = "DIFFERENTIAL"
+
+    class DVHCalculator:
+        def __init__(self):
+            pass
+
+        def calculate_dvh(self, structure, dose_grid, dvh_type, **kwargs):
+            # Trả về dữ liệu DVH giả
+            return {
+                "dose": np.linspace(0, 70, 100),
+                "volume": np.exp(-np.linspace(0, 7, 100)),
+                "min_dose": 0,
+                "max_dose": 70,
+                "mean_dose": 20,
+                "differential_volume": np.exp(-np.linspace(0, 7, 100)) * 0.1,
+                "metrics": {
+                    "D95": 40,
+                    "D50": 60,
+                    "D5": 69,
+                },
+            }
 
     class Plan:
         def __init__(self):
@@ -355,8 +395,8 @@ class DVHWidget(QWidget):
 
         # Tạo biểu đồ matplotlib
         self.figure = Figure(figsize=(8, 6), dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.ax = self.figure.add_subplot(111)
+            self.canvas = FigureCanvas(self.figure)
+            self.ax = self.figure.add_subplot(111)
         self.ax.set_xlabel(f"Liều ({self.dose_unit})")
         self.ax.set_ylabel("Thể tích (%)")
         self.ax.set_title("Biểu đồ liều-thể tích (DVH)")
@@ -364,8 +404,8 @@ class DVHWidget(QWidget):
 
         # Thêm thanh công cụ matplotlib
         self.toolbar = NavigationToolbar(self.canvas, self)
-        dvh_layout.addWidget(self.toolbar)
-        dvh_layout.addWidget(self.canvas)
+            dvh_layout.addWidget(self.toolbar)
+            dvh_layout.addWidget(self.canvas)
 
         tab_widget.addTab(dvh_tab, "Biểu đồ DVH")
 
@@ -399,6 +439,14 @@ class DVHWidget(QWidget):
         splitter.setSizes([200, 600])  # Thiết lập kích thước ban đầu
 
         main_layout.addWidget(splitter)
+
+        # Thiết lập style Eclipse nếu có
+        if HAS_ECLIPSE_THEME and "create_eclipse_widget_style" in globals():
+            try:
+                # Sửa lỗi quá nhiều tham số, chỉ cần truyền kiểu widget
+                self.setStyleSheet(create_eclipse_widget_style("table"))
+            except Exception as e:
+                logger.debug(f"Không thể thiết lập Eclipse style cho bảng: {e}")
 
     def _connect_signals(self):
         """Kết nối các tín hiệu với các slot."""
@@ -814,7 +862,7 @@ class DVHWidget(QWidget):
             return
 
         # Xóa biểu đồ cũ
-        self.ax.clear()
+            self.ax.clear()
 
         # Thiết lập tiêu đề và nhãn trục
         volume_label = "Thể tích (%)" if self.display_volumes else "Thể tích (cc)"
@@ -912,7 +960,7 @@ class DVHWidget(QWidget):
                     self.calculate_dvh(self.current_plan_name, structure_name)
                 except Exception as e:
                     logger.error(f"Lỗi khi tính toán DVH cho {structure_name}: {e}")
-                    continue
+                continue
 
             dvh_data = self.calculated_dvhs.get(key)
             if not dvh_data:
@@ -1241,62 +1289,128 @@ class DVHWidget(QWidget):
         self.show_robustness_bands = checked
         self.update_dvh_plot()
 
+    def _create_sample_dvh(self, structure):
+        """
+        Tạo dữ liệu DVH mẫu khi không có dữ liệu thực tế.
 
-def show_dvh_dialog(parent=None, plan=None):
-    """
-    Hiển thị hộp thoại DVH.
+        Parameters
+        ----------
+        structure : Dict[str, Any]
+            Thông tin cấu trúc
 
-    Parameters:
-        parent: Widget cha
-        plan: Kế hoạch xạ trị
+        Returns
+        -------
+        Dict[str, Any]
+            Dữ liệu DVH mẫu
+        """
+        try:
+            structure_name = structure.get("name", "Unknown")
+            structure_type = self._get_structure_type(structure_name)
 
-    Returns:
-        DVHWidget instance
-    """
-    if not PYQT_AVAILABLE:
-        logging.error("Không thể hiển thị hộp thoại DVH: PyQt5 không khả dụng")
-        return None
+            # Số lượng điểm dữ liệu
+            num_points = 100
 
-    try:
-        # Sử dụng các class đã import ở đầu file
-        dialog = QDialog(parent) if "QDialog" in globals() else None
+            # Tạo mảng liều từ 0 đến 80 Gy
+            dose = np.linspace(0, 80, num_points)
 
-        # Nếu không có QDialog, tạo một widget thay thế
-        if dialog is None:
-            dialog = QWidget(parent)
-            dialog.setWindowTitle = lambda x: None
-            dialog.resize = lambda x, y: None
-            dialog.show = lambda: None
-            dialog.reject = lambda: None
+            # Tham số cho đường cong mẫu dựa vào loại cấu trúc
+            if structure_type == "TARGET":
+                # Tạo đường cong cho PTV (hình chữ nhật với vai phải)
+                volume = np.ones(num_points) * 100
+                # Liều theo toa từ 45-78 Gy
+                prescription = np.random.uniform(45, 78)
+                # Tìm chỉ số của liều theo toa
+                idx = np.argmin(np.abs(dose - prescription))
+                # Tạo vai phải với dropout từ 100% xuống 0%
+                drop_idx = idx + np.random.randint(3, 10)  # Thêm biến động
+                if drop_idx < num_points:
+                    # Tạo sự suy giảm dần
+                    volume[idx:drop_idx] = np.linspace(100, 5, drop_idx - idx)
+                    volume[drop_idx:] = 0
+            elif structure_type == "OAR":
+                # Tạo đường cong cho OAR (hàm mũ giảm dần)
+                mean_dose = np.random.uniform(
+                    5, 30
+                )  # Liều trung bình ngẫu nhiên từ 5-30 Gy
 
-        dialog.setWindowTitle("Biểu đồ Liều-Thể tích (DVH)")
-        dialog.resize(1000, 700)
+                # Tham số alpha cho tốc độ suy giảm (nhỏ hơn cho các OAR song song, lớn hơn cho các OAR nối tiếp)
+                alpha = np.random.uniform(0.05, 0.15)
 
-        layout = QVBoxLayout(dialog)
+                # Tạo đường cong mũ giảm dần
+                volume = 100 * np.exp(-alpha * dose)
 
-        # Tạo widget DVH
-        dvh_widget = DVHWidget(dialog)
-        if plan:
-            dvh_widget.add_plan(plan)
-
-        layout.addWidget(dvh_widget)
-
-        # Buttons
-        button_box = (
-            QDialogButtonBox(QDialogButtonBox.Close)
-            if "QDialogButtonBox" in globals()
-            else QPushButton("Đóng")
-        )
-        if isinstance(button_box, QDialogButtonBox):
-            button_box.rejected.connect(dialog.reject)
+                # Thêm nhiễu để tạo tính thực tế
+                noise = np.random.normal(0, 2, num_points)
+                volume = volume + noise
+                volume = np.clip(volume, 0, 100)  # Đảm bảo giá trị trong khoảng 0-100%
         else:
-            button_box.clicked.connect(dialog.close)
-        layout.addWidget(button_box)
+                # Cấu trúc khác - tạo đường cong ngẫu nhiên
+                volume = 100 * np.exp(-0.1 * dose) + np.random.normal(0, 5, num_points)
+                volume = np.clip(volume, 0, 100)
 
-        # Hiển thị hộp thoại
-        dialog.show()
+            # Làm trơn đường cong
+            from scipy.ndimage import gaussian_filter1d
 
-        return dvh_widget
+            volume = gaussian_filter1d(volume, sigma=1.5)
+
+            # Tạo một số chỉ số thống kê phổ biến
+            d90 = np.interp(90, np.flip(volume), np.flip(dose))
+            d50 = np.interp(50, np.flip(volume), np.flip(dose))
+            d10 = np.interp(10, np.flip(volume), np.flip(dose))
+
+            v20 = np.interp(20, dose, volume) if structure_type != "TARGET" else 100
+            v10 = np.interp(10, dose, volume) if structure_type != "TARGET" else 100
+
+            mean_dose = np.sum(dose * np.diff(np.append(volume, [0])) * -1) / 100
+
+            # Hoàn thiện dictionary DVH
+            dvh_data = {
+                "dose": dose.tolist(),
+                "volume": volume.tolist(),
+                "metrics": {
+                    "Dmin": dose[volume > 0].min() if np.any(volume > 0) else 0,
+                    "Dmax": dose[volume > 0].max() if np.any(volume > 0) else 0,
+                    "Dmean": mean_dose,
+                    "D98": np.interp(98, np.flip(volume), np.flip(dose)),
+                    "D95": np.interp(95, np.flip(volume), np.flip(dose)),
+                    "D90": d90,
+                    "D50": d50,
+                    "D2": np.interp(2, np.flip(volume), np.flip(dose)),
+                    "V20Gy": v20,
+                    "V10Gy": v10,
+                    "volume_cc": np.random.uniform(5, 200),  # Thể tích giả định
+                },
+            }
+
+            # Lưu dữ liệu vào cấu trúc để sử dụng lại
+            structure["dvh"] = dvh_data
+            structure["is_sample_dvh"] = True  # Đánh dấu là dữ liệu mẫu
+
+            # Thông báo debug thành công
+            logger.debug(
+                f"Đã tạo dữ liệu DVH mẫu cho {structure_name} (loại: {structure_type})"
+            )
+
+            return dvh_data
     except Exception as e:
-        logging.error(f"Lỗi khi hiển thị hộp thoại DVH: {e}")
-        return None
+            logger.error(f"Lỗi khi tạo dữ liệu DVH mẫu: {e}")
+            import traceback
+
+            logger.debug(traceback.format_exc())
+
+            # Trả về dữ liệu mẫu đơn giản nếu lỗi
+            return {
+                "dose": list(range(0, 81)),
+                "volume": [100] * 41 + [0] * 40,
+                "metrics": {
+                    "Dmin": 0,
+                    "Dmax": 40,
+                    "Dmean": 20,
+                    "D98": 38,
+                    "D95": 39,
+                    "D50": 40,
+                    "D2": 40,
+                    "V20Gy": 100,
+                    "V10Gy": 100,
+                },
+            }

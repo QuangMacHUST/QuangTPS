@@ -12,6 +12,9 @@ sinh học được thực hiện chính xác và hiệu quả.
 import logging
 import numpy as np
 from typing import Dict, List, Tuple, Any, Optional, Union
+import re
+from collections import defaultdict
+from datetime import datetime
 
 # Import các module sinh học
 try:
@@ -83,6 +86,11 @@ class BiologicalEvaluation:
             "detailed_results": True,  # Lưu các kết quả chi tiết cho báo cáo
             "max_acceptable_error": 0.05,  # Lỗi tối đa cho phép trong tính toán
             "fallback_to_dvh": True,  # Chuyển sang tính toán dựa trên DVH khi cần
+            "normalize_radar_metrics": True,  # Chuẩn hóa các giá trị cho biểu đồ radar
+            "report_uncertainty": True,  # Báo cáo độ không chắc chắn của kết quả
+            "auto_detect_organ": True,  # Tự động nhận diện loại cơ quan từ tên cấu trúc
+            "use_modern_models": True,  # Sử dụng mô hình sinh học tiên tiến nhất
+            "evaluation_language": "vi",  # Ngôn ngữ báo cáo đánh giá (vi: Tiếng Việt)
         }
 
         # Trạng thái tính toán
@@ -102,8 +110,27 @@ class BiologicalEvaluation:
         if BIOLOGICAL_MODELS_AVAILABLE:
             try:
                 self._load_default_organ_parameters()
+                self._create_structure_mapping_templates()
             except Exception as e:
                 logger.error(f"Lỗi khi nạp tham số cơ quan mặc định: {str(e)}")
+
+        # Từ điển lưu trữ kết quả đánh giá mới nhất
+        self.latest_results = {}
+
+        # Thông tin tóm tắt về đánh giá
+        self.evaluation_summary = {
+            "timestamp": None,
+            "total_structures": 0,
+            "targets": 0,
+            "oars": 0,
+            "high_tcp_structures": 0,
+            "high_ntcp_structures": 0,
+            "average_tcp": 0.0,
+            "average_ntcp": 0.0,
+            "overall_score": 0.0,
+            "warnings": [],
+            "recommendations": [],
+        }
 
     def _load_default_organ_parameters(self):
         """Nạp thông số mặc định cho các cơ quan."""
@@ -306,70 +333,71 @@ class BiologicalEvaluation:
             raise
 
     def _create_structure_mapping_templates(self):
-        """Tạo các mẫu ánh xạ tên cấu trúc sang loại cơ quan và loại cấu trúc."""
-        # Khuôn mẫu ánh xạ tên cấu trúc sang tên cơ quan
-        self.structure_organ_patterns = {
-            # TARGET patterns
-            r"(?i)gtv.*": "gtv",
-            r"(?i)ctv.*": "ctv",
-            r"(?i)ptv.*": "ptv",
-            r"(?i)target.*": "ptv",
-            # OAR patterns
-            r"(?i)lung.*": "lung",
-            r"(?i)heart.*": "heart",
-            r"(?i)cord.*": "spinal_cord",
-            r"(?i)spin.*cord": "spinal_cord",
-            r"(?i)brain.*stem": "brainstem",
-            r"(?i)parotid.*": "parotid",
-            r"(?i)rectum.*": "rectum",
-            r"(?i)bladder.*": "bladder",
-            r"(?i)esophag.*": "esophagus",
-            r"(?i)liver.*": "liver",
-            r"(?i)kidney.*": "kidney",
-            r"(?i)optic.*nerve": "optic_nerve",
-            r"(?i)chiasm.*": "chiasm",
-            r"(?i)lens.*": "lens",
-            r"(?i)eye.*": "eye",
-            r"(?i)cochlea.*": "cochlea",
-            r"(?i)mandible.*": "mandible",
-            r"(?i)femur.*": "femur",
-            r"(?i)bowel.*": "bowel",
-            r"(?i)stomach.*": "stomach",
-            r"(?i)duoden.*": "duodenum",
-            r"(?i)thyroid.*": "thyroid",
+        """Tạo mẫu ánh xạ tên cấu trúc sang loại cơ quan và loại cấu trúc."""
+        # Mẫu cho các cấu trúc mục tiêu (PTV, CTV, GTV)
+        self.target_patterns = [
+            r"\bptv\b",
+            r"\bctv\b",
+            r"\bgtv\b",
+            r"\btarget\b",
+            r"\btumor\b",
+            r"\bcancer\b",
+            r"\bboost\b",
+            r"\bplanning\b",
+            r"\bprescription\b",
+        ]
+
+        # Tạo từ điển ánh xạ từ tên cấu trúc sang tên cơ quan
+        self.organ_name_patterns = {
+            "lung": [r"\blung\b", r"\bphoi\b", r"ipsi", r"contra", r"bilateral"],
+            "heart": [r"\bheart\b", r"\btim\b", r"cardiac", r"cardio"],
+            "parotid": [r"\bparotid\b", r"tuyến mang tai", r"gland"],
+            "esophagus": [r"\besophagus\b", r"thực quản"],
+            "rectum": [r"\brectum\b", r"trực tràng"],
+            "bladder": [r"\bbladder\b", r"bàng quang"],
+            "spinal_cord": [r"\bspinal", r"cord\b", r"tủy sống", r"spine"],
+            "brain": [r"\bbrain\b", r"não", r"brain stem", r"brainstem"],
+            "optic_nerve": [r"\boptic", r"thị thần kinh", r"chiasm"],
+            "kidney": [r"\bkidney\b", r"thận", r"renal"],
+            "liver": [r"\bliver\b", r"gan"],
+            "bowel": [r"\bbowel\b", r"ruột", r"intestine", r"duodenum", r"colon"],
+            "stomach": [r"\bstomach\b", r"dạ dày"],
+            "femoral_head": [r"femoral", r"head", r"femur", r"đầu xương đùi"],
         }
 
-        # Ánh xạ tên cấu trúc sang loại cấu trúc (TARGET/OAR)
-        self.structure_type_patterns = {
-            # TARGET patterns
-            r"(?i)gtv.*": "TARGET",
-            r"(?i)ctv.*": "TARGET",
-            r"(?i)ptv.*": "TARGET",
-            r"(?i)target.*": "TARGET",
-            r"(?i)tumor.*": "TARGET",
-            r"(?i)boost.*": "TARGET",
-            # OAR patterns (mọi mẫu còn lại là OAR)
-            r"(?i)cord.*": "OAR",
-            r"(?i)lung.*": "OAR",
-            r"(?i)heart.*": "OAR",
-            r"(?i)brain.*": "OAR",
-            r"(?i)stem.*": "OAR",
-            r"(?i)parotid.*": "OAR",
-            r"(?i)eye.*": "OAR",
-            r"(?i)optic.*": "OAR",
-            r"(?i)chiasm.*": "OAR",
-            r"(?i)cochlea.*": "OAR",
-            r"(?i)lens.*": "OAR",
-            r"(?i)kidney.*": "OAR",
-            r"(?i)liver.*": "OAR",
-            r"(?i)bowel.*": "OAR",
-            r"(?i)rectum.*": "OAR",
-            r"(?i)bladder.*": "OAR",
+        # Từ điển ánh xạ ngược (từ viết tắt/tên thông dụng sang tên chuẩn)
+        self.common_structure_mapping = {
+            "cord": "spinal_cord",
+            "sc": "spinal_cord",
+            "parotids": "parotid",
+            "heart_whole": "heart",
+            "cardiac": "heart",
+            "bowels": "bowel",
+            "small_bowel": "bowel",
+            "large_bowel": "bowel",
+            "kidney_left": "kidney",
+            "kidney_right": "kidney",
+            "lung_left": "lung",
+            "lung_right": "lung",
+            "lungs": "lung",
+            "eye_left": "eye",
+            "eye_right": "eye",
+            "eyes": "eye",
+            "optic_chiasm": "optic_nerve",
+            "chiasm": "optic_nerve",
+            "lens_left": "lens",
+            "lens_right": "lens",
+            "lenses": "lens",
+            "femur_left": "femoral_head",
+            "femur_right": "femoral_head",
+            "femur_heads": "femoral_head",
+            "brain_stem": "brain",
+            "brainstem": "brain",
         }
 
     def detect_structure_type(self, structure_name: str) -> str:
         """
-        Tự động phát hiện loại cấu trúc (TARGET/OAR) dựa trên tên.
+        Phát hiện loại cấu trúc (TARGET/OAR) từ tên cấu trúc.
 
         Parameters
         ----------
@@ -379,29 +407,22 @@ class BiologicalEvaluation:
         Returns
         -------
         str
-            'TARGET' hoặc 'OAR'
+            "TARGET" hoặc "OAR"
         """
-        if not self.parameters.get("auto_detect_structure_type", True):
-            return "UNKNOWN"
+        # Chuẩn hóa tên cấu trúc
+        name_lower = structure_name.lower()
 
-        # Đã có trong ánh xạ thì trả về luôn
-        if structure_name in self.structure_type_mapping:
-            return self.structure_type_mapping[structure_name]
+        # Kiểm tra xem cấu trúc có phải là TARGET không
+        for pattern in self.target_patterns:
+            if re.search(pattern, name_lower):
+                return "TARGET"
 
-        # Tìm kiếm theo mẫu
-        import re
-
-        for pattern, struct_type in self.structure_type_patterns.items():
-            if re.match(pattern, structure_name):
-                self.structure_type_mapping[structure_name] = struct_type
-                return struct_type
-
-        # Mặc định là OAR nếu không tìm thấy
+        # Nếu không khớp với bất kỳ mẫu nào của TARGET, coi là OAR
         return "OAR"
 
     def detect_organ_type(self, structure_name: str) -> str:
         """
-        Tự động phát hiện loại cơ quan dựa trên tên cấu trúc.
+        Phát hiện loại cơ quan từ tên cấu trúc.
 
         Parameters
         ----------
@@ -411,22 +432,24 @@ class BiologicalEvaluation:
         Returns
         -------
         str
-            Tên loại cơ quan phát hiện được, hoặc None nếu không phát hiện được
+            Tên loại cơ quan ("lung", "heart", ...) hoặc "unknown"
         """
-        # Đã có trong ánh xạ thì trả về luôn
-        if structure_name in self.structure_organ_mapping:
-            return self.structure_organ_mapping[structure_name]
+        # Chuẩn hóa tên cấu trúc
+        name_lower = structure_name.lower()
 
-        # Tìm kiếm theo mẫu
-        import re
+        # Kiểm tra xem cấu trúc có trong ánh xạ thông dụng không
+        for common_name, organ_name in self.common_structure_mapping.items():
+            if common_name.lower() in name_lower:
+                return organ_name
 
-        for pattern, organ_type in self.structure_organ_patterns.items():
-            if re.match(pattern, structure_name):
-                self.structure_organ_mapping[structure_name] = organ_type
-                return organ_type
+        # Kiểm tra xem cấu trúc có khớp với mẫu nào không
+        for organ_name, patterns in self.organ_name_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, name_lower):
+                    return organ_name
 
-        # Không tìm thấy
-        return None
+        # Nếu không khớp với bất kỳ mẫu nào, trả về "unknown"
+        return "unknown"
 
     def set_parameters(self, parameters: Dict[str, Any]):
         """
@@ -1191,6 +1214,258 @@ class BiologicalEvaluation:
                     result["recommendations"].append("Xem xét kỹ DVH và phân bố liều")
 
         return result
+
+    def get_radar_metrics(
+        self, results: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Dict[str, float]]:
+        """
+        Lấy và chuẩn hóa các chỉ số cho biểu đồ radar.
+
+        Parameters
+        ----------
+        results : Dict[str, Dict[str, Any]]
+            Kết quả đánh giá sinh học từ phương thức calculate_metrics
+
+        Returns
+        -------
+        Dict[str, Dict[str, float]]
+            Từ điển chứa các chỉ số đã chuẩn hóa cho biểu đồ radar
+        """
+        radar_metrics = {}
+
+        for struct_name, metrics in results.items():
+            structure_type = metrics.get("type", "OAR")
+
+            # Chọn các chỉ số hiển thị tùy theo loại cấu trúc
+            if structure_type == "TARGET":
+                # Các chỉ số quan trọng cho cấu trúc mục tiêu
+                radar_metrics[struct_name] = {
+                    "TCP": metrics.get("tcp", 0) * 100,  # Hiển thị dạng %
+                    "EUD": metrics.get("eud", 0),
+                    "CI": metrics.get("conformity_index", 1),
+                    "HI": metrics.get("homogeneity_index", 1),
+                    "Coverage": metrics.get("coverage", 0) * 100,  # Hiển thị dạng %
+                }
+            else:
+                # Các chỉ số quan trọng cho cơ quan nguy cấp
+                radar_metrics[struct_name] = {
+                    "NTCP": metrics.get("ntcp", 0) * 100,  # Hiển thị dạng %
+                    "Mean Dose": metrics.get("mean_dose", 0),
+                    "Max Dose": metrics.get("max_dose", 0),
+                    "EUD": metrics.get("eud", 0),
+                    "Sparing": 100
+                    - (
+                        metrics.get("percent_volume_threshold", 0) * 100
+                    ),  # Phần % thể tích được bảo vệ
+                }
+
+            # Thêm thông tin loại
+            radar_metrics[struct_name]["type"] = structure_type
+
+        return radar_metrics
+
+    def get_evaluation_summary(
+        self, results: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Tóm tắt kết quả đánh giá sinh học.
+
+        Parameters
+        ----------
+        results : Dict[str, Dict[str, Any]]
+            Kết quả đánh giá sinh học từ phương thức calculate_metrics
+
+        Returns
+        -------
+        Dict[str, Any]
+            Từ điển chứa tóm tắt đánh giá
+        """
+        # Khởi tạo tóm tắt
+        summary = {
+            "timestamp": datetime.now(),
+            "total_structures": len(results),
+            "targets": 0,
+            "oars": 0,
+            "high_tcp_structures": 0,
+            "high_ntcp_structures": 0,
+            "average_tcp": 0.0,
+            "average_ntcp": 0.0,
+            "overall_score": 0.0,
+            "warnings": [],
+            "recommendations": [],
+        }
+
+        # Biến lưu trữ tạm thời
+        total_tcp = 0.0
+        total_ntcp = 0.0
+        targets_count = 0
+        oars_count = 0
+
+        # Xử lý từng cấu trúc
+        for struct_name, metrics in results.items():
+            structure_type = metrics.get("type", "OAR")
+
+            if structure_type == "TARGET":
+                summary["targets"] += 1
+                targets_count += 1
+
+                # Kiểm tra TCP
+                tcp = metrics.get("tcp", 0)
+                total_tcp += tcp
+
+                if tcp >= 0.95:  # TCP >= 95%
+                    summary["high_tcp_structures"] += 1
+                elif tcp < 0.5:  # TCP < 50%
+                    summary["warnings"].append(
+                        f"TCP thấp ({tcp * 100:.1f}%) cho cấu trúc mục tiêu {struct_name}"
+                    )
+                    summary["recommendations"].append(
+                        f"Xem xét tăng liều cho cấu trúc {struct_name}"
+                    )
+            else:
+                summary["oars"] += 1
+                oars_count += 1
+
+                # Kiểm tra NTCP
+                ntcp = metrics.get("ntcp", 0)
+                total_ntcp += ntcp
+
+                if ntcp >= 0.05:  # NTCP >= 5%
+                    summary["high_ntcp_structures"] += 1
+                    summary["warnings"].append(
+                        f"NTCP cao ({ntcp * 100:.1f}%) cho cơ quan nguy cấp {struct_name}"
+                    )
+                    summary["recommendations"].append(
+                        f"Xem xét giảm liều cho cơ quan {struct_name}"
+                    )
+
+        # Tính giá trị trung bình
+        summary["average_tcp"] = total_tcp / targets_count if targets_count > 0 else 0
+        summary["average_ntcp"] = total_ntcp / oars_count if oars_count > 0 else 0
+
+        # Tính điểm tổng thể (cao là tốt)
+        summary["overall_score"] = (0.7 * summary["average_tcp"] * 100) - (
+            0.3 * summary["average_ntcp"] * 100
+        )
+
+        return summary
+
+    def generate_biological_report(self, structure_name: str) -> Dict[str, Any]:
+        """
+        Tạo báo cáo đánh giá sinh học chi tiết cho một cấu trúc.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc cần tạo báo cáo
+
+        Returns
+        -------
+        Dict[str, Any]
+            Từ điển chứa báo cáo chi tiết
+        """
+        if structure_name not in self.latest_results:
+            return {
+                "status": "error",
+                "message": f"Không tìm thấy kết quả đánh giá cho cấu trúc {structure_name}",
+            }
+
+        metrics = self.latest_results[structure_name]
+        structure_type = metrics.get("type", "OAR")
+
+        # Tạo báo cáo
+        report = {
+            "structure_name": structure_name,
+            "structure_type": structure_type,
+            "organ_type": metrics.get("organ_type", "unknown"),
+            "metrics": {},
+            "parameters": {},
+            "evaluation": {},
+            "recommendations": [],
+        }
+
+        # Thêm các chỉ số
+        report["metrics"]["eud"] = metrics.get("eud", 0)
+
+        if structure_type == "TARGET":
+            report["metrics"]["tcp"] = metrics.get("tcp", 0)
+            report["metrics"]["tcp_percent"] = metrics.get("tcp", 0) * 100
+            report["metrics"]["coverage"] = metrics.get("coverage", 0) * 100
+            report["metrics"]["conformity_index"] = metrics.get("conformity_index", 1)
+            report["metrics"]["homogeneity_index"] = metrics.get("homogeneity_index", 1)
+
+            # Thêm tham số
+            report["parameters"]["alpha"] = metrics.get("parameters", {}).get(
+                "alpha", 0.3
+            )
+            report["parameters"]["alpha_beta"] = metrics.get("parameters", {}).get(
+                "alpha_beta", 10.0
+            )
+            report["parameters"]["tcd50"] = metrics.get("parameters", {}).get(
+                "tcd50", 60.0
+            )
+            report["parameters"]["gamma50"] = metrics.get("parameters", {}).get(
+                "gamma50", 2.0
+            )
+
+            # Đánh giá
+            tcp = metrics.get("tcp", 0)
+            if tcp >= 0.95:
+                report["evaluation"]["tcp"] = "Rất tốt"
+                report["evaluation"]["color"] = "green"
+            elif tcp >= 0.9:
+                report["evaluation"]["tcp"] = "Tốt"
+                report["evaluation"]["color"] = "lightgreen"
+            elif tcp >= 0.8:
+                report["evaluation"]["tcp"] = "Chấp nhận được"
+                report["evaluation"]["color"] = "yellow"
+            elif tcp >= 0.5:
+                report["evaluation"]["tcp"] = "Thấp"
+                report["evaluation"]["color"] = "orange"
+                report["recommendations"].append("Xem xét tăng liều để cải thiện TCP")
+            else:
+                report["evaluation"]["tcp"] = "Rất thấp"
+                report["evaluation"]["color"] = "red"
+                report["recommendations"].append(
+                    "Cần tăng liều đáng kể để cải thiện TCP"
+                )
+        else:
+            report["metrics"]["ntcp"] = metrics.get("ntcp", 0)
+            report["metrics"]["ntcp_percent"] = metrics.get("ntcp", 0) * 100
+            report["metrics"]["mean_dose"] = metrics.get("mean_dose", 0)
+            report["metrics"]["max_dose"] = metrics.get("max_dose", 0)
+
+            # Thêm tham số
+            report["parameters"]["alpha_beta"] = metrics.get("parameters", {}).get(
+                "alpha_beta", 3.0
+            )
+            report["parameters"]["td50"] = metrics.get("parameters", {}).get("td50", 0)
+            report["parameters"]["n"] = metrics.get("parameters", {}).get("n", 0)
+            report["parameters"]["m"] = metrics.get("parameters", {}).get("m", 0)
+
+            # Đánh giá
+            ntcp = metrics.get("ntcp", 0)
+            if ntcp <= 0.01:
+                report["evaluation"]["ntcp"] = "Rất tốt"
+                report["evaluation"]["color"] = "green"
+            elif ntcp <= 0.03:
+                report["evaluation"]["ntcp"] = "Tốt"
+                report["evaluation"]["color"] = "lightgreen"
+            elif ntcp <= 0.05:
+                report["evaluation"]["ntcp"] = "Chấp nhận được"
+                report["evaluation"]["color"] = "yellow"
+            elif ntcp <= 0.1:
+                report["evaluation"]["ntcp"] = "Cao"
+                report["evaluation"]["color"] = "orange"
+                report["recommendations"].append("Xem xét giảm liều để cải thiện NTCP")
+            else:
+                report["evaluation"]["ntcp"] = "Rất cao"
+                report["evaluation"]["color"] = "red"
+                report["recommendations"].append(
+                    "Cần giảm liều đáng kể để cải thiện NTCP"
+                )
+
+        return report
 
 
 # Import hàm tính EUD từ module DVH để tránh lỗi circular import

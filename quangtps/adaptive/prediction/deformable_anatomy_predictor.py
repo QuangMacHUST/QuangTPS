@@ -487,8 +487,8 @@ class DeformableAnatomyPredictor:
 
         logger.info(
             f"Đã thêm hình ảnh ngày {date}. Tổng số ảnh: {len(self.image_series)}"
-        )
-        return True
+            )
+            return True
 
     def train_model(self):
         """
@@ -603,7 +603,7 @@ class DeformableAnatomyPredictor:
 
             return predicted_image
 
-        except Exception as e:
+            except Exception as e:
             logger.error(f"Lỗi khi dự đoán hình ảnh: {str(e)}")
             return None
 
@@ -1037,7 +1037,7 @@ class DeformableAnatomyPredictor:
                                 "daily_rate": daily_rate,
                             }
                         )
-                except Exception as e:
+        except Exception as e:
                     logger.error(
                         f"Lỗi khi tính tốc độ thay đổi thể tích cho cấu trúc {struct_id}: {str(e)}"
                     )

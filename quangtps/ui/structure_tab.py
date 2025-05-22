@@ -168,9 +168,9 @@ except ImportError:
     from quangtps.core.patient import Patient
 
 # Import ServiceRegistry với xử lý lỗi
-try:
+    try:
     from quangtps.core.service_registry import ServiceRegistry
-except ImportError:
+    except ImportError:
     logging.warning("Không thể import ServiceRegistry. Sử dụng lớp giả.")
 
     class ServiceRegistry:
@@ -202,7 +202,7 @@ try:
     from quangtps.ui.visualization_3d import StructureViewer3D
 
     HAS_3D_VISUALIZATION = True
-except ImportError:
+    except ImportError:
     logging.warning(
         "Không thể import StructureViewer3D. Chức năng hiển thị 3D sẽ bị hạn chế."
     )
@@ -1811,8 +1811,8 @@ class StructureTab(QWidget):
                     self.structureModified.emit(self.selected_structure)
 
                     # Thông báo thành công
-                    QMessageBox.information(
-                        self,
+        QMessageBox.information(
+            self,
                         "Hoàn tất",
                         f"Phân đoạn tự động của {selected_structure_name} hoàn tất.",
                     )
@@ -1888,13 +1888,13 @@ class StructureTab(QWidget):
 
         try:
             # Truyền thêm thông tin tool_type cho segmentation_interface
-            if event_type == "press":
-                return self.segmentation_interface.handle_mouse_press(
+        if event_type == "press":
+            return self.segmentation_interface.handle_mouse_press(
                     point, slice_index, orientation, tool_type
-                )
-            elif event_type == "move":
+            )
+        elif event_type == "move":
                 return self.segmentation_interface.handle_mouse_move(point, tool_type)
-            elif event_type == "release":
+        elif event_type == "release":
                 result = self.segmentation_interface.handle_mouse_release(
                     point, tool_type
                 )

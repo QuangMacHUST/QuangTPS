@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union, Callable, Set
 import time
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import scipy
@@ -589,19 +589,49 @@ class VMATOptimizer(OptimizerBase):
 
         Phương thức này tối ưu hóa các tham số VMAT để giảm thiểu thời gian phân phối
         trong khi vẫn duy trì chất lượng kế hoạch.
+
+        Returns
+        -------
+        Dict
+            Kết quả của quá trình tối ưu hóa thời gian phân phối
         """
+        import time
+        import traceback
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        # Tạo trình theo dõi thời gian chi tiết cho từng phần
+        timers = {
+            "total": 0,
+            "setup": 0,
+            "optimization": 0,
+            "control_points": 0,
+            "gantry_speed": 0,
+            "mlc_complexity": 0,
+            "dose_rate": 0,
+            "finalization": 0,
+        }
+
+        start_time = time.perf_counter()
+        timers["total"] = start_time
+
         if not self.current_plan:
             logger.warning(
                 "Không có kế hoạch hiện tại để tối ưu hóa thời gian phân phối"
             )
-            return
+            return {"status": "error", "message": "Không có kế hoạch hiện tại"}
 
         logger.info("Bắt đầu tối ưu hóa thời gian phân phối liều...")
+
+        # Đánh dấu thời gian setup
+        setup_start = time.perf_counter()
 
         # Lưu lại kế hoạch ban đầu để so sánh
         original_plan = self.current_plan.copy()
         original_delivery_time = self._estimate_delivery_time(original_plan)
         original_score = self._calculate_score()
+
+        # Kết thúc thời gian setup
+        timers["setup"] = time.perf_counter() - setup_start
 
         if self.progress_callback:
             self.progress_callback(
@@ -609,60 +639,194 @@ class VMATOptimizer(OptimizerBase):
                 f"Tối ưu hóa thời gian phân phối liều: {original_delivery_time:.1f} giây",
             )
 
-        # Chiến lược 1: Tối ưu khoảng cách điểm điều khiển
-        self._optimize_control_point_spacing()
+        # Đánh dấu thời gian bắt đầu tối ưu hóa
+        optimization_start = time.perf_counter()
 
-        # Chiến lược 2: Tối ưu tốc độ gantry
-        self._optimize_gantry_speed()
+        # Sử dụng đa luồng để tối ưu hóa các chiến lược đồng thời
+        optimization_results = {}
 
-        # Chiến lược 3: Tối ưu MLC để giảm độ phức tạp
-        self._optimize_mlc_complexity()
+        if self.params.use_multithreading and self.params.num_threads > 1:
+            # Tạo danh sách các nhiệm vụ cần thực hiện
+            optimization_tasks = [
+                ("control_points", self._optimize_control_point_spacing),
+                ("gantry_speed", self._optimize_gantry_speed),
+                ("mlc_complexity", self._optimize_mlc_complexity),
+                ("dose_rate", self._optimize_dose_rate),
+            ]
 
-        # Chiến lược 4: Tối ưu dose rate
-        self._optimize_dose_rate()
+            max_workers = min(len(optimization_tasks), self.params.num_threads)
+            logger.info(f"Thực hiện tối ưu hóa song song với {max_workers} luồng")
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Tạo từ điển ánh xạ future với tên nhiệm vụ
+                future_to_task = {
+                    executor.submit(task_func): task_name
+                    for task_name, task_func in optimization_tasks
+                }
+
+                # Thu thập kết quả khi hoàn thành
+                for i, future in enumerate(as_completed(future_to_task)):
+                    task_name = future_to_task[future]
+                    progress = (i + 1) / len(optimization_tasks)
+
+                    if self.progress_callback:
+                        self.progress_callback(
+                            progress * 0.8,  # 80% của tiến trình tổng thể
+                            f"Đang tối ưu hóa {task_name}: {progress:.0%}",
+                        )
+
+                    task_start = time.perf_counter()
+
+                    try:
+                        result = future.result()
+                        optimization_results[task_name] = result
+                    except Exception as e:
+                        logger.error(f"Lỗi trong quá trình tối ưu {task_name}: {e}")
+                        logger.debug(traceback.format_exc())
+                        optimization_results[task_name] = {
+                            "status": "error",
+                            "message": str(e),
+                            "traceback": traceback.format_exc(),
+                        }
+
+                    # Lưu thời gian thực hiện
+                    timers[task_name] = time.perf_counter() - task_start
+        else:
+            logger.info("Thực hiện tối ưu hóa tuần tự")
+            # Chiến lược 1: Tối ưu khoảng cách điểm điều khiển
+            task_start = time.perf_counter()
+            optimization_results["control_points"] = (
+                self._optimize_control_point_spacing()
+            )
+            timers["control_points"] = time.perf_counter() - task_start
+
+            if self.progress_callback:
+                self.progress_callback(
+                    0.2, "Tối ưu hóa khoảng cách điểm điều khiển hoàn tất"
+                )
+
+            # Chiến lược 2: Tối ưu tốc độ gantry
+            task_start = time.perf_counter()
+            optimization_results["gantry_speed"] = self._optimize_gantry_speed()
+            timers["gantry_speed"] = time.perf_counter() - task_start
+
+            if self.progress_callback:
+                self.progress_callback(0.4, "Tối ưu hóa tốc độ gantry hoàn tất")
+
+            # Chiến lược 3: Tối ưu MLC để giảm độ phức tạp
+            task_start = time.perf_counter()
+            optimization_results["mlc_complexity"] = self._optimize_mlc_complexity()
+            timers["mlc_complexity"] = time.perf_counter() - task_start
+
+            if self.progress_callback:
+                self.progress_callback(0.6, "Tối ưu hóa độ phức tạp MLC hoàn tất")
+
+            # Chiến lược 4: Tối ưu dose rate
+            task_start = time.perf_counter()
+            optimization_results["dose_rate"] = self._optimize_dose_rate()
+            timers["dose_rate"] = time.perf_counter() - task_start
+
+            if self.progress_callback:
+                self.progress_callback(0.8, "Tối ưu hóa tốc độ liều hoàn tất")
+
+        # Kết thúc thời gian tối ưu hóa
+        timers["optimization"] = time.perf_counter() - optimization_start
+
+        # Đánh dấu thời gian bắt đầu hoàn thiện
+        finalization_start = time.perf_counter()
 
         # Kiểm tra và so sánh kết quả
         new_delivery_time = self._estimate_delivery_time(self.current_plan)
         new_score = self._calculate_score()
 
         # Nếu kế hoạch mới làm xấu đi chất lượng quá nhiều, khôi phục kế hoạch ban đầu
-        quality_degradation_threshold = 0.05  # Cho phép kế hoạch xấu đi tối đa 5%
-        if new_score > original_score * (1 + quality_degradation_threshold):
+        quality_degradation_threshold = 0.05
+        if (new_score / original_score) > (1 + quality_degradation_threshold):
             logger.warning(
-                f"Tối ưu hóa thời gian phân phối làm giảm chất lượng kế hoạch "
-                f"quá nhiều ({new_score:.2f} vs {original_score:.2f}). Khôi phục kế hoạch ban đầu."
+                f"Tối ưu hóa thời gian phân phối làm giảm chất lượng kế hoạch quá mức cho phép "
+                f"({new_score:.4f} so với {original_score:.4f}). Khôi phục kế hoạch ban đầu."
             )
             self.current_plan = original_plan
-            improvement = 0
+            new_delivery_time = original_delivery_time
+            improved = False
         else:
-            improvement = (
-                (original_delivery_time - new_delivery_time)
-                / original_delivery_time
-                * 100
-            )
+            time_improved = (
+                original_delivery_time - new_delivery_time
+            ) / original_delivery_time
+            improved = time_improved > 0.05  # Cải thiện ít nhất 5%
             logger.info(
-                f"Đã tối ưu thành công thời gian phân phối: "
-                f"{original_delivery_time:.1f}s → {new_delivery_time:.1f}s "
-                f"(giảm {improvement:.1f}%)"
+                f"Thời gian phân phối giảm từ {original_delivery_time:.1f}s xuống {new_delivery_time:.1f}s "
+                f"(cải thiện {time_improved:.1%})"
             )
+
+        # Kết thúc thời gian hoàn thiện
+        timers["finalization"] = time.perf_counter() - finalization_start
+
+        # Tính tổng thời gian thực hiện
+        end_time = time.perf_counter()
+        timers["total"] = end_time - start_time
 
         if self.progress_callback:
             self.progress_callback(
                 1.0,
-                f"Hoàn thành tối ưu hóa thời gian phân phối: {new_delivery_time:.1f} giây (giảm {improvement:.1f}%)",
+                f"Hoàn thành tối ưu hóa thời gian phân phối: {new_delivery_time:.1f}s",
             )
 
-        return {
+        # Chi tiết hiệu năng
+        performance_details = {
+            "total_execution_time": timers["total"],
+            "setup_time": timers["setup"],
+            "optimization_time": timers["optimization"],
+            "finalization_time": timers["finalization"],
+            "task_times": {
+                "control_points": timers["control_points"],
+                "gantry_speed": timers["gantry_speed"],
+                "mlc_complexity": timers["mlc_complexity"],
+                "dose_rate": timers["dose_rate"],
+            },
+            "multithreaded": self.params.use_multithreading
+            and self.params.num_threads > 1,
+            "num_threads": self.params.num_threads
+            if self.params.use_multithreading
+            else 1,
+        }
+
+        # Chuẩn bị kết quả chi tiết
+        result = {
             "original_time": original_delivery_time,
             "optimized_time": new_delivery_time,
-            "improvement_percent": improvement,
+            "time_improvement_percent": (original_delivery_time - new_delivery_time)
+            / original_delivery_time
+            * 100
+            if original_delivery_time > 0
+            else 0,
             "original_score": original_score,
             "new_score": new_score,
+            "score_degradation_percent": (new_score - original_score)
+            / original_score
+            * 100
+            if original_score > 0
+            else 0,
+            "improvement_accepted": improved,
+            "optimization_results": optimization_results,
+            "performance": performance_details,
         }
+
+        logger.info(
+            f"Tối ưu hóa thời gian phân phối hoàn tất trong {timers['total']:.2f}s"
+        )
+
+        # Log chi tiết về hiệu năng
+        logger.debug(f"Chi tiết hiệu năng tối ưu hóa: {performance_details}")
+
+        return result
 
     def _estimate_delivery_time(self, plan=None):
         """
         Ước tính thời gian phân phối liều cho kế hoạch VMAT.
+
+        Phương thức này sử dụng thuật toán vector hóa để tính toán nhanh thời gian
+        phân phối dựa trên giới hạn tốc độ gantry, dose rate và tốc độ MLC.
 
         Parameters
         ----------
@@ -674,6 +838,11 @@ class VMATOptimizer(OptimizerBase):
         float
             Thời gian phân phối ước tính (giây)
         """
+        import time
+
+        # Đo thời gian thực hiện
+        profiling_start = time.perf_counter()
+
         if plan is None:
             plan = self.current_plan
 
@@ -689,73 +858,143 @@ class VMATOptimizer(OptimizerBase):
             if not control_points or total_mu <= 0:
                 return 0.0
 
-            # Tính thời gian dựa trên các yếu tố chính
-            time_components = []
-
-            # 1. Thời gian do giới hạn tốc độ gantry
-            total_gantry_angle = 0
-            for i in range(1, len(control_points)):
-                start_angle = control_points[i - 1].get("gantry_angle", 0)
-                end_angle = control_points[i].get("gantry_angle", 0)
-                angle_diff = abs(end_angle - start_angle)
-                # Xử lý trường hợp qua 0/360 độ
-                if angle_diff > 180:
-                    angle_diff = 360 - angle_diff
-                total_gantry_angle += angle_diff
-
+            # Tối ưu hóa: Lấy tham số quan trọng trước để tránh truy cập lặp đi lặp lại
             max_gantry_speed = self.params.max_gantry_speed  # độ/giây
-            gantry_time = total_gantry_angle / max_gantry_speed
-            time_components.append(("Gantry rotation", gantry_time))
+            max_dose_rate = self.params.max_dose_rate / 60.0  # MU/giây
+            max_leaf_speed = self.params.max_leaf_speed  # cm/giây
+
+            # 1. Tính thời gian dựa trên giới hạn tốc độ gantry
+            # Chuyển đổi sang mảng numpy để vector hóa tính toán
+            try:
+                # Tối ưu: Chỉ lấy các thông tin cần thiết từ control points
+                gantry_angles = np.array(
+                    [cp.get("gantry_angle", 0) for cp in control_points]
+                )
+
+                # Vector hóa tính toán góc chuyển động
+                angle_diffs = np.abs(np.diff(gantry_angles))
+
+                # Xử lý chuyên biệt trường hợp qua 0/360 độ
+                angle_diffs = np.minimum(angle_diffs, 360 - angle_diffs)
+
+                # Tính tổng góc và thời gian
+                total_gantry_angle = float(np.sum(angle_diffs))
+                gantry_time = total_gantry_angle / max_gantry_speed
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    f"Lỗi khi tính thời gian gantry: {e}. Sử dụng phương pháp dự phòng."
+                )
+                # Phương pháp dự phòng không sử dụng vector hóa
+                total_gantry_angle = 0
+                for i in range(1, len(control_points)):
+                    angle1 = control_points[i - 1].get("gantry_angle", 0)
+                    angle2 = control_points[i].get("gantry_angle", 0)
+                    diff = abs(angle2 - angle1)
+                    if diff > 180:
+                        diff = 360 - diff
+                    total_gantry_angle += diff
+                gantry_time = total_gantry_angle / max_gantry_speed
 
             # 2. Thời gian do giới hạn dose rate
-            max_dose_rate = self.params.max_dose_rate / 60.0  # MU/giây
             dose_time = total_mu / max_dose_rate
-            time_components.append(("Dose delivery", dose_time))
 
             # 3. Thời gian do giới hạn tốc độ MLC
-            max_leaf_travel = 0
-            for i in range(1, len(control_points)):
-                prev_mlc = control_points[i - 1].get("mlc_positions", [])
-                curr_mlc = control_points[i].get("mlc_positions", [])
+            mlc_time = 0.0
 
-                if prev_mlc and curr_mlc and len(prev_mlc) == len(curr_mlc):
-                    for j in range(len(prev_mlc)):
-                        travel = abs(curr_mlc[j] - prev_mlc[j])
-                        max_leaf_travel = max(max_leaf_travel, travel)
+            if len(control_points) > 1:
+                try:
+                    # Tối ưu: Trích xuất dữ liệu MLC thành mảng Numpy để vector hóa
+                    all_mlc_positions = []
 
-            max_leaf_speed = self.params.max_leaf_speed  # cm/giây
-            if max_leaf_speed > 0:
-                mlc_time = max_leaf_travel / max_leaf_speed
-                time_components.append(("MLC movement", mlc_time))
-            else:
-                mlc_time = 0
+                    # Chỉ lấy các vị trí MLC từ các điểm điều khiển
+                    for cp in control_points:
+                        mlc_pos = cp.get("mlc_positions", None)
+                        if mlc_pos is not None and len(mlc_pos) > 0:
+                            all_mlc_positions.append(np.array(mlc_pos))
 
-            # Thời gian phân phối là yếu tố giới hạn lớn nhất
-            delivery_time = max(t[1] for t in time_components)
+                    if len(all_mlc_positions) > 1:
+                        # Tính toán khoảng cách di chuyển lớn nhất giữa các vị trí MLC
+                        max_leaf_travel = 0.0
+                        for i in range(1, len(all_mlc_positions)):
+                            mlc_prev = all_mlc_positions[i - 1]
+                            mlc_curr = all_mlc_positions[i]
 
-            # Thêm thời gian setup và overhead
-            overhead_time = 15.0  # Thời gian overhead cố định (giây)
-            total_time = delivery_time + overhead_time
+                            if mlc_prev.shape == mlc_curr.shape and mlc_prev.size > 0:
+                                # Tính toán ma trận sự thay đổi
+                                leaf_diffs = np.abs(mlc_curr - mlc_prev)
+                                max_diff = np.max(leaf_diffs)
+                                max_leaf_travel = max(max_leaf_travel, max_diff)
 
-            # Chi tiết các thành phần
-            details = {
-                "total_time": total_time,
-                "delivery_time": delivery_time,
-                "overhead_time": overhead_time,
-                "components": time_components,
-                "limiting_factor": max(time_components, key=lambda x: x[1])[0],
-                "total_mu": total_mu,
-                "control_points": len(control_points),
-            }
+                        # Thời gian MLC là quãng đường lá phải đi xa nhất chia cho tốc độ tối đa
+                        mlc_time = max_leaf_travel / max_leaf_speed
+                except (ValueError, TypeError) as e:
+                    logger.warning(
+                        f"Lỗi khi tính thời gian MLC: {e}. Sử dụng phương pháp dự phòng."
+                    )
+                    # Phương pháp dự phòng không sử dụng vector hóa
+                    max_leaf_travel = 0.0
+                    for i in range(1, len(control_points)):
+                        mlc_prev = control_points[i - 1].get("mlc_positions", [])
+                        mlc_curr = control_points[i].get("mlc_positions", [])
 
-            return total_time
+                        if mlc_prev and mlc_curr and len(mlc_prev) == len(mlc_curr):
+                            for j in range(len(mlc_prev)):
+                                try:
+                                    leaf_travel = abs(mlc_curr[j] - mlc_prev[j])
+                                    max_leaf_travel = max(max_leaf_travel, leaf_travel)
+                                except (TypeError, IndexError):
+                                    continue
 
+                    mlc_time = max_leaf_travel / max_leaf_speed
+
+            # Thời gian cuối cùng là thời gian lớn nhất trong các hạn chế
+            delivery_time = max(gantry_time, dose_time, mlc_time)
+
+            # Thêm thời gian cố định cho việc thiết lập ban đầu và kiểm tra cuối cùng
+            setup_time = 30.0  # Giây, bao gồm thiết lập và kiểm tra cuối
+            total_time = delivery_time + setup_time
+
+            # Đo thời gian thực hiện của phương thức
+            execution_time = time.perf_counter() - profiling_start
+            if execution_time > 0.05:  # Chỉ log nếu mất nhiều thời gian (>50ms)
+                logger.debug(
+                    f"Ước tính thời gian phân phối mất {execution_time * 1000:.1f}ms"
+                )
+
+            # Lưu chi tiết giới hạn tốc độ để phân tích
+            limiting_factor = "Unknown"
+            if delivery_time == gantry_time:
+                limiting_factor = "Gantry Speed"
+            elif delivery_time == dose_time:
+                limiting_factor = "Dose Rate"
+            elif delivery_time == mlc_time:
+                limiting_factor = "MLC Speed"
+
+            # Lưu thông tin chi tiết vào kế hoạch
+            if plan == self.current_plan:
+                self.current_plan["delivery_time_details"] = {
+                    "total_time": total_time,
+                    "delivery_time": delivery_time,
+                    "setup_time": setup_time,
+                    "gantry_time": gantry_time,
+                    "dose_time": dose_time,
+                    "mlc_time": mlc_time,
+                    "total_gantry_angle": float(total_gantry_angle),
+                    "total_mu": total_mu,
+                    "max_leaf_travel": float(max_leaf_travel)
+                    if isinstance(max_leaf_travel, (np.floating, np.integer))
+                    else max_leaf_travel,
+                    "limiting_factor": limiting_factor,
+                    "estimation_time_ms": execution_time * 1000,
+                }
+
+            return float(total_time)
         except Exception as e:
-            logger.error(f"Lỗi khi ước tính thời gian phân phối: {str(e)}")
+            logger.error(f"Lỗi khi ước tính thời gian phân phối: {e}")
             import traceback
 
-            traceback.print_exc()
-            return 0.0
+            logger.debug(traceback.format_exc())
+            return 120.0  # Trả về giá trị mặc định an toàn trong trường hợp lỗi
 
     def _optimize_control_point_spacing(self):
         """Tối ưu hóa khoảng cách giữa các điểm điều khiển."""
@@ -1061,3 +1300,72 @@ class VMATOptimizer(OptimizerBase):
         # Phương thức này có thể tùy chỉnh thêm để tối ưu hóa dose rate
         # Tạm thời, đã được xử lý đủ trong các phương thức khác
         return True
+
+    def _calculate_dose(self, plan=None):
+        """
+        Tính toán phân bố liều cho kế hoạch hiện tại hoặc kế hoạch được chỉ định.
+
+        Phương thức này sử dụng dose_engine để tính toán phân bố liều dựa trên cấu hình
+        chùm tia và vị trí MLC trong kế hoạch.
+
+        Parameters
+        ----------
+        plan : Dict[str, Any], optional
+            Kế hoạch cần tính liều, mặc định là kế hoạch hiện tại
+
+        Returns
+        -------
+        np.ndarray
+            Phân bố liều 3D được tính toán, hoặc None nếu không thể tính
+        """
+        if plan is None:
+            plan = self.current_plan
+
+        if not plan:
+            logger.warning("Không có kế hoạch để tính toán liều")
+            return None
+
+        if not self.dose_engine:
+            logger.warning("Không có dose_engine để tính toán liều")
+            return None
+
+        try:
+            logger.debug("Bắt đầu tính toán liều...")
+            start_time = time.perf_counter()
+
+            # Trích xuất cấu hình chùm tia từ kế hoạch
+            beam_config = {
+                "control_points": plan.get("control_points", []),
+                "total_mu": plan.get("total_mu", 0),
+                "prescription": plan.get("prescription", None),
+                "isocenter": plan.get("isocenter", [0, 0, 0]),
+            }
+
+            # Gọi dose_engine để tính toán
+            if hasattr(self.dose_engine, "calculate_dose"):
+                dose_grid = self.dose_engine.calculate_dose(beam_config)
+            elif hasattr(self.dose_engine, "calculate"):
+                dose_grid = self.dose_engine.calculate(beam_config)
+            else:
+                logger.error(
+                    "Dose engine không có phương thức calculate_dose hoặc calculate"
+                )
+                return None
+
+            calc_time = time.perf_counter() - start_time
+            logger.debug(f"Đã tính toán liều trong {calc_time:.2f} giây")
+
+            # Lưu thông tin thời gian tính toán
+            if "dose_calculation_times" not in self.operation_times:
+                self.operation_times["dose_calculation_times"] = []
+
+            self.operation_times["dose_calculation_times"].append(calc_time)
+
+            return dose_grid
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính toán liều: {str(e)}")
+            import traceback
+
+            logger.debug(f"Chi tiết lỗi: {traceback.format_exc()}")
+            return None

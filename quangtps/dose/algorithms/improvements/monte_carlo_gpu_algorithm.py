@@ -422,72 +422,192 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
             Tiêu chí đánh giá, bao gồm:
             - 'gamma_criteria': List các tuple (dta_mm, dd_percent) hoặc (distance_mm, dose_percent)
             - 'threshold': Ngưỡng liều tương đối để tính gamma (0.0 - 1.0)
+            - 'local_normalization': Sử dụng chuẩn hóa cục bộ thay vì toàn cục
 
         Returns
         -------
         dict
             Kết quả so sánh với các chỉ số đánh giá.
         """
-        if not evaluation_criteria:
+        # Thiết lập tiêu chí đánh giá mặc định nếu không được cung cấp
+        if evaluation_criteria is None:
             evaluation_criteria = {
-                "gamma_criteria": [(3.0, 3.0)],  # (dta_mm, dd_percent)
+                "gamma_criteria": [(3.0, 3.0), (2.0, 2.0)],
                 "threshold": 0.1,
+                "local_normalization": False,
             }
 
         try:
-            # Import hàm phân tích gamma
-            from quangtps.evaluation.metrics.gamma_analysis import (
-                calculate_gamma_3d,
-                gamma_pass_rate,
-            )
+            # Kiểm tra đầu vào hợp lệ
+            if reference_dose_grid is None:
+                logger.error("Phân phối liều tham chiếu không được cung cấp")
+                return {
+                    "status": "error",
+                    "message": "Phân phối liều tham chiếu không được cung cấp",
+                }
 
-            # Chuẩn bị dữ liệu liều
-            ref_dose_grid = reference_dose_grid.get_grid()
-            eval_dose_grid = self.dose_grid.get_grid()
+            # Trích xuất dữ liệu liều từ các đối tượng DoseGrid
+            ref_dose_grid = reference_dose_grid
+            if hasattr(reference_dose_grid, "dose_grid"):
+                ref_dose_grid = reference_dose_grid.dose_grid
+            elif hasattr(reference_dose_grid, "data"):
+                ref_dose_grid = reference_dose_grid.data
 
-            # Lấy kích thước voxel
-            voxel_size = reference_dose_grid.get_voxel_size()
+            eval_dose_grid = self.dose_grid
+            if eval_dose_grid is None:
+                logger.error("Không có phân phối liều để so sánh")
+                return {
+                    "status": "error",
+                    "message": "Không có phân phối liều để so sánh",
+                }
+
+            # Kiểm tra kích thước của hai lưới liều
+            if (
+                np.array(ref_dose_grid.shape).size == 0
+                or np.array(eval_dose_grid.shape).size == 0
+            ):
+                logger.error(
+                    f"Lưới liều không hợp lệ: ref={np.array(ref_dose_grid.shape)}, eval={np.array(eval_dose_grid.shape)}"
+                )
+                return {
+                    "status": "error",
+                    "message": "Lưới liều không có kích thước hợp lệ",
+                }
+
+            if ref_dose_grid.shape != eval_dose_grid.shape:
+                logger.error(
+                    f"Kích thước lưới liều không khớp: ref={ref_dose_grid.shape}, eval={eval_dose_grid.shape}"
+                )
+                return {
+                    "status": "error",
+                    "message": f"Kích thước lưới liều không khớp: ref={ref_dose_grid.shape}, eval={eval_dose_grid.shape}",
+                }
+
+            # Kích thước voxel (mm)
+            voxel_size = getattr(reference_dose_grid, "voxel_size", (1.0, 1.0, 1.0))
+            if hasattr(reference_dose_grid, "spacing"):
+                voxel_size = reference_dose_grid.spacing
+            logger.info(f"Đang phân tích gamma với voxel size: {voxel_size}")
+
+            # Import hàm tính gamma
+            try:
+                from quangtps.evaluation.metrics.gamma_analysis import (
+                    calculate_gamma_3d,
+                    gamma_pass_rate,
+                )
+            except ImportError as e:
+                logger.error(f"Không thể import các hàm phân tích gamma: {e}")
+                return {
+                    "status": "error",
+                    "message": f"Không thể import các hàm phân tích gamma: {e}",
+                }
 
             # Tính toán với mỗi tiêu chí gamma
             gamma_results = {}
             for criterion in evaluation_criteria["gamma_criteria"]:
-                # Hỗ trợ cả hai cách đặt tên tham số
-                dta_mm, dd_percent = criterion
+                # Trích xuất thông số từ tiêu chí
+                distance_param, dose_param = criterion
+                criterion_str = f"{distance_param}mm/{dose_param}%"
 
-                # Tính toán gamma 3D - hỗ trợ cả tên tham số cũ và mới
-                gamma = calculate_gamma_3d(
-                    reference=ref_dose_grid,
-                    evaluation=eval_dose_grid,
-                    dta_mm=dta_mm,
-                    dd_percent=dd_percent,
-                    threshold=evaluation_criteria.get("threshold", 0.1),
-                    voxel_size=voxel_size,
-                    local_normalization=evaluation_criteria.get(
+                logger.info(f"Tính toán gamma với tiêu chí: {criterion_str}")
+
+                # Chuẩn bị tham số cho hàm calculate_gamma_3d
+                gamma_params = {
+                    "reference": ref_dose_grid,
+                    "evaluation": eval_dose_grid,
+                    "threshold": evaluation_criteria.get("threshold", 0.1),
+                    "local_normalization": evaluation_criteria.get(
                         "local_normalization", False
                     ),
-                )
+                    "max_gamma": evaluation_criteria.get("max_gamma", 5.0),
+                    "voxel_size": voxel_size,
+                }
+
+                # Thêm tham số dựa trên phiên bản API của hàm calculate_gamma_3d
+                if (
+                    "dta_mm" in calculate_gamma_3d.__code__.co_varnames
+                    and "dd_percent" in calculate_gamma_3d.__code__.co_varnames
+                ):
+                    gamma_params["dta_mm"] = distance_param
+                    gamma_params["dd_percent"] = dose_param
+                else:
+                    gamma_params["distance_mm"] = distance_param
+                    gamma_params["dose_percent"] = dose_param
+
+                # Gọi hàm tính gamma
+                gamma = calculate_gamma_3d(**gamma_params)
+
+                # Kiểm tra kết quả gamma
+                if gamma is None or gamma.size == 0:
+                    logger.warning(
+                        f"Kết quả gamma rỗng hoặc None cho tiêu chí {criterion_str}"
+                    )
+                    continue
+
+                # Xử lý các giá trị NaN và Inf trong kết quả gamma
+                valid_gamma = gamma[np.isfinite(gamma)]
+                if valid_gamma.size == 0:
+                    logger.warning(
+                        f"Không có giá trị hợp lệ trong kết quả gamma cho tiêu chí {criterion_str}"
+                    )
+                    continue
 
                 # Tính tỷ lệ đạt tiêu chí gamma
                 pass_rate = gamma_pass_rate(gamma, pass_criteria=1.0)
+                logger.info(f"Tỷ lệ đạt tiêu chí {criterion_str}: {pass_rate:.2f}%")
 
-                # Lưu kết quả
-                criterion_str = f"{dta_mm}mm/{dd_percent}%"
+                # Lưu kết quả vào gamma_results
                 gamma_results[criterion_str] = {
                     "gamma": gamma,
                     "pass_rate": pass_rate,
+                    "criterion": (distance_param, dose_param),
+                    "mean_gamma": float(np.mean(valid_gamma)),
+                    "max_gamma": float(np.max(valid_gamma)),
+                }
+
+            if not gamma_results:
+                logger.warning("Không có kết quả gamma nào được tính toán thành công")
+                return {
+                    "status": "warning",
+                    "message": "Không có kết quả gamma nào được tính toán thành công",
                 }
 
             return {
                 "gamma_results": gamma_results,
                 "status": "success",
-                "message": "Phân tích gamma hoàn tất",
+                "message": f"Phân tích gamma hoàn tất cho {len(gamma_results)} tiêu chí",
+                "reference_max": float(np.max(ref_dose_grid)),
+                "evaluation_max": float(np.max(eval_dose_grid)),
             }
 
         except Exception as e:
             logger.error(f"Lỗi khi so sánh phân phối liều: {e}")
+            import traceback
+
+            # Log chi tiết lỗi để dễ dàng debug
+            error_details = traceback.format_exc()
+            logger.debug(f"Chi tiết lỗi: {error_details}")
+
+            # Thêm thông tin về các tham số đầu vào khi có lỗi
+            input_details = {
+                "reference_type": type(reference_dose_grid).__name__,
+                "reference_size": getattr(ref_dose_grid, "shape", "Unknown")
+                if "ref_dose_grid" in locals()
+                else "Unknown",
+                "evaluation_size": getattr(eval_dose_grid, "shape", "Unknown")
+                if "eval_dose_grid" in locals()
+                else "Unknown",
+                "evaluation_criteria": str(evaluation_criteria),
+                "voxel_size": str(voxel_size)
+                if "voxel_size" in locals()
+                else "Unknown",
+            }
+
             return {
                 "status": "error",
                 "message": f"Không thể tính toán gamma: {str(e)}",
+                "details": error_details,
+                "input_info": input_details,
             }
 
 

@@ -199,23 +199,23 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
 
             # Generate pencil beams based on field type
             pencil_beams = []
-            try:
-                if mlc_config is not None:
-                    # Handle MLC-defined field
-                    pencil_beams = self._generate_mlc_pencil_beams(
-                        mlc_config,
-                        pencil_spacing,
-                        source_position,
-                        isocenter,
+
+            if mlc_config is not None:
+                # Handle MLC-defined field
+                pencil_beams = self._generate_mlc_pencil_beams(
+                    mlc_config,
+                    pencil_spacing,
+                    source_position,
+                    isocenter,
                         beam_direction,
-                    )
-                else:
-                    # Handle rectangular field
-                    pencil_beams = self._generate_rectangular_pencil_beams(
-                        field_size,
-                        pencil_spacing,
-                        source_position,
-                        isocenter,
+                )
+            else:
+                # Handle rectangular field
+                pencil_beams = self._generate_rectangular_pencil_beams(
+                    field_size,
+                    pencil_spacing,
+                    source_position,
+                    isocenter,
                         beam_direction,
                     )
 
@@ -277,24 +277,24 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                             tissue_air_ratio_correction,
                         )
 
-            except MemoryError:
-                logger.error(
-                    "Lỗi bộ nhớ khi tính toán liều. Thử làm việc với grid thưa hơn."
-                )
-                raise DoseCalculationError(
-                    "Không đủ bộ nhớ để tính toán liều với grid hiện tại"
-                ) from None
+        except MemoryError:
+            logger.error(
+                "Lỗi bộ nhớ khi tính toán liều. Thử làm việc với grid thưa hơn."
+            )
+            raise DoseCalculationError(
+                "Không đủ bộ nhớ để tính toán liều với grid hiện tại"
+            ) from None
 
-            except Exception as e:
-                logger.error(f"Lỗi trong quá trình tính toán liều: {e}")
-                import traceback
+        except Exception as e:
+            logger.error(f"Lỗi trong quá trình tính toán liều: {e}")
+            import traceback
 
-                logger.debug(traceback.format_exc())
-                raise DoseCalculationError(f"Lỗi tính toán liều: {str(e)}") from e
+            logger.debug(traceback.format_exc())
+            raise DoseCalculationError(f"Lỗi tính toán liều: {str(e)}") from e
 
-            # Normalize the dose grid (optional based on beam weight)
-            if hasattr(beam, "weight") and beam.weight > 0:
-                dose_data *= beam.weight
+        # Normalize the dose grid (optional based on beam weight)
+        if hasattr(beam, "weight") and beam.weight > 0:
+            dose_data *= beam.weight
 
             # Create the output image
             dose_image = Image(

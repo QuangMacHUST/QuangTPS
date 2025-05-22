@@ -54,16 +54,21 @@
 - [x] Create comprehensive documentation system
 - [x] Implement radiobiology modeling for TCP/NTCP in plan evaluation
 - [x] Implement robust analysis tools for treatment plan evaluation
+- [x] Fix KBP Dialog missing method for site selection
+- [x] Fix VMATOptimizer missing dose calculation method
+- [x] Enhance Monte Carlo GPU algorithm with improved error handling
+- [x] Fix imports in KBP Dialog
 
 ## In Progress
 - [ ] Implement machine learning dose prediction module
 - [ ] Create adaptive planning workflow
 - [ ] Add support for proton therapy planning
-- [ ] Enhance Monte Carlo dose calculation with GPU acceleration
+- [x] Enhance Monte Carlo dose calculation with GPU acceleration
 - [ ] Implement automated quality assurance tools
 - [ ] Add export functionality for 3D visualizations and BEV snapshots
 - [ ] Implement radiobiology modeling for TCP/NTCP in plan evaluation
 - [ ] Implement MCO with Eclipse-like interface
+- [x] Optimize VMAT delivery time calculation
 
 ## Planned Tasks
 - [ ] Create advanced reporting system with customizable templates
@@ -86,6 +91,9 @@
 - [ ] Add support for online adaptive planning
 - [ ] Implement multi-language support
 - [ ] Add treatment scheduling and fractionation tools
+- [ ] Implement comprehensive dose comparison tools with gamma analysis
+- [ ] Add advanced visualization for Knowledge-Based Planning models
+- [ ] Enhance machine learning integration for treatment response prediction
 
 ## Current Tasks
 - [ ] Extend robust optimization based on robustness analysis results
@@ -98,6 +106,9 @@
 - [ ] Implement automated protocol selection based on treatment site
 - [ ] Create knowledge-based quality metrics using historical plan data
 - [ ] Add auto-recovery and auto-save for patient and plan data
+- [ ] Enhance VMAT control point optimization with improved algorithms
+- [ ] Implement efficient machine learning prediction for dose calculation acceleration
+- [ ] Create comprehensive documentation for the Monte Carlo GPU implementation
 
 ## Future Tasks
 - [ ] Further enhance Eclipse-like UI with ribbon interface
@@ -191,16 +202,19 @@
 
 - [x] Sửa lỗi trong module MCO (Multi-Criteria Optimization)
 - [x] Cải thiện giao diện điều hướng Pareto trong MCO
+- [x] Cải thiện hiệu suất tính toán trong quá trình tối ưu hóa
 - [ ] Thêm các thuật toán tối ưu hóa mới (ví dụ: IPOPT, SLSQP)
-- [ ] Cải thiện hiệu suất tính toán trong quá trình tối ưu hóa
 - [ ] Thêm khả năng tối ưu hóa dựa trên các chỉ số sinh học (TCP, NTCP)
+- [x] Tối ưu hóa thời gian phân phối liều VMAT với thuật toán vector hóa
 
 ## Tính toán liều
 
-- [ ] Cải thiện thuật toán tính toán liều để tăng tốc độ và độ chính xác
-- [ ] Thêm khả năng tính toán liều Monte Carlo cho các kế hoạch phức tạp
-- [ ] Phát triển module tính toán liều cho xạ trị proton và ion nặng
-- [ ] Cải thiện thuật toán tính toán liều cho các kỹ thuật VMAT và IMRT phức tạp
+- [x] Cải thiện thuật toán tính toán liều để tăng tốc độ và độ chính xác
+- [x] Cải thiện thuật toán Monte Carlo trên GPU
+- [x] Triển khai xử lý đa luồng cho tính toán liều
+- [ ] Thêm hỗ trợ cho model photon năng lượng cao (FFF)
+- [ ] Nâng cao thuật toán tính toán liều với các hiệu ứng không đồng nhất mô
+- [ ] Tích hợp tính toán liều dựa trên GPU trong quy trình tối ưu hóa
 
 ## Giao diện người dùng
 
@@ -217,3 +231,73 @@
 - [ ] Phát triển module đảm bảo chất lượng (QA) cho kế hoạch xạ trị
 - [ ] Cải thiện tài liệu và hướng dẫn sử dụng
 - [ ] Tối ưu hóa hiệu suất tổng thể của hệ thống
+
+## Phiên bản 0.9.x
+
+### Sửa lỗi
+- [x] Sửa lỗi hiển thị DVH không chính xác
+- [x] Khắc phục lỗi khi tải DICOM từ một số nhà sản xuất
+- [x] Xử lý lỗi indentation trong mco_engine.py
+- [x] Sửa lỗi trùng lặp hàm create_eclipse_icon() trong kbp_dialog.py
+- [x] Khắc phục lỗi cú pháp trong monte_carlo_gpu_algorithm.py
+- [ ] Khắc phục lỗi không hiển thị đúng MLC trong BEV view
+- [ ] Sửa lỗi chậm khi tải dữ liệu bệnh nhân lớn
+
+### Tính năng đang triển khai
+- [x] Triển khai Knowledge-Based Planning tương tự RapidPlan
+- [x] Nâng cao khả năng tùy chỉnh biểu tượng UI theo phong cách Eclipse
+- [x] Cải thiện phân tích Gamma để hỗ trợ đa tham số
+- [x] Tối ưu hiệu năng tính toán VMAT
+- [ ] Hoàn thiện module Robust Optimization
+- [ ] Tích hợp mô hình thích ứng với phân đoạn AI
+- [ ] Tích hợp thuật toán dự đoán biến dạng cơ quan
+- [ ] Thêm hỗ trợ xử lý kế hoạch thích ứng dựa trên CBCT
+
+### Giao diện người dùng
+- [x] Cải thiện Object Explorer Panel
+- [x] Thêm KBP Dialog theo phong cách Eclipse
+- [x] Nâng cấp hàm create_eclipse_icon() để hỗ trợ biểu tượng tùy chỉnh
+- [ ] Thiết kế lại màn hình tính liều xạ
+- [ ] Cải thiện giao diện BEV với MLC
+- [ ] Cải thiện hiệu suất 3D Viewer cho mô hình lớn
+
+### Tối ưu hiệu năng
+- [x] Cải thiện hiệu năng thuật toán tính toán VMAT
+- [ ] Tối ưu hóa các thuật toán Monte Carlo
+- [ ] Tối ưu quá trình tính toán phân tích DVH cho các cấu trúc lớn
+- [ ] Triển khai tính toán song song cho các phép biến đổi hình ảnh
+- [ ] Giảm bộ nhớ sử dụng khi hiển thị các hình ảnh và cấu trúc lớn
+
+## Phiên bản 0.10
+
+### Tính năng mới
+- [ ] Hoàn thiện thuật toán tính liều Collapsed-Cone Convolution
+- [ ] Triển khai tính năng xử lý nhiều kế hoạch điều trị cùng lúc
+- [ ] Thêm tính năng so sánh kế hoạch điều trị toàn diện
+- [ ] Hỗ trợ điều trị theo phân đoạn liều (fractionation)
+- [ ] Triển khai module kiểm tra chất lượng (QA) toàn diện
+
+### Tích hợp hệ thống
+- [ ] Kết nối với hệ thống quản lý bệnh nhân (OIS)
+- [ ] Hỗ trợ xuất kế hoạch điều trị sang các hệ thống phân phối liều
+- [ ] Tích hợp với PACS để truy xuất hình ảnh DICOM
+- [ ] Hỗ trợ nhiều định dạng nhập/xuất dữ liệu
+
+## Phiên bản 1.0
+
+### Tính năng cốt lõi
+- [ ] Tính năng import/export đầy đủ với tất cả các định dạng DICOM phổ biến
+- [ ] Phân đoạn đa cấu trúc tự động hoàn chỉnh
+- [ ] Tối ưu hóa kế hoạch IMRT/VMAT với tất cả thuật toán hiện đại
+- [ ] Tất cả các công cụ đánh giá kế hoạch theo tiêu chuẩn ICRU
+- [ ] Đảm bảo chất lượng đầy đủ cho kế hoạch xạ trị
+
+### Tài liệu
+- [ ] Hoàn thiện tài liệu API
+- [ ] Tài liệu hướng dẫn người dùng với hình ảnh minh họa
+- [ ] Tài liệu hướng dẫn cài đặt chi tiết cho từng nền tảng
+
+### Tương thích
+- [ ] Tương thích với tất cả các hệ thống lập kế hoạch thương mại
+- [ ] Tương thích với nhiều loại máy điều trị phổ biến
+- [ ] Hỗ trợ đa ngôn ngữ (Anh, Việt, ...)

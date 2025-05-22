@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-Module giao diện Eclipse-style cho QuangTPS.
+Module eclipse_style_theme cho QuangTPS.
 
-Module này cung cấp stylesheets, colormaps và các thành phần giao diện
-mô phỏng giao diện Eclipse TPS của Varian.
+Module này cung cấp các hàm và tiện ích để áp dụng giao diện theo phong cách
+Eclipse của Varian cho các widget trong hệ thống.
 """
 
 import logging
@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 
 logger = logging.getLogger(__name__)
 
-# Thử import PyQt5
+# Kiểm tra PyQt
 try:
     from PyQt5.QtWidgets import (
         QApplication,
@@ -24,14 +24,29 @@ try:
         QComboBox,
         QTabWidget,
         QMainWindow,
+        QStyleFactory,
+        QGraphicsDropShadowEffect,
+        QFrame,
+        QToolBar,
+        QMenu,
     )
-    from PyQt5.QtGui import QColor, QPalette, QFont
-    from PyQt5.QtCore import Qt
+    from PyQt5.QtCore import Qt, QSize
+    from PyQt5.QtGui import (
+        QPalette,
+        QColor,
+        QFont,
+        QBrush,
+        QLinearGradient,
+        QPixmap,
+        QPainter,
+        QPen,
+        QIcon,
+    )
 
-    PYQT_AVAILABLE = True
+    HAS_PYQT = True
 except ImportError:
-    PYQT_AVAILABLE = False
-    logger.warning("PyQt5 không khả dụng - chức năng tạo Eclipse theme bị hạn chế")
+    logger.warning("PyQt5 không khả dụng. Các chức năng stylesheet sẽ bị giới hạn.")
+    HAS_PYQT = False
 
 # Constants cho Eclipse theme
 ECLIPSE_PRIMARY_COLOR = "#2D5B86"  # Xanh dương đậm của Eclipse
@@ -42,6 +57,23 @@ ECLIPSE_TEXT_COLOR = "#333333"  # Màu chữ
 ECLIPSE_HEADER_BG = "#E6E6E6"  # Màu nền header
 ECLIPSE_ACTIVE_TAB_COLOR = "#FFFFFF"  # Màu nền tab đang chọn
 ECLIPSE_INACTIVE_TAB_COLOR = "#E6E6E6"  # Màu nền tab không chọn
+
+# Định nghĩa ECLIPSE_COLORS cho sử dụng trong các hàm style
+ECLIPSE_COLORS = {
+    "primary": ECLIPSE_PRIMARY_COLOR,
+    "secondary": ECLIPSE_SECONDARY_COLOR,
+    "accent": ECLIPSE_ACCENT_COLOR,
+    "background": ECLIPSE_BG_COLOR,
+    "text": ECLIPSE_TEXT_COLOR,
+    "header": ECLIPSE_HEADER_BG,
+    "tab_active": ECLIPSE_ACTIVE_TAB_COLOR,
+    "tab_inactive": ECLIPSE_INACTIVE_TAB_COLOR,
+    "text_light": "#FFFFFF",  # Màu chữ sáng
+    "border": "#E0E0E0",  # Màu đường viền
+    "ptv": "#E27025",  # Màu PTV kiểu Eclipse
+    "oar": "#5C87B2",  # Màu OAR kiểu Eclipse
+    "isodose": "#2D8659",  # Màu đường isodose
+}
 
 # Colormaps cho Eclipse-style
 ECLIPSE_DOSE_COLORMAP = {
@@ -374,7 +406,7 @@ def apply_eclipse_theme(app: Optional[QApplication] = None) -> bool:
     bool
         True nếu áp dụng thành công, False nếu thất bại
     """
-    if not PYQT_AVAILABLE:
+    if not HAS_PYQT:
         logger.error("PyQt5 không khả dụng. Không thể áp dụng Eclipse theme.")
         return False
 
@@ -466,245 +498,227 @@ def get_eclipse_colormap(
     return {0.0: (0, 0, 0, 0), 1.0: (r, g, b, 0.7)}
 
 
-def create_eclipse_widget_style(widget_type: str) -> str:
+def create_eclipse_widget_style(
+    widget_type: str = "default", custom_colors: Dict[str, str] = None
+) -> str:
     """
-    Tạo CSS style cho một loại widget cụ thể theo phong cách Eclipse.
+    Tạo stylesheet theo phong cách Eclipse cho widget.
 
     Parameters
     ----------
     widget_type : str
-        Loại widget, ví dụ: "button", "table", "tab", "tree"
+        Loại widget cần áp dụng style (default, button, table, tab, etc.)
+    custom_colors : Dict[str, str], optional
+        Tùy chỉnh màu sắc nếu cần
 
     Returns
     -------
     str
-        CSS style cho widget
+        Stylesheet CSS
     """
-    widget_type = widget_type.lower()
+    if not HAS_PYQT:
+        return ""
 
+    colors = ECLIPSE_COLORS.copy()
+    if custom_colors:
+        colors.update(custom_colors)
+
+    # Stylesheet chung cho tất cả các widget
+    base_style = f"""
+    QWidget {{
+        font-family: 'Segoe UI', 'Open Sans', Arial, sans-serif;
+        color: {colors["text"]};
+        background-color: {colors["background"]};
+    }}
+    """
+
+    # Stylesheet riêng theo loại widget
     if widget_type == "button":
-        return """
-        QPushButton {
-            background-color: #F0F0F0;
-            color: #333333;
-            border: 1px solid #C0C0C0;
-            border-radius: 3px;
-            padding: 4px 12px;
-            min-height: 20px;
-        }
-        QPushButton:hover {
-            background-color: #E3E3E3;
-            border-color: #A0A0A0;
-        }
-        QPushButton:pressed {
-            background-color: #D6D6D6;
-        }
-        QPushButton:disabled {
-            background-color: #F8F8F8;
-            color: #B0B0B0;
-            border-color: #D8D8D8;
-        }
-        """
-
-    elif widget_type == "primary_button":
         return (
-            """
-        QPushButton {
-            background-color: """
-            + ECLIPSE_PRIMARY_COLOR
-            + """;
-            color: white;
-            border: 1px solid """
-            + ECLIPSE_SECONDARY_COLOR
-            + """;
+            base_style
+            + f"""
+        QPushButton {{
+            background-color: {colors["primary"]};
+            color: {colors["text_light"]};
+            border: none;
             border-radius: 3px;
-            padding: 4px 12px;
-            min-height: 20px;
-        }
-        QPushButton:hover {
-            background-color: #3A6C9D;
-        }
-        QPushButton:pressed {
-            background-color: #1F4A75;
-        }
-        QPushButton:disabled {
-            background-color: #A9BCD3;
-            color: #E6E6E6;
-            border-color: #A9BCD3;
-        }
+            padding: 6px 12px;
+            font-weight: 500;
+        }}
+
+        QPushButton:hover {{
+            background-color: {colors["secondary"]};
+        }}
+
+        QPushButton:pressed {{
+            background-color: {colors["accent"]};
+        }}
+
+        QPushButton:disabled {{
+            background-color: #B0BEC5;
+            color: #78909C;
+        }}
         """
         )
-
     elif widget_type == "table":
         return (
-            """
-        QTableView {
-            border: 1px solid #D0D0D0;
-            background-color: white;
-            alternate-background-color: #F9F9F9;
+            base_style
+            + f"""
+        QTableWidget {{
+            border: 1px solid #E0E0E0;
             gridline-color: #E0E0E0;
-        }
-        QHeaderView::section {
-            background-color: """
-            + ECLIPSE_HEADER_BG
-            + """;
-            border: 1px solid #D0D0D0;
+            selection-background-color: {colors["accent"]};
+            selection-color: {colors["text_light"]};
+        }}
+
+        QTableWidget::item {{
             padding: 4px;
+            border-bottom: 1px solid #F5F5F5;
+        }}
+
+        QHeaderView::section {{
+            background-color: #EEEEEE;
             font-weight: bold;
-        }
-        QTableView::item:selected {
-            background-color: """
-            + ECLIPSE_SECONDARY_COLOR
-            + """;
-            color: white;
-        }
+            padding: 4px;
+            border: none;
+            border-right: 1px solid #E0E0E0;
+            border-bottom: 1px solid #E0E0E0;
+        }}
         """
         )
-
     elif widget_type == "tab":
         return (
-            """
-        QTabWidget::pane {
-            border: 1px solid #D0D0D0;
-            border-top-width: 0px;
-            background-color: white;
-        }
-        QTabBar::tab {
-            background-color: """
-            + ECLIPSE_INACTIVE_TAB_COLOR
-            + """;
-            border: 1px solid #D0D0D0;
+            base_style
+            + f"""
+        QTabWidget::pane {{
+            border: 1px solid #E0E0E0;
+            border-top: 0px;
+            border-radius: 0px 0px 3px 3px;
+        }}
+
+        QTabBar::tab {{
+            background-color: #EEEEEE;
+            color: {colors["text"]};
+            padding: 6px 12px;
+            border: 1px solid #E0E0E0;
             border-bottom: none;
-            border-top-left-radius: 4px;
-            border-top-right-radius: 4px;
-            padding: 5px 10px;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
             margin-right: 2px;
-            min-width: 80px;
-        }
-        QTabBar::tab:selected {
-            background-color: """
-            + ECLIPSE_ACTIVE_TAB_COLOR
-            + """;
+        }}
+
+        QTabBar::tab:selected {{
+            background-color: {colors["primary"]};
+            color: {colors["text_light"]};
+            border: 1px solid {colors["primary"]};
             border-bottom: none;
-        }
-        QTabBar::tab:hover:!selected {
-            background-color: #EFEFEF;
-        }
+        }}
+
+        QTabBar::tab:!selected:hover {{
+            background-color: #E0E0E0;
+        }}
         """
         )
-
-    elif widget_type == "tree":
+    elif widget_type == "dvh":
         return (
-            """
-        QTreeView {
-            border: 1px solid #D0D0D0;
+            base_style
+            + f"""
+        QGroupBox {{
+            border: 1px solid #E0E0E0;
+            border-radius: 3px;
+            margin-top: 0.5em;
+            padding-top: 1em;
+            font-weight: bold;
+        }}
+
+        QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px 0 5px;
+        }}
+
+        QComboBox {{
+            border: 1px solid #E0E0E0;
+            border-radius: 3px;
+            padding: 3px 5px;
             background-color: white;
-            alternate-background-color: #FAFAFA;
-        }
-        QTreeView::item {
-            padding: 3px;
-            border: none;
-        }
-        QTreeView::item:selected {
-            background-color: """
-            + ECLIPSE_SECONDARY_COLOR
-            + """;
-            color: white;
-        }
-        QTreeView::branch {
-            background: transparent;
-        }
+            selection-background-color: {colors["primary"]};
+        }}
+
+        QComboBox::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 15px;
+            border-left: 1px solid #E0E0E0;
+        }}
+
+        QCheckBox {{
+            spacing: 5px;
+        }}
+
+        QCheckBox::indicator {{
+            width: 15px;
+            height: 15px;
+        }}
+
+        QCheckBox::indicator:unchecked {{
+            border: 1px solid #E0E0E0;
+            background-color: white;
+            border-radius: 3px;
+        }}
+
+        QCheckBox::indicator:checked {{
+            border: 1px solid {colors["primary"]};
+            background-color: {colors["primary"]};
+            border-radius: 3px;
+        }}
         """
         )
+    else:
+        # Default style
+        return base_style
 
-    # Trả về rỗng nếu không tìm thấy loại widget
-    return ""
 
-
-def get_eclipse_icon(icon_name: str) -> str:
+def apply_eclipse_style_theme(widget: "QWidget", widget_type: str = "default") -> None:
     """
-    Trả về đường dẫn đến icon Eclipse-style.
+    Áp dụng theme Eclipse cho widget.
 
     Parameters
     ----------
-    icon_name : str
-        Tên icon cần lấy
+    widget : QWidget
+        Widget cần áp dụng theme
+    widget_type : str, optional
+        Loại widget để áp dụng style phù hợp
+    """
+    if not HAS_PYQT:
+        return
+
+    # Áp dụng stylesheet
+    widget.setStyleSheet(create_eclipse_widget_style(widget_type))
+
+
+def get_structure_color(structure_type: str) -> Tuple[int, int, int]:
+    """
+    Lấy màu sắc mặc định cho cấu trúc dựa vào loại cấu trúc.
+
+    Parameters
+    ----------
+    structure_type : str
+        Loại cấu trúc ("PTV", "OAR", "OTHER")
 
     Returns
     -------
-    str
-        Đường dẫn đến file icon
+    Tuple[int, int, int]
+        Màu sắc RGB
     """
-    # Đường dẫn đến thư mục icon
-    icon_dir = os.path.join(os.path.dirname(__file__), "icons", "new_icons")
+    structure_type = structure_type.upper() if isinstance(structure_type, str) else ""
 
-    # Các đuôi file phổ biến cho icon
-    extensions = [".png", ".svg", ".ico"]
-
-    # Kiểm tra file với các đuôi
-    for ext in extensions:
-        icon_path = os.path.join(icon_dir, f"{icon_name}{ext}")
-        if os.path.exists(icon_path):
-            return icon_path
-
-    # Trả về None nếu không tìm thấy
-    return None
-
-
-# Class EncapsulateWidget để cung cấp widget với style Eclipse
-class EclipseStyleWidget:
-    """
-    Lớp utility để tạo và style widget theo phong cách Eclipse.
-    """
-
-    @staticmethod
-    def button(text: str, is_primary: bool = False) -> QPushButton:
-        """
-        Tạo button với style Eclipse.
-
-        Parameters
-        ----------
-        text : str
-            Text hiển thị trên button
-        is_primary : bool
-            True nếu là button chính (màu xanh), False nếu là button thường
-
-        Returns
-        -------
-        QPushButton
-            Button đã được style
-        """
-        if not PYQT_AVAILABLE:
-            logger.error("PyQt5 không khả dụng. Không thể tạo button.")
-            return None
-
-        button = QPushButton(text)
-
-        if is_primary:
-            button.setStyleSheet(create_eclipse_widget_style("primary_button"))
-            button.setProperty("default", True)
-        else:
-            button.setStyleSheet(create_eclipse_widget_style("button"))
-
-        return button
-
-    @staticmethod
-    def make_tab_widget() -> QTabWidget:
-        """
-        Tạo tab widget với style Eclipse.
-
-        Returns
-        -------
-        QTabWidget
-            Tab widget đã được style
-        """
-        if not PYQT_AVAILABLE:
-            logger.error("PyQt5 không khả dụng. Không thể tạo tab widget.")
-            return None
-
-        tab_widget = QTabWidget()
-        tab_widget.setStyleSheet(create_eclipse_widget_style("tab"))
-        return tab_widget
+    if structure_type == "PTV" or structure_type.startswith("PTV"):
+        return (229, 57, 53)  # Đỏ
+    elif structure_type == "OAR" or "OAR" in structure_type:
+        return (30, 136, 229)  # Xanh dương
+    else:
+        return (141, 110, 99)  # Nâu
 
 
 # Thông tin phiên bản

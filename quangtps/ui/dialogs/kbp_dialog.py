@@ -51,8 +51,8 @@ try:
         QTreeWidgetItem,
         QGridLayout,
     )
-    from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot
-    from PyQt5.QtGui import QFont, QColor, QIcon
+    from PyQt5.QtCore import Qt, QSize, QRect, pyqtSignal, pyqtSlot
+    from PyQt5.QtGui import QFont, QColor, QIcon, QPixmap, QPainter, QBrush, QPen
 
     HAS_PYQT = True
 except ImportError:
@@ -726,6 +726,41 @@ class KBPDialog(QDialog):
 
         self._init_ui()
         self._site_changed(self.site_combo.currentText())
+
+    def _get_available_sites(self) -> List[str]:
+        """
+        Lấy danh sách các vị trí điều trị có sẵn.
+
+        Returns
+        -------
+        List[str]
+            Danh sách các vị trí điều trị có sẵn trong hệ thống
+        """
+        # Trong thực tế, danh sách này sẽ được lấy từ dữ liệu mô hình KBP
+        # Hiện tại sử dụng danh sách cố định cho mục đích demo
+        sites = [
+            "Prostate",
+            "Head and Neck",
+            "Brain",
+            "Lung",
+            "Breast",
+            "Rectum",
+            "Pelvis",
+            "Abdomen",
+            "Spine",
+            "Liver",
+        ]
+
+        try:
+            # Thử lấy danh sách vị trí từ KBP predictor nếu có thể
+            if hasattr(self.kbp_predictor, "get_available_sites"):
+                predictor_sites = self.kbp_predictor.get_available_sites()
+                if predictor_sites and len(predictor_sites) > 0:
+                    return predictor_sites
+        except Exception as e:
+            logger.warning(f"Không thể lấy danh sách vị trí từ predictor: {e}")
+
+        return sites
 
     def _init_ui(self):
         self.setWindowTitle("Knowledge-Based Planning")

@@ -367,7 +367,7 @@ def create_algorithm(algorithm_name: str) -> Optional[DoseCalculationAlgorithm]:
     # Tạo đối tượng thuật toán
     try:
         algorithm_class = _algorithm_classes[algorithm_name]
-        return algorithm_class()
+    return algorithm_class()
     except Exception as e:
         logger.error(f"Lỗi khi tạo thuật toán {algorithm_name}: {str(e)}")
         return None

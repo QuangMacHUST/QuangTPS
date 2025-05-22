@@ -5,6 +5,76 @@ Tất cả những thay đổi đáng chú ý của dự án QuangTPS sẽ đư�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2024-03-15
+
+### Cải tiến
+- **Tăng cường độ ổn định của hệ thống DVH**:
+  - Cải thiện xử lý ngoại lệ trong DVHRobustnessAnalyzer để tránh crash khi phân tích mảng
+  - Thêm kiểm tra tính hợp lệ của dữ liệu DVH trước khi tính toán các chỉ số
+  - Cải thiện logging với thông tin chi tiết hơn về lỗi xảy ra trong quá trình phân tích
+
+### Sửa lỗi
+- **Khắc phục lỗi trong cách gọi create_eclipse_widget_style**:
+  - Sửa cách gọi hàm trong DVHWidget để áp dụng stylesheet trả về vào widget
+  - Đảm bảo chỉ truyền tham số widget_type mà không truyền tham số widget
+- **Sửa lỗi trong hàm calculate_dvh**:
+  - Loại bỏ các tham số không hợp lệ (dose_spacing và dose_origin) khi gọi calculate_dvh
+  - Chỉ sử dụng các tham số được hỗ trợ (dose_grid, structure_mask, bin_count)
+- Cải thiện định nghĩa ECLIPSE_COLORS trong eclipse_style_theme.py
+- Sửa đường dẫn import từ quangtps.ui.styles.eclipse_theme thành quangtps.ui.eclipse_style_theme
+
+## [0.13.0] - 2024-03-10
+
+### Cải tiến
+- **Thêm module phân tích độ bền vững DVH (robustness) với tính năng cao cấp**:
+  - Hỗ trợ phân tích nhiều kịch bản biến thể khác nhau của DVH
+  - Tạo dải DVH min-max trực quan để đánh giá phạm vi biến động
+  - Cung cấp các chỉ số thống kê chi tiết cho các chỉ số quan trọng (D98, D50, V20Gy)
+  - Tính toán điểm ổn định (stability score) để đánh giá mức độ bền vững của kế hoạch
+
+- **Nâng cấp giao diện theo phong cách Eclipse của Varian**:
+  - Tạo module eclipse_style_theme riêng biệt với đầy đủ màu sắc chuẩn
+  - Áp dụng mã màu thông minh cho các cấu trúc khác nhau (PTV, OAR)
+  - Cung cấp stylesheet tùy chỉnh cho nhiều loại widget (button, table, tab)
+  - Xử lý các trường hợp library UI không khả dụng với cơ chế dự phòng
+
+- **Cải thiện độ ổn định của hệ thống**:
+  - Sửa lỗi tham chiếu đến HAS_ECLIPSE_THEME và create_eclipse_widget_style
+  - Sửa lỗi trong phương thức _create_sample_dvh của DVHWidget
+  - Tăng cường xử lý ngoại lệ trong tất cả các phương thức quan trọng
+  - Bổ sung logging chi tiết cho việc phát hiện và xử lý lỗi
+
+## [0.12.0] - 2024-03-01
+
+### Cải tiến
+- **Nâng cao độ ổn định của DVHWidget với xử lý dự phòng đầy đủ**:
+  - Thêm biến HAS_ECLIPSE_THEME và import create_eclipse_widget_style với cơ chế dự phòng
+  - Cải thiện xử lý lỗi khi thư viện UI không khả dụng hoặc gặp vấn đề
+  - Tạo hàm tạo widget style giả khi không có eclipse_style_theme
+  - Tăng cường thông báo lỗi thông qua logging khi không tìm thấy các module cần thiết
+
+- **Hoàn thiện xử lý ngoại lệ trong DVHCanvas và DVHWidget**:
+  - Cải thiện quá trình tạo dữ liệu DVH mẫu với xử lý đầy đủ các trường hợp lỗi
+  - Thêm cơ chế dự phòng cho dữ liệu không hợp lệ trong _create_sample_dvh
+  - Tối ưu hóa quá trình làm trơn đường cong DVH với gaussian_filter1d
+  - Đảm bảo hiển thị chỉ số đánh giá chất lượng kế hoạch ngay cả khi thiếu dữ liệu
+
+- **Tăng cường tích hợp với các module khác**:
+  - Cải thiện cơ chế xử lý khi các module tính toán DVH không khả dụng
+  - Làm rõ luồng xử lý dữ liệu giữa DVHWidget và DVHCanvas
+  - Đảm bảo tương thích với tất cả các phiên bản PyQt và matplotlib
+
+### Sửa lỗi
+- Khắc phục lỗi "Undefined variable 'HAS_ECLIPSE_THEME'" trong DVHWidget
+- Sửa lỗi "Undefined variable 'create_eclipse_widget_style'" với cơ chế dự phòng thông minh
+- Cải thiện cơ chế kiểm tra tính khả dụng của eclipse_style_theme
+- Khắc phục các vấn đề tiềm ẩn trong quá trình tính toán DVH mẫu
+
+### Tài liệu
+- Bổ sung docstring chi tiết về cơ chế xử lý lỗi và dự phòng trong DVHWidget
+- Cải thiện thông báo debugging khi gặp vấn đề với các module ngoài
+- Thêm ghi chú về cách hoạt động của cơ chế dự phòng khi không có các thành phần UI
+
 ## [0.11.2] - 2026-09-20
 
 ### Cải tiến
@@ -72,79 +142,6 @@ và dự án này tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.
 - Cập nhật docstring cho các phương thức mới trong ObjectExplorerPanel và LeftPanel
 - Thêm hướng dẫn sử dụng Object Explorer với các tính năng mới
 - Cải thiện thông tin debug và log để dễ dàng khắc phục sự cố
-
-## [0.9.3] - 2023-11-15
-
-### Thêm mới
-- Triển khai hoàn chỉnh module phân tích sinh học (biological_models.py):
-  - Tính toán EUD với các tham số đặc trưng cho từng loại mô
-  - Tính toán TCP và NTCP dựa trên các mô hình Niemierko và LKB
-  - Cơ sở dữ liệu tham số sinh học cho nhiều loại cơ quan
-  - Các hàm BED và EQD2 cho đánh giá phân liều
-
-- Hoàn thiện module đánh giá độ bền vững (robustness):
-  - Class RobustnessAnalyzer với khả năng phân tích nhiều kịch bản
-  - Class RobustnessResult để lưu trữ và truy xuất kết quả phân tích
-  - Phân tích sai số thiết lập và bất định phạm vi
-  - Tích hợp với DVH và các chỉ số lâm sàng
-
-### Cải tiến
-- Tích hợp phân tích sinh học vào giao diện đánh giá kế hoạch:
-  - Tab "Phân tích sinh học" trong PlanEvaluationTab
-  - Kết nối dữ liệu DVH với module phân tích sinh học
-  - Hiển thị các chỉ số TCP, NTCP và EUD cho từng cấu trúc
-
-- Cải thiện cấu trúc và tài liệu:
-  - Docstring chuẩn cho tất cả các hàm mới
-  - File __init__.py đầy đủ thông tin và export
-  - Phiên bản 0.9.3 với thông tin về các tính năng mới
-
-### Sửa lỗi
-- Khắc phục lỗi indentation trong mco_engine.py
-- Sửa các lỗi import trong các module robustness và biological
-- Cải thiện xử lý ngoại lệ khi thiếu thư viện phụ thuộc
-- Đảm bảo tương thích với Python 3.8 và 3.9
-- Sửa lỗi trong set_dvh_data với dữ liệu không chuẩn
-
-## [0.9.2] - 2023-11-01
-
-### Cải tiến
-- Nâng cấp module MCO (Multi-Criteria Optimization) cho hoạt động ổn định hơn:
-  - Khắc phục lỗi indentation trong mco_engine.py gây lỗi import
-  - Hoàn thiện phương thức select_solution_by_objectives để cải thiện kết quả chọn giải pháp
-  - Cải thiện cơ chế xử lý lỗi khi các thành phần không khả dụng
-  - Đảm bảo tích hợp liền mạch với External Beam Planning tab
-
-- Cải thiện tích hợp KBP (Knowledge-Based Planning):
-  - Thêm hàm create_eclipse_icon trong utils/ui_utils.py để tạo biểu tượng nhất quán
-  - Cập nhật import trong kbp_dialog.py để đảm bảo tương thích
-  - Tối ưu hóa xử lý ngoại lệ trong quá trình áp dụng đề xuất KBP
-  - Cải thiện tương thích giữa KBP và quy trình tối ưu hóa
-
-- Phát triển module phân tích sinh học cho đánh giá kế hoạch:
-  - Thêm các mô hình TCP (Tumor Control Probability) và NTCP (Normal Tissue Complication Probability)
-  - Tích hợp tính toán EUD (Equivalent Uniform Dose) và BED (Biologically Effective Dose)
-  - Hỗ trợ cơ sở dữ liệu tham số sinh học cho nhiều loại cơ quan khác nhau
-  - Tạo giao diện hiển thị trực quan các chỉ số sinh học trong tab đánh giá kế hoạch
-
-- Bổ sung module đánh giá độ bền vững (Robustness Evaluation):
-  - Phân tích ảnh hưởng của sai số thiết lập (setup errors)
-  - Đánh giá tác động của sự không chắc chắn về phạm vi (range uncertainty) cho kế hoạch proton/ion
-  - Mô phỏng ảnh hưởng của các phương pháp phân liều khác nhau (fractionation effect)
-  - Hỗ trợ trực quan hóa dải DVH (DVH bands) để đánh giá độ bền vững của kế hoạch
-
-- Ổn định hệ thống:
-  - Cập nhật cơ chế import trong module dialogs để đảm bảo tính nhất quán
-  - Cải thiện khả năng phục hồi lỗi khi các thành phần không khả dụng
-  - Tối ưu hóa hiệu suất trong quá trình tính toán chỉ số chất lượng kế hoạch
-  - Bổ sung tài liệu và ghi chú mã nguồn cho dễ dàng bảo trì
-
-### Sửa lỗi
-- Khắc phục sự cố MCO module không hoạt động do lỗi cú pháp trong mco_engine.py
-- Sửa lỗi import trong ui/dialogs/kbp_dialog.py
-- Sửa lỗi thiếu hàm _format_params trong external_beam_planning_tab.py
-- Khắc phục lỗi biến toàn cục gây sự cố trong quá trình tính toán MCO
-- Sửa lỗi xử lý không đúng khi áp dụng đề xuất KBP vào kế hoạch hiện tại
 
 ## [0.9.1] - 2023-10-25
 

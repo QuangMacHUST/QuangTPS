@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Union, Any
 
 # Import PyQt
 try:
-    from PyQt5.QtWidgets import (
+from PyQt5.QtWidgets import (
         QDialog,
         QVBoxLayout,
         QHBoxLayout,

@@ -35,6 +35,8 @@ try:
         QGridLayout,
         QSpinBox,
         QAbstractItemView,
+        QListWidget,
+        QFrame,
     )
     from PyQt5.QtCore import Qt, pyqtSignal
     from PyQt5.QtGui import QColor, QBrush, QPainter
@@ -298,8 +300,6 @@ class BiologicalMetricsWidget(QWidget):
             self.sensitivity_range_min = QSpinBox()
             self.sensitivity_range_min.setRange(-50, 0)
             self.sensitivity_range_min.setValue(-20)
-            self.sensitivity_range_min.setSingleStep(5)
-            self.sensitivity_range_min.setSuffix("%")
             min_layout.addWidget(self.sensitivity_range_min)
             range_layout.addLayout(min_layout, 0, 1)
 
@@ -309,237 +309,151 @@ class BiologicalMetricsWidget(QWidget):
             self.sensitivity_range_max = QSpinBox()
             self.sensitivity_range_max.setRange(0, 50)
             self.sensitivity_range_max.setValue(20)
-            self.sensitivity_range_max.setSingleStep(5)
-            self.sensitivity_range_max.setSuffix("%")
             max_layout.addWidget(self.sensitivity_range_max)
             range_layout.addLayout(max_layout, 0, 2)
-
-            # Số điểm dữ liệu
-            points_layout = QHBoxLayout()
-            points_layout.addWidget(QLabel("Số điểm:"))
-            self.sensitivity_points = QSpinBox()
-            self.sensitivity_points.setRange(3, 15)
-            self.sensitivity_points.setValue(7)
-            self.sensitivity_points.setSingleStep(2)
-            points_layout.addWidget(self.sensitivity_points)
-            range_layout.addLayout(points_layout, 1, 2)
 
             control_layout.addWidget(range_widget)
 
             # Nút phân tích
-            analyze_btn = QPushButton("Phân tích")
-            analyze_btn.clicked.connect(self._run_sensitivity_analysis)
-            control_layout.addWidget(analyze_btn)
+            analyze_button = QPushButton("Phân tích")
+            analyze_button.clicked.connect(self._run_sensitivity_analysis)
+            control_layout.addWidget(analyze_button)
 
-            # Thêm panel điều khiển vào layout
             self.sensitivity_layout.addWidget(control_panel)
 
-            # Widget tách
-            splitter = QSplitter(Qt.Vertical)
-
-            # Panel hiển thị biểu đồ
-            self.sensitivity_chart_panel = QWidget()
-            chart_layout = QVBoxLayout(self.sensitivity_chart_panel)
-
-            # Tạo figure cho biểu đồ phân tích độ nhạy
-            self.sensitivity_figure = Figure(figsize=(8, 5))
+            # Thêm vùng hiển thị biểu đồ độ nhạy
+            self.sensitivity_figure = Figure(figsize=(8, 6))
             self.sensitivity_canvas = FigureCanvas(self.sensitivity_figure)
-            chart_layout.addWidget(self.sensitivity_canvas)
+            self.sensitivity_layout.addWidget(self.sensitivity_canvas, 3)
 
-            # Panel hiển thị bảng kết quả
-            self.sensitivity_table_panel = QWidget()
-            table_layout = QVBoxLayout(self.sensitivity_table_panel)
-
-            # Bảng kết quả
-            self.sensitivity_table = QTableWidget()
-            self.sensitivity_table.setColumnCount(3)
-            self.sensitivity_table.setHorizontalHeaderLabels(
-                ["Giá trị tham số", "Kết quả", "Thay đổi (%)"]
+            # Thêm bảng kết quả
+            self.sensitivity_results_table = QTableWidget()
+            self.sensitivity_results_table.setColumnCount(3)
+            self.sensitivity_results_table.setHorizontalHeaderLabels(
+                ["Thay đổi tham số (%)", "Giá trị mới", "Thay đổi kết quả (%)"]
             )
-            self.sensitivity_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.Stretch
+            self.sensitivity_layout.addWidget(self.sensitivity_results_table, 1)
+        else:
+            self.sensitivity_layout.addWidget(
+                QLabel(
+                    "Matplotlib không khả dụng. Không thể hiển thị phân tích độ nhạy."
+                )
             )
-            table_layout.addWidget(self.sensitivity_table)
-
-            # Thêm các panel vào splitter
-            splitter.addWidget(self.sensitivity_chart_panel)
-            splitter.addWidget(self.sensitivity_table_panel)
-            splitter.setSizes([600, 300])  # Thiết lập kích thước ban đầu
-
-            # Thêm splitter vào layout
-            self.sensitivity_layout.addWidget(splitter)
-
-            # Thêm tab vào widget chính
-            self.tabs.addTab(self.sensitivity_tab, "Độ nhạy")
 
         # Tab 5: Chi tiết
         self.details_tab = QWidget()
-        details_layout = QVBoxLayout(self.details_tab)
+        self.details_layout = QVBoxLayout(self.details_tab)
 
-        # Khởi tạo panel chi tiết
+        # Thêm panel chi tiết
         self._init_details_panel()
-        details_layout.addWidget(self.details_scroll_area)
 
-        # Thêm các tab vào tabwidget
-        self.tabs.addTab(self.metrics_tab, "Chỉ số")
+        # Thêm các tab vào widget
+        self.tabs.addTab(self.metrics_tab, "Bảng chỉ số")
         self.tabs.addTab(self.chart_tab, "Biểu đồ")
-        self.tabs.addTab(self.radar_tab, "Radar")
-        self.tabs.addTab(self.sensitivity_tab, "Độ nhạy")
+        self.tabs.addTab(self.radar_tab, "Biểu đồ Radar")
+        self.tabs.addTab(self.sensitivity_tab, "Phân tích độ nhạy")
         self.tabs.addTab(self.details_tab, "Chi tiết")
 
         # Kết nối sự kiện thay đổi tab
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
-        # Thêm phần tham số
-        params_group = QGroupBox("Tham số sinh học")
-        params_layout = QFormLayout(params_group)
-
-        # Tham số alpha/beta cho khối u
-        self.alpha_beta_tumor_spin = QDoubleSpinBox()
-        self.alpha_beta_tumor_spin.setRange(0.1, 50.0)
-        self.alpha_beta_tumor_spin.setValue(self.parameters["alpha_beta_tumor"])
-        self.alpha_beta_tumor_spin.setSingleStep(0.5)
-        self.alpha_beta_tumor_spin.valueChanged.connect(self._on_parameter_changed)
-        params_layout.addRow("α/β khối u (Gy):", self.alpha_beta_tumor_spin)
-
-        # Tham số alpha/beta cho mô lành
-        self.alpha_beta_normal_spin = QDoubleSpinBox()
-        self.alpha_beta_normal_spin.setRange(0.1, 50.0)
-        self.alpha_beta_normal_spin.setValue(self.parameters["alpha_beta_normal"])
-        self.alpha_beta_normal_spin.setSingleStep(0.5)
-        self.alpha_beta_normal_spin.valueChanged.connect(self._on_parameter_changed)
-        params_layout.addRow("α/β mô lành (Gy):", self.alpha_beta_normal_spin)
-
-        # Kích thước phân liều
-        self.fraction_size_spin = QDoubleSpinBox()
-        self.fraction_size_spin.setRange(0.1, 20.0)
-        self.fraction_size_spin.setValue(self.parameters["fraction_size"])
-        self.fraction_size_spin.setSingleStep(0.1)
-        self.fraction_size_spin.valueChanged.connect(self._on_parameter_changed)
-        params_layout.addRow("Kích thước phân liều (Gy):", self.fraction_size_spin)
-
-        # Số phân liều
-        self.num_fractions_spin = QDoubleSpinBox()
-        self.num_fractions_spin.setRange(1, 100)
-        self.num_fractions_spin.setValue(self.parameters["num_fractions"])
-        self.num_fractions_spin.setDecimals(0)
-        self.num_fractions_spin.setSingleStep(1)
-        self.num_fractions_spin.valueChanged.connect(self._on_parameter_changed)
-        params_layout.addRow("Số phân liều:", self.num_fractions_spin)
-
-        # Mô hình TCP
-        self.tcp_model_combo = QComboBox()
-        self.tcp_model_combo.addItems(["poisson", "niemierko", "logistic", "webb"])
-        self.tcp_model_combo.setCurrentText(self.parameters["tcp_model"])
-        self.tcp_model_combo.currentTextChanged.connect(self._on_parameter_changed)
-        params_layout.addRow("Mô hình TCP:", self.tcp_model_combo)
-
-        # Mô hình NTCP
-        self.ntcp_model_combo = QComboBox()
-        self.ntcp_model_combo.addItems(
-            ["lkb", "relative_seriality", "logit", "poisson"]
-        )
-        self.ntcp_model_combo.setCurrentText(self.parameters["ntcp_model"])
-        self.ntcp_model_combo.currentTextChanged.connect(self._on_parameter_changed)
-        params_layout.addRow("Mô hình NTCP:", self.ntcp_model_combo)
-
-        # Nút cập nhật
-        buttons_layout = QHBoxLayout()
-        update_button = QPushButton("Cập nhật chỉ số")
-        update_button.clicked.connect(self.update_metrics)
-        buttons_layout.addWidget(update_button)
-
-        export_button = QPushButton("Xuất báo cáo")
-        export_button.clicked.connect(self._export_report)
-        buttons_layout.addWidget(export_button)
-
-        # Thêm vào layout chính
+        # Thêm các widget vào layout chính
         main_layout.addWidget(self.tabs)
-        main_layout.addWidget(params_group)
-        main_layout.addLayout(buttons_layout)
-
-        # Khởi tạo chi tiết
-        self._init_details_panel()
 
     def _init_details_panel(self):
-        """Khởi tạo panel hiển thị chi tiết cấu trúc."""
-        # Tạo widget cho chi tiết
-        self.detail_widget = QWidget()
-        self.detail_layout = QVBoxLayout(self.detail_widget)
+        """Khởi tạo panel hiển thị chi tiết về đánh giá sinh học."""
+        # Tạo layout chính cho tab chi tiết
+        details_layout = QVBoxLayout()
 
-        # Tiêu đề
-        self.detail_title = QLabel("Chi tiết đánh giá sinh học")
-        self.detail_title.setAlignment(Qt.AlignCenter)
-        self.detail_title.setStyleSheet("font-size: 14pt; font-weight: bold;")
-        self.detail_layout.addWidget(self.detail_title)
+        # Tạo scroll area để có thể cuộn khi có nhiều thông tin
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
 
-        # Thông tin cơ bản
-        self.basic_info_group = QGroupBox("Thông tin cơ bản")
-        basic_info_layout = QFormLayout(self.basic_info_group)
+        # Tạo form layout cho các trường thông tin
+        form_layout = QFormLayout()
 
-        self.detail_structure_name = QLabel("")
-        basic_info_layout.addRow("Cấu trúc:", self.detail_structure_name)
+        # Thông tin cơ bản về cấu trúc
+        self.detail_structure_name = QLabel("Chưa chọn")
+        self.detail_structure_name.setStyleSheet("font-weight: bold; font-size: 14px;")
+        form_layout.addRow("Cấu trúc:", self.detail_structure_name)
 
         self.detail_structure_type = QLabel("")
-        basic_info_layout.addRow("Loại:", self.detail_structure_type)
+        form_layout.addRow("Loại cấu trúc:", self.detail_structure_type)
 
         self.detail_organ_type = QLabel("")
-        basic_info_layout.addRow("Cơ quan:", self.detail_organ_type)
+        form_layout.addRow("Loại cơ quan:", self.detail_organ_type)
 
-        self.detail_layout.addWidget(self.basic_info_group)
+        # Tạo đường kẻ phân cách
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
 
-        # Chỉ số sinh học
-        self.bio_metrics_group = QGroupBox("Chỉ số sinh học")
-        bio_metrics_layout = QFormLayout(self.bio_metrics_group)
+        # Tạo group box cho các chỉ số sinh học
+        metrics_group = QGroupBox("Chỉ số sinh học")
+        metrics_layout = QFormLayout(metrics_group)
 
         self.detail_eud = QLabel("")
-        bio_metrics_layout.addRow("EUD:", self.detail_eud)
+        metrics_layout.addRow("EUD:", self.detail_eud)
 
         self.detail_tcp = QLabel("")
-        bio_metrics_layout.addRow("TCP:", self.detail_tcp)
+        metrics_layout.addRow("TCP:", self.detail_tcp)
 
         self.detail_ntcp = QLabel("")
-        bio_metrics_layout.addRow("NTCP:", self.detail_ntcp)
+        metrics_layout.addRow("NTCP:", self.detail_ntcp)
 
         self.detail_bed = QLabel("")
-        bio_metrics_layout.addRow("BED:", self.detail_bed)
+        metrics_layout.addRow("BED:", self.detail_bed)
 
-        self.detail_layout.addWidget(self.bio_metrics_group)
-
-        # Đánh giá & khuyến nghị
-        self.evaluation_group = QGroupBox("Đánh giá & khuyến nghị")
-        evaluation_layout = QVBoxLayout(self.evaluation_group)
+        # Tạo group box cho đánh giá
+        evaluation_group = QGroupBox("Đánh giá")
+        evaluation_layout = QVBoxLayout(evaluation_group)
 
         self.detail_status = QLabel("")
+        self.detail_status.setStyleSheet("font-weight: bold; font-size: 12px;")
         evaluation_layout.addWidget(self.detail_status)
 
-        self.detail_concerns = QLabel("")
-        self.detail_concerns.setWordWrap(True)
-        evaluation_layout.addWidget(self.detail_concerns)
-
-        self.detail_recommendations = QLabel("")
-        self.detail_recommendations.setWordWrap(True)
+        # Tạo danh sách khuyến nghị
+        evaluation_layout.addWidget(QLabel("Khuyến nghị:"))
+        self.detail_recommendations = QListWidget()
+        self.detail_recommendations.setMaximumHeight(100)
         evaluation_layout.addWidget(self.detail_recommendations)
 
-        self.detail_layout.addWidget(self.evaluation_group)
+        # Tạo group box cho tham số tính toán
+        params_group = QGroupBox("Tham số tính toán")
+        params_layout = QFormLayout(params_group)
 
-        # Mô hình thay thế
-        self.alt_models_group = QGroupBox("Các mô hình thay thế")
-        alt_models_layout = QVBoxLayout(self.alt_models_group)
+        self.detail_num_fractions = QLabel(f"{self.parameters.get('num_fractions', 0)}")
+        params_layout.addRow("Số phân liều:", self.detail_num_fractions)
 
-        self.alt_models_table = QTableWidget()
-        self.alt_models_table.setColumnCount(2)
-        self.alt_models_table.setHorizontalHeaderLabels(["Mô hình", "Giá trị"])
-        self.alt_models_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.Stretch
+        self.detail_fraction_size = QLabel(
+            f"{self.parameters.get('fraction_size', 0)} Gy"
         )
-        alt_models_layout.addWidget(self.alt_models_table)
+        params_layout.addRow("Liều mỗi phân liều:", self.detail_fraction_size)
 
-        self.detail_layout.addWidget(self.alt_models_group)
+        self.detail_alpha_beta = QLabel("")
+        params_layout.addRow("Tỷ lệ α/β:", self.detail_alpha_beta)
 
-        # Thêm vào layout chi tiết chính
-        self.details_content_layout.addWidget(self.detail_widget)
-        self.details_content_layout.addStretch()
+        self.detail_model = QLabel("")
+        params_layout.addRow("Mô hình sử dụng:", self.detail_model)
+
+        # Thêm các widget vào layout chính
+        scroll_layout.addLayout(form_layout)
+        scroll_layout.addWidget(line)
+        scroll_layout.addWidget(metrics_group)
+        scroll_layout.addWidget(evaluation_group)
+        scroll_layout.addWidget(params_group)
+        scroll_layout.addStretch()
+
+        # Thiết lập scroll area
+        scroll_area.setWidget(scroll_content)
+
+        # Thêm scroll area vào layout chính
+        details_layout.addWidget(scroll_area)
+
+        # Thiết lập layout cho tab chi tiết
+        self.details_layout.addLayout(details_layout)
 
     def _on_tab_changed(self, index):
         """Xử lý khi người dùng chuyển tab."""
@@ -770,397 +684,319 @@ class BiologicalMetricsWidget(QWidget):
         self.chart.legend().setAlignment(Qt.AlignBottom)
 
     def _update_radar_chart(self):
-        """Cập nhật biểu đồ radar cho các chỉ số sinh học."""
+        """Cập nhật biểu đồ radar."""
         if not HAS_MATPLOTLIB:
-            logger.warning("Không thể tạo biểu đồ radar vì thiếu matplotlib")
             return
 
-        if not self.biological_metrics:
+        # Lấy cấu trúc được chọn
+        selected_structure = self.structures_combo.currentText()
+        if not selected_structure or not self.biological_metrics:
             return
 
-        # Xóa biểu đồ cũ nếu có
-        try:
-            if hasattr(self, "radar_canvas") and self.radar_canvas:
-                self.radar_layout.removeWidget(self.radar_canvas)
-                self.radar_canvas.deleteLater()
-        except Exception as e:
-            logger.error(f"Lỗi khi xóa biểu đồ radar cũ: {str(e)}")
+        # Xóa biểu đồ cũ
+        self.radar_figure.clear()
 
-        try:
-            # Lấy các cấu trúc
-            if hasattr(self, "structure_combo") and self.structure_combo:
-                selected_structure = self.structure_combo.currentText()
-            else:
-                selected_structure = next(iter(self.biological_metrics.keys()), None)
+        # Lấy thông tin cấu trúc
+        structure_type = self.structure_types.get(selected_structure, "OAR")
 
-            if (
-                not selected_structure
-                or selected_structure not in self.biological_metrics
-            ):
-                return
+        # Vẽ biểu đồ radar mới
+        self._draw_radar_chart(
+            selected_structure, self.biological_metrics, structure_type
+        )
 
-            # Lấy dữ liệu cho biểu đồ radar
-            metrics = self.biological_metrics[selected_structure]
-
-            # Xác định loại cấu trúc để hiển thị thông tin phù hợp
-            structure_type = self.structure_types.get(selected_structure, "OAR")
-
-            # Lọc các chỉ số sinh học phù hợp với loại cấu trúc
-            data = {}
-
-            if structure_type == "TARGET":
-                # Cho cấu trúc đích, tập trung vào TCP và EUD
-                if "TCP" in metrics:
-                    data["TCP (%)"] = metrics["TCP"]
-                if "EUD" in metrics:
-                    data["EUD (Gy)"] = metrics["EUD"]
-                if "BED" in metrics:
-                    data["BED (Gy)"] = metrics["BED"]
-                # Thêm chỉ số sinh học đặc thù cho PTV
-                if "TCP_logistic" in metrics:
-                    data["TCP-L (%)"] = metrics["TCP_logistic"]
-                if "TCP_poisson" in metrics:
-                    data["TCP-P (%)"] = metrics["TCP_poisson"]
-                if "TCP_niemierko" in metrics:
-                    data["TCP-N (%)"] = metrics["TCP_niemierko"]
-                if "g_EUD" in metrics:
-                    data["gEUD (Gy)"] = metrics["g_EUD"]
-            else:
-                # Cho cơ quan nguy cấp, tập trung vào NTCP và EUD
-                if "NTCP" in metrics:
-                    data["NTCP (%)"] = metrics["NTCP"]
-                if "EUD" in metrics:
-                    data["EUD (Gy)"] = metrics["EUD"]
-                if "BED" in metrics:
-                    data["BED (Gy)"] = metrics["BED"]
-                # Thêm chỉ số sinh học đặc thù cho OAR
-                if "NTCP_lkb" in metrics:
-                    data["NTCP-LKB (%)"] = metrics["NTCP_lkb"]
-                if "NTCP_logit" in metrics:
-                    data["NTCP-Logit (%)"] = metrics["NTCP_logit"]
-                if "NTCP_poisson" in metrics:
-                    data["NTCP-Poisson (%)"] = metrics["NTCP_poisson"]
-                if "NTCP_rs" in metrics:
-                    data["NTCP-RS (%)"] = metrics["NTCP_rs"]
-                if "g_EUD" in metrics:
-                    data["gEUD (Gy)"] = metrics["g_EUD"]
-
-            # Vẽ biểu đồ radar
-            self._draw_radar_chart(selected_structure, data, structure_type)
-        except Exception as e:
-            logger.error(f"Lỗi khi cập nhật biểu đồ radar: {str(e)}")
+        # Cập nhật canvas
+        self.radar_canvas.draw()
 
     def _draw_radar_chart(self, structure_name, metrics_data, structure_type="OAR"):
         """
-        Vẽ biểu đồ radar để hiển thị các chỉ số sinh học.
+        Vẽ biểu đồ radar cho một cấu trúc.
 
         Args:
-            structure_name (str): Tên cấu trúc
-            metrics_data (dict): Dữ liệu chỉ số sinh học
-            structure_type (str): Loại cấu trúc ('TARGET' hoặc 'OAR')
+            structure_name: Tên cấu trúc
+            metrics_data: Dữ liệu chỉ số sinh học
+            structure_type: Loại cấu trúc (TARGET/OAR)
         """
-        if not HAS_MATPLOTLIB or not metrics_data:
+        if not HAS_MATPLOTLIB or structure_name not in metrics_data:
             return
 
-        # Xóa nội dung cũ trên figure
-        self.radar_figure.clear()
+        # Lấy dữ liệu cho cấu trúc
+        metrics = metrics_data[structure_name]
 
-        # Tạo trục radar
-        ax = self.radar_figure.add_subplot(111, projection="polar")
+        # Tạo subplot với tọa độ cực
+        ax = self.radar_figure.add_subplot(111, polar=True)
 
-        # Chuẩn bị dữ liệu
-        categories = []
-        values = []
-        normalized_values = []  # Giá trị chuẩn hóa để hiển thị trên cùng biểu đồ
-        colors = []
-        optimal_directions = []  # Hướng tối ưu (max hoặc min) cho mỗi chỉ số
-
-        # Chuẩn bị thang chuẩn hóa để hiển thị các giá trị trên cùng biểu đồ
-        normalization_ranges = {
-            "TCP (%)": (0, 100),
-            "NTCP (%)": (0, 100),
-            "EUD (Gy)": (0, 80),
-            "gEUD (Gy)": (0, 80),
-            "BED (Gy)": (0, 120),
-            "Max Dose (Gy)": (0, 100),
-            "Mean Dose (Gy)": (0, 80),
-            "CI": (0, 1),
-            "HI": (0, 2),
-        }
-
-        # Tạo dict chỉ số theo loại cấu trúc
+        # Xác định các chỉ số sẽ hiển thị tùy theo loại cấu trúc
         if structure_type == "TARGET":
-            metric_info = {
-                "TCP (%)": {"optimal": "max", "weight": 1.0, "color": "#1a9641"},
-                "EUD (Gy)": {"optimal": "max", "weight": 0.8, "color": "#91cf60"},
-                "BED (Gy)": {"optimal": "max", "weight": 0.7, "color": "#a6d96a"},
-                "CI": {"optimal": "max", "weight": 0.6, "color": "#ffffbf"},
-                "HI": {"optimal": "min", "weight": 0.6, "color": "#fc8d59"},
-            }
-        else:  # OAR
-            metric_info = {
-                "NTCP (%)": {"optimal": "min", "weight": 1.0, "color": "#d7191c"},
-                "EUD (Gy)": {"optimal": "min", "weight": 0.8, "color": "#fdae61"},
-                "BED (Gy)": {"optimal": "min", "weight": 0.7, "color": "#fee08b"},
-                "Max Dose (Gy)": {"optimal": "min", "weight": 0.9, "color": "#e6f598"},
-                "Mean Dose (Gy)": {"optimal": "min", "weight": 0.9, "color": "#abdda4"},
-            }
+            # Các chỉ số cho cấu trúc mục tiêu
+            categories = ["TCP", "EUD", "CI", "HI", "Coverage"]
 
-        # Lọc các chỉ số có trong dữ liệu
-        available_metrics = {}
-        for metric_name, info in metric_info.items():
-            base_name = metric_name.split(" ")[0]  # Lấy phần đầu của tên chỉ số
-            for key in metrics_data:
-                if base_name.lower() in key.lower():
-                    if isinstance(metrics_data[key], dict):
-                        value = metrics_data[key].get("value")
-                    else:
-                        value = metrics_data[key]
+            # Lấy giá trị cho từng chỉ số
+            tcp = metrics.get("tcp", 0) * 100  # Chuyển sang phần trăm
+            eud = min(
+                metrics.get("eud", 0) / 80, 1.0
+            )  # Chuẩn hóa EUD (giả sử max 80Gy)
+            ci = min(
+                1.0 / max(metrics.get("conformity_index", 1), 0.5), 1.0
+            )  # CI càng gần 1 càng tốt
+            hi = min(
+                1.0 / max(metrics.get("homogeneity_index", 1), 0.5), 1.0
+            )  # HI càng gần 1 càng tốt
+            coverage = metrics.get("coverage", 0) * 100  # Chuyển sang phần trăm
 
-                    if value is not None:
-                        available_metrics[metric_name] = {
-                            "value": value,
-                            "optimal": info["optimal"],
-                            "weight": info["weight"],
-                            "color": info["color"],
-                        }
-                    break
+            values = [tcp / 100, eud, ci, hi, coverage / 100]  # Chuẩn hóa về thang 0-1
 
-        # Nếu không có dữ liệu
-        if not available_metrics:
-            ax.text(
-                0,
-                0,
-                f"Không có dữ liệu cho {structure_name}",
-                ha="center",
-                va="center",
-                fontsize=12,
-            )
-            self.radar_figure.tight_layout()
-            self.radar_canvas.draw()
-            return
+            # Màu sắc cho TARGET (đỏ)
+            color = "red"
 
-        # Thu thập dữ liệu và chuẩn hóa
-        for metric_name, info in available_metrics.items():
-            categories.append(metric_name)
-            raw_value = info["value"]
-            values.append(raw_value)
+            # Giá trị hiển thị
+            display_values = [
+                f"{tcp:.1f}%",
+                f"{metrics.get('eud', 0):.1f}Gy",
+                f"{metrics.get('conformity_index', 1):.2f}",
+                f"{metrics.get('homogeneity_index', 1):.2f}",
+                f"{coverage:.1f}%",
+            ]
+        else:
+            # Các chỉ số cho cơ quan nguy cấp
+            categories = ["NTCP", "Mean Dose", "Max Dose", "EUD", "Sparing"]
 
-            # Chuẩn hóa giá trị để hiển thị trên cùng biểu đồ
-            min_val, max_val = normalization_ranges.get(metric_name, (0, 1))
-            normalized_value = (
-                (raw_value - min_val) / (max_val - min_val)
-                if max_val > min_val
-                else 0.5
-            )
+            # Lấy giá trị cho từng chỉ số
+            ntcp = metrics.get("ntcp", 0) * 100  # Chuyển sang phần trăm
+            mean_dose = min(
+                metrics.get("mean_dose", 0) / 50, 1.0
+            )  # Chuẩn hóa mean dose (giả sử max 50Gy)
+            max_dose = min(
+                metrics.get("max_dose", 0) / 80, 1.0
+            )  # Chuẩn hóa max dose (giả sử max 80Gy)
+            eud = min(
+                metrics.get("eud", 0) / 50, 1.0
+            )  # Chuẩn hóa EUD (giả sử max 50Gy)
+            sparing = 1.0 - metrics.get(
+                "percent_volume_threshold", 0
+            )  # Phần thể tích được bảo vệ
 
-            # Đảo ngược giá trị nếu tối ưu là min (số càng thấp càng tốt)
-            if info["optimal"] == "min":
-                normalized_value = 1 - normalized_value
+            # Đảo ngược giá trị NTCP (thấp là tốt)
+            ntcp_inv = 1.0 - (ntcp / 100)
+            mean_dose_inv = 1.0 - mean_dose
+            max_dose_inv = 1.0 - max_dose
+            eud_inv = 1.0 - eud
 
-            normalized_values.append(normalized_value)
-            colors.append(info["color"])
-            optimal_directions.append(info["optimal"])
+            values = [
+                ntcp_inv,
+                mean_dose_inv,
+                max_dose_inv,
+                eud_inv,
+                sparing,
+            ]  # Chuẩn hóa về thang 0-1
 
-        # Số lượng chỉ số
+            # Màu sắc cho OAR (xanh lam)
+            color = "blue"
+
+            # Giá trị hiển thị
+            display_values = [
+                f"{ntcp:.1f}%",
+                f"{metrics.get('mean_dose', 0):.1f}Gy",
+                f"{metrics.get('max_dose', 0):.1f}Gy",
+                f"{metrics.get('eud', 0):.1f}Gy",
+                f"{sparing * 100:.1f}%",
+            ]
+
+        # Số lượng biến
         N = len(categories)
-        if N < 3:
-            # Biểu đồ radar cần ít nhất 3 chiều, thêm chiều giả nếu cần
-            dummy_count = 3 - N
-            categories.extend([""] * dummy_count)
-            values.extend([0] * dummy_count)
-            normalized_values.extend([0] * dummy_count)
-            colors.extend(["#cccccc"] * dummy_count)
-            optimal_directions.extend(["max"] * dummy_count)
-            N = 3
 
-        # Tạo các góc cho biểu đồ radar
-        angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
+        # Góc cho mỗi trục
+        angles = [n / float(N) * 2 * np.pi for n in range(N)]
+        angles += angles[:1]  # Đóng đường
 
-        # Khép kín biểu đồ
-        categories = categories + [categories[0]]
-        normalized_values = normalized_values + [normalized_values[0]]
-        values = values + [values[0]]
-        angles = angles + [angles[0]]
+        # Thêm giá trị đầu tiên vào cuối để đóng đường
+        values += values[:1]
 
-        # Vẽ biểu đồ radar với giá trị chuẩn hóa
-        ax.plot(
-            angles, normalized_values, "o-", linewidth=2, color="#5c9dc2", alpha=0.8
-        )
-        ax.fill(angles, normalized_values, color="#5c9dc2", alpha=0.2)
-
-        # Đặt nhãn cho các trục
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories[:-1])
-
-        # Thêm thông tin giá trị thực tế lên đồ thị
-        for i, (angle, value, normalized, category) in enumerate(
-            zip(angles[:-1], values[:-1], normalized_values[:-1], categories[:-1])
-        ):
-            if category:  # Chỉ hiển thị cho các trục có tên
-                # Tính toán vị trí văn bản dựa trên góc
-                ha = "left" if -np.pi / 2 <= angle <= np.pi / 2 else "right"
-                va = "center"
-                offset = 0.1
-                text_angle = angle
-
-                # Hiển thị giá trị thực tế
-                if "%" in category:
-                    value_text = f"{value:.1f}%"
-                elif "Gy" in category:
-                    value_text = f"{value:.1f} Gy"
-                else:
-                    value_text = f"{value:.2f}"
-
-                ax.text(
-                    text_angle,
-                    normalized + offset,
-                    value_text,
-                    ha=ha,
-                    va=va,
-                    fontsize=8,
-                    bbox=dict(facecolor="white", alpha=0.7, boxstyle="round,pad=0.3"),
-                )
-
-        # Vẽ vòng tròn nền
+        # Vẽ các đường tròn nền
         self._draw_background_circles(ax)
 
-        # Cài đặt giới hạn trục và tiêu đề
-        ax.set_ylim(0, 1.2)  # Giới hạn cho giá trị chuẩn hóa
-        ax.set_title(f"Radar Chart: {structure_name} ({structure_type})", fontsize=12)
-        self.radar_figure.tight_layout()
+        # Vẽ đường biểu đồ
+        ax.plot(angles, values, linewidth=2, linestyle="solid", color=color)
+        ax.fill(angles, values, color=color, alpha=0.25)
 
-        # Hiển thị biểu đồ
-        self.radar_canvas.draw()
+        # Thiết lập các trục
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories)
+
+        # Thêm nhãn giá trị
+        for i, (angle, value, display) in enumerate(
+            zip(angles[:-1], values[:-1], display_values)
+        ):
+            # Tính toán vị trí để hiển thị giá trị
+            ha = "left" if 0 <= angle < np.pi else "right"
+            offset = 0.1 if 0 <= angle < np.pi else -0.1
+
+            # Hiển thị giá trị thực tế (không chuẩn hóa)
+            ax.text(angle, value + 0.1, display, ha=ha, va="center", fontsize=9)
+
+        # Thêm tiêu đề
+        title = f"Đánh giá sinh học: {structure_name}"
+        ax.set_title(title, fontsize=12, fontweight="bold", y=1.08)
+
+        # Đặt giới hạn trục r từ 0 đến 1
+        ax.set_ylim(0, 1)
+
+        # Ẩn nhãn giá trị trên trục r
+        ax.set_yticklabels([])
 
     def _draw_background_circles(self, ax):
         """
-        Vẽ các vòng tròn nền cho biểu đồ radar.
+        Vẽ các đường tròn nền cho biểu đồ radar.
 
         Args:
-            ax: Trục matplotlib để vẽ vòng tròn
+            ax: Trục biểu đồ
         """
-        # Vẽ vòng tròn nền
-        r_max = 1.0
-        for i in range(5):
-            r = r_max * i / 4
-            circle = plt.Circle(
-                (0, 0),
-                r,
-                transform=ax.transData._b,
-                fill=False,
-                edgecolor="gray",
-                alpha=0.3,
-                linestyle=":",
+        # Vẽ các đường tròn đồng tâm
+        circles = [0.2, 0.4, 0.6, 0.8, 1.0]
+        for circle in circles:
+            ax.plot(
+                np.linspace(0, 2 * np.pi, 100),
+                [circle] * 100,
+                color="gray",
+                linestyle="--",
+                linewidth=0.5,
+                alpha=0.7,
             )
-            ax.add_artist(circle)
 
-            # Thêm nhãn giá trị cho vòng tròn
-            if i > 0:  # Không hiển thị giá trị 0
-                # Hiển thị giá trị dưới dạng phần trăm
-                label = f"{i / 4 * 100:.0f}%"
-                ax.text(
-                    0,
-                    r,
-                    label,
-                    ha="center",
-                    va="bottom",
-                    fontsize=7,
-                    color="gray",
-                    bbox=dict(facecolor="white", alpha=0.7, boxstyle="round,pad=0.1"),
-                )
+        # Tạo lưới từ tâm ra ngoài
+        ax.grid(True, color="gray", linestyle="--", linewidth=0.5, alpha=0.7)
+
+        # Thêm nhãn cho các đường tròn
+        labels = ["20%", "40%", "60%", "80%", "100%"]
+        for circle, label in zip(circles, labels):
+            ax.text(
+                0, circle, label, ha="center", va="bottom", color="gray", fontsize=8
+            )
 
     def _update_detail_display(self, all_metrics=None):
-        """Cập nhật hiển thị chi tiết thông số cho cấu trúc đã chọn."""
-        # Sử dụng tham số đã truyền vào hoặc metrics đã tính
+        """
+        Cập nhật hiển thị chi tiết cho cấu trúc được chọn.
+
+        Args:
+            all_metrics: Từ điển chứa tất cả các chỉ số sinh học
+        """
+        # Nếu không có all_metrics, sử dụng dữ liệu hiện tại
         if all_metrics is None:
             all_metrics = self.biological_metrics
 
-        if not all_metrics:
+        # Lấy cấu trúc được chọn
+        selected_row = self.metrics_table.currentRow()
+        if selected_row < 0 or selected_row >= self.metrics_table.rowCount():
             return
 
-        try:
-            # Lấy tên cấu trúc đã chọn
-            selected_rows = self.metrics_table.selectedItems()
-            if not selected_rows:
-                return
+        structure_name = self.metrics_table.item(selected_row, 0).text()
 
-            row = selected_rows[0].row()
-            structure_name = self.metrics_table.item(row, 0).text()
+        if structure_name not in all_metrics:
+            return
 
-            if structure_name not in all_metrics:
-                return
+        metrics = all_metrics[structure_name]
+        structure_type = metrics.get("type", "OAR")
 
-            metrics = all_metrics[structure_name]
+        # Cập nhật thông tin cơ bản
+        self.detail_structure_name.setText(structure_name)
+        self.detail_structure_type.setText(structure_type)
 
-            # Tạo chi tiết để hiển thị
-            detail_text = f"<h3>Chi tiết cho cấu trúc: {structure_name}</h3>"
-            detail_text += (
-                f"<p><b>Loại cấu trúc:</b> {metrics.get('type', 'Không xác định')}</p>"
-            )
+        # Cập nhật thông tin cơ quan
+        organ_type = metrics.get("organ_type", "unknown")
+        self.detail_organ_type.setText(organ_type)
 
-            # Thêm các thông số tính toán
-            detail_text += "<h4>Chỉ số sinh học:</h4>"
-            detail_text += "<ul>"
+        # Cập nhật chỉ số sinh học
+        eud = metrics.get("eud", 0)
+        self.detail_eud.setText(f"{eud:.2f} Gy")
 
-            for key, value in metrics.items():
-                if key not in ["name", "type"]:
-                    if key in ["TCP", "NTCP"]:
-                        detail_text += f"<li><b>{key}:</b> {value:.2f}%</li>"
-                    else:
-                        detail_text += f"<li><b>{key}:</b> {value:.2f} Gy</li>"
+        # Cập nhật TCP/NTCP dựa vào loại cấu trúc
+        if structure_type == "TARGET":
+            tcp = metrics.get("tcp", 0) * 100  # Chuyển sang phần trăm
+            self.detail_tcp.setText(f"{tcp:.2f}%")
 
-            detail_text += "</ul>"
-
-            # Hiển thị thông số tham số nếu có
-            if hasattr(self, "bio_eval") and self.bio_eval:
-                detail_text += "<h4>Tham số tính toán:</h4>"
-                detail_text += "<ul>"
-
-                params = self.parameters
-                detail_text += f"<li><b>Số phân liều:</b> {params.get('num_fractions', 'N/A')}</li>"
-                detail_text += f"<li><b>Liều mỗi phân liều:</b> {params.get('fraction_size', 'N/A')} Gy</li>"
-                detail_text += f"<li><b>Tỷ lệ α/β:</b> {params.get('alpha_beta_ratio', 'N/A')} Gy</li>"
-
-                detail_text += "</ul>"
-
-            # Hiển thị chi tiết nếu chưa có QLabel chi tiết, tạo mới
-            if not hasattr(self, "detail_label"):
-                # Tạo tab mới cho chi tiết
-                self.detail_tab = QWidget()
-                detail_layout = QVBoxLayout(self.detail_tab)
-
-                # Tạo widget cuộn cho chi tiết
-                scroll_area = QScrollArea()
-                scroll_area.setWidgetResizable(True)
-
-                # Tạo widget nội dung
-                content_widget = QWidget()
-                content_layout = QVBoxLayout(content_widget)
-
-                # Tạo label hiển thị chi tiết
-                self.detail_label = QLabel()
-                self.detail_label.setTextFormat(Qt.RichText)
-                self.detail_label.setWordWrap(True)
-                self.detail_label.setText(detail_text)
-
-                content_layout.addWidget(self.detail_label)
-                scroll_area.setWidget(content_widget)
-                detail_layout.addWidget(scroll_area)
-
-                # Thêm tab vào widget chính
-                self.tabs.addTab(self.detail_tab, "Chi tiết")
-
-                # Chuyển đến tab chi tiết
-                self.tabs.setCurrentWidget(self.detail_tab)
+            # Đặt màu sắc dựa vào giá trị TCP
+            if tcp >= 95:
+                self.detail_tcp.setStyleSheet("color: green; font-weight: bold;")
+            elif tcp >= 90:
+                self.detail_tcp.setStyleSheet("color: lightgreen; font-weight: bold;")
+            elif tcp >= 80:
+                self.detail_tcp.setStyleSheet("color: orange; font-weight: bold;")
             else:
-                # Cập nhật nội dung
-                self.detail_label.setText(detail_text)
-                # Chuyển đến tab chi tiết
-                self.tabs.setCurrentWidget(self.detail_tab)
+                self.detail_tcp.setStyleSheet("color: red; font-weight: bold;")
 
-        except Exception as e:
-            logger.error(f"Lỗi khi cập nhật hiển thị chi tiết: {str(e)}")
+            # Ẩn NTCP cho TARGET
+            self.detail_ntcp.setText("N/A")
+            self.detail_ntcp.setStyleSheet("")
+        else:
+            ntcp = metrics.get("ntcp", 0) * 100  # Chuyển sang phần trăm
+            self.detail_ntcp.setText(f"{ntcp:.2f}%")
+
+            # Đặt màu sắc dựa vào giá trị NTCP
+            if ntcp <= 1:
+                self.detail_ntcp.setStyleSheet("color: green; font-weight: bold;")
+            elif ntcp <= 5:
+                self.detail_ntcp.setStyleSheet("color: lightgreen; font-weight: bold;")
+            elif ntcp <= 10:
+                self.detail_ntcp.setStyleSheet("color: orange; font-weight: bold;")
+            else:
+                self.detail_ntcp.setStyleSheet("color: red; font-weight: bold;")
+
+            # Ẩn TCP cho OAR
+            self.detail_tcp.setText("N/A")
+            self.detail_tcp.setStyleSheet("")
+
+        # Cập nhật BED
+        bed = metrics.get("bed", 0)
+        self.detail_bed.setText(f"{bed:.2f} Gy")
+
+        # Cập nhật đánh giá
+        evaluation = ""
+        recommendations = []
+
+        if structure_type == "TARGET":
+            tcp = metrics.get("tcp", 0)
+            if tcp >= 0.95:
+                evaluation = "Rất tốt - TCP cao"
+                self.detail_status.setStyleSheet("color: green; font-weight: bold;")
+            elif tcp >= 0.9:
+                evaluation = "Tốt - TCP đạt yêu cầu"
+                self.detail_status.setStyleSheet(
+                    "color: lightgreen; font-weight: bold;"
+                )
+            elif tcp >= 0.8:
+                evaluation = "Chấp nhận được - TCP khá"
+                self.detail_status.setStyleSheet("color: orange; font-weight: bold;")
+                recommendations.append("Xem xét tăng liều để cải thiện TCP")
+            else:
+                evaluation = "Cần cải thiện - TCP thấp"
+                self.detail_status.setStyleSheet("color: red; font-weight: bold;")
+                recommendations.append("Cần tăng liều đáng kể để cải thiện TCP")
+                recommendations.append("Kiểm tra lại kế hoạch điều trị")
+        else:
+            ntcp = metrics.get("ntcp", 0)
+            if ntcp <= 0.01:
+                evaluation = "Rất tốt - NTCP rất thấp"
+                self.detail_status.setStyleSheet("color: green; font-weight: bold;")
+            elif ntcp <= 0.05:
+                evaluation = "Tốt - NTCP thấp"
+                self.detail_status.setStyleSheet(
+                    "color: lightgreen; font-weight: bold;"
+                )
+            elif ntcp <= 0.1:
+                evaluation = "Chấp nhận được - NTCP trung bình"
+                self.detail_status.setStyleSheet("color: orange; font-weight: bold;")
+                recommendations.append("Xem xét giảm liều để cải thiện NTCP")
+            else:
+                evaluation = "Cần cải thiện - NTCP cao"
+                self.detail_status.setStyleSheet("color: red; font-weight: bold;")
+                recommendations.append("Cần giảm liều đáng kể để cải thiện NTCP")
+                recommendations.append("Kiểm tra lại kế hoạch điều trị")
+
+        self.detail_status.setText(evaluation)
+
+        # Hiển thị khuyến nghị
+        self.detail_recommendations.clear()
+        for recommendation in recommendations:
+            self.detail_recommendations.addItem(recommendation)
 
     def _on_parameter_changed(self):
         """Xử lý khi người dùng thay đổi tham số."""
@@ -1518,7 +1354,7 @@ class BiologicalMetricsWidget(QWidget):
             results: Dict với phần tử {param_value: metric_value}
         """
         # Xóa dữ liệu cũ
-        self.sensitivity_table.setRowCount(0)
+        self.sensitivity_results_table.setRowCount(0)
 
         if not results:
             return
@@ -1541,8 +1377,8 @@ class BiologicalMetricsWidget(QWidget):
 
         # Thêm dữ liệu vào bảng
         for i, param_value in enumerate(param_values):
-            row = self.sensitivity_table.rowCount()
-            self.sensitivity_table.insertRow(row)
+            row = self.sensitivity_results_table.rowCount()
+            self.sensitivity_results_table.insertRow(row)
 
             # Giá trị tham số
             param_item = QTableWidgetItem(f"{param_value:.4f}")
@@ -1553,7 +1389,7 @@ class BiologicalMetricsWidget(QWidget):
                 param_item.setFont(font)
                 param_item.setBackground(QColor(230, 230, 255))  # Màu nền nhẹ
 
-            self.sensitivity_table.setItem(row, 0, param_item)
+            self.sensitivity_results_table.setItem(row, 0, param_item)
 
             # Giá trị kết quả
             metric_value = results[param_value]
@@ -1565,7 +1401,7 @@ class BiologicalMetricsWidget(QWidget):
                 metric_item.setFont(font)
                 metric_item.setBackground(QColor(230, 230, 255))
 
-            self.sensitivity_table.setItem(row, 1, metric_item)
+            self.sensitivity_results_table.setItem(row, 1, metric_item)
 
             # Phần trăm thay đổi so với giá trị cơ sở
             if base_metric != 0:
@@ -1595,15 +1431,15 @@ class BiologicalMetricsWidget(QWidget):
                 change_item.setFont(font)
                 change_item.setBackground(QColor(230, 230, 255))
 
-            self.sensitivity_table.setItem(row, 2, change_item)
+            self.sensitivity_results_table.setItem(row, 2, change_item)
 
         # Điều chỉnh kích thước cột cho phù hợp
-        self.sensitivity_table.resizeColumnsToContents()
+        self.sensitivity_results_table.resizeColumnsToContents()
 
         # Cuộn đến giá trị cơ sở
         if base_index >= 0:
-            self.sensitivity_table.scrollToItem(
-                self.sensitivity_table.item(base_index, 0),
+            self.sensitivity_results_table.scrollToItem(
+                self.sensitivity_results_table.item(base_index, 0),
                 QAbstractItemView.PositionAtCenter,
             )
 

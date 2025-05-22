@@ -1294,7 +1294,7 @@ class MainWindow(QMainWindow):
 
         # Add beam set to plan
         if hasattr(plan, "add_beam_set"):
-            plan.add_beam_set(beam_set)
+        plan.add_beam_set(beam_set)
         else:
             # Dự phòng nếu không có phương thức add_beam_set
             if not hasattr(plan, "beam_sets"):
@@ -1538,7 +1538,7 @@ class MainWindow(QMainWindow):
     def update_dose_progress(self, progress):
         """Cập nhật tiến trình tính toán liều."""
         if hasattr(self, "progress_bar"):
-            self.progress_bar.setValue(int(progress * 100))
+        self.progress_bar.setValue(int(progress * 100))
 
     def show_protocols_dialog(self):
         """Show the clinical protocols dialog."""
@@ -1594,9 +1594,9 @@ class MainWindow(QMainWindow):
         # Update UI based on current tab
         if current_tab == self.contouring_tab:
             try:
-                self.statusBar().showMessage(
-                    "Contouring tab: Use the tools to create and edit structures"
-                )
+            self.statusBar().showMessage(
+                "Contouring tab: Use the tools to create and edit structures"
+            )
             except Exception as e:
                 logging.error(f"Lỗi khi hiển thị thông báo: {e}")
         elif current_tab == self.planning_tab:
@@ -1780,12 +1780,12 @@ class MainWindow(QMainWindow):
                     self.plan_comparison_dialog = PlanComparisonDialog(parent=self)
             except ImportError:
                 logging.error("Không thể import PlanComparisonDialog")
-                QMessageBox.warning(
+            QMessageBox.warning(
                     self,
                     "Module không khả dụng",
                     "Module so sánh kế hoạch không khả dụng.",
-                )
-                return
+            )
+            return
 
         # Hiển thị dialog
         self.plan_comparison_dialog.show()

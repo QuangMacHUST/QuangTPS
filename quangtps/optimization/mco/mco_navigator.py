@@ -219,7 +219,7 @@ class MCONavigator:
 
                 self.solutions[solution.solution_id] = solution
 
-            except Exception as e:
+        except Exception as e:
                 logger.error("Lỗi khi tối ưu hóa cho mục tiêu %s: %s", obj_name, str(e))
 
         self._anchor_points_computed = True
