@@ -8,10 +8,15 @@ Module này cung cấp các hàm tiện ích giúp tạo và định dạng các
 theo phong cách Eclipse.
 """
 
-import os
 import logging
 from typing import Optional, Union, Dict, Any, List, Tuple
+import os
 
+# Khởi tạo logger trước khi import PyQt5
+logger = logging.getLogger(__name__)
+
+# Kiểm tra PyQt5 availability
+HAS_PYQT5 = False
 try:
     from PyQt5.QtWidgets import QWidget, QApplication, QStyleFactory
     from PyQt5.QtCore import QSize, Qt, QRect
@@ -26,310 +31,723 @@ try:
         QFont,
     )
 
-    HAS_QT = True
-except ImportError:
-    HAS_QT = False
-    logging.warning("PyQt5 không khả dụng. Các chức năng UI sẽ bị giới hạn.")
+    HAS_PYQT5 = True
+    logger.info("PyQt5 được tải thành công")
+except ImportError as e:
+    logger.warning(f"PyQt5 không khả dụng: {e}")
 
-logger = logging.getLogger(__name__)
+    # Tạo fallback classes
+    class QWidget:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def setStyleSheet(self, *args, **kwargs):
+            pass
+
+        def style(self):
+            return None
+
+    class Qt:
+        transparent = 0
+        white = 1
+        black = 2
+
+    class QIcon:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QPixmap:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def fill(self, *args, **kwargs):
+            pass
+
+    class QPainter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def setRenderHint(self, *args, **kwargs):
+            pass
+
+        def setPen(self, *args, **kwargs):
+            pass
+
+        def setBrush(self, *args, **kwargs):
+            pass
+
+        def drawEllipse(self, *args, **kwargs):
+            pass
+
+        def drawRect(self, *args, **kwargs):
+            pass
+
+        def drawText(self, *args, **kwargs):
+            pass
+
+        def end(self):
+            pass
+
+        Antialiasing = 1
+
+    class QColor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QPen:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QFont:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def setPointSize(self, *args, **kwargs):
+            pass
+
+        def setBold(self, *args, **kwargs):
+            pass
+
+    class QBrush:
+        def __init__(self, *args, **kwargs):
+            pass
 
 
 def create_eclipse_icon(
     icon_name: str, custom_render: bool = True, size: int = 32, colors: Dict = None
 ) -> Optional["QIcon"]:
     """
-    Tạo biểu tượng theo phong cách Eclipse cho các nút.
-
-    Function này tìm kiếm biểu tượng trong thư mục icons của QuangTPS và
-    trả về QIcon tương ứng. Các biểu tượng được tổ chức theo phong cách của
-    Eclipse, với các icon chuẩn cho các chức năng phổ biến.
-
-    Nếu custom_render=True và icon_name là "kbp", "rapidplan" hoặc các loại đặc biệt khác,
-    tạo biểu tượng tùy chỉnh với QPainter.
+    Tạo icon theo phong cách Eclipse với khả năng render tùy chỉnh.
 
     Parameters
     ----------
     icon_name : str
-        Tên của biểu tượng cần tạo (không bao gồm phần mở rộng)
-    custom_render : bool, optional
-        Nếu True, sử dụng QPainter để render các biểu tượng đặc biệt như kbp hay rapidplan
-    size : int, optional
-        Kích thước của biểu tượng (mặc định: 32px)
-    colors : Dict, optional
-        Từ điển chứa màu sắc tùy chỉnh cho biểu tượng
+        Tên icon cần tạo
+    custom_render : bool
+        Có sử dụng custom rendering hay không
+    size : int
+        Kích thước icon (pixels)
+    colors : Dict
+        Dictionary màu sắc tùy chỉnh
 
     Returns
     -------
-    Optional[QIcon]
-        Đối tượng QIcon nếu tìm thấy biểu tượng, None nếu không tìm thấy
-        hoặc PyQt không khả dụng
+    QIcon hoặc None
+        Icon được tạo hoặc None nếu không thể tạo
     """
-    if not HAS_QT:
-        logger.warning("PyQt không khả dụng, không thể tạo biểu tượng.")
+    if not HAS_PYQT5:
+        logger.warning("PyQt5 không khả dụng, không thể tạo icon")
         return None
 
-    # Sử dụng màu sắc mặc định nếu không được cung cấp
-    if colors is None:
-        colors = {
-            "kbp": {
-                "background": QColor(41, 128, 185),  # Xanh dương
-                "border": QColor(52, 152, 219),
-                "text": QColor(255, 255, 255),  # Trắng
-                "graphic": QColor(255, 255, 255),  # Trắng
-            },
-            "rapidplan": {
-                "background": QColor(155, 89, 182),  # Tím
-                "border": QColor(142, 68, 173),
-                "text": QColor(255, 255, 255),  # Trắng
-                "graphic": QColor(255, 255, 255),  # Trắng
-            },
-            "default": {
-                "background": QColor(52, 152, 219),  # Xanh dương nhạt
-                "border": QColor(41, 128, 185),
-                "text": QColor(255, 255, 255),  # Trắng
-                "graphic": QColor(255, 255, 255),  # Trắng
-            },
-        }
-
-    # Tạo biểu tượng tùy chỉnh với QPainter nếu được yêu cầu
-    if custom_render:
-        if icon_name.lower() in ["kbp", "rapidplan", "mcmc", "mco_navigator"]:
-            try:
-                # Tạo pixmap trống
-                pixmap = QPixmap(size, size)
-                pixmap.fill(Qt.transparent)
-
-                # Tạo painter
-                painter = QPainter(pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-
-                # Lấy màu sắc phù hợp
-                color_set = colors.get(icon_name.lower(), colors["default"])
-
-                # Vẽ biểu tượng tùy thuộc vào loại
-                if icon_name.lower() == "kbp":
-                    # Vẽ biểu tượng KBP (hình tròn với chữ K bên trong)
-                    # Vẽ hình tròn với màu nền
-                    brush = QBrush(color_set["background"])
-                    painter.setBrush(brush)
-
-                    # Viền
-                    pen = QPen(color_set["border"], 1)
-                    painter.setPen(pen)
-
-                    # Vẽ hình tròn
-                    painter.drawEllipse(4, 4, size - 8, size - 8)
-
-                    # Vẽ chữ "K" bên trong
-                    font = painter.font()
-                    font.setBold(True)
-                    font.setPointSize(10) if hasattr(
-                        font, "setPointSize"
-                    ) else font.setPixelSize(12)
-                    painter.setFont(font)
-
-                    pen = QPen(color_set["text"])
-                    painter.setPen(pen)
-                    painter.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "K")
-
-                    # Vẽ đường cong đại diện cho dữ liệu
-                    pen = QPen(color_set["graphic"], 2)
-                    painter.setPen(pen)
-                    painter.drawLine(8, size / 2 + 4, size - 8, size / 2 - 4)
-
-                elif icon_name.lower() == "rapidplan":
-                    # Vẽ biểu tượng RapidPlan
-                    brush = QBrush(color_set["background"])
-                    painter.setBrush(brush)
-
-                    # Viền
-                    pen = QPen(color_set["border"], 1)
-                    painter.setPen(pen)
-
-                    # Vẽ hình tròn
-                    painter.drawEllipse(4, 4, size - 8, size - 8)
-
-                    # Vẽ chữ "R" bên trong
-                    font = painter.font()
-                    font.setBold(True)
-                    font.setPointSize(10) if hasattr(
-                        font, "setPointSize"
-                    ) else font.setPixelSize(12)
-                    painter.setFont(font)
-
-                    pen = QPen(color_set["text"])
-                    painter.setPen(pen)
-                    painter.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "R")
-
-                elif icon_name.lower() == "mcmc":
-                    # Vẽ biểu tượng Monte Carlo model comparison
-                    brush = QBrush(QColor(46, 204, 113))  # Xanh lá
-                    painter.setBrush(brush)
-
-                    # Viền
-                    pen = QPen(QColor(39, 174, 96), 1)
-                    painter.setPen(pen)
-
-                    # Vẽ hình tròn
-                    painter.drawEllipse(4, 4, size - 8, size - 8)
-
-                    # Vẽ chữ "MC" bên trong
-                    font = painter.font()
-                    font.setBold(True)
-                    font.setPointSize(9) if hasattr(
-                        font, "setPointSize"
-                    ) else font.setPixelSize(11)
-                    painter.setFont(font)
-
-                    pen = QPen(Qt.white)
-                    painter.setPen(pen)
-                    painter.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "MC")
-
-                elif icon_name.lower() == "mco_navigator":
-                    # Vẽ biểu tượng MCO Navigator
-                    brush = QBrush(QColor(230, 126, 34))  # Cam
-                    painter.setBrush(brush)
-
-                    # Viền
-                    pen = QPen(QColor(211, 84, 0), 1)
-                    painter.setPen(pen)
-
-                    # Vẽ hình tròn
-                    painter.drawEllipse(4, 4, size - 8, size - 8)
-
-                    # Vẽ chữ "MCO" bên trong
-                    font = painter.font()
-                    font.setBold(True)
-                    font.setPointSize(7) if hasattr(
-                        font, "setPointSize"
-                    ) else font.setPixelSize(9)
-                    painter.setFont(font)
-
-                    pen = QPen(Qt.white)
-                    painter.setPen(pen)
-                    painter.drawText(QRect(0, 0, size, size), Qt.AlignCenter, "MCO")
-
-                painter.end()
-
-                # Tạo QIcon từ pixmap
-                return QIcon(pixmap)
-            except Exception as e:
-                logger.error(f"Lỗi khi tạo biểu tượng tùy chỉnh {icon_name}: {e}")
-                # Nếu lỗi, tiếp tục với phương pháp tìm kiếm file
-
-    # Các đường dẫn có thể chứa biểu tượng
-    icon_paths = [
-        os.path.join("quangtps", "ui", "icons", f"{icon_name}.png"),
-        os.path.join("quangtps", "ui", "icons", "new_icons", f"{icon_name}.png"),
-        os.path.join("quangtps", "ui", "icons", "eclipse", f"{icon_name}.png"),
-        os.path.join("ui", "icons", f"{icon_name}.png"),
-        os.path.join("icons", f"{icon_name}.png"),
-    ]
-
-    # Kiểm tra từng đường dẫn
-    for path in icon_paths:
-        if os.path.exists(path):
-            return QIcon(path)
-
-    # Nếu không tìm thấy, tạo biểu tượng mặc định dựa trên tên
     try:
-        # Ánh xạ tên biểu tượng phổ biến sang biểu tượng có sẵn trong Qt
-        icon_map = {
-            "new": QApplication.style().standardIcon(QApplication.style().SP_FileIcon),
-            "open": QApplication.style().standardIcon(
-                QApplication.style().SP_DirOpenIcon
-            ),
-            "save": QApplication.style().standardIcon(
-                QApplication.style().SP_DriveFDIcon
-            ),
-            "delete": QApplication.style().standardIcon(
-                QApplication.style().SP_TrashIcon
-            ),
-            "cancel": QApplication.style().standardIcon(
-                QApplication.style().SP_DialogCancelButton
-            ),
-            "apply": QApplication.style().standardIcon(
-                QApplication.style().SP_DialogApplyButton
-            ),
-            "ok": QApplication.style().standardIcon(
-                QApplication.style().SP_DialogOkButton
-            ),
-            "help": QApplication.style().standardIcon(
-                QApplication.style().SP_DialogHelpButton
-            ),
-            "refresh": QApplication.style().standardIcon(
-                QApplication.style().SP_BrowserReload
-            ),
-            "calculate": QApplication.style().standardIcon(
-                QApplication.style().SP_ComputerIcon
-            ),
-            "settings": QApplication.style().standardIcon(
-                QApplication.style().SP_FileDialogDetailedView
-            ),
-            "edit": QApplication.style().standardIcon(
-                QApplication.style().SP_FileDialogContentsView
-            ),
-            "view": QApplication.style().standardIcon(
-                QApplication.style().SP_FileDialogListView
-            ),
-            "generate": QApplication.style().standardIcon(
-                QApplication.style().SP_ArrowRight
-            ),
-            "analysis": QApplication.style().standardIcon(
-                QApplication.style().SP_FileDialogInfoView
-            ),
-            "optimize": QApplication.style().standardIcon(
-                QApplication.style().SP_MediaPlay
-            ),
-            "kbp": QApplication.style().standardIcon(
-                QApplication.style().SP_DialogApplyButton
-            ),
+        # Default colors với Eclipse theme
+        default_colors = {
+            "primary": "#4A90E2",
+            "secondary": "#CCCCCC",
+            "background": "#2B2B2B",
+            "accent": "#F5A623",
+            "danger": "#D0021B",
         }
 
-        if icon_name in icon_map:
-            return icon_map[icon_name]
-        else:
-            # Nếu không có trong ánh xạ, sử dụng biểu tượng mặc định
-            return QApplication.style().standardIcon(
-                QApplication.style().SP_TitleBarMenuButton
+        if colors:
+            default_colors.update(colors)
+
+        # Tạo pixmap trong suốt
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.transparent)
+
+        if not custom_render:
+            return QIcon(pixmap)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Icon-specific rendering
+        if icon_name == "plan":
+            # Icon kế hoạch xạ trị - target with crosshairs
+            painter.setPen(QPen(QColor(default_colors["primary"]), 2))
+            center = size // 2
+            radius = (size - 6) // 2
+
+            # Vẽ mục tiêu (target)
+            painter.drawEllipse(
+                center - radius, center - radius, radius * 2, radius * 2
             )
+            painter.drawEllipse(
+                center - radius // 2, center - radius // 2, radius, radius
+            )
+
+            # Vẽ crosshairs
+            painter.drawLine(3, center, size - 3, center)
+            painter.drawLine(center, 3, center, size - 3)
+
+        elif icon_name == "dose":
+            # Icon liều - gradient circles
+            colors = [
+                default_colors["danger"],
+                default_colors["accent"],
+                default_colors["primary"],
+            ]
+            for i, color in enumerate(colors):
+                radius = (size - 4) // 2 - i * 4
+                if radius > 0:
+                    painter.setPen(QPen(QColor(color), 2))
+                    center = size // 2
+                    painter.drawEllipse(
+                        center - radius, center - radius, radius * 2, radius * 2
+                    )
+
+        elif icon_name == "structure":
+            # Icon cấu trúc - overlapping polygons
+            painter.setPen(QPen(QColor(default_colors["secondary"]), 2))
+            painter.setBrush(QBrush(QColor(default_colors["primary"])))
+
+            # Vẽ polygon đơn giản
+            points = [
+                (size // 4, size // 4),
+                (3 * size // 4, size // 4),
+                (3 * size // 4, 3 * size // 4),
+                (size // 4, 3 * size // 4),
+            ]
+            painter.drawRect(size // 4, size // 4, size // 2, size // 2)
+
+        elif icon_name == "beam":
+            # Icon chùm tia - rays from center
+            painter.setPen(QPen(QColor(default_colors["accent"]), 2))
+            center = size // 2
+
+            # Vẽ các tia từ trung tâm
+            for angle in range(0, 360, 45):
+                import math
+
+                rad = math.radians(angle)
+                x1 = center + int(4 * math.cos(rad))
+                y1 = center + int(4 * math.sin(rad))
+                x2 = center + int((size // 2 - 4) * math.cos(rad))
+                y2 = center + int((size // 2 - 4) * math.sin(rad))
+                painter.drawLine(x1, y1, x2, y2)
+
+        elif icon_name == "optimization":
+            # Icon tối ưu hóa - ascending bars
+            painter.setPen(QPen(QColor(default_colors["primary"]), 1))
+            painter.setBrush(QBrush(QColor(default_colors["primary"])))
+
+            # Vẽ các thanh tăng dần
+            bar_width = size // 6
+            for i in range(5):
+                x = 2 + i * (bar_width + 1)
+                height = (i + 1) * (size - 4) // 5
+                y = size - 2 - height
+                painter.drawRect(x, y, bar_width, height)
+
+        elif icon_name == "evaluation":
+            # Icon đánh giá - check mark
+            painter.setPen(QPen(QColor(default_colors["primary"]), 3))
+
+            # Vẽ dấu check
+            check_points = [
+                (size // 4, size // 2),
+                (size // 2, 3 * size // 4),
+                (3 * size // 4, size // 4),
+            ]
+            painter.drawLine(
+                check_points[0][0],
+                check_points[0][1],
+                check_points[1][0],
+                check_points[1][1],
+            )
+            painter.drawLine(
+                check_points[1][0],
+                check_points[1][1],
+                check_points[2][0],
+                check_points[2][1],
+            )
+
+        elif icon_name == "patient":
+            # Icon bệnh nhân - simplified person
+            painter.setPen(QPen(QColor(default_colors["secondary"]), 2))
+            painter.setBrush(QBrush(QColor(default_colors["secondary"])))
+
+            # Vẽ đầu
+            head_radius = size // 6
+            center = size // 2
+            painter.drawEllipse(
+                center - head_radius,
+                size // 4 - head_radius,
+                head_radius * 2,
+                head_radius * 2,
+            )
+
+            # Vẽ thân
+            painter.drawRect(center - size // 8, size // 2, size // 4, size // 3)
+
+        elif icon_name == "machine":
+            # Icon máy xạ trị - simplified linac
+            painter.setPen(QPen(QColor(default_colors["secondary"]), 2))
+
+            # Gantry (oval)
+            painter.drawEllipse(4, 4, size - 8, size - 8)
+
+            # Head
+            painter.setPen(QPen(QColor(default_colors["primary"]), 3))
+            center = size // 2
+            painter.drawRect(center - 3, 6, 6, size // 3)
+
+        else:
+            # Default icon - simple circle
+            painter.setPen(QPen(QColor(default_colors["primary"]), 2))
+            painter.drawEllipse(4, 4, size - 8, size - 8)
+
+        painter.end()
+        return QIcon(pixmap)
+
     except Exception as e:
-        logger.warning(f"Không thể tạo biểu tượng {icon_name}: {e}")
+        logger.error(f"Lỗi tạo icon {icon_name}: {e}")
         return None
 
 
 def apply_eclipse_theme(widget: "QWidget") -> None:
     """
-    Áp dụng theme kiểu Eclipse cho widget.
+    Áp dụng Eclipse theme cho widget (deprecated - sử dụng apply_eclipse_style_theme).
 
     Parameters
     ----------
     widget : QWidget
         Widget cần áp dụng theme
     """
-    if not HAS_QT:
+    logger.warning("apply_eclipse_theme deprecated, sử dụng apply_eclipse_style_theme")
+    apply_eclipse_style_theme(widget)
+
+
+def apply_eclipse_style_theme(widget):
+    """
+    Áp dụng theme Eclipse cho widget.
+
+    Parameters
+    ----------
+    widget : QWidget
+        Widget cần áp dụng theme
+    """
+    if not HAS_PYQT5:
+        logger.warning("PyQt5 không khả dụng, không thể áp dụng theme")
         return
 
     try:
-        # Thiết lập style cho widget
-        if "Fusion" in QStyleFactory.keys():
-            QApplication.setStyle(QStyleFactory.create("Fusion"))
+        if not isinstance(widget, QWidget):
+            logger.warning(
+                f"Widget {widget} không phải QWidget, không thể áp dụng theme"
+            )
+            return
 
-        # Tạo palette màu kiểu Eclipse
-        palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(240, 240, 240))
-        palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
-        palette.setColor(QPalette.Base, QColor(255, 255, 255))
-        palette.setColor(QPalette.AlternateBase, QColor(245, 245, 245))
-        palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 220))
-        palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0))
-        palette.setColor(QPalette.Text, QColor(0, 0, 0))
-        palette.setColor(QPalette.Button, QColor(240, 240, 240))
-        palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
-        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        # Eclipse dark theme stylesheet
+        eclipse_style = """
+        QWidget {
+            background-color: #2B2B2B;
+            color: #CCCCCC;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9pt;
+        }
 
-        # Áp dụng palette
-        widget.setPalette(palette)
+        QTabWidget::pane {
+            border: 1px solid #555555;
+            background-color: #2B2B2B;
+        }
+
+        QTabBar::tab {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            padding: 8px 16px;
+            margin-right: 2px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+
+        QTabBar::tab:selected {
+            background-color: #4A90E2;
+            color: white;
+        }
+
+        QTabBar::tab:hover {
+            background-color: #484848;
+        }
+
+        QPushButton {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            padding: 6px 12px;
+            border-radius: 3px;
+            min-height: 18px;
+        }
+
+        QPushButton:hover {
+            background-color: #4A90E2;
+            border-color: #4A90E2;
+        }
+
+        QPushButton:pressed {
+            background-color: #357ABD;
+        }
+
+        QPushButton:disabled {
+            background-color: #2B2B2B;
+            color: #777777;
+            border-color: #444444;
+        }
+
+        QComboBox {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            padding: 4px 8px;
+            border-radius: 3px;
+            min-height: 18px;
+        }
+
+        QComboBox:hover {
+            border-color: #4A90E2;
+        }
+
+        QComboBox::drop-down {
+            border: none;
+            width: 20px;
+        }
+
+        QComboBox::down-arrow {
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 6px solid #CCCCCC;
+            margin-right: 6px;
+        }
+
+        QListWidget {
+            background-color: #2B2B2B;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            selection-background-color: #4A90E2;
+        }
+
+        QListWidget::item {
+            padding: 4px;
+            border-bottom: 1px solid #404040;
+        }
+
+        QListWidget::item:selected {
+            background-color: #4A90E2;
+        }
+
+        QListWidget::item:hover {
+            background-color: #484848;
+        }
+
+        QTableWidget {
+            background-color: #2B2B2B;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            selection-background-color: #4A90E2;
+            gridline-color: #404040;
+        }
+
+        QTableWidget::item {
+            padding: 4px;
+            border-bottom: 1px solid #404040;
+        }
+
+        QTableWidget::item:selected {
+            background-color: #4A90E2;
+        }
+
+        QHeaderView::section {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            padding: 6px;
+            border: 1px solid #555555;
+            font-weight: bold;
+        }
+
+        QLineEdit {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            padding: 4px 8px;
+            border-radius: 3px;
+            selection-background-color: #4A90E2;
+        }
+
+        QLineEdit:focus {
+            border-color: #4A90E2;
+        }
+
+        QTextEdit {
+            background-color: #2B2B2B;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            selection-background-color: #4A90E2;
+        }
+
+        QScrollBar:vertical {
+            background-color: #2B2B2B;
+            width: 16px;
+            border: none;
+        }
+
+        QScrollBar::handle:vertical {
+            background-color: #555555;
+            border-radius: 8px;
+            min-height: 20px;
+            margin: 2px;
+        }
+
+        QScrollBar::handle:vertical:hover {
+            background-color: #666666;
+        }
+
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+
+        QScrollBar:horizontal {
+            background-color: #2B2B2B;
+            height: 16px;
+            border: none;
+        }
+
+        QScrollBar::handle:horizontal {
+            background-color: #555555;
+            border-radius: 8px;
+            min-width: 20px;
+            margin: 2px;
+        }
+
+        QScrollBar::handle:horizontal:hover {
+            background-color: #666666;
+        }
+
+        QScrollBar::add-line:horizontal,
+        QScrollBar::sub-line:horizontal {
+            width: 0px;
+        }
+
+        QProgressBar {
+            background-color: #2B2B2B;
+            border: 1px solid #555555;
+            border-radius: 3px;
+            text-align: center;
+            color: #CCCCCC;
+        }
+
+        QProgressBar::chunk {
+            background-color: #4A90E2;
+            border-radius: 2px;
+        }
+
+        QSpinBox, QDoubleSpinBox {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            color: #CCCCCC;
+            padding: 4px 8px;
+            border-radius: 3px;
+        }
+
+        QSpinBox:focus, QDoubleSpinBox:focus {
+            border-color: #4A90E2;
+        }
+
+        QSpinBox::up-button, QDoubleSpinBox::up-button {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            border-bottom: none;
+        }
+
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            border-top: none;
+        }
+
+        QCheckBox {
+            color: #CCCCCC;
+            spacing: 8px;
+        }
+
+        QCheckBox::indicator {
+            width: 16px;
+            height: 16px;
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            border-radius: 3px;
+        }
+
+        QCheckBox::indicator:checked {
+            background-color: #4A90E2;
+            border-color: #4A90E2;
+        }
+
+        QRadioButton {
+            color: #CCCCCC;
+            spacing: 8px;
+        }
+
+        QRadioButton::indicator {
+            width: 16px;
+            height: 16px;
+            background-color: #3C3C3C;
+            border: 1px solid #555555;
+            border-radius: 8px;
+        }
+
+        QRadioButton::indicator:checked {
+            background-color: #4A90E2;
+            border-color: #4A90E2;
+        }
+
+        QMenuBar {
+            background-color: #2B2B2B;
+            color: #CCCCCC;
+            border-bottom: 1px solid #555555;
+        }
+
+        QMenuBar::item {
+            background-color: transparent;
+            padding: 6px 12px;
+        }
+
+        QMenuBar::item:selected {
+            background-color: #4A90E2;
+        }
+
+        QMenu {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            border: 1px solid #555555;
+        }
+
+        QMenu::item {
+            padding: 6px 20px;
+        }
+
+        QMenu::item:selected {
+            background-color: #4A90E2;
+        }
+
+        QToolBar {
+            background-color: #2B2B2B;
+            border: 1px solid #555555;
+            spacing: 2px;
+        }
+
+        QToolButton {
+            background-color: transparent;
+            border: none;
+            color: #CCCCCC;
+            padding: 4px;
+            border-radius: 3px;
+        }
+
+        QToolButton:hover {
+            background-color: #4A90E2;
+        }
+
+        QToolButton:pressed {
+            background-color: #357ABD;
+        }
+
+        QStatusBar {
+            background-color: #2B2B2B;
+            color: #CCCCCC;
+            border-top: 1px solid #555555;
+        }
+
+        QSplitter::handle {
+            background-color: #555555;
+        }
+
+        QSplitter::handle:horizontal {
+            width: 3px;
+        }
+
+        QSplitter::handle:vertical {
+            height: 3px;
+        }
+
+        QGroupBox {
+            color: #CCCCCC;
+            border: 1px solid #555555;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px 0 5px;
+        }
+        """
+
+        widget.setStyleSheet(eclipse_style)
+        logger.debug(f"Áp dụng Eclipse theme cho {type(widget).__name__}")
+
     except Exception as e:
-        logger.warning(f"Không thể áp dụng theme Eclipse: {e}")
+        logger.error(f"Lỗi áp dụng Eclipse theme: {e}")
+
+
+def create_eclipse_themed_widget(widget_class, *args, **kwargs):
+    """
+    Tạo widget với Eclipse theme được áp dụng sẵn.
+
+    Parameters
+    ----------
+    widget_class : class
+        Class của widget cần tạo
+    *args, **kwargs
+        Arguments cho constructor của widget
+
+    Returns
+    -------
+    Widget
+        Widget đã được tạo và áp dụng theme, hoặc fallback widget
+    """
+    if not HAS_PYQT5:
+        logger.warning("PyQt5 không khả dụng, trả về fallback widget")
+        return FallbackWidget()
+
+    try:
+        widget = widget_class(*args, **kwargs)
+        apply_eclipse_style_theme(widget)
+        return widget
+    except Exception as e:
+        logger.error(f"Lỗi tạo widget {widget_class.__name__}: {e}")
+        return FallbackWidget()
+
+
+class FallbackWidget:
+    """
+    Widget dự phòng khi PyQt5 không khả dụng.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.visible = True
+        self.enabled = True
+
+    def show(self):
+        self.visible = True
+
+    def hide(self):
+        self.visible = False
+
+    def setEnabled(self, enabled):
+        self.enabled = enabled
+
+    def setStyleSheet(self, style):
+        pass
+
+    def __getattr__(self, name):
+        # Trả về function giả cho bất kỳ method nào
+        def dummy_method(*args, **kwargs):
+            logger.debug(f"FallbackWidget dummy method called: {name}")
+            return None
+
+        return dummy_method

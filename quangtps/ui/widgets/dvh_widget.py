@@ -211,7 +211,7 @@ except ImportError as e:
     # Hàm giả để tránh lỗi khi calculate_dvh không khả dụng
     def calculate_dvh(*args, **kwargs):
         logging.error("Hàm calculate_dvh không khả dụng!")
-            return {
+        return {
             "dose_bins": np.array([0]),
             "differential_volume": np.array([0]),
             "cumulative_volume": np.array([0]),
@@ -221,7 +221,7 @@ except ImportError as e:
             "median_dose": 0,
             "std_dose": 0,
             "volume": 0,
-            }
+        }
 
     class DVHType(enum.Enum):
         CUMULATIVE = "CUMULATIVE"
@@ -395,8 +395,8 @@ class DVHWidget(QWidget):
 
         # Tạo biểu đồ matplotlib
         self.figure = Figure(figsize=(8, 6), dpi=100)
-            self.canvas = FigureCanvas(self.figure)
-            self.ax = self.figure.add_subplot(111)
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111)
         self.ax.set_xlabel(f"Liều ({self.dose_unit})")
         self.ax.set_ylabel("Thể tích (%)")
         self.ax.set_title("Biểu đồ liều-thể tích (DVH)")
@@ -404,8 +404,8 @@ class DVHWidget(QWidget):
 
         # Thêm thanh công cụ matplotlib
         self.toolbar = NavigationToolbar(self.canvas, self)
-            dvh_layout.addWidget(self.toolbar)
-            dvh_layout.addWidget(self.canvas)
+        dvh_layout.addWidget(self.toolbar)
+        dvh_layout.addWidget(self.canvas)
 
         tab_widget.addTab(dvh_tab, "Biểu đồ DVH")
 
@@ -862,7 +862,7 @@ class DVHWidget(QWidget):
             return
 
         # Xóa biểu đồ cũ
-            self.ax.clear()
+        self.ax.clear()
 
         # Thiết lập tiêu đề và nhãn trục
         volume_label = "Thể tích (%)" if self.display_volumes else "Thể tích (cc)"
@@ -1343,7 +1343,7 @@ class DVHWidget(QWidget):
                 noise = np.random.normal(0, 2, num_points)
                 volume = volume + noise
                 volume = np.clip(volume, 0, 100)  # Đảm bảo giá trị trong khoảng 0-100%
-        else:
+            else:
                 # Cấu trúc khác - tạo đường cong ngẫu nhiên
                 volume = 100 * np.exp(-0.1 * dose) + np.random.normal(0, 5, num_points)
                 volume = np.clip(volume, 0, 100)
@@ -1392,7 +1392,7 @@ class DVHWidget(QWidget):
             )
 
             return dvh_data
-    except Exception as e:
+        except Exception as e:
             logger.error(f"Lỗi khi tạo dữ liệu DVH mẫu: {e}")
             import traceback
 

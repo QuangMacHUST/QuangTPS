@@ -378,6 +378,9 @@ class MonteCarloGPU:
         """
         So sánh phân bố liều tính toán với phân bố liều tham chiếu.
 
+        Phương thức này thực hiện phân tích chi tiết sự khác biệt giữa hai phân phối liều,
+        bao gồm cả phân tích gamma 3D với nhiều tiêu chí khác nhau.
+
         Parameters
         ----------
         reference_dose : np.ndarray
@@ -386,42 +389,61 @@ class MonteCarloGPU:
         Returns
         -------
         Dict[str, Any]
-            Dictionary với các chỉ số so sánh
+            Dictionary với các chỉ số so sánh chi tiết
         """
         if self.dose_grid is None or reference_dose is None:
             logger.error("Cả liều tính toán và tham chiếu đều phải tồn tại")
-            return None
+            return {"error": "Missing dose data"}
 
-        # Kiểm tra kích thước
+        # Kiểm tra kích thước và loại dữ liệu
         if self.dose_grid.shape != reference_dose.shape:
             logger.error(
                 f"Không khớp kích thước: {self.dose_grid.shape} vs {reference_dose.shape}"
             )
-            return None
+            return {"error": f"Size mismatch: {self.dose_grid.shape} vs {reference_dose.shape}"}
+
+        # Chuyển đổi sang kiểu dữ liệu float32 cho nhất quán
+        calc_dose = self.dose_grid.astype(np.float32)
+        ref_dose = reference_dose.astype(np.float32)
 
         # Tính toán các chỉ số cơ bản
-        diff = self.dose_grid - reference_dose
+        diff = calc_dose - ref_dose
         abs_diff = np.abs(diff)
 
-        # Tạo mask chỉ xét vùng có liều > 10% liều tối đa
-        ref_max = np.max(reference_dose)
-        mask = reference_dose >= (0.1 * ref_max)
+        # Tạo mask chỉ xét vùng có liều > threshold% liều tối đa
+        threshold_percent = 10.0  # 10% của liều tối đa
+        ref_max = float(np.max(ref_dose))
+
+        if ref_max <= 0:
+            logger.warning("Liều tham chiếu có giá trị tối đa bằng 0 hoặc âm")
+            return {"error": "Invalid reference dose (max <= 0)"}
+
+        dose_threshold = ref_max * (threshold_percent / 100.0)
+        mask = ref_dose >= dose_threshold
+        masked_voxel_count = int(np.sum(mask))
 
         # Tính % sai khác trung bình trong vùng quan tâm
-        mean_pct_diff = (
-            100.0 * np.mean(abs_diff[mask]) / ref_max if np.sum(mask) > 0 else 0.0
-        )
+        if masked_voxel_count > 0:
+            mean_pct_diff = 100.0 * float(np.mean(abs_diff[mask])) / ref_max
+        else:
+            mean_pct_diff = 0.0
+            logger.warning(f"Không có voxel nào trong vùng quan tâm (> {threshold_percent}% liều tối đa)")
 
+        # Tính các chỉ số cơ bản - chuyển sang native Python types
         metrics = {
-            "mean_error": np.mean(diff),
-            "mean_abs_error": np.mean(abs_diff),
-            "mean_pct_diff": mean_pct_diff,
-            "max_error": np.max(abs_diff),
-            "rms_error": np.sqrt(np.mean(np.square(diff))),
+            "mean_error": float(np.mean(diff)),
+            "mean_abs_error": float(np.mean(abs_diff)),
+            "mean_pct_diff": float(mean_pct_diff),
+            "max_error": float(np.max(abs_diff)),
+            "rms_error": float(np.sqrt(np.mean(np.square(diff)))),
+            "max_reference_dose": float(ref_max),
+            "voxels_in_mask": int(masked_voxel_count),
+            "threshold_percent": float(threshold_percent)
         }
 
         # Tính chỉ số gamma nếu module phân tích gamma có sẵn
         try:
+            # Import động để tránh phụ thuộc cứng
             from quangtps.evaluation.metrics.gamma_analysis import (
                 calculate_gamma_3d,
                 gamma_pass_rate,
@@ -429,85 +451,140 @@ class MonteCarloGPU:
 
             logger.info("Bắt đầu phân tích gamma 3D...")
 
-            # Lấy thông tin voxel_size nếu có
-            voxel_size = (
-                self.voxel_size if hasattr(self, "voxel_size") else (1.0, 1.0, 1.0)
-            )
+            # Lấy thông tin voxel_size từ thuộc tính nếu có
+            voxel_size = getattr(self, "voxel_size", (1.0, 1.0, 1.0))
 
-            # Thiết lập các tham số cho phân tích gamma
-            distance_criterion_mm = 3.0  # Khoảng cách đến điểm tương đồng (mm)
-            dose_difference_percent = 3.0  # Sai khác liều (% của liều tối đa)
-            threshold_dose = 0.1  # Chỉ tính gamma cho vùng liều > 10% của liều tối đa
+            # Đảm bảo voxel_size là tuple để tránh lỗi kiểu
+            if not isinstance(voxel_size, tuple):
+                voxel_size = tuple(voxel_size)
 
-            # Thêm vào metric container
-            metrics["gamma_criteria"] = {
-                "dta_mm": distance_criterion_mm,
-                "dd_percent": dose_difference_percent,
-                "threshold": threshold_dose,
-                "voxel_size": voxel_size,
-            }
+            # Thiết lập các bộ tiêu chí gamma phổ biến
+            gamma_criteria = [
+                {"distance_mm": 3.0, "dose_percent": 3.0, "threshold": 0.1},  # 3mm/3%
+                {"distance_mm": 2.0, "dose_percent": 2.0, "threshold": 0.1},  # 2mm/2%
+                {"distance_mm": 1.0, "dose_percent": 1.0, "threshold": 0.1}   # 1mm/1%
+            ]
 
-            # Gọi hàm gamma analysis với đúng thông số
-            gamma_result = calculate_gamma_3d(
-                reference=reference_dose,
-                evaluation=self.dose_grid,
-                dta_mm=distance_criterion_mm,
-                dd_percent=dose_difference_percent,
-                threshold=threshold_dose,
-                voxel_size=voxel_size,
-                max_gamma=5.0,
-                local_normalization=False,
-            )
+            # Thêm container cho kết quả gamma
+            metrics["gamma_analysis"] = {}
 
-            # Tính pass rate và thêm vào kết quả
-            # Chuyển đổi gamma_result sang numpy array nếu nó không phải là numpy array
-            gamma_array = np.array(gamma_result)
-            pass_rate_value = gamma_pass_rate(gamma_array, mask=mask, pass_criteria=1.0)
+            # Tính toán gamma cho từng bộ tiêu chí
+            for criteria in gamma_criteria:
+                distance_criterion_mm = criteria["distance_mm"]
+                dose_difference_percent = criteria["dose_percent"]
+                threshold_dose = criteria["threshold"]
 
-            metrics["gamma_analysis"] = {
-                "pass_rate": pass_rate_value,
-                "mean_gamma": np.mean(gamma_array[mask]) if np.sum(mask) > 0 else 0.0,
-                "max_gamma": np.max(gamma_array[mask]) if np.sum(mask) > 0 else 0.0,
-                "criteria_string": f"{distance_criterion_mm}mm/{dose_difference_percent}%",
-            }
+                criteria_key = f"gamma_{int(distance_criterion_mm)}mm_{int(dose_difference_percent)}pct"
 
-            # Thêm phân tích với tiêu chí khác
-            for dta, dd in [(2.0, 2.0), (1.0, 1.0)]:
                 try:
-                    gamma_key = f"gamma_{int(dta)}mm_{int(dd)}pct"
-                    gamma_2 = calculate_gamma_3d(
-                        reference=reference_dose,
-                        evaluation=self.dose_grid,
-                        dta_mm=dta,
-                        dd_percent=dd,
+                    # Gọi hàm gamma analysis với đúng thông số và xử lý lỗi
+                    gamma_result = calculate_gamma_3d(
+                        reference=ref_dose,
+                        evaluation=calc_dose,
+                        dta_mm=distance_criterion_mm,
+                        dd_percent=dose_difference_percent,
                         threshold=threshold_dose,
                         voxel_size=voxel_size,
                         max_gamma=5.0,
                         local_normalization=False,
                     )
-                    # Chuyển đổi gamma_2 sang numpy array nếu cần
-                    gamma_2_array = np.array(gamma_2)
-                    pass_rate_2 = gamma_pass_rate(
-                        gamma_2_array, mask=mask, pass_criteria=1.0
-                    )
-                    metrics["gamma_analysis"][gamma_key] = {
-                        "pass_rate": pass_rate_2,
-                        "criteria_string": f"{dta}mm/{dd}%",
+
+                    # Chuyển đổi gamma_result sang numpy array nếu cần
+                    if not isinstance(gamma_result, np.ndarray):
+                        gamma_array = np.array(gamma_result)
+                    else:
+                        gamma_array = gamma_result
+
+                    # Tính pass rate với các voxel có trị số gamma <= 1.0
+                    try:
+                        pass_rate_value = gamma_pass_rate(
+                            gamma_array, mask=mask, pass_criteria=1.0
+                        )
+                    except Exception as pr_error:
+                        logger.warning(f"Lỗi khi tính pass rate: {str(pr_error)}")
+                        # Tính thủ công nếu hàm gamma_pass_rate gặp lỗi
+                        valid_voxels = np.sum(mask)
+                        if valid_voxels > 0:
+                            passing_voxels = np.sum((gamma_array[mask] <= 1.0))
+                            pass_rate_value = 100.0 * passing_voxels / valid_voxels
+                        else:
+                            pass_rate_value = 0.0
+
+                    # Tính các giá trị thống kê và chuyển sang native Python types
+                    if np.sum(mask) > 0:
+                        mean_gamma = float(np.mean(gamma_array[mask]))
+                        max_gamma = float(np.max(gamma_array[mask]))
+                    else:
+                        mean_gamma = 0.0
+                        max_gamma = 0.0
+
+                    # Lưu kết quả với các kiểu dữ liệu Python chuẩn để JSON serialization
+                    metrics["gamma_analysis"][criteria_key] = {
+                        "pass_rate": float(pass_rate_value),
+                        "mean_gamma": mean_gamma,
+                        "max_gamma": max_gamma,
+                        "criteria_string": f"{distance_criterion_mm}mm/{dose_difference_percent}%",
+                        "evaluated_voxels": int(np.sum(mask)),
+                        "passing_voxels": int(np.sum((gamma_array[mask] <= 1.0)) if np.sum(mask) > 0 else 0)
                     }
-                except Exception as e:
-                    logger.warning(
-                        f"Lỗi khi tính gamma với tiêu chí {dta}mm/{dd}%: {str(e)}"
+
+                    # Thông tin chi tiết về kết quả phân tích gamma
+                    logger.info(
+                        f"Phân tích gamma {criteria_key}: pass rate = {float(pass_rate_value):.2f}% "
+                        f"({int(np.sum((gamma_array[mask] <= 1.0)) if np.sum(mask) > 0 else 0)}/{int(np.sum(mask))} voxels)"
                     )
 
-            logger.info(
-                f"Phân tích gamma đã hoàn tất với tỉ lệ đạt {pass_rate_value:.2f}% theo tiêu chí {distance_criterion_mm}mm/{dose_difference_percent}%"
-            )
+                except Exception as e:
+                    error_msg = f"Lỗi khi tính gamma với tiêu chí {criteria_key}: {str(e)}"
+                    logger.warning(error_msg)
+                    # Lưu thông tin lỗi trong kết quả để frontend có thể xử lý
+                    metrics["gamma_analysis"][criteria_key] = {
+                        "error": error_msg,
+                        "criteria_string": f"{distance_criterion_mm}mm/{dose_difference_percent}%"
+                    }
 
-        except ImportError:
-            logger.warning("Module phân tích gamma không khả dụng, bỏ qua chỉ số này")
+            # Thêm kết quả với tiêu chí chính (3mm/3%) vào cấp cao nhất của dict để dễ truy cập
+            if "gamma_3mm_3pct" in metrics["gamma_analysis"]:
+                if "error" not in metrics["gamma_analysis"]["gamma_3mm_3pct"]:
+                    metrics.update({
+                        "gamma_pass_rate": metrics["gamma_analysis"]["gamma_3mm_3pct"]["pass_rate"],
+                        "gamma_criteria": "3mm/3%",
+                        "mean_gamma": metrics["gamma_analysis"]["gamma_3mm_3pct"]["mean_gamma"],
+                        "max_gamma": metrics["gamma_analysis"]["gamma_3mm_3pct"]["max_gamma"]
+                    })
+
+        except ImportError as e:
+            error_message = f"Module phân tích gamma không khả dụng: {str(e)}"
+            logger.warning(error_message)
+            metrics["gamma_analysis"] = {"status": "unavailable", "message": error_message}
+            # Thêm phương thức thay thế khi không có gamma analysis
+            logger.info("Sử dụng phương thức thay thế đơn giản để đánh giá độ chênh lệch")
+
+            # Tính tỷ lệ voxel có sai khác < 3% liều tối đa
+            diff_threshold = ref_max * 0.03  # 3%
+            passing_voxels = np.sum((abs_diff[mask] <= diff_threshold))
+            if masked_voxel_count > 0:
+                simple_pass_rate = 100.0 * passing_voxels / masked_voxel_count
+            else:
+                simple_pass_rate = 0.0
+
+            metrics.update({
+                "simple_pass_rate": float(simple_pass_rate),
+                "simple_criteria": "3% difference",
+                "simple_passing_voxels": int(passing_voxels),
+                "simple_evaluated_voxels": int(masked_voxel_count)
+            })
+
         except Exception as e:
-            logger.error(f"Lỗi trong tính toán gamma: {str(e)}", exc_info=True)
-            metrics["gamma_error"] = str(e)
+            error_message = f"Lỗi không mong đợi trong tính toán gamma: {str(e)}"
+            logger.error(error_message, exc_info=True)
+            metrics["gamma_error"] = error_message
+            # Cung cấp ít nhất một số thông tin hữu ích khi gặp lỗi
+            metrics["delta_analysis"] = {
+                "max_abs_difference": float(np.max(abs_diff)),
+                "mean_abs_difference": float(np.mean(abs_diff)),
+                "percent_difference": float(mean_pct_diff)
+            }
 
         return metrics
 

@@ -30,7 +30,7 @@ def test_import_modules():
         "quangtps.optimization.objectives",
         "quangtps.optimization.optimizer",
         "quangtps.evaluation.dvh.dose_volume_histogram",
-        "quangtps.ui.3d_viewer",
+        # "quangtps.ui.3d_viewer",  # Skip due to filename issue
     ]
 
     for module_name in modules_to_test:
@@ -270,15 +270,18 @@ def test_dicom_export():
 
 
 def test_3d_viewer():
-    """Test 3D viewer"""
+    """Test 3D viewer functionality"""
     print("\n" + "=" * 60)
     print("TEST 3D VIEWER")
     print("=" * 60)
 
     try:
-        from quangtps.ui import create_3d_viewer
+        # Import module với tên file chứa số
+        import importlib
 
-        # Tạo 3D viewer (không display)
+        viewer_module = importlib.import_module("quangtps.ui.3d_viewer")
+        create_3d_viewer = getattr(viewer_module, "create_3d_viewer")
+
         viewer = create_3d_viewer()
         print(f"✓ Tạo 3D viewer: {type(viewer).__name__}")
 
@@ -287,7 +290,7 @@ def test_3d_viewer():
         viewer.set_image_data(test_image, spacing=(1.0, 1.0, 2.0))
         print(f"✓ Set image data: {test_image.shape}")
 
-        # Test thêm structure
+        # Test add structure
         structure_mask = np.zeros_like(test_image)
         structure_mask[10:20, 20:40, 20:40] = 1
         viewer.add_structure("Test_Structure", structure_mask, color=(1.0, 0.0, 0.0))

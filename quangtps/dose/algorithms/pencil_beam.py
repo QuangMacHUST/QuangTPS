@@ -207,7 +207,7 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                     pencil_spacing,
                     source_position,
                     isocenter,
-                        beam_direction,
+                    beam_direction,
                 )
             else:
                 # Handle rectangular field
@@ -216,8 +216,8 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                     pencil_spacing,
                     source_position,
                     isocenter,
-                        beam_direction,
-                    )
+                    beam_direction,
+                )
 
                 logger.info(f"Đã tạo {len(pencil_beams)} pencil beam")
 
@@ -277,24 +277,9 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                             tissue_air_ratio_correction,
                         )
 
-        except MemoryError:
-            logger.error(
-                "Lỗi bộ nhớ khi tính toán liều. Thử làm việc với grid thưa hơn."
-            )
-            raise DoseCalculationError(
-                "Không đủ bộ nhớ để tính toán liều với grid hiện tại"
-            ) from None
-
-        except Exception as e:
-            logger.error(f"Lỗi trong quá trình tính toán liều: {e}")
-            import traceback
-
-            logger.debug(traceback.format_exc())
-            raise DoseCalculationError(f"Lỗi tính toán liều: {str(e)}") from e
-
-        # Normalize the dose grid (optional based on beam weight)
-        if hasattr(beam, "weight") and beam.weight > 0:
-            dose_data *= beam.weight
+            # Normalize the dose grid (optional based on beam weight)
+            if hasattr(beam, "weight") and beam.weight > 0:
+                dose_data *= beam.weight
 
             # Create the output image
             dose_image = Image(
@@ -357,6 +342,14 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
 
             return result
 
+        except MemoryError:
+            logger.error(
+                "Lỗi bộ nhớ khi tính toán liều. Thử làm việc với grid thưa hơn."
+            )
+            raise DoseCalculationError(
+                "Không đủ bộ nhớ để tính toán liều với grid hiện tại"
+            ) from None
+
         except ValidationError as e:
             logger.error(f"Lỗi xác thực đầu vào: {e}")
             raise
@@ -399,121 +392,142 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
             if np.any(np.isnan(hu_values)) or np.any(np.isinf(hu_values)):
                 invalid_mask = np.isnan(hu_values) | np.isinf(hu_values)
                 invalid_count = np.sum(invalid_mask)
-                logger.warning(f"Phát hiện {invalid_count} giá trị HU không hợp lệ (NaN/Inf)")
+                logger.warning(
+                    f"Phát hiện {invalid_count} giá trị HU không hợp lệ (NaN/Inf)"
+                )
                 # Thay thế giá trị không hợp lệ bằng -1000 (không khí)
                 hu_values[invalid_mask] = -1000
 
             # Lấy loại đường cong hiệu chuẩn (nếu có)
             # Hỗ trợ nhiều loại thiết bị CT và giao thức chụp
-            calibration_type = self.get_parameter("ct_calibration_type") if hasattr(self, "get_parameter") else "default"
+            calibration_type = (
+                self.get_parameter("ct_calibration_type")
+                if hasattr(self, "get_parameter")
+                else "default"
+            )
 
             # Các bảng chuyển đổi chuẩn cho các loại CT khác nhau
             # Chứa các cặp (HU, mật độ electron tương đối so với nước)
             calibration_tables = {
-                "default": np.array([
-                    [-1000, 0.00],  # Không khí
-                    [-976, 0.024],  # Phổi hít vào
-                    [-480, 0.52],   # Phổi
-                    [-100, 0.90],   # Mỡ
-                    [0, 1.00],      # Nước
-                    [55, 1.06],     # Mô mềm (cơ bắp)
-                    [800, 1.45],    # Xương xốp
-                    [1500, 1.70],   # Xương đặc
-                    [2000, 1.96],   # Xương rất đặc/implant
-                    [3000, 2.5],    # Kim loại
-                ], dtype=np.float32),
-
-                "siemens_sensation": np.array([
-                    [-1000, 0.00],
-                    [-950, 0.05],
-                    [-700, 0.30],
-                    [-300, 0.70],
-                    [-100, 0.90],
-                    [0, 1.00],
-                    [100, 1.07],
-                    [300, 1.19],
-                    [800, 1.45],
-                    [1200, 1.63],
-                    [1800, 1.86],
-                    [3000, 2.35],
-                ], dtype=np.float32),
-
-                "ge_lightspeed": np.array([
-                    [-1000, 0.00],
-                    [-900, 0.10],
-                    [-500, 0.50],
-                    [-100, 0.90],
-                    [0, 1.00],
-                    [100, 1.10],
-                    [300, 1.20],
-                    [900, 1.50],
-                    [1500, 1.75],
-                    [2000, 1.95],
-                    [3000, 2.40],
-                ], dtype=np.float32),
-
-                "philips_brilliance": np.array([
-                    [-1000, 0.00],
-                    [-950, 0.02],
-                    [-750, 0.25],
-                    [-400, 0.60],
-                    [-100, 0.93],
-                    [0, 1.00],
-                    [100, 1.06],
-                    [400, 1.25],
-                    [1000, 1.55],
-                    [1600, 1.80],
-                    [2500, 2.1],
-                    [4000, 2.7],
-                ], dtype=np.float32),
-
-                "siemens_force": np.array([
-                    [-1000, 0.00],
-                    [-980, 0.01],
-                    [-800, 0.20],
-                    [-600, 0.42],
-                    [-400, 0.60],
-                    [-200, 0.80],
-                    [0, 1.00],
-                    [200, 1.12],
-                    [400, 1.24],
-                    [800, 1.40],
-                    [1000, 1.48],
-                    [1500, 1.70],
-                    [2000, 1.90],
-                    [3000, 2.35],
-                ], dtype=np.float32),
-
-                "toshiba_aquilion": np.array([
-                    [-1000, 0.00],
-                    [-950, 0.03],
-                    [-650, 0.35],
-                    [-350, 0.65],
-                    [-150, 0.85],
-                    [0, 1.00],
-                    [150, 1.10],
-                    [350, 1.22],
-                    [750, 1.40],
-                    [1400, 1.68],
-                    [2000, 2.00],
-                    [3000, 2.50],
-                ], dtype=np.float32),
-
+                "default": np.array(
+                    [
+                        [-1000, 0.00],  # Không khí
+                        [-976, 0.024],  # Phổi hít vào
+                        [-480, 0.52],  # Phổi
+                        [-100, 0.90],  # Mỡ
+                        [0, 1.00],  # Nước
+                        [55, 1.06],  # Mô mềm (cơ bắp)
+                        [800, 1.45],  # Xương xốp
+                        [1500, 1.70],  # Xương đặc
+                        [2000, 1.96],  # Xương rất đặc/implant
+                        [3000, 2.5],  # Kim loại
+                    ],
+                    dtype=np.float32,
+                ),
+                "siemens_sensation": np.array(
+                    [
+                        [-1000, 0.00],
+                        [-950, 0.05],
+                        [-700, 0.30],
+                        [-300, 0.70],
+                        [-100, 0.90],
+                        [0, 1.00],
+                        [100, 1.07],
+                        [300, 1.19],
+                        [800, 1.45],
+                        [1200, 1.63],
+                        [1800, 1.86],
+                        [3000, 2.35],
+                    ],
+                    dtype=np.float32,
+                ),
+                "ge_lightspeed": np.array(
+                    [
+                        [-1000, 0.00],
+                        [-900, 0.10],
+                        [-500, 0.50],
+                        [-100, 0.90],
+                        [0, 1.00],
+                        [100, 1.10],
+                        [300, 1.20],
+                        [900, 1.50],
+                        [1500, 1.75],
+                        [2000, 1.95],
+                        [3000, 2.40],
+                    ],
+                    dtype=np.float32,
+                ),
+                "philips_brilliance": np.array(
+                    [
+                        [-1000, 0.00],
+                        [-950, 0.02],
+                        [-750, 0.25],
+                        [-400, 0.60],
+                        [-100, 0.93],
+                        [0, 1.00],
+                        [100, 1.06],
+                        [400, 1.25],
+                        [1000, 1.55],
+                        [1600, 1.80],
+                        [2500, 2.1],
+                        [4000, 2.7],
+                    ],
+                    dtype=np.float32,
+                ),
+                "siemens_force": np.array(
+                    [
+                        [-1000, 0.00],
+                        [-980, 0.01],
+                        [-800, 0.20],
+                        [-600, 0.42],
+                        [-400, 0.60],
+                        [-200, 0.80],
+                        [0, 1.00],
+                        [200, 1.12],
+                        [400, 1.24],
+                        [800, 1.40],
+                        [1000, 1.48],
+                        [1500, 1.70],
+                        [2000, 1.90],
+                        [3000, 2.35],
+                    ],
+                    dtype=np.float32,
+                ),
+                "toshiba_aquilion": np.array(
+                    [
+                        [-1000, 0.00],
+                        [-950, 0.03],
+                        [-650, 0.35],
+                        [-350, 0.65],
+                        [-150, 0.85],
+                        [0, 1.00],
+                        [150, 1.10],
+                        [350, 1.22],
+                        [750, 1.40],
+                        [1400, 1.68],
+                        [2000, 2.00],
+                        [3000, 2.50],
+                    ],
+                    dtype=np.float32,
+                ),
                 # Đặc biệt cho các máy CT dùng trong xạ trị (CT-Sim)
-                "ct_sim": np.array([
-                    [-1000, 0.00],
-                    [-980, 0.02],
-                    [-800, 0.20],
-                    [-500, 0.50],
-                    [-200, 0.80],
-                    [0, 1.00],
-                    [200, 1.12],
-                    [500, 1.28],
-                    [1000, 1.50],
-                    [1500, 1.75],
-                    [2000, 1.98],
-                    [3000, 2.50],
-                ], dtype=np.float32),
+                "ct_sim": np.array(
+                    [
+                        [-1000, 0.00],
+                        [-980, 0.02],
+                        [-800, 0.20],
+                        [-500, 0.50],
+                        [-200, 0.80],
+                        [0, 1.00],
+                        [200, 1.12],
+                        [500, 1.28],
+                        [1000, 1.50],
+                        [1500, 1.75],
+                        [2000, 1.98],
+                        [3000, 2.50],
+                    ],
+                    dtype=np.float32,
+                ),
             }
 
             # Sử dụng đường cong mặc định nếu loại được chỉ định không tồn tại
@@ -541,7 +555,9 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
             # Tạo mảng mật độ electron với kích thước giống HU
             # Sử dụng nội suy tuyến tính piecewise cho toàn bộ mảng
             # np.interp cho xử lý vectorized hiệu quả hơn
-            density = np.interp(hu_clipped.flatten(), hu_points, density_points).reshape(hu_values.shape)
+            density = np.interp(
+                hu_clipped.flatten(), hu_points, density_points
+            ).reshape(hu_values.shape)
 
             # Đảm bảo giới hạn hợp lý và ngăn chặn các giá trị ngoài phạm vi
             density = np.clip(density, 0.0, 8.0)
@@ -557,13 +573,13 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
             # Thống kê và hiển thị phân phối mật độ electron theo nhóm để hỗ trợ phát hiện vấn đề
             if logger.isEnabledFor(logging.DEBUG):
                 ranges = [
-                    (0.0, 0.1),     # Không khí
-                    (0.1, 0.5),     # Phổi
-                    (0.5, 0.9),     # Mô mật độ thấp
-                    (0.9, 1.1),     # Nước/mô mềm
-                    (1.1, 1.5),     # Mô đặc
-                    (1.5, 2.0),     # Xương
-                    (2.0, 8.0),     # Kim loại/implant
+                    (0.0, 0.1),  # Không khí
+                    (0.1, 0.5),  # Phổi
+                    (0.5, 0.9),  # Mô mật độ thấp
+                    (0.9, 1.1),  # Nước/mô mềm
+                    (1.1, 1.5),  # Mô đặc
+                    (1.5, 2.0),  # Xương
+                    (2.0, 8.0),  # Kim loại/implant
                 ]
 
                 total_voxels = density.size
@@ -573,13 +589,20 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                     count = np.sum((density >= min_val) & (density < max_val))
                     percentage = count / total_voxels * 100
                     tissue_type = ""
-                    if min_val == 0.0: tissue_type = "(không khí)"
-                    elif min_val == 0.1: tissue_type = "(phổi)"
-                    elif min_val == 0.5: tissue_type = "(mô mật độ thấp)"
-                    elif min_val == 0.9: tissue_type = "(mô mềm/nước)"
-                    elif min_val == 1.1: tissue_type = "(mô đặc)"
-                    elif min_val == 1.5: tissue_type = "(xương)"
-                    elif min_val == 2.0: tissue_type = "(implant/kim loại)"
+                    if min_val == 0.0:
+                        tissue_type = "(không khí)"
+                    elif min_val == 0.1:
+                        tissue_type = "(phổi)"
+                    elif min_val == 0.5:
+                        tissue_type = "(mô mật độ thấp)"
+                    elif min_val == 0.9:
+                        tissue_type = "(mô mềm/nước)"
+                    elif min_val == 1.1:
+                        tissue_type = "(mô đặc)"
+                    elif min_val == 1.5:
+                        tissue_type = "(xương)"
+                    elif min_val == 2.0:
+                        tissue_type = "(implant/kim loại)"
 
                     logger.debug(
                         f"  Mật độ {min_val:.1f}-{max_val:.1f} {tissue_type}: {count} voxel ({percentage:.2f}%)"
@@ -592,7 +615,7 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                 "mean": np.mean(density),
                 "median": np.median(density),
                 "std": np.std(density),
-                "calibration": calibration_type
+                "calibration": calibration_type,
             }
 
             logger.info(
@@ -607,10 +630,13 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
         except Exception as e:
             logger.error(f"Lỗi khi chuyển đổi CT sang mật độ electron: {e}")
             import traceback
+
             logger.debug(traceback.format_exc())
 
             # Trả về mảng mật độ nước đồng nhất (1.0) thay thế do lỗi chuyển đổi
-            logger.warning("Sử dụng mật độ nước đồng nhất (1.0) thay thế do lỗi chuyển đổi")
+            logger.warning(
+                "Sử dụng mật độ nước đồng nhất (1.0) thay thế do lỗi chuyển đổi"
+            )
             return np.ones_like(ct_image.data, dtype=np.float32)
 
     def validate_inputs(self, ct_image: Image, beam: Beam) -> None:

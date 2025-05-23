@@ -12,13 +12,35 @@ import numpy as np
 import SimpleITK as sitk
 from typing import Dict, List, Tuple, Optional, Union, Any
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 
-from quangtps.core.dose import DoseGrid
-from quangtps.evaluation.dvh.dvh_data import DVHData
+from quangtps.dose.dose_grid import DoseGrid
 from quangtps.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class DVHType(Enum):
+    """Loại DVH."""
+
+    CUMULATIVE = "cumulative"
+    DIFFERENTIAL = "differential"
+
+
+class VolumeUnits(Enum):
+    """Đơn vị thể tích."""
+
+    PERCENT = "percent"
+    CC = "cc"
+
+
+class DoseUnits(Enum):
+    """Đơn vị liều."""
+
+    GY = "Gy"
+    CGY = "cGy"
+    PERCENT = "percent"
 
 
 @dataclass
@@ -74,8 +96,8 @@ class DVHData:
     max_dose: float = 0.0
     mean_dose: float = 0.0
     min_dose: float = 0.0
-    d_x: Dict[float, float] = None
-    v_x: Dict[float, float] = None
+    d_x: Optional[Dict[float, float]] = None
+    v_x: Optional[Dict[float, float]] = None
     is_cumulative: bool = True
 
     def __post_init__(self):
@@ -94,6 +116,44 @@ class DVHData:
             non_zero_doses = self.dose_bins[self.dose_bins > 0]
             if len(non_zero_doses) > 0:
                 self.min_dose = np.min(non_zero_doses)
+
+    @classmethod
+    def from_raw_data(
+        cls,
+        structure_name: str,
+        dose_bins: List[float],
+        volume_bins: List[float],
+        structure_volume: float,
+        is_cumulative: bool = True,
+    ) -> "DVHData":
+        """
+        Tạo DVHData từ raw data.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        dose_bins : List[float]
+            Danh sách liều
+        volume_bins : List[float]
+            Danh sách thể tích
+        structure_volume : float
+            Tổng thể tích cấu trúc
+        is_cumulative : bool
+            DVH tích lũy hay vi phân
+
+        Returns
+        -------
+        DVHData
+            Đối tượng DVHData
+        """
+        return cls(
+            dose_bins=np.array(dose_bins),
+            volume_bins=np.array(volume_bins),
+            structure_name=structure_name,
+            structure_volume=structure_volume,
+            is_cumulative=is_cumulative,
+        )
 
     def get_dx(self, percent_volume: float) -> float:
         """

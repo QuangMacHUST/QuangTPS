@@ -19,10 +19,13 @@ from quangtps.dose.dose_calculator import (
 from quangtps.dose.dose_grid import DoseGrid
 
 # Import dose visualization
-from quangtps.dose.dose_visualization import DoseVisualizer
+from quangtps.dose.dose_visualization import DoseColorwash as DoseVisualizer
 
 # Import dose constraints
-from quangtps.dose.dose_constraints import DoseConstraint, DoseConstraintType
+from quangtps.dose.dose_constraints import (
+    DoseVolumeConstraint as DoseConstraint,
+    ConstraintType as DoseConstraintType,
+)
 
 __all__ = [
     # Dose calculator and algorithms

@@ -68,6 +68,9 @@ class ModelRepository:
         # Tải cơ sở dữ liệu mô hình
         self.models_db = self._load_models_db()
 
+        # Add models property for easy access
+        self.models = self.models_db.get("models", {})
+
         # Theo dõi quá trình tải xuống
         self.download_progress = {}
         self.download_threads = {}

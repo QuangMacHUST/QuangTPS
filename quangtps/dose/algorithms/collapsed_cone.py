@@ -672,38 +672,282 @@ class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
             logger.error(error_msg)
             raise DoseCalculationError(error_msg) from e
 
-    def _convert_ct_to_density(self, ct_image: Image) -> np.ndarray:
+    def validate_inputs(self, ct_image: Image, beam: Beam) -> bool:
         """
-        Convert CT image data to electron density relative to water.
+        Validate inputs for dose calculation.
 
         Parameters
         ----------
         ct_image : Image
-            CT image
+            CT image for dose calculation
+        beam : Beam
+            Treatment beam
+
+        Returns
+        -------
+        bool
+            True if inputs are valid
+
+        Raises
+        ------
+        ValidationError
+            If inputs are invalid
+        """
+        try:
+            # Check CT image
+            if ct_image is None:
+                raise ValidationError("CT image is required")
+
+            if not hasattr(ct_image, "data") or ct_image.data is None:
+                raise ValidationError("CT image data is missing")
+
+            if ct_image.data.ndim != 3:
+                raise ValidationError(f"CT image must be 3D, got {ct_image.data.ndim}D")
+
+            # Check spacing
+            if not hasattr(ct_image, "spacing") or ct_image.spacing is None:
+                raise ValidationError("CT image spacing is missing")
+
+            if len(ct_image.spacing) != 3:
+                raise ValidationError("CT image spacing must have 3 components")
+
+            # Check beam
+            if beam is None:
+                raise ValidationError("Beam is required")
+
+            # Check beam energy
+            energy = getattr(beam, "energy", None)
+            if energy is None or energy <= 0:
+                raise ValidationError("Valid beam energy is required")
+
+            # Check field size if available
+            if hasattr(beam, "field_size"):
+                field_size = beam.field_size
+                if isinstance(field_size, (list, tuple)) and len(field_size) >= 2:
+                    if field_size[0] <= 0 or field_size[1] <= 0:
+                        raise ValidationError("Field size components must be positive")
+
+            # Check isocenter
+            if hasattr(beam, "isocenter") and beam.isocenter is not None:
+                if len(beam.isocenter) != 3:
+                    raise ValidationError("Beam isocenter must have 3 coordinates")
+
+            logger.debug("Input validation passed for Collapsed Cone algorithm")
+            return True
+
+        except ValidationError:
+            raise
+        except Exception as e:
+            raise ValidationError(f"Unexpected error during input validation: {str(e)}")
+
+    def _convert_ct_to_density(self, ct_image: Image) -> np.ndarray:
+        """
+        Convert CT Hounsfield units to electron density relative to water.
+
+        Parameters
+        ----------
+        ct_image : Image
+            CT image with HU values
 
         Returns
         -------
         np.ndarray
-            Electron density array
+            Electron density map (relative to water)
         """
-        # This is a simplified conversion - real implementation would use a calibration curve
-        # based on the specific CT scanner and protocol
+        try:
+            ct_data = ct_image.data.astype(np.float32)
 
-        # CT values (Hounsfield Units) typically range from -1000 (air) to +1000 or more (bone)
-        # We convert to relative electron density where water = 1.0
+            # Standard HU to density conversion
+            # Based on typical calibration curve for medical CT scanners
+            # Water = 0 HU = density 1.0
+            # Air = -1000 HU = density 0.001
+            # Bone ≈ 1000 HU = density 1.8-2.0
 
-        # Simple linear mapping
-        ct_data = ct_image.data.copy()
+            # Piecewise linear conversion
+            density = np.zeros_like(ct_data, dtype=np.float32)
 
-        # Air: -1000 HU -> 0.001 relative electron density
-        # Water: 0 HU -> 1.0 relative electron density
-        # Bone: +1000 HU -> 1.8 relative electron density
-        electron_density = 1.0 + ct_data / 1000.0
+            # Air to water region (-1000 to 0 HU)
+            air_mask = ct_data <= 0
+            density[air_mask] = 1.0 + ct_data[air_mask] * 0.001
 
-        # Set minimum density threshold to avoid division by zero
-        electron_density = np.maximum(electron_density, 0.001)
+            # Water to bone region (0 to 1000+ HU)
+            tissue_mask = ct_data > 0
+            # Use a saturating curve for high densities
+            density[tissue_mask] = 1.0 + ct_data[tissue_mask] * 0.0008
 
-        return electron_density
+            # Handle very high HU values (metal artifacts, contrast)
+            high_hu_mask = ct_data > 2000
+            density[high_hu_mask] = 2.5  # Cap at reasonable tissue density
+
+            # Clip to physically reasonable range
+            density = np.clip(density, 0.001, 3.0)
+
+            logger.debug(
+                f"Converted CT to density: range {np.min(density):.3f} to {np.max(density):.3f}"
+            )
+            return density
+
+        except Exception as e:
+            logger.error(f"Error converting CT to density: {str(e)}")
+            # Return water-equivalent density as fallback
+            return np.ones_like(ct_image.data, dtype=np.float32)
+
+    def _normalize_dose(self, dose_data: np.ndarray, beam: Beam) -> np.ndarray:
+        """
+        Normalize the calculated dose distribution.
+
+        Parameters
+        ----------
+        dose_data : np.ndarray
+            Raw dose distribution
+        beam : Beam
+            Treatment beam with normalization info
+
+        Returns
+        -------
+        np.ndarray
+            Normalized dose distribution
+        """
+        try:
+            if np.max(dose_data) == 0:
+                logger.warning("Dose distribution is zero, cannot normalize")
+                return dose_data
+
+            # Get normalization parameters
+            norm_depth = self.parameters.get("normalization_depth", 10.0)  # cm
+            prescription_dose = getattr(beam, "prescription_dose", 100.0)
+
+            # Find normalization point
+            # This is simplified - real implementation would find point at specific depth along CAX
+            max_dose_point = np.unravel_index(np.argmax(dose_data), dose_data.shape)
+            normalization_dose = dose_data[max_dose_point]
+
+            # Normalize to prescription
+            if normalization_dose > 0:
+                normalized_dose = dose_data * (prescription_dose / normalization_dose)
+            else:
+                normalized_dose = dose_data
+
+            logger.debug(f"Normalized dose: max = {np.max(normalized_dose):.1f}%")
+            return normalized_dose
+
+        except Exception as e:
+            logger.error(f"Error normalizing dose: {str(e)}")
+            return dose_data
+
+    def _calculate_primary_dose(
+        self,
+        terma: np.ndarray,
+        density: np.ndarray,
+        beam: Beam,
+        voxel_size: Tuple[float, float, float],
+    ) -> np.ndarray:
+        """
+        Calculate primary dose component from TERMA.
+
+        Parameters
+        ----------
+        terma : np.ndarray
+            TERMA distribution
+        density : np.ndarray
+            Density map
+        beam : Beam
+            Treatment beam
+        voxel_size : Tuple[float, float, float]
+            Voxel dimensions in cm
+
+        Returns
+        -------
+        np.ndarray
+            Primary dose distribution
+        """
+        try:
+            # Simple conversion from TERMA to dose
+            # Real implementation would use proper energy absorption
+            energy = getattr(beam, "energy", 6.0)  # MV
+
+            # Energy-dependent conversion factor
+            if energy <= 6:
+                conversion_factor = 0.85
+            elif energy <= 10:
+                conversion_factor = 0.82
+            else:
+                conversion_factor = 0.80
+
+            # Convert TERMA to dose (simplified)
+            primary_dose = terma * conversion_factor / density
+
+            # Apply density correction for primary beam attenuation
+            # This is a simplified exponential attenuation
+            attenuation_coeff = 0.05 / energy  # Rough approximation
+
+            # Apply beam geometry effects
+            primary_dose = self._apply_beam_geometry_correction(
+                primary_dose, beam, voxel_size
+            )
+
+            return primary_dose
+
+        except Exception as e:
+            logger.error(f"Error calculating primary dose: {str(e)}")
+            return np.zeros_like(terma)
+
+    def _apply_beam_geometry_correction(
+        self, dose: np.ndarray, beam: Beam, voxel_size: Tuple[float, float, float]
+    ) -> np.ndarray:
+        """
+        Apply beam geometry corrections including off-axis factors.
+
+        Parameters
+        ----------
+        dose : np.ndarray
+            Dose distribution
+        beam : Beam
+            Treatment beam
+        voxel_size : Tuple[float, float, float]
+            Voxel dimensions
+
+        Returns
+        -------
+        np.ndarray
+            Geometry-corrected dose
+        """
+        try:
+            # Get beam parameters
+            field_size = getattr(beam, "field_size", (10.0, 10.0))  # cm
+            gantry_angle = getattr(beam, "gantry_angle", 0.0)  # degrees
+
+            # Create coordinate grids
+            nz, ny, nx = dose.shape
+            z_coords = np.arange(nz) * voxel_size[2]
+            y_coords = np.arange(ny) * voxel_size[1] - ny * voxel_size[1] / 2
+            x_coords = np.arange(nx) * voxel_size[0] - nx * voxel_size[0] / 2
+
+            # Create meshgrids
+            Z, Y, X = np.meshgrid(z_coords, y_coords, x_coords, indexing="ij")
+
+            # Calculate distance from central axis
+            distance_from_axis = np.sqrt(X**2 + Y**2)
+
+            # Apply off-axis ratio (simplified Gaussian model)
+            field_radius = max(field_size) / 2.0  # Use larger field dimension
+            sigma = field_radius / 2.0  # Standard deviation for Gaussian falloff
+
+            off_axis_factor = np.exp(-(distance_from_axis**2) / (2 * sigma**2))
+
+            # Apply inverse square law correction (simplified)
+            # Real implementation would use proper SAD geometry
+            sad = 100.0  # cm, source-axis distance
+            inverse_square_factor = (sad / (sad + Z)) ** 2
+
+            # Combine corrections
+            corrected_dose = dose * off_axis_factor * inverse_square_factor
+
+            return corrected_dose
+
+        except Exception as e:
+            logger.error(f"Error applying geometry correction: {str(e)}")
+            return dose
 
     def calculate_beam_dose(self, beam: Beam, ct_image: Image) -> Image:
         """

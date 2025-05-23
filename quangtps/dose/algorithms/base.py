@@ -13,6 +13,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Dict, List, Optional, Tuple, Union, Any
+from dataclasses import dataclass, field
 
 from quangtps.dose.dose_grid import DoseGrid
 
@@ -46,6 +47,47 @@ class DoseCalculationMode(Enum):
     CLINICAL = auto()  # Phù hợp cho tính toán lâm sàng
     RESEARCH = auto()  # Phù hợp cho nghiên cứu
     CUSTOM = auto()  # Chế độ tùy chỉnh
+
+
+class DoseCalculationAlgorithm(Enum):
+    """Enum tương thích với dose_engine.py cho các thuật toán tính liều."""
+
+    # Mapping tương thích với DoseAlgorithmType
+    NONE = "none"
+    GENERIC = "generic"
+    PDD_SAR = "pdd_sar"
+    CONVOLUTION = "convolution"
+    SUPERPOSITION = "superposition"
+    AAA = "aaa"
+    CCC = "ccc"  # Collapsed Cone Convolution
+    ACUROS_XB = "acuros_xb"
+    MONTE_CARLO = "monte_carlo"
+    MONTE_CARLO_GPU = "monte_carlo_gpu"
+    VMC = "vmc"
+    ELECTRON_MONTE_CARLO = "electron_monte_carlo"
+
+    # Thêm các aliases phổ biến
+    COLLAPSED_CONE = "ccc"
+    ACUROS = "acuros_xb"
+
+    @classmethod
+    def from_algorithm_type(cls, algorithm_type: DoseAlgorithmType):
+        """Chuyển đổi từ DoseAlgorithmType sang DoseCalculationAlgorithm."""
+        mapping = {
+            DoseAlgorithmType.NONE: cls.NONE,
+            DoseAlgorithmType.GENERIC: cls.GENERIC,
+            DoseAlgorithmType.PDD_SAR: cls.PDD_SAR,
+            DoseAlgorithmType.CONVOLUTION: cls.CONVOLUTION,
+            DoseAlgorithmType.SUPERPOSITION: cls.SUPERPOSITION,
+            DoseAlgorithmType.AAA: cls.AAA,
+            DoseAlgorithmType.CCC: cls.CCC,
+            DoseAlgorithmType.ACUROS: cls.ACUROS_XB,
+            DoseAlgorithmType.MONTE_CARLO: cls.MONTE_CARLO,
+            DoseAlgorithmType.MONTE_CARLO_GPU: cls.MONTE_CARLO_GPU,
+            DoseAlgorithmType.VMC: cls.VMC,
+            DoseAlgorithmType.ELECTRON_MONTE_CARLO: cls.ELECTRON_MONTE_CARLO,
+        }
+        return mapping.get(algorithm_type, cls.GENERIC)
 
 
 class DoseAlgorithm(ABC):
@@ -357,3 +399,39 @@ class GenericDoseAlgorithm(DoseAlgorithm):
             dose = dose / max_dose
 
         return dose
+
+
+@dataclass
+class DoseCalculationResult:
+    """Kết quả tính toán liều."""
+
+    dose_grid: Any  # DoseGrid object
+    calculation_time: float = 0.0  # seconds
+    algorithm_used: str = ""
+
+    # Statistics
+    max_dose: float = 0.0  # Gy
+    min_dose: float = 0.0  # Gy
+    mean_dose: float = 0.0  # Gy
+
+    # Metadata
+    calculation_parameters: Dict[str, Any] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+
+    def is_successful(self) -> bool:
+        """Kiểm tra tính toán có thành công không."""
+        return len(self.errors) == 0
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Lấy summary của kết quả."""
+        return {
+            "algorithm": self.algorithm_used,
+            "calculation_time": self.calculation_time,
+            "max_dose": self.max_dose,
+            "min_dose": self.min_dose,
+            "mean_dose": self.mean_dose,
+            "successful": self.is_successful(),
+            "warnings_count": len(self.warnings),
+            "errors_count": len(self.errors),
+        }

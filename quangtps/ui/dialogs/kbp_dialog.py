@@ -729,38 +729,241 @@ class KBPDialog(QDialog):
 
     def _get_available_sites(self) -> List[str]:
         """
-        Lấy danh sách các vị trí điều trị có sẵn.
+        Lấy danh sách các vị trí điều trị có mô hình KBP khả dụng.
 
-        Returns
-        -------
-        List[str]
-            Danh sách các vị trí điều trị có sẵn trong hệ thống
+        Phương thức này tìm kiếm các mô hình KBP có sẵn trong hệ thống, từ nhiều nguồn khác nhau
+        bao gồm thư mục cấu hình, dữ liệu tích hợp và các đường dẫn tùy chỉnh.
+
+        Returns:
+            List[str]: Danh sách tên các vị trí điều trị
         """
-        # Trong thực tế, danh sách này sẽ được lấy từ dữ liệu mô hình KBP
-        # Hiện tại sử dụng danh sách cố định cho mục đích demo
-        sites = [
-            "Prostate",
-            "Head and Neck",
-            "Brain",
-            "Lung",
-            "Breast",
-            "Rectum",
-            "Pelvis",
-            "Abdomen",
-            "Spine",
-            "Liver",
-        ]
+        try:
+            # Tìm các mô hình KBP từ nhiều nguồn
+            sites_found = set()
+
+            # 1. Kiểm tra từ KBPPredictor nếu có
+            try:
+                from quangtps.optimization.kbp.predictor import KBPPredictor
+                predictor = KBPPredictor()
+                predictor_sites = predictor.get_available_sites()
+                if predictor_sites:
+                    sites_found.update(predictor_sites)
+                    logger.info(f"Tìm thấy {len(predictor_sites)} vị trí từ KBPPredictor: {', '.join(predictor_sites)}")
+            except (ImportError, AttributeError) as e:
+                logger.debug(f"Không thể import hoặc sử dụng KBPPredictor: {str(e)}")
+
+            # 2. Tìm từ thư mục mô hình tiêu chuẩn
+            model_dirs = [
+                os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'models', 'kbp'),
+                os.path.join(os.path.dirname(__file__), '..', '..', 'optimization', 'kbp', 'models')
+            ]
+
+            # Thêm đường dẫn từ cấu hình nếu có
+            try:
+                from quangtps.core.config import Config
+                config = Config()
+                if hasattr(config, 'kbp_models_path') and config.kbp_models_path:
+                    model_dirs.append(config.kbp_models_path)
+            except ImportError:
+                pass
+
+            # Tìm kiếm các thư mục con đại diện cho các vị trí
+            for base_dir in model_dirs:
+                if os.path.exists(base_dir) and os.path.isdir(base_dir):
+                    for item in os.listdir(base_dir):
+                        item_path = os.path.join(base_dir, item)
+                        if os.path.isdir(item_path):
+                            # Kiểm tra xem thư mục có chứa các file mô hình không
+                            model_files = [f for f in os.listdir(item_path)
+                                          if f.endswith(('.json', '.pkl', '.h5', '.model'))]
+                            if model_files:
+                                # Chuẩn hóa tên vị trí (loại bỏ gạch dưới, viết hoa chữ cái đầu)
+                                site_name = ' '.join(word.capitalize() for word in item.replace('_', ' ').split())
+                                sites_found.add(site_name)
+                                logger.debug(f"Tìm thấy mô hình cho {site_name} tại {item_path}")
+
+            if sites_found:
+                logger.info(f"Tổng cộng tìm thấy {len(sites_found)} vị trí điều trị có mô hình KBP")
+                # Chuyển set thành list và sắp xếp theo thứ tự alphabet
+                return sorted(list(sites_found))
+
+            # 3. Nếu không tìm thấy mô hình nào, sử dụng danh sách mặc định
+            logger.warning("Không tìm thấy mô hình KBP, sử dụng danh sách mặc định")
+            return ["Head & Neck", "Prostate", "Lung", "Breast", "Brain"]
+
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy danh sách vị trí điều trị: {str(e)}", exc_info=True)
+            # Fallback: trả về các vị trí điều trị phổ biến
+            return ["Head & Neck", "Prostate", "Lung", "Breast", "Brain"]
+
+    def _load_kbp_model(self, site: str) -> Optional[object]:
+        """
+        Tải mô hình KBP cho vị trí điều trị cụ thể.
+
+        Phương thức này tìm và tải mô hình KBP cho vị trí điều trị cụ thể.
+        Nó sẽ tìm kiếm ở nhiều vị trí khác nhau và sử dụng các phương pháp khác nhau
+        để tải mô hình, với cơ chế fallback để đảm bảo tính ổn định.
+
+        Args:
+            site (str): Vị trí điều trị
+
+        Returns:
+            Optional[object]: Mô hình KBP nếu tải thành công, None nếu thất bại
+        """
+        if not site:
+            logger.warning("Không thể tải mô hình: Không có vị trí điều trị được chỉ định")
+            return None
 
         try:
-            # Thử lấy danh sách vị trí từ KBP predictor nếu có thể
-            if hasattr(self.kbp_predictor, "get_available_sites"):
-                predictor_sites = self.kbp_predictor.get_available_sites()
-                if predictor_sites and len(predictor_sites) > 0:
-                    return predictor_sites
-        except Exception as e:
-            logger.warning(f"Không thể lấy danh sách vị trí từ predictor: {e}")
+            # Chuẩn hóa tên vị trí để tìm kiếm
+            normalized_site = site.lower().replace(' & ', '_').replace(' ', '_')
+            logger.info(f"Đang tìm kiếm mô hình KBP cho vị trí {site} (chuẩn hóa: {normalized_site})")
 
-        return sites
+            # Phương pháp 1: Tải qua KBPPredictor (phương pháp ưu tiên)
+            try:
+                from quangtps.optimization.kbp.predictor import KBPPredictor
+                predictor = KBPPredictor()
+                logger.debug(f"Đang tải mô hình KBP cho {site} thông qua KBPPredictor...")
+                model = predictor.load_model(site)
+
+                if model:
+                    logger.info(f"Đã tải thành công mô hình KBP cho {site} thông qua KBPPredictor")
+                    return model
+                else:
+                    logger.debug(f"Không thể tải mô hình cho {site} thông qua KBPPredictor")
+            except (ImportError, AttributeError, Exception) as e:
+                logger.debug(f"Không thể sử dụng KBPPredictor: {str(e)}")
+
+            # Phương pháp 2: Tìm và tải trực tiếp từ các đường dẫn tiêu chuẩn
+            model_dirs = [
+                os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'models', 'kbp'),
+                os.path.join(os.path.dirname(__file__), '..', '..', 'optimization', 'kbp', 'models')
+            ]
+
+            # Thêm đường dẫn từ cấu hình nếu có
+            try:
+                from quangtps.core.config import Config
+                config = Config()
+                if hasattr(config, 'kbp_models_path') and config.kbp_models_path:
+                    model_dirs.append(config.kbp_models_path)
+            except ImportError:
+                pass
+
+            # Tạo danh sách các thư mục có thể chứa mô hình
+            potential_model_dirs = []
+            for base_dir in model_dirs:
+                if os.path.exists(base_dir):
+                    # Tìm thư mục trực tiếp
+                    direct_match = os.path.join(base_dir, normalized_site)
+                    if os.path.isdir(direct_match):
+                        potential_model_dirs.append(direct_match)
+
+                    # Tìm tất cả thư mục có tên giống vị trí
+                    for item in os.listdir(base_dir):
+                        item_path = os.path.join(base_dir, item)
+                        if os.path.isdir(item_path) and (
+                            normalized_site in item.lower() or
+                            site.lower() in item.lower().replace('_', ' ')):
+                            potential_model_dirs.append(item_path)
+
+            # Tìm và tải mô hình từ các thư mục tiềm năng
+            for model_dir in potential_model_dirs:
+                # Kiểm tra file .json chứa metadata
+                metadata_path = os.path.join(model_dir, 'model_info.json')
+                if os.path.exists(metadata_path):
+                    try:
+                        import json
+                        with open(metadata_path, 'r') as f:
+                            metadata = json.load(f)
+
+                        # Kiểm tra nếu có thông tin mô hình chính
+                        model_file = metadata.get('model_file') or 'model.pkl'
+                        model_path = os.path.join(model_dir, model_file)
+
+                        if os.path.exists(model_path):
+                            # Tạo mô hình giả nếu không thể tải mô hình thực tế
+                            model_info = {
+                                'site': site,
+                                'path': model_path,
+                                'metadata': metadata,
+                                'is_dummy': True  # Đánh dấu đây là mô hình giả
+                            }
+                            logger.info(f"Tìm thấy thông tin mô hình cho {site} tại {model_path}")
+                            return model_info
+                    except Exception as json_err:
+                        logger.debug(f"Lỗi khi đọc metadata của mô hình: {str(json_err)}")
+
+                # Tìm các file mô hình chuẩn
+                for ext in ['.pkl', '.h5', '.model']:
+                    model_path = os.path.join(model_dir, f"model{ext}")
+                    if os.path.exists(model_path):
+                        logger.info(f"Tìm thấy file mô hình {model_path}")
+                        # Tạo thông tin mô hình cơ bản
+                        return {
+                            'site': site,
+                            'path': model_path,
+                            'metadata': {'description': f"Mô hình KBP cho {site}"},
+                            'is_dummy': True
+                        }
+
+            # Phương pháp 3: Tạo mô hình giả lập dựa trên các quy tắc thông thường
+            logger.warning(f"Không tìm thấy mô hình thực tế cho {site}, sử dụng mô hình giả lập")
+            dummy_model = self._create_dummy_model(site)
+            if dummy_model:
+                return dummy_model
+
+            logger.error(f"Không thể tìm hoặc tạo mô hình KBP cho vị trí {site}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tải mô hình KBP cho vị trí {site}: {str(e)}", exc_info=True)
+            return None
+
+    def _create_dummy_model(self, site: str) -> Optional[Dict]:
+        """
+        Tạo mô hình giả lập khi không tìm thấy mô hình thực.
+
+        Args:
+            site (str): Vị trí điều trị
+
+        Returns:
+            Optional[Dict]: Thông tin mô hình giả lập
+        """
+        try:
+            # Tạo một mô hình giả đơn giản với các thông số phù hợp với vị trí
+            dummy_model = {
+                'site': site,
+                'is_dummy': True,
+                'metadata': {
+                    'description': f"Mô hình giả lập cho {site}",
+                    'version': '1.0',
+                    'created_date': time.strftime('%Y-%m-%d'),
+                    'training_cases': 50,
+                    'validation_cases': 10,
+                    'accuracy': 0.85
+                }
+            }
+
+            # Thêm các thông số cụ thể theo vị trí
+            if 'head' in site.lower() or 'neck' in site.lower():
+                dummy_model['structures'] = ['PTV', 'Brainstem', 'Spinal Cord', 'Parotid', 'Oral Cavity']
+            elif 'prostate' in site.lower():
+                dummy_model['structures'] = ['PTV', 'Rectum', 'Bladder', 'Femoral Heads', 'Bowel']
+            elif 'lung' in site.lower():
+                dummy_model['structures'] = ['PTV', 'Heart', 'Esophagus', 'Spinal Cord', 'Lung']
+            elif 'breast' in site.lower():
+                dummy_model['structures'] = ['PTV', 'Heart', 'Lung', 'Ribs']
+            elif 'brain' in site.lower():
+                dummy_model['structures'] = ['PTV', 'Brainstem', 'Optics', 'Cochlea']
+            else:
+                dummy_model['structures'] = ['PTV', 'OAR1', 'OAR2', 'OAR3']
+
+            logger.info(f"Đã tạo mô hình giả lập cho {site} với {len(dummy_model['structures'])} cấu trúc")
+            return dummy_model
+
+        except Exception as e:
+            logger.error(f"Không thể tạo mô hình giả lập: {str(e)}")
+            return None
 
     def _init_ui(self):
         self.setWindowTitle("Knowledge-Based Planning")

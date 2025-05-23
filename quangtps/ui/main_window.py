@@ -2052,12 +2052,33 @@ class MainWindow(QMainWindow):
     def _create_plan_evaluation_tab(self):
         """Tạo tab Plan Evaluation với các widget liên quan."""
         try:
-            # Import các module cần thiết
-            from quangtps.ui.plan_evaluation_tab import PlanEvaluationTab
-            from quangtps.ui.dvh_widget import DVHWidget
-            from quangtps.ui.metrics_widget import MetricsWidget
+            # Import các module cần thiết với error handling
+            try:
+                from quangtps.ui.plan_evaluation_tab import PlanEvaluationTab
 
-            # Import biological metrics widget
+                HAS_PLAN_EVALUATION_TAB = True
+            except ImportError as e:
+                logger.warning(f"Không thể import PlanEvaluationTab: {e}")
+                HAS_PLAN_EVALUATION_TAB = False
+
+            try:
+                from quangtps.ui.dvh_widget import DVHWidget
+
+                HAS_DVH_WIDGET = True
+            except ImportError as e:
+                logger.warning(f"Không thể import DVHWidget: {e}")
+                HAS_DVH_WIDGET = False
+
+            try:
+                from quangtps.ui.metrics_widget import MetricsWidget
+
+                HAS_METRICS_WIDGET = True
+            except ImportError as e:
+                logger.warning(f"Không thể import MetricsWidget: {e}")
+                HAS_METRICS_WIDGET = False
+
+            # Import biological metrics widget với fallback
+            HAS_BIO_WIDGET = False
             try:
                 from quangtps.ui.evaluation.biological_metrics_widget import (
                     create_biological_metrics_widget,
@@ -2071,15 +2092,16 @@ class MainWindow(QMainWindow):
                 try:
                     from quangtps.ui.biological_metrics_widget import (
                         create_biological_metrics_widget,
+                        BiologicalMetricsWidget,
                     )
 
                     HAS_BIO_WIDGET = True
                     logger.info("Đã tìm thấy module biological_metrics_widget (legacy)")
                 except ImportError:
                     logger.warning("Không thể import biological_metrics_widget")
-                    HAS_BIO_WIDGET = False
 
-            # Import robustness widget
+            # Import robustness widget với fallback
+            HAS_ROBUSTNESS_WIDGET = False
             try:
                 from quangtps.ui.evaluation.robustness_widget import (
                     create_robustness_widget,
@@ -2093,62 +2115,71 @@ class MainWindow(QMainWindow):
                 try:
                     from quangtps.ui.robustness_widget import (
                         create_robustness_widget,
+                        RobustnessWidget,
                     )
 
                     HAS_ROBUSTNESS_WIDGET = True
                     logger.info("Đã tìm thấy module robustness_widget (legacy)")
                 except ImportError:
                     logger.warning("Không thể import robustness_widget")
-                    HAS_ROBUSTNESS_WIDGET = False
 
-            # Tạo tab đánh giá kế hoạch
-            plan_evaluation_tab = PlanEvaluationTab()
+            # Tạo tab evaluation
+            if HAS_PLAN_EVALUATION_TAB:
+                evaluation_tab = PlanEvaluationTab(self)
 
-            # Tạo widget DVH
-            dvh_widget = DVHWidget()
-            plan_evaluation_tab.set_dvh_widget(dvh_widget)
+                # Kết nối với các widget khác nếu có
+                if HAS_DVH_WIDGET and hasattr(evaluation_tab, "dvh_widget"):
+                    # Đảm bảo DVH widget được khởi tạo đúng cách
+                    if evaluation_tab.dvh_widget is None:
+                        evaluation_tab.dvh_widget = DVHWidget(evaluation_tab)
 
-            # Tạo widget chỉ số đánh giá
-            metrics_widget = MetricsWidget()
-            plan_evaluation_tab.set_metrics_widget(metrics_widget)
-
-            # Tạo và thiết lập widget chỉ số sinh học nếu có
-            if HAS_BIO_WIDGET:
-                try:
-                    biological_metrics_widget = create_biological_metrics_widget()
-                    if biological_metrics_widget:
-                        plan_evaluation_tab.set_biological_metrics_widget(
-                            biological_metrics_widget
+                if HAS_BIO_WIDGET and hasattr(evaluation_tab, "biological_widget"):
+                    # Đảm bảo biological widget được khởi tạo đúng cách
+                    if evaluation_tab.biological_widget is None:
+                        evaluation_tab.biological_widget = (
+                            create_biological_metrics_widget(evaluation_tab)
                         )
-                        logger.info(
-                            "Đã thêm biological metrics widget vào PlanEvaluationTab"
+
+                if HAS_ROBUSTNESS_WIDGET and hasattr(
+                    evaluation_tab, "robustness_widget"
+                ):
+                    # Đảm bảo robustness widget được khởi tạo đúng cách
+                    if evaluation_tab.robustness_widget is None:
+                        evaluation_tab.robustness_widget = create_robustness_widget(
+                            evaluation_tab
                         )
-                except Exception as e:
-                    logger.error(f"Lỗi khi tạo biological metrics widget: {str(e)}")
 
-            # Tạo và thiết lập widget phân tích độ bền vững nếu có
-            if HAS_ROBUSTNESS_WIDGET:
-                try:
-                    robustness_widget = create_robustness_widget()
-                    if robustness_widget:
-                        plan_evaluation_tab.set_robustness_widget(robustness_widget)
-                        logger.info("Đã thêm robustness widget vào PlanEvaluationTab")
-                except Exception as e:
-                    logger.error(f"Lỗi khi tạo robustness widget: {str(e)}")
-
-            # Thiết lập kế hoạch hiện tại nếu có
-            if hasattr(self, "current_plan") and self.current_plan:
-                plan_evaluation_tab.set_plan(self.current_plan)
-
-            return plan_evaluation_tab
+                logger.info(
+                    "Đã tạo PlanEvaluationTab thành công với tất cả widget hỗ trợ"
+                )
+                return evaluation_tab
+            else:
+                # Fallback: tạo evaluation view đơn giản
+                logger.warning(
+                    "Sử dụng EvaluationView fallback do không có PlanEvaluationTab"
+                )
+                return EvaluationView(self)
 
         except Exception as e:
-            logger.error(f"Lỗi khi tạo Plan Evaluation tab: {str(e)}")
+            logger.error(f"Lỗi tạo Plan Evaluation tab: {str(e)}")
             import traceback
 
             logger.error(traceback.format_exc())
-            # Tạo một widget trống nếu có lỗi
-            return QWidget()
+
+            # Fallback đến evaluation view cơ bản
+            try:
+                return EvaluationView(self)
+            except Exception as e2:
+                logger.error(f"Lỗi tạo EvaluationView fallback: {str(e2)}")
+                # Tạo widget trống nếu tất cả đều thất bại
+                empty_widget = QWidget()
+                empty_layout = QVBoxLayout(empty_widget)
+                error_label = QLabel(f"Lỗi tạo Plan Evaluation tab: {str(e)}")
+                error_label.setStyleSheet(
+                    "color: red; font-weight: bold; padding: 20px;"
+                )
+                empty_layout.addWidget(error_label)
+                return empty_widget
 
     def _create_plan_checker_tab(self):
         """Tạo tab Plan Checker với widget kiểm tra kế hoạch."""

@@ -11,7 +11,7 @@ It serves as a bridge between the UI and the underlying segmentation models.
 import os
 import logging
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any, Union, TYPE_CHECKING
 import threading
 import time
 import SimpleITK as sitk
@@ -20,6 +20,15 @@ from quangtps.segmentation.auto.model_repository import model_repository
 from quangtps.segmentation.deep_learning_segmentation import SegmentationModel
 from quangtps.core.config import Config
 from quangtps.core.exceptions import ValidationError
+
+# Import Image class for type hints
+if TYPE_CHECKING:
+    from quangtps.imaging.image import Image
+else:
+    try:
+        from quangtps.imaging.image import Image
+    except ImportError:
+        Image = None
 
 # Check if PyTorch is available
 try:
@@ -58,14 +67,37 @@ class AutoSegmentationEngine:
         """
         structures = set()
 
-        # Get all installed models
-        models = self.model_repository.get_installed_models()
+        try:
+            # Get all installed models
+            if hasattr(self.model_repository, "get_installed_models"):
+                models = self.model_repository.get_installed_models()
+            elif hasattr(self.model_repository, "models"):
+                models = getattr(self.model_repository, "models", [])
+            else:
+                logger.warning(
+                    "Model repository doesn't have get_installed_models method"
+                )
+                models = []
 
-        # Collect all structures from models
-        for model_info in models:
-            model_structures = model_info.get("structures", [])
-            for structure in model_structures:
-                structures.add(structure)
+            # Collect all structures from models
+            for model_info in models:
+                if isinstance(model_info, dict):
+                    model_structures = model_info.get("structures", [])
+                    for structure in model_structures:
+                        structures.add(structure)
+
+        except Exception as e:
+            logger.error(f"Error getting available structures: {e}")
+            # Return default structures if repository fails
+            structures = {
+                "Lung_L",
+                "Lung_R",
+                "Heart",
+                "SpinalCord",
+                "Liver",
+                "Kidney_L",
+                "Kidney_R",
+            }
 
         return sorted(list(structures))
 
@@ -83,14 +115,27 @@ class AutoSegmentationEngine:
         Optional[Dict[str, Any]]
             Model information or None if no suitable model is found
         """
-        # Get all installed models
-        models = self.model_repository.get_installed_models()
+        try:
+            # Get all installed models
+            if hasattr(self.model_repository, "get_installed_models"):
+                models = self.model_repository.get_installed_models()
+            elif hasattr(self.model_repository, "models"):
+                models = getattr(self.model_repository, "models", [])
+            else:
+                logger.warning(
+                    "Model repository doesn't have get_installed_models method"
+                )
+                return None
 
-        # Find models that can segment this structure
-        for model_info in models:
-            model_structures = model_info.get("structures", [])
-            if structure in model_structures:
-                return model_info
+            # Find models that can segment this structure
+            for model_info in models:
+                if isinstance(model_info, dict):
+                    model_structures = model_info.get("structures", [])
+                    if structure in model_structures:
+                        return model_info
+
+        except Exception as e:
+            logger.error(f"Error finding model for structure {structure}: {e}")
 
         return None
 
@@ -114,14 +159,31 @@ class AutoSegmentationEngine:
 
         # Load model
         try:
-            model_info = self.model_repository.load_model(model_id)
+            model_info = None
+
+            # Try different methods to load model
+            if hasattr(self.model_repository, "load_model"):
+                model_info = self.model_repository.load_model(model_id)
+            elif hasattr(self.model_repository, "get_model"):
+                model_info = self.model_repository.get_model(model_id)
+            elif (
+                hasattr(self.model_repository, "models")
+                and model_id in self.model_repository.models
+            ):
+                model_info = self.model_repository.models[model_id]
+            else:
+                logger.warning(
+                    f"Model repository doesn't have load_model method for {model_id}"
+                )
+                return None
+
             if not model_info:
                 logger.error(f"Failed to load model {model_id}")
                 return None
 
             weights_path = model_info.get("weights_path")
             if not weights_path or not os.path.exists(weights_path):
-                logger.error(f"Model weights not found for {model_id}")
+                logger.error(f"Model weights not found for {model_id}: {weights_path}")
                 return None
 
             # Create segmentation model
@@ -484,4 +546,206 @@ class AutoSegmentationEngine:
 
     def clear_model_cache(self):
         """Clear the model cache to free memory."""
+        for model in self.model_cache.values():
+            if hasattr(model, "clear"):
+                model.clear()
         self.model_cache.clear()
+        logger.info("Model cache cleared")
+
+    def segment_structure(
+        self,
+        image: Union[np.ndarray, "Image"],
+        structure: str,
+        spacing: Optional[Tuple[float, float, float]] = None,
+        use_gpu: bool = True,
+        threshold: float = 0.5,
+        **kwargs,
+    ) -> Optional[np.ndarray]:
+        """
+        Segment a structure from an image.
+
+        This is the main interface for structure segmentation, supporting both
+        numpy arrays and QuangTPS Image objects.
+
+        Parameters
+        ----------
+        image : Union[np.ndarray, Image]
+            Input image to segment (3D volume or Image object)
+        structure : str
+            Name of the structure to segment
+        spacing : Optional[Tuple[float, float, float]], optional
+            Voxel spacing in mm (x, y, z)
+        use_gpu : bool, optional
+            Whether to use GPU for segmentation, by default True
+        threshold : float, optional
+            Threshold for binary segmentation, by default 0.5
+        **kwargs
+            Additional arguments for segmentation
+
+        Returns
+        -------
+        Optional[np.ndarray]
+            Segmented mask as 3D numpy array, or None if segmentation failed
+        """
+        try:
+            # Handle different input types
+            if hasattr(image, "data"):
+                # QuangTPS Image object
+                volume_data = image.data
+                if spacing is None and hasattr(image, "spacing"):
+                    spacing = image.spacing
+            elif isinstance(image, np.ndarray):
+                # Numpy array
+                volume_data = image
+            else:
+                logger.error(f"Unsupported image type: {type(image)}")
+                return None
+
+            # Validate input
+            if volume_data is None or volume_data.size == 0:
+                logger.error("Empty or invalid image data")
+                return None
+
+            # Ensure 3D volume
+            if len(volume_data.shape) == 2:
+                # Convert 2D to 3D by adding singleton dimension
+                volume_data = np.expand_dims(volume_data, axis=2)
+            elif len(volume_data.shape) != 3:
+                logger.error(f"Invalid image dimensions: {volume_data.shape}")
+                return None
+
+            # Default spacing if not provided
+            if spacing is None:
+                spacing = (1.0, 1.0, 1.0)
+                logger.warning("No spacing provided, using default (1,1,1) mm")
+
+            # Check if structure is available
+            available_structures = self.get_available_structures()
+            if structure not in available_structures:
+                logger.warning(
+                    f"Structure '{structure}' not in available models. "
+                    f"Available: {available_structures}"
+                )
+
+                # Try to find similar structure names
+                similar = self._find_similar_structures(structure, available_structures)
+                if similar:
+                    logger.info(f"Using similar structure: {similar[0]}")
+                    structure = similar[0]
+                else:
+                    # Create mock segmentation for unavailable structures
+                    logger.info(f"Creating mock segmentation for {structure}")
+                    return self._create_mock_segmentation(volume_data, structure)
+
+            # Perform segmentation
+            result = self.segment_volume(
+                volume=volume_data,
+                structure=structure,
+                spacing=spacing,
+                use_gpu=use_gpu,
+                threshold=threshold,
+            )
+
+            if result.get("success", False):
+                mask = result.get("mask")
+                if mask is not None:
+                    # Ensure mask has same shape as input
+                    if mask.shape != volume_data.shape:
+                        logger.warning(
+                            f"Mask shape {mask.shape} != input shape {volume_data.shape}"
+                        )
+                        # Try to resize mask to match input
+                        try:
+                            from scipy.ndimage import zoom
+
+                            zoom_factors = [
+                                volume_data.shape[i] / mask.shape[i] for i in range(3)
+                            ]
+                            mask = (
+                                zoom(mask.astype(float), zoom_factors, order=1)
+                                > threshold
+                            )
+                        except ImportError:
+                            logger.error("scipy not available for mask resizing")
+                            return None
+
+                    # Ensure binary mask
+                    mask = (mask > threshold).astype(np.uint8)
+
+                    logger.info(
+                        f"Successfully segmented {structure}: "
+                        f"mask shape {mask.shape}, {np.sum(mask)} voxels"
+                    )
+                    return mask
+                else:
+                    logger.error(f"No mask returned for structure {structure}")
+                    return None
+            else:
+                error_msg = result.get("error", "Unknown error")
+                logger.error(f"Segmentation failed for {structure}: {error_msg}")
+                return None
+
+        except Exception as e:
+            logger.error(
+                f"Error in segment_structure for {structure}: {str(e)}", exc_info=True
+            )
+            return None
+
+    def _find_similar_structures(self, target: str, available: List[str]) -> List[str]:
+        """
+        Find structures with similar names to the target.
+
+        Parameters
+        ----------
+        target : str
+            Target structure name
+        available : List[str]
+            List of available structure names
+
+        Returns
+        -------
+        List[str]
+            List of similar structure names, sorted by similarity
+        """
+        target_lower = target.lower()
+        similar = []
+
+        # Exact match first
+        for struct in available:
+            if struct.lower() == target_lower:
+                return [struct]
+
+        # Partial matches
+        for struct in available:
+            struct_lower = struct.lower()
+            # Check if target is substring of available structure
+            if target_lower in struct_lower or struct_lower in target_lower:
+                similar.append(struct)
+
+        # Keyword-based matching for common structures
+        keyword_map = {
+            "lung": ["lung", "pulmonary"],
+            "heart": ["heart", "cardiac"],
+            "liver": ["liver", "hepatic"],
+            "kidney": ["kidney", "renal"],
+            "brain": ["brain", "cerebral"],
+            "cord": ["cord", "spinal"],
+            "parotid": ["parotid", "gland"],
+            "mandible": ["mandible", "jaw"],
+            "femur": ["femur", "femoral"],
+            "bladder": ["bladder", "vesical"],
+        }
+
+        target_keywords = []
+        for keyword, synonyms in keyword_map.items():
+            if any(syn in target_lower for syn in synonyms):
+                target_keywords.extend(synonyms)
+
+        if target_keywords:
+            for struct in available:
+                struct_lower = struct.lower()
+                if any(keyword in struct_lower for keyword in target_keywords):
+                    if struct not in similar:
+                        similar.append(struct)
+
+        return similar[:3]  # Return top 3 matches

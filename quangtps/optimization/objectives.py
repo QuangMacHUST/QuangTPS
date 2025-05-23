@@ -19,6 +19,121 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+class ObjectiveBase(ABC):
+    """
+    Base class cho tất cả các objective functions trong optimization.
+
+    Cung cấp interface chung cho tất cả các loại objective function
+    và định nghĩa các phương thức cần được implement bởi subclasses.
+    """
+
+    def __init__(self, structure_name: str, weight: float = 1.0, priority: int = 1):
+        """
+        Khởi tạo objective base.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc áp dụng objective
+        weight : float, optional
+            Trọng số của objective, mặc định 1.0
+        priority : int, optional
+            Độ ưu tiên của objective, mặc định 1
+        """
+        self.structure_name = structure_name
+        self.weight = weight
+        self.priority = priority
+        self.is_active = True
+        self.objective_id = str(uuid.uuid4())[:8]
+
+    @abstractmethod
+    def evaluate(self, dose_data: np.ndarray, structure_mask: np.ndarray) -> float:
+        """
+        Tính toán giá trị objective function.
+
+        Parameters
+        ----------
+        dose_data : np.ndarray
+            Dữ liệu phân bố liều
+        structure_mask : np.ndarray
+            Mask của cấu trúc
+
+        Returns
+        -------
+        float
+            Giá trị objective function
+        """
+        pass
+
+    @abstractmethod
+    def get_gradient(
+        self, dose_data: np.ndarray, structure_mask: np.ndarray
+    ) -> np.ndarray:
+        """
+        Tính toán gradient của objective function.
+
+        Parameters
+        ----------
+        dose_data : np.ndarray
+            Dữ liệu phân bố liều
+        structure_mask : np.ndarray
+            Mask của cấu trúc
+
+        Returns
+        -------
+        np.ndarray
+            Gradient của objective function
+        """
+        pass
+
+    def get_description(self) -> str:
+        """
+        Lấy mô tả của objective.
+
+        Returns
+        -------
+        str
+            Mô tả objective
+        """
+        return f"{self.__class__.__name__} for {self.structure_name}"
+
+    def is_feasible(self, dose_data: np.ndarray, structure_mask: np.ndarray) -> bool:
+        """
+        Kiểm tra xem objective có khả thi hay không.
+
+        Parameters
+        ----------
+        dose_data : np.ndarray
+            Dữ liệu phân bố liều
+        structure_mask : np.ndarray
+            Mask của cấu trúc
+
+        Returns
+        -------
+        bool
+            True nếu objective khả thi
+        """
+        return True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển objective thành dictionary.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary representation
+        """
+        return {
+            "type": self.__class__.__name__,
+            "structure_name": self.structure_name,
+            "weight": self.weight,
+            "priority": self.priority,
+            "is_active": self.is_active,
+            "objective_id": self.objective_id,
+        }
+
+
 class ObjectiveType(Enum):
     """Các loại hàm mục tiêu tối ưu hóa."""
 
@@ -471,5 +586,209 @@ class DoseObjective:
         return obj
 
     def __str__(self) -> str:
-        """Biểu diễn chuỗi của mục tiêu."""
-        return self.description
+        """Biểu diễn chuỗi của objective."""
+        return f"{self.structure_name}: {self.description}"
+
+
+class ObjectiveCollection:
+    """
+    Collection class quản lý multiple objectives trong optimization.
+
+    Lớp này quản lý tập hợp các objective functions và cung cấp
+    các phương thức để thêm, xóa, và tính toán tổng objective value.
+    """
+
+    def __init__(self):
+        """Khởi tạo objective collection."""
+        self.objectives: Dict[str, ObjectiveBase] = {}
+        self.structure_objectives: Dict[
+            str, List[str]
+        ] = {}  # structure_name -> [objective_ids]
+
+    def add_objective(self, objective: ObjectiveBase) -> str:
+        """
+        Thêm objective vào collection.
+
+        Parameters
+        ----------
+        objective : ObjectiveBase
+            Objective cần thêm
+
+        Returns
+        -------
+        str
+            ID của objective đã thêm
+        """
+        obj_id = objective.objective_id
+        self.objectives[obj_id] = objective
+
+        # Cập nhật structure_objectives mapping
+        structure_name = objective.structure_name
+        if structure_name not in self.structure_objectives:
+            self.structure_objectives[structure_name] = []
+        self.structure_objectives[structure_name].append(obj_id)
+
+        return obj_id
+
+    def remove_objective(self, objective_id: str) -> bool:
+        """
+        Xóa objective khỏi collection.
+
+        Parameters
+        ----------
+        objective_id : str
+            ID của objective cần xóa
+
+        Returns
+        -------
+        bool
+            True nếu xóa thành công
+        """
+        if objective_id not in self.objectives:
+            return False
+
+        objective = self.objectives[objective_id]
+        structure_name = objective.structure_name
+
+        # Xóa khỏi objectives
+        del self.objectives[objective_id]
+
+        # Xóa khỏi structure_objectives
+        if structure_name in self.structure_objectives:
+            self.structure_objectives[structure_name].remove(objective_id)
+            if not self.structure_objectives[structure_name]:
+                del self.structure_objectives[structure_name]
+
+        return True
+
+    def get_objectives_for_structure(self, structure_name: str) -> List[ObjectiveBase]:
+        """
+        Lấy tất cả objectives cho một structure.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên structure
+
+        Returns
+        -------
+        List[ObjectiveBase]
+            Danh sách objectives
+        """
+        if structure_name not in self.structure_objectives:
+            return []
+
+        obj_ids = self.structure_objectives[structure_name]
+        return [
+            self.objectives[obj_id] for obj_id in obj_ids if obj_id in self.objectives
+        ]
+
+    def evaluate_all(
+        self, dose_distributions: Dict[str, Tuple[np.ndarray, np.ndarray]]
+    ) -> Dict[str, float]:
+        """
+        Tính toán tất cả objectives.
+
+        Parameters
+        ----------
+        dose_distributions : Dict[str, Tuple[np.ndarray, np.ndarray]]
+            Dictionary chứa (dose_data, structure_mask) cho mỗi structure
+
+        Returns
+        -------
+        Dict[str, float]
+            Dictionary chứa giá trị objective cho mỗi objective_id
+        """
+        results = {}
+
+        for obj_id, objective in self.objectives.items():
+            if not objective.is_active:
+                continue
+
+            structure_name = objective.structure_name
+            if structure_name not in dose_distributions:
+                logger.warning(
+                    f"Không tìm thấy dose distribution cho structure: {structure_name}"
+                )
+                continue
+
+            dose_data, structure_mask = dose_distributions[structure_name]
+
+            try:
+                value = objective.evaluate(dose_data, structure_mask)
+                results[obj_id] = value * objective.weight
+            except Exception as e:
+                logger.error(f"Lỗi tính toán objective {obj_id}: {str(e)}")
+                results[obj_id] = 0.0
+
+        return results
+
+    def get_total_objective_value(
+        self, dose_distributions: Dict[str, Tuple[np.ndarray, np.ndarray]]
+    ) -> float:
+        """
+        Tính tổng giá trị objective.
+
+        Parameters
+        ----------
+        dose_distributions : Dict[str, Tuple[np.ndarray, np.ndarray]]
+            Dictionary chứa (dose_data, structure_mask) cho mỗi structure
+
+        Returns
+        -------
+        float
+            Tổng giá trị objective
+        """
+        objective_values = self.evaluate_all(dose_distributions)
+        return sum(objective_values.values())
+
+    def get_active_objectives(self) -> List[ObjectiveBase]:
+        """
+        Lấy danh sách các objectives đang active.
+
+        Returns
+        -------
+        List[ObjectiveBase]
+            Danh sách objectives active
+        """
+        return [obj for obj in self.objectives.values() if obj.is_active]
+
+    def get_all_objectives(self) -> List[ObjectiveBase]:
+        """
+        Lấy tất cả objectives.
+
+        Returns
+        -------
+        List[ObjectiveBase]
+            Danh sách tất cả objectives
+        """
+        return list(self.objectives.values())
+
+    def clear(self):
+        """Xóa tất cả objectives."""
+        self.objectives.clear()
+        self.structure_objectives.clear()
+
+    def __len__(self) -> int:
+        """Trả về số lượng objectives."""
+        return len(self.objectives)
+
+    def __contains__(self, objective_id: str) -> bool:
+        """Kiểm tra xem objective_id có tồn tại không."""
+        return objective_id in self.objectives
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển collection thành dictionary.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary representation
+        """
+        return {
+            "objectives": {
+                obj_id: obj.to_dict() for obj_id, obj in self.objectives.items()
+            },
+            "structure_objectives": self.structure_objectives,
+        }

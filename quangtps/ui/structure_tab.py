@@ -142,17 +142,104 @@ except ImportError:
             pass
 
     # Import các module khác
-    from quangtps.segmentation.structures.structure import (
-        Structure,
-        StructureType,
-        StructurePriority,
-    )
-    from quangtps.segmentation.structures.structure_set import StructureSet
-    from quangtps.segmentation.contour.contour_manager import ContourManager
-    from quangtps.segmentation.contour.polygon_tool import PolygonTool
-    from quangtps.segmentation.contour.margin import MarginTool, MarginType
-    from quangtps.segmentation.contour.boolean_operations import BooleanOperator
-    from quangtps.segmentation.contour.interpolation import ContourInterpolator
+    try:
+        from quangtps.segmentation.structures.structure import (
+            Structure,
+            StructureType,
+            StructurePriority,
+        )
+    except ImportError:
+        logging.warning("Không thể import Structure. Sử dụng lớp giả.")
+
+        class Structure:
+            def __init__(self, *args, **kwargs):
+                self.id = "unknown"
+                self.name = "Unknown Structure"
+                self.color = (1.0, 0.0, 0.0)
+                self.visible = True
+
+        class StructureType:
+            PTV = "PTV"
+            OAR = "OAR"
+            OTHER = "OTHER"
+
+        class StructurePriority:
+            LOW = 1
+            MEDIUM = 2
+            HIGH = 3
+
+    try:
+        from quangtps.segmentation.structures.structure_set import StructureSet
+    except ImportError:
+        logging.warning("Không thể import StructureSet. Sử dụng lớp giả.")
+
+        class StructureSet:
+            def __init__(self, *args, **kwargs):
+                self.structures = []
+                self.id = "unknown"
+                self.name = "Unknown StructureSet"
+
+    try:
+        from quangtps.segmentation.contour.contour_manager import ContourManager
+    except ImportError:
+        logging.warning("Không thể import ContourManager. Sử dụng lớp giả.")
+
+        class ContourManager:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def undo(self):
+                return False
+
+            def redo(self):
+                return False
+
+    try:
+        from quangtps.segmentation.contour.polygon_tool import PolygonTool
+    except ImportError:
+        logging.warning("Không thể import PolygonTool. Sử dụng lớp giả.")
+
+        class PolygonTool:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def set_mode(self, mode):
+                pass
+
+    try:
+        from quangtps.segmentation.contour.margin import MarginTool, MarginType
+    except ImportError:
+        logging.warning("Không thể import MarginTool. Sử dụng lớp giả.")
+
+        class MarginTool:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def margin_by_type(self, contours, margin_type, params, spacing):
+                return contours
+
+        class MarginType:
+            def __init__(self, *args, **kwargs):
+                pass
+
+    try:
+        from quangtps.segmentation.contour.boolean_operations import BooleanOperator
+    except ImportError:
+        logging.warning("Không thể import BooleanOperator. Sử dụng lớp giả.")
+
+        class BooleanOperator:
+            UNION = "union"
+            INTERSECTION = "intersection"
+            SUBTRACT = "subtract"
+
+    try:
+        from quangtps.segmentation.contour.interpolation import ContourInterpolator
+    except ImportError:
+        logging.warning("Không thể import ContourInterpolator. Sử dụng lớp giả.")
+
+        class ContourInterpolator:
+            def __init__(self, *args, **kwargs):
+                pass
 
     # Handle potentially missing modules
     try:
@@ -168,9 +255,9 @@ except ImportError:
     from quangtps.core.patient import Patient
 
 # Import ServiceRegistry với xử lý lỗi
-    try:
+try:
     from quangtps.core.service_registry import ServiceRegistry
-    except ImportError:
+except ImportError:
     logging.warning("Không thể import ServiceRegistry. Sử dụng lớp giả.")
 
     class ServiceRegistry:
@@ -202,7 +289,7 @@ try:
     from quangtps.ui.visualization_3d import StructureViewer3D
 
     HAS_3D_VISUALIZATION = True
-    except ImportError:
+except ImportError:
     logging.warning(
         "Không thể import StructureViewer3D. Chức năng hiển thị 3D sẽ bị hạn chế."
     )
@@ -1811,8 +1898,8 @@ class StructureTab(QWidget):
                     self.structureModified.emit(self.selected_structure)
 
                     # Thông báo thành công
-        QMessageBox.information(
-            self,
+                    QMessageBox.information(
+                        self,
                         "Hoàn tất",
                         f"Phân đoạn tự động của {selected_structure_name} hoàn tất.",
                     )
@@ -1882,36 +1969,30 @@ class StructureTab(QWidget):
     def handle_mouse_event(
         self, event_type, point, slice_index=None, orientation=None, tool_type="draw"
     ):
-        """Xử lý các sự kiện chuột từ MPR viewer."""
-        if not self.selected_structure or not self.segmentation_interface:
+        """Xử lý sự kiện chuột từ MPR viewer."""
+        if (
+            not hasattr(self, "segmentation_interface")
+            or not self.segmentation_interface
+        ):
             return False
 
         try:
             # Truyền thêm thông tin tool_type cho segmentation_interface
-        if event_type == "press":
-            return self.segmentation_interface.handle_mouse_press(
+            if event_type == "press":
+                return self.segmentation_interface.handle_mouse_press(
                     point, slice_index, orientation, tool_type
-            )
-        elif event_type == "move":
-                return self.segmentation_interface.handle_mouse_move(point, tool_type)
-        elif event_type == "release":
-                result = self.segmentation_interface.handle_mouse_release(
-                    point, tool_type
                 )
-
-                # Nếu có thay đổi, thêm vào lịch sử undo
-                if result and hasattr(self, "contour_manager") and self.contour_manager:
-                    self.contour_manager._undo_stack.append(
-                        {
-                            "structure_id": self.selected_structure.id,
-                            "operation": "edit_contour",
-                            "slice_index": slice_index,
-                            "orientation": orientation,
-                        }
-                    )
-                    # Xóa lịch sử redo vì đã có thay đổi mới
-                    self.contour_manager._redo_stack = []
-
+            elif event_type == "move":
+                return self.segmentation_interface.handle_mouse_move(
+                    point, slice_index, orientation, tool_type
+                )
+            elif event_type == "release":
+                result = self.segmentation_interface.handle_mouse_release(
+                    point, slice_index, orientation, tool_type
+                )
+                # Cập nhật overlay sau khi vẽ
+                if result and hasattr(self, "mpr_viewer"):
+                    self.update_structure_overlay(orientation)
                 return result
 
         except Exception as e:
@@ -2557,44 +2638,25 @@ class StructureTab(QWidget):
                     self.structureModified.emit(self.selected_structure)
 
     def update_structure_overlay(self, orientation):
-        """Cập nhật overlay cấu trúc trong MPR viewer cho một hướng cụ thể."""
-        if not self.mpr_viewer or not self.structure_set:
+        """Cập nhật overlay cấu trúc cho một hướng cụ thể."""
+        if not hasattr(self, "mpr_viewer") or not self.mpr_viewer:
             return
 
         try:
-            # Lấy slice index hiện tại cho orientation
-            current_slice = self.mpr_viewer.get_current_slice_index(orientation)
+            # Lấy slice index hiện tại (không cần orientation parameter)
+            if hasattr(self.mpr_viewer, "get_current_slice_index"):
+                current_slice = self.mpr_viewer.get_current_slice_index()
+            else:
+                current_slice = 0
+
             if current_slice is None:
                 return
+            # Tạo overlay cho slice hiện tại
+            overlay = self.get_overlay_for_viewer(orientation, current_slice)
 
-            # Cập nhật tất cả các cấu trúc có hiển thị (visible=True)
-            for structure in self.structure_set.structures:
-                if structure.visible:
-                    # Kiểm tra xem cấu trúc có dữ liệu contour không
-                    if hasattr(structure, "contours") and structure.contours:
-                        # Đánh dấu nổi bật nếu là cấu trúc đang chọn
-                        is_selected = structure == self.selected_structure
-
-                        # Thêm overlay vào MPR viewer
-                        self.mpr_viewer.add_structure_overlay(
-                            structure.id, structure, structure.color, is_selected
-                        )
-
-                        # Cập nhật slice hiện tại
-                        self.mpr_viewer.update_view(orientation)
-                else:
-                    # Xóa overlay nếu cấu trúc không hiển thị
-                    self.mpr_viewer.remove_structure_overlay(structure.id)
-
-        except Exception as e:
-            logger.error(f"Lỗi khi cập nhật overlay cấu trúc: {str(e)}")
-
-    def update_all_structure_overlays(self):
-        """Cập nhật tất cả các overlay cấu trúc trong tất cả các hướng MPR."""
-        if not self.mpr_viewer or not self.structure_set:
-            return
-
-        try:
+            # Cập nhật overlay trong MPR viewer
+            if hasattr(self.mpr_viewer, "set_overlay"):
+                self.mpr_viewer.set_overlay(overlay)
             # Xóa tất cả các overlay hiện tại
             self.mpr_viewer.clear_all_structure_overlays()
 
@@ -2616,8 +2678,25 @@ class StructureTab(QWidget):
         """Cập nhật giao diện người dùng dựa trên hướng hiện tại."""
         try:
             # Cập nhật các nút điều khiển hoặc hiển thị thông tin cho hướng hiện tại
-            current_slice = self.mpr_viewer.get_current_slice_index(orientation)
-            total_slices = self.mpr_viewer.get_total_slices(orientation)
+            if hasattr(self.mpr_viewer, "get_current_slice_index"):
+                try:
+                    # Thử với orientation parameter trước
+                    current_slice = self.mpr_viewer.get_current_slice_index(orientation)
+                except TypeError:
+                    # Nếu không nhận orientation parameter, gọi không tham số
+                    current_slice = self.mpr_viewer.get_current_slice_index()
+            else:
+                current_slice = 0
+
+            if hasattr(self.mpr_viewer, "get_total_slices"):
+                try:
+                    # Thử với orientation parameter trước
+                    total_slices = self.mpr_viewer.get_total_slices(orientation)
+                except TypeError:
+                    # Nếu không nhận orientation parameter, gọi không tham số
+                    total_slices = self.mpr_viewer.get_total_slices()
+            else:
+                total_slices = 1
 
             # Cập nhật status bar hoặc label hiển thị thông tin slice
             if hasattr(self, "status_label"):
@@ -2634,123 +2713,34 @@ class StructureTab(QWidget):
 
 def test_structure_tab():
     """Test function for the structure tab."""
-    import sys
-
-    # Sử dụng cách import này để tránh lỗi linter
-    from PyQt5 import QtWidgets
-
-    app = QtWidgets.QApplication(sys.argv)
-
-    # Create main window
-    main_window = QtWidgets.QMainWindow()
-
-    # Create test patient
-    class TestPatient:
-        """Lớp Patient giả cho mục đích kiểm thử."""
-
-        def __init__(self, id, name):
-            self.id = id
-            self.name = name
-            # Thêm các thuộc tính tương thích với Patient
-            self.image_sets = []
-            self.structure_sets = []
-            self.plans = []
-
-    # Create test image
-    class TestImage:
-        def __init__(self):
-            self.id = "test_image_1"
-            self.description = "Test CT Image"
-            self.series_id = "series_1"
-            self.data = np.zeros((100, 512, 512))
-            # Add some test patterns
-            for z in range(100):
-                # Circular pattern that varies with slice
-                center_x, center_y = 256, 256
-                radius = 100 + z
-                for x in range(512):
-                    for y in range(512):
-                        dist = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
-                        if dist < radius:
-                            self.data[z, y, x] = 100 + z
-
-            self.shape = self.data.shape
-            self.spacing = (1.0, 1.0, 1.0)  # 1mm spacing
-
-        def __getitem__(self, indices):
-            return self.data[indices]
-
-    # Create mock PatientDB for testing
-    class TestPatientDB:
-        def __init__(self):
-            self.patients = {}
-            self.images = {}
-            self.structure_sets = {}
-            self.plans = {}
-
-        def get_images_for_patient(self, patient_id):
-            return [img for img in self.images.values() if img.patient_id == patient_id]
-
-        def get_structure_sets_for_patient(self, patient_id):
-            return [
-                ss for ss in self.structure_sets.values() if ss.patient_id == patient_id
-            ]
-
-        def get_plans_for_patient(self, patient_id):
-            return [
-                plan for plan in self.plans.values() if plan.patient_id == patient_id
-            ]
-
-        def add_structure_set(self, structure_set):
-            ss_id = f"ss_{len(self.structure_sets) + 1}"
-            structure_set.id = ss_id
-            self.structure_sets[ss_id] = structure_set
-            return ss_id
-
-        def get_image_data(self, image_id):
-            if image_id in self.images:
-                return self.images[image_id].data
-            return None
-
-    # Create test data
-    test_patient = TestPatient("patient_1", "John Doe")
-    test_image = TestImage()
-    test_image.patient_id = test_patient.id
-
-    # Register mock services
     try:
-        # Khởi tạo TestPatientDB một lần
-        test_patient_db = TestPatientDB()
+        import sys
+        from PyQt5.QtWidgets import QApplication
 
-        # Đăng ký với ServiceRegistry
-        registry = ServiceRegistry.get_instance()
-        if registry and hasattr(registry, "register_service"):
-            registry.register_service("PatientDB", test_patient_db)
-            logger.info("Đã đăng ký TestPatientDB vào ServiceRegistry")
-        else:
-            logger.warning("ServiceRegistry không có sẵn phương thức register_service")
+        app = QApplication(sys.argv)
 
-        # Sử dụng TestPatientDB trực tiếp
-        patient_db = test_patient_db
+        # Tạo test patient
+        class TestPatient:
+            def __init__(self, id, name):
+                self.id = id
+                self.name = name
+                self.birth_date = None
+                self.gender = None
+
+        # Test structure tab creation
+        structure_tab = StructureTab()
+
+        # Test với mock patient
+        test_patient = TestPatient("TEST001", "Test Patient")
+        structure_tab.set_patient(test_patient)
+
+        print("✓ StructureTab test passed")
+
     except Exception as e:
-        logger.error(f"Lỗi khi đăng ký service: {e}")
-        logger.error(traceback.format_exc())
-        patient_db = TestPatientDB()  # Fallback
+        print(f"✗ StructureTab test failed: {str(e)}")
+        import traceback
 
-    patient_db.patients[test_patient.id] = test_patient
-    patient_db.images[test_image.id] = test_image
-
-    # Create structure tab
-    structure_tab = StructureTab()
-    structure_tab.set_patient(test_patient)
-
-    # Set as central widget
-    main_window.setCentralWidget(structure_tab)
-    main_window.setWindowTitle("QuangTPS - Structure Tab")
-    main_window.resize(1200, 800)
-    main_window.show()
-
-    sys.exit(app.exec_())
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

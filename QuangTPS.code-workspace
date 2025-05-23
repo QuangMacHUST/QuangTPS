@@ -5,7 +5,41 @@
 		}
 	],
 	"settings": {
-		"python.analysis.extraPaths": ["./quangtps"],
-		"python.envFile": "${workspaceFolder}/.env"
+		"python.analysis.extraPaths": [
+			"./quangtps"
+		],
+		"python.envFile": "${workspaceFolder}/.env",
+		"cursor.composer.cmdPFilePicker2": true,
+		"cursor.composer.collapsePaneInputBoxPills": true,
+		"cursor.composer.shouldAllowCustomModes": true,
+		"cursor.composer.shouldChimeAfterChatFinishes": true,
+		"cursor.composer.shouldQueueWhenGenerating": true,
+		"cursor.cpp.disabledLanguages": [],
+		"cursor.composer.shouldShowMarkdownHoverParticipantActions2": true,
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/*.log": true,
+			"**/*.pyc": true,
+			"**/*.txt": true,
+			"**/tests": true
+		},
+		"files.associations": {
+			"*.dcm": "python"
+		},
+		"cursor.cpp.enablePartialAccepts": true,
+		"cursor.diffs.useCharacterLevelDiffs": true,
+		"cursor.general.enableShadowWorkspace": true,
+		"cursor.general.gitGraphIndexing": "enabled",
+		"cursor.preferNotificationsSameAsChat": true,
+		"cursor.terminal.usePreviewBox": true,
+		"editor.codeActions.triggerOnFocusChange": true,
+		"scm.alwaysShowActions": true,
+		"scm.alwaysShowRepositories": true,
+		"scm.diffDecorationsGutterPattern": {
+			"added": true
+		},
+		"testing.showAllMessages": true,
+		"testing.followRunningTest": true,
+		"scm.defaultViewMode": "tree"
 	}
 }

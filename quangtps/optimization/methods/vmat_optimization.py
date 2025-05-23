@@ -1324,44 +1324,196 @@ class VMATOptimizer(OptimizerBase):
 
         if plan is None:
             logger.error("Không có kế hoạch để tính liều")
+            if self.progress_callback:
+                self.progress_callback(0.0, "Lỗi: Không có kế hoạch để tính liều")
             return False
 
         if self.dose_engine is None:
             logger.error("Không có dose_engine để tính liều")
+            if self.progress_callback:
+                self.progress_callback(0.0, "Lỗi: Dose engine không khả dụng")
+            return False
+
+        # Kiểm tra điểm điều khiển
+        control_points = plan.get('control_points', [])
+        if not control_points:
+            logger.error("Kế hoạch không có điểm điều khiển")
+            if self.progress_callback:
+                self.progress_callback(0.0, "Lỗi: Kế hoạch không có điểm điều khiển")
             return False
 
         try:
-            # Chuyển đổi kế hoạch sang định dạng phù hợp với dose_engine
-            dose_calc_input = self._convert_plan_to_dose_input(plan)
+            # Báo cáo tiến trình
+            if self.progress_callback:
+                self.progress_callback(0.05, f"Chuẩn bị tính liều cho {len(control_points)} điểm điều khiển")
 
-            # Tính toán phân phối liều
-            logger.info("Đang tính toán phân phối liều...")
-            dose_result = self.dose_engine.calculate(dose_calc_input)
+            # Chuyển đổi kế hoạch sang định dạng phù hợp cho dose engine
+            dose_input = self._convert_plan_to_dose_input(plan)
 
-            if dose_result is None:
-                logger.error("Tính toán liều thất bại - kết quả rỗng")
+            # Thêm thông tin chi tiết về cấu hình tính toán
+            logger.info(
+                f"Tính toán phân phối liều cho kế hoạch VMAT với "
+                f"{len(control_points)} điểm điều khiển, "
+                f"thuật toán {dose_input['calculation_options']['algorithm']}, "
+                f"{'GPU' if dose_input['calculation_options']['use_gpu'] else 'CPU'} "
+                f"với {dose_input['calculation_options']['threads']} thread"
+            )
+
+            # Báo cáo tiến trình
+            if self.progress_callback:
+                self.progress_callback(0.1, "Bắt đầu tính toán liều...")
+
+            # Đo thời gian tính toán
+            start_time = time.time()
+
+            # Gọi dose engine để tính toán liều
+            try:
+                dose_result = self.dose_engine.calculate_dose(dose_input)
+            except Exception as calc_error:
+                logger.error(f"Lỗi từ dose engine: {str(calc_error)}", exc_info=True)
+                if self.progress_callback:
+                    self.progress_callback(0.0, f"Lỗi tính toán liều: {str(calc_error)}")
                 return False
 
-            # Lưu kết quả vào kế hoạch
-            if hasattr(dose_result, "dose_grid"):
-                plan["dose_grid"] = dose_result.dose_grid
-            elif hasattr(dose_result, "data"):
-                plan["dose_grid"] = dose_result.data
+            # Báo cáo tiến trình
+            if self.progress_callback:
+                self.progress_callback(0.7, "Xử lý kết quả tính toán liều...")
+
+            # Kiểm tra kết quả
+            if dose_result is None:
+                logger.error("Tính toán liều thất bại: không có kết quả từ dose engine")
+                if self.progress_callback:
+                    self.progress_callback(0.0, "Lỗi: Không nhận được kết quả từ dose engine")
+                return False
+
+            # Kiểm tra cấu trúc kết quả
+            dose_grid = dose_result.get("dose_grid")
+            if dose_grid is None:
+                logger.error("Kết quả tính toán liều không chứa dose_grid")
+                if self.progress_callback:
+                    self.progress_callback(0.0, "Lỗi: Kết quả không có dose_grid")
+                return False
+
+            # Kiểm tra dữ liệu liều có hợp lệ không
+            if isinstance(dose_grid, np.ndarray):
+                has_nan = np.isnan(dose_grid).any()
+                has_inf = np.isinf(dose_grid).any()
+
+                if has_nan or has_inf:
+                    logger.warning(
+                        f"Phát hiện giá trị không hợp lệ trong kết quả liều: "
+                        f"NaN: {has_nan}, Inf: {has_inf}. Đang sửa chữa..."
+                    )
+                    # Thay thế NaN và Inf bằng 0
+                    dose_grid = np.nan_to_num(dose_grid, nan=0.0, posinf=0.0, neginf=0.0)
+
+            # Tính thống kê cơ bản nếu chưa có
+            statistics = dose_result.get("statistics", {})
+            if not statistics and isinstance(dose_grid, np.ndarray):
+                try:
+                    min_dose = float(np.min(dose_grid))
+                    max_dose = float(np.max(dose_grid))
+                    mean_dose = float(np.mean(dose_grid))
+                    statistics = {
+                        "min_dose": min_dose,
+                        "max_dose": max_dose,
+                        "mean_dose": mean_dose,
+                        "dose_units": "Gy"
+                    }
+                except Exception as stat_error:
+                    logger.warning(f"Không thể tính thống kê liều: {str(stat_error)}")
+
+            # Cập nhật liều vào kế hoạch
+            if plan is self.current_plan:
+                self.current_plan["dose_distribution"] = dose_grid
+                self.current_plan["dose_statistics"] = statistics
+                self.current_plan["dose_calculation_time"] = time.time() - start_time
             else:
-                plan["dose_grid"] = dose_result
+                plan["dose_distribution"] = dose_grid
+                plan["dose_statistics"] = statistics
+                plan["dose_calculation_time"] = time.time() - start_time
 
-            # Tính toán DVH và các chỉ số phụ thuộc vào liều
-            self._calculate_dvh(plan)
+            # Ghi log kết quả tính toán
+            calc_time = time.time() - start_time
+            logger.info(
+                f"Tính toán liều hoàn tất trong {calc_time:.2f} giây. "
+                f"Kích thước dose grid: {dose_grid.shape if isinstance(dose_grid, np.ndarray) else 'không xác định'}"
+            )
 
-            logger.info("Tính toán phân phối liều hoàn tất")
+            if isinstance(dose_grid, np.ndarray) and statistics:
+                logger.info(
+                    f"Thông số liều: Min={statistics.get('min_dose', 'N/A'):.2f} Gy, "
+                    f"Max={statistics.get('max_dose', 'N/A'):.2f} Gy, "
+                    f"Mean={statistics.get('mean_dose', 'N/A'):.2f} Gy"
+                )
+
+            # Báo cáo tiến trình
+            if self.progress_callback:
+                self.progress_callback(0.9, "Hoàn thiện kết quả liều...")
+
+            # Tối ưu và làm mịn liều nếu được cấu hình
+            if hasattr(self.params, "dose_smoothing_enabled") and self.params.dose_smoothing_enabled:
+                self._smooth_dose_distribution(plan)
+
+            # Tính DVH nếu có cấu trúc
+            if self.structures and hasattr(self, "_calculate_dvh"):
+                try:
+                    self._calculate_dvh(plan)
+                except Exception as dvh_error:
+                    logger.warning(f"Không thể tính DVH: {str(dvh_error)}")
+
+            # Báo cáo hoàn tất
+            if self.progress_callback:
+                self.progress_callback(1.0, "Tính toán liều hoàn tất")
+
             return True
 
-        except Exception as e:
-            logger.error(f"Lỗi khi tính toán phân phối liều: {str(e)}")
-            import traceback
-
-            logger.debug(f"Chi tiết lỗi: {traceback.format_exc()}")
+        except MemoryError:
+            error_msg = "Không đủ bộ nhớ để tính toán liều. Hãy giảm độ phân giải dose grid hoặc tăng bộ nhớ hệ thống."
+            logger.error(error_msg)
+            if self.progress_callback:
+                self.progress_callback(0.0, f"Lỗi: {error_msg}")
             return False
+        except Exception as e:
+            logger.error(f"Lỗi không xác định khi tính toán liều: {str(e)}", exc_info=True)
+            if self.progress_callback:
+                self.progress_callback(0.0, f"Lỗi: {str(e)}")
+            return False
+
+    def _smooth_dose_distribution(self, plan):
+        """
+        Làm mịn phân phối liều để mô phỏng tốt hơn phân phối liều thực tế.
+
+        Parameters
+        ----------
+        plan : Dict
+            Kế hoạch VMAT với phân phối liều cần làm mịn
+        """
+        if "dose_distribution" not in plan:
+            return
+
+        dose_grid = plan["dose_distribution"]
+        if dose_grid is None:
+            return
+
+        try:
+            # Áp dụng bộ lọc gaussian để làm mịn
+            import scipy.ndimage as ndimage
+
+            # Sigma nhỏ để tránh làm mịn quá mức
+            sigma = 0.8
+            smoothed_dose = ndimage.gaussian_filter(dose_grid, sigma=sigma)
+
+            # Lưu cả bản gốc và bản làm mịn
+            plan["original_dose_distribution"] = dose_grid.copy()
+            plan["dose_distribution"] = smoothed_dose
+
+            logger.debug("Đã áp dụng làm mịn phân phối liều")
+
+        except ImportError:
+            logger.warning("Không thể làm mịn phân phối liều: thiếu scipy.ndimage")
+        except Exception as e:
+            logger.warning(f"Lỗi khi làm mịn phân phối liều: {str(e)}")
 
     def _convert_plan_to_dose_input(self, plan):
         """
@@ -1374,17 +1526,16 @@ class VMATOptimizer(OptimizerBase):
 
         Returns
         -------
-        Any
+        Dict
             Đầu vào phù hợp cho dose_engine
         """
         # Trích xuất thông tin cần thiết từ kế hoạch
         arcs = plan.get("arcs", [])
-        control_points = plan.get("control_points", {})
+        control_points = plan.get("control_points", [])
 
         # Tạo đối tượng đầu vào cho dose_engine
-        # Cấu trúc này phụ thuộc vào API của dose_engine thực tế được sử dụng
         dose_input = {
-            "patient_data": self.patient_data,
+            "patient_id": getattr(self, "patient_id", None),
             "structures": self.structures,
             "beam_model": self.beam_model,
             "mlc_model": self.mlc_model,
@@ -1392,10 +1543,10 @@ class VMATOptimizer(OptimizerBase):
             "control_points": control_points,
             "calculation_options": {
                 "algorithm": self.params.dose_calc_algorithm,
-                "threads": self.params.num_threads
-                if self.params.use_multithreading
-                else 1,
+                "threads": self.params.num_threads if self.params.use_multithreading else 1,
                 "use_gpu": self.params.use_gpu_acceleration,
+                "dose_grid_resolution": getattr(self, "dose_grid_resolution", (3.0, 3.0, 3.0)),  # mm
+                "calculate_uncertainty": False  # Chỉ tính uncertainty trong tính toán cuối cùng để tăng tốc độ
             },
         }
 

@@ -1,404 +1,56 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-Module định nghĩa các kiểu dữ liệu cơ bản sử dụng trong QuangTPS.
+Core Types Module
 
-Module này định nghĩa các lớp dữ liệu cốt lõi như Structure, Image, Plan, Beam, Dose, v.v.,
-để đảm bảo tính thống nhất trong hệ thống. Các module khác nên import các kiểu dữ liệu từ đây
-thay vì import trực tiếp từ các module khác để giảm thiểu phụ thuộc chéo.
+Module này định nghĩa các types và classes cơ bản được sử dụng
+trong toàn bộ hệ thống QuangTPS.
 """
 
+import logging
+from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Optional, Union, Any, TYPE_CHECKING
-from enum import Enum, auto
-import SimpleITK as sitk
-import numpy as np
-import uuid
+from enum import Enum
 from datetime import datetime, date
-import os
-import sys
-import enum
+import numpy as np
 
-# Use TYPE_CHECKING to avoid circular imports
-if TYPE_CHECKING:
-    from quangtps.evaluation.dvh.dvh_analysis import DVHAnalysis
+logger = logging.getLogger(__name__)
 
 
-# Define PatientStatus directly here to avoid circular imports
-class PatientStatus(str, Enum):
-    """Trạng thái của bệnh nhân."""
+class TreatmentType(Enum):
+    """Loại điều trị xạ trị."""
 
-    ACTIVE = "Active"
-    PLANNED = "Planned"
-    ON_TREATMENT = "On Treatment"
-    COMPLETED = "Completed"
-    ON_HOLD = "On Hold"
-    ARCHIVED = "Archived"
-    DECEASED = "Deceased"
-    UNKNOWN = "Unknown"
-
-
-@dataclass
-class DoseGrid:
-    """
-    A three-dimensional dose grid.
-
-    This class represents a 3D dose distribution, including its geometric
-    properties and metadata.
-    """
-
-    data: np.ndarray  # 3D array of dose values (Gy)
-    spacing: Tuple[float, float, float]  # Voxel spacing in mm
-    origin: Tuple[float, float, float]  # Grid origin in mm
-    direction: Optional[np.ndarray] = None  # Direction cosine matrix (3x3)
-    metadata: Dict[str, Any] = field(default_factory=dict)  # Additional metadata
-
-    def to_sitk(self) -> sitk.Image:
-        """
-        Convert to SimpleITK image.
-
-        Returns:
-            SimpleITK image representation of the dose grid
-        """
-        img = sitk.GetImageFromArray(self.data.astype(np.float32))
-        img.SetSpacing(self.spacing)
-        img.SetOrigin(self.origin)
-
-        if self.direction is not None:
-            img.SetDirection(self.direction.flatten())
-
-        # Set metadata
-        for key, value in self.metadata.items():
-            if isinstance(value, str):
-                img.SetMetaData(key, value)
-            else:
-                img.SetMetaData(key, str(value))
-
-        return img
-
-    @classmethod
-    def from_sitk(cls, image: sitk.Image) -> "DoseGrid":
-        """
-        Create from SimpleITK image.
-
-        Args:
-            image: SimpleITK image containing dose data
-
-        Returns:
-            DoseGrid instance
-        """
-        data = sitk.GetArrayFromImage(image)
-        spacing = image.GetSpacing()
-        origin = image.GetOrigin()
-        direction = np.array(image.GetDirection()).reshape(3, 3)
-
-        # Extract metadata
-        metadata = {}
-        for key in image.GetMetaDataKeys():
-            metadata[key] = image.GetMetaData(key)
-
-        return cls(
-            data=data,
-            spacing=spacing,
-            origin=origin,
-            direction=direction,
-            metadata=metadata,
-        )
-
-    def get_dose_at_point(self, point: Tuple[float, float, float]) -> float:
-        """
-        Get dose value at a specific point in 3D space.
-
-        Args:
-            point: 3D coordinates (x, y, z) in mm
-
-        Returns:
-            Interpolated dose value at the point (Gy)
-        """
-        # Convert point to grid indices
-        ix = (point[0] - self.origin[0]) / self.spacing[0]
-        iy = (point[1] - self.origin[1]) / self.spacing[1]
-        iz = (point[2] - self.origin[2]) / self.spacing[2]
-
-        # Check if point is within grid bounds
-        if (
-            0 <= ix < self.data.shape[2] - 1
-            and 0 <= iy < self.data.shape[1] - 1
-            and 0 <= iz < self.data.shape[0] - 1
-        ):
-            # Trilinear interpolation
-            ix_floor, iy_floor, iz_floor = int(ix), int(iy), int(iz)
-            ix_ceil, iy_ceil, iz_ceil = ix_floor + 1, iy_floor + 1, iz_floor + 1
-
-            # Interpolation weights
-            wx = ix - ix_floor
-            wy = iy - iy_floor
-            wz = iz - iz_floor
-
-            # Interpolate
-            dose = (
-                self.data[iz_floor, iy_floor, ix_floor] * (1 - wx) * (1 - wy) * (1 - wz)
-                + self.data[iz_floor, iy_floor, ix_ceil] * wx * (1 - wy) * (1 - wz)
-                + self.data[iz_floor, iy_ceil, ix_floor] * (1 - wx) * wy * (1 - wz)
-                + self.data[iz_floor, iy_ceil, ix_ceil] * wx * wy * (1 - wz)
-                + self.data[iz_ceil, iy_floor, ix_floor] * (1 - wx) * (1 - wy) * wz
-                + self.data[iz_ceil, iy_floor, ix_ceil] * wx * (1 - wy) * wz
-                + self.data[iz_ceil, iy_ceil, ix_floor] * (1 - wx) * wy * wz
-                + self.data[iz_ceil, iy_ceil, ix_ceil] * wx * wy * wz
-            )
-
-            return dose
-        else:
-            # Point is outside grid
-            return 0.0
-
-    def resample_to_image(self, reference_image: sitk.Image) -> "DoseGrid":
-        """
-        Resample the dose grid to match a reference image.
-
-        Args:
-            reference_image: Image with desired geometry
-
-        Returns:
-            Resampled dose grid
-        """
-        # Convert to SimpleITK image
-        dose_image = self.to_sitk()
-
-        # Create resampler
-        resampler = sitk.ResampleImageFilter()
-        resampler.SetReferenceImage(reference_image)
-        resampler.SetInterpolator(sitk.sitkLinear)
-        resampler.SetDefaultPixelValue(0.0)
-
-        # Resample dose
-        resampled_image = resampler.Execute(dose_image)
-
-        # Return new dose grid
-        return DoseGrid.from_sitk(resampled_image)
-
-
-@dataclass
-class BeamParameters:
-    """
-    Parameters describing a radiation beam.
-
-    This class contains all parameters needed to define a radiation beam
-    for dose calculation.
-    """
-
-    beam_name: str  # Beam name/ID
-    beam_type: str  # 'photon', 'electron', 'proton', etc.
-    nominal_energy: float  # Nominal energy in MeV
-    isocenter: Tuple[float, float, float]  # Isocenter position in mm
-    gantry_angle: float  # Gantry angle in degrees
-    collimator_angle: float = 0.0  # Collimator angle in degrees
-    couch_angle: float = 0.0  # Couch angle in degrees
-    field_size: Tuple[float, float] = (100.0, 100.0)  # Field size in mm
-    sad: Optional[float] = 1000.0  # Source-axis distance in mm
-    ssd: Optional[float] = None  # Source-surface distance in mm
-
-    # MLC configuration for IMRT/VMAT
-    mlc_positions: Optional[List[Tuple[float, float]]] = None  # Leaf positions in mm
-
-    # Wedge filter
-    wedge_angle: Optional[float] = None  # Wedge angle in degrees
-    wedge_orientation: Optional[float] = None  # Wedge orientation in degrees
-
-    # Monitor units
-    monitor_units: float = 100.0  # Monitor units (MU)
-
-    # Dose grid normalization
-    dose_grid_normalization: Optional[float] = (
-        None  # Normalization factor for dose grid
-    )
-
-    # Beam modifiers
-    applicator_id: Optional[str] = None  # Electron applicator ID
-    applicator_size: Optional[float] = None  # Electron applicator size in mm
-    bolus_thickness: Optional[float] = None  # Bolus thickness in mm
-
-    # Additional parameters for specific beam types
-    additional_parameters: Dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self):
-        """Initialize derived parameters."""
-        # Calculate SSD if not provided
-        if self.ssd is None and self.sad is not None:
-            # In a real implementation, this would calculate SSD based on patient surface
-            # For now, use a default value
-            self.ssd = self.sad - 50.0  # Typical patient thickness
-
-    def get_beam_direction(self) -> np.ndarray:
-        """
-        Get the beam direction vector.
-
-        Returns:
-            3D unit vector pointing from source to isocenter
-        """
-        # Convert angles to radians
-        gantry_rad = np.radians(self.gantry_angle)
-        couch_rad = np.radians(self.couch_angle)
-
-        # Calculate beam direction
-        # At gantry=0, beam points in +z direction
-        direction = np.array([np.sin(gantry_rad), 0, np.cos(gantry_rad)])
-
-        # Apply couch rotation
-        if abs(couch_rad) > 1e-6:
-            # Rotation around z-axis
-            couch_cos = np.cos(couch_rad)
-            couch_sin = np.sin(couch_rad)
-
-            direction = np.array(
-                [
-                    direction[0] * couch_cos - direction[1] * couch_sin,
-                    direction[0] * couch_sin + direction[1] * couch_cos,
-                    direction[2],
-                ]
-            )
-
-        return direction
-
-    def get_source_position(self) -> np.ndarray:
-        """
-        Get the source position.
-
-        Returns:
-            3D position of the radiation source
-        """
-        # Get beam direction
-        direction = self.get_beam_direction()
-
-        # Calculate source position
-        source_pos = np.array(self.isocenter) - direction * self.sad
-
-        return source_pos
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert to dictionary.
-
-        Returns:
-            Dictionary representation of beam parameters
-        """
-        return {
-            "beam_name": self.beam_name,
-            "beam_type": self.beam_type,
-            "nominal_energy": self.nominal_energy,
-            "isocenter": self.isocenter,
-            "gantry_angle": self.gantry_angle,
-            "collimator_angle": self.collimator_angle,
-            "couch_angle": self.couch_angle,
-            "field_size": self.field_size,
-            "sad": self.sad,
-            "ssd": self.ssd,
-            "monitor_units": self.monitor_units,
-            "wedge_angle": self.wedge_angle,
-            "wedge_orientation": self.wedge_orientation,
-            "applicator_id": self.applicator_id,
-            "applicator_size": self.applicator_size,
-            "bolus_thickness": self.bolus_thickness,
-            "additional_parameters": self.additional_parameters,
-        }
-
-
-class BeamEnergyType(Enum):
-    """Loại năng lượng của chùm tia"""
-
-    PHOTON = "photon"
-    ELECTRON = "electron"
+    EXTERNAL_BEAM = "external_beam"
+    BRACHYTHERAPY = "brachytherapy"
+    STEREOTACTIC = "stereotactic"
     PROTON = "proton"
-    NEUTRON = "neutron"
-    CARBON = "carbon"
-    UNKNOWN = "unknown"
+    ELECTRON = "electron"
 
 
-class TechniqueType(Enum):
-    """Loại kỹ thuật xạ trị."""
+class TreatmentTechnique(Enum):
+    """Kỹ thuật điều trị."""
 
-    CONFORMAL = "3D-CRT"
-    IMRT = "IMRT"
-    VMAT = "VMAT"
-    SRS = "SRS"
-    SBRT = "SBRT"
-    ELECTRON = "Electron"
-    UNKNOWN = "Unknown"
-
-
-class BeamType(Enum):
-    """Loại chùm tia xạ trị."""
-
-    STATIC = "static"
-    ARC = "arc"
-    DYNAMIC = "dynamic"
+    CONFORMAL_3D = "3d_conformal"
+    IMRT = "imrt"
+    VMAT = "vmat"
+    SBRT = "sbrt"
+    SRS = "srs"
+    PROTON_THERAPY = "proton"
+    ELECTRON_THERAPY = "electron"
+    HDR_BRACHYTHERAPY = "hdr_brachy"
+    LDR_BRACHYTHERAPY = "ldr_brachy"
 
 
-class StructureType(Enum):
-    """Loại cấu trúc."""
+class TreatmentStatus(Enum):
+    """Trạng thái điều trị."""
 
-    PTV = "ptv"
-    CTV = "ctv"
-    GTV = "gtv"
-    OAR = "oar"
-    EXTERNAL = "external"
-    IMPLANT = "implant"
-    COUCH = "couch"
-    BOLUS = "bolus"
-    SUPPORT = "support"
-    ISOCENTER = "isocenter"
-    MARKER = "marker"
-    CONTRAST = "contrast"
-    CAVITY = "cavity"
-    UNDEFINED = "undefined"
-
-
-class PatientPosition(Enum):
-    """Vị trí của bệnh nhân."""
-
-    HFS = "HFS"  # Head First-Supine
-    HFP = "HFP"  # Head First-Prone
-    FFS = "FFS"  # Feet First-Supine
-    FFP = "FFP"  # Feet First-Prone
-    HFDR = "HFDR"  # Head First-Decubitus Right
-    HFDL = "HFDL"  # Head First-Decubitus Left
-    FFDR = "FFDR"  # Feet First-Decubitus Right
-    FFDL = "FFDL"  # Feet First-Decubitus Left
-    UNKNOWN = "Unknown"
-
-
-class ImageModality(Enum):
-    """Các loại hình thức hình ảnh."""
-
-    CT = "CT"
-    MRI = "MR"
-    PET = "PT"
-    RTDOSE = "RTDOSE"
-    CBCT = "CBCT"
-    RTPLAN = "RTPLAN"
-    RTSTRUCT = "RTSTRUCT"
-    RTIMAGE = "RTIMAGE"
-    US = "US"
-    UNKNOWN = "UNKNOWN"
-
-
-class Orientation(Enum):
-    """Hướng của hình ảnh."""
-
-    AXIAL = "axial"
-    SAGITTAL = "sagittal"
-    CORONAL = "coronal"
-    OBLIQUE = "oblique"
-
-
-class BinaryOperation(Enum):
-    """Các phép toán binary."""
-
-    AND = "and"
-    OR = "or"
-    SUB = "sub"
-    XOR = "xor"
+    PLANNING = "planning"
+    APPROVED = "approved"
+    IN_TREATMENT = "in_treatment"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    ON_HOLD = "on_hold"
 
 
 class DoseUnit(Enum):
@@ -406,445 +58,473 @@ class DoseUnit(Enum):
 
     GY = "Gy"
     CGY = "cGy"
+    MU = "MU"  # Monitor Unit
+    PERCENT = "percent"
 
 
 class VolumeUnit(Enum):
     """Đơn vị thể tích."""
 
-    CC = "cm³"
-    ML = "ml"
-
-
-class LengthUnit(Enum):
-    """Đơn vị độ dài."""
-
-    MM = "mm"
-    CM = "cm"
-
-
-class TimeUnit(Enum):
-    """Đơn vị thời gian."""
-
-    S = "s"
-    MIN = "min"
-    H = "h"
-
-
-class BeamStatus(Enum):
-    """Trạng thái của chùm tia."""
-
-    PLANNING = "planning"
-    APPROVED = "approved"
-    DELIVERED = "delivered"
-    INTERRUPTED = "interrupted"
-    CANCELED = "canceled"
-
-
-class PlanStatus(Enum):
-    """Trạng thái của kế hoạch."""
-
-    PLANNING = "planning"
-    APPROVED = "approved"
-    DELIVERED = "delivered"
-    INTERRUPTED = "interrupted"
-    CANCELED = "canceled"
-
-
-class TreatmentStatus(Enum):
-    """Trạng thái của điều trị."""
-
-    PLANNING = "planning"
-    READY = "ready"
-    ONGOING = "ongoing"
-    COMPLETED = "completed"
-    INTERRUPTED = "interrupted"
-    CANCELED = "canceled"
-
-
-class FractionStatus(Enum):
-    """Trạng thái của phân liều."""
-
-    PLANNED = "planned"
-    DELIVERED = "delivered"
-    PARTIAL = "partial"
-    CANCELED = "canceled"
-
-
-class TaskStatus(Enum):
-    """Trạng thái của nhiệm vụ."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELED = "canceled"
-
-
-class RoleType(Enum):
-    """Loại vai trò người dùng."""
-
-    ADMIN = "admin"
-    PHYSICIST = "physicist"
-    PHYSICIAN = "physician"
-    THERAPIST = "therapist"
-    DOSIMETRIST = "dosimetrist"
-    RESEARCHER = "researcher"
-    GUEST = "guest"
-
-
-class DataType:
-    """Base class for data types with serialization capabilities."""
-
-    def __init__(self):
-        """Initialize the data type."""
-        pass
-
-    def to_dict(self) -> Dict:
-        """
-        Convert the object to a dictionary for serialization.
-
-        Returns:
-            Dict: Dictionary representation of the object
-        """
-        # Get all attributes that don't start with underscore
-        attrs = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
-
-        # Handle special types
-        for key, value in attrs.items():
-            if isinstance(value, Enum):
-                attrs[key] = value.value
-            elif isinstance(value, np.ndarray):
-                attrs[key] = value.tolist()
-            elif isinstance(value, (datetime, date)):
-                attrs[key] = value.isoformat()
-            elif hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
-                attrs[key] = value.to_dict()
-
-        return attrs
-
-    def from_dict(self, data: Dict) -> None:
-        """
-        Update the object from a dictionary.
-
-        Args:
-            data: Dictionary with attribute values
-        """
-        for key, value in data.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
-    def validate(self) -> bool:
-        """
-        Validate the object.
-
-        Returns:
-            bool: True if valid, False otherwise
-        """
-        return True
+    CC = "cc"  # Cubic centimeter
+    ML = "ml"  # Milliliter (same as cc)
+    PERCENT = "percent"
+    LITER = "liter"
 
 
 @dataclass
-class Patient(DataType):
-    """
-    Patient information.
+class ImageProperties:
+    """Thuộc tính hình ảnh y tế."""
 
-    This class represents a patient in the radiation therapy planning system,
-    including demographic and medical information.
-    """
+    modality: str = "CT"  # CT, MR, PET, etc.
+    pixel_spacing: Tuple[float, float] = (1.0, 1.0)  # mm
+    slice_thickness: float = 1.0  # mm
+    image_orientation: Tuple[float, ...] = field(
+        default_factory=lambda: (1, 0, 0, 0, 1, 0)
+    )
+    image_position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-    patient_id: str  # Hospital ID of the patient
-    name: str  # Full name of the patient
-    birth_date: Optional[Union[date, str]] = None  # Birth date
-    gender: Optional[str] = None  # M, F, O (Other)
+    # Window/Level settings
+    window_center: Optional[float] = None
+    window_width: Optional[float] = None
 
-    # Additional demographics and medical information
-    height: Optional[float] = None  # Height in cm
-    weight: Optional[float] = None  # Weight in kg
-    allergies: List[str] = field(default_factory=list)  # List of allergies
-    conditions: List[str] = field(default_factory=list)  # List of medical conditions
-
-    # Treatment-related information
-    diagnosis: Optional[str] = None  # Diagnosis/reason for treatment
-    diagnosis_date: Optional[Union[date, str]] = None  # Date of diagnosis
-
-    # Additional metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)  # Additional information
-
-    def __post_init__(self):
-        """Process values after initialization."""
-        # Ensure patient_id is a string
-        self.patient_id = str(self.patient_id)
-
-        # Convert date strings to date objects if needed
-        if isinstance(self.birth_date, str):
-            try:
-                self.birth_date = datetime.fromisoformat(self.birth_date).date()
-            except ValueError:
-                pass  # Keep as string if invalid format
-
-        if isinstance(self.diagnosis_date, str):
-            try:
-                self.diagnosis_date = datetime.fromisoformat(self.diagnosis_date).date()
-            except ValueError:
-                pass  # Keep as string if invalid format
-
-    def get_age(self) -> Optional[int]:
-        """
-        Calculate the patient's age.
-
-        Returns:
-            Optional[int]: Age in years, or None if birth date is not set
-        """
-        if not self.birth_date:
-            return None
-
-        if isinstance(self.birth_date, str):
-            return None  # Can't calculate from string
-
-        today = date.today()
-        age = today.year - self.birth_date.year
-
-        # Adjust age if birthday hasn't occurred yet this year
-        if (today.month, today.day) < (self.birth_date.month, self.birth_date.day):
-            age -= 1
-
-        return age
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert to dictionary.
-
-        Returns:
-            Dict[str, Any]: Dictionary representation of patient
-        """
-        data = super().to_dict()
-
-        # Ensure dates are converted to strings
-        if isinstance(data.get("birth_date"), date):
-            data["birth_date"] = data["birth_date"].isoformat()
-
-        if isinstance(data.get("diagnosis_date"), date):
-            data["diagnosis_date"] = data["diagnosis_date"].isoformat()
-
-        return data
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Patient":
-        """
-        Create from dictionary.
-
-        Args:
-            data: Dictionary with patient data
-
-        Returns:
-            Patient: New patient object
-        """
-        # Create a copy of the data to avoid modifying the original
-        data_copy = data.copy()
-
-        # Handle nested structures
-        if "allergies" in data_copy and not isinstance(data_copy["allergies"], list):
-            data_copy["allergies"] = []
-
-        if "conditions" in data_copy and not isinstance(data_copy["conditions"], list):
-            data_copy["conditions"] = []
-
-        if "metadata" in data_copy and not isinstance(data_copy["metadata"], dict):
-            data_copy["metadata"] = {}
-
-        # Create patient object
-        return cls(**data_copy)
+    # Acquisition parameters
+    kvp: Optional[float] = None
+    mas: Optional[float] = None
+    slice_location: Optional[float] = None
 
 
-class Structure:
-    """
-    Lớp mô tả cấu trúc giải phẫu trong kế hoạch xạ trị.
+@dataclass
+class StructureInfo:
+    """Thông tin cơ bản của structure."""
 
-    Attributes
-    ----------
-    id : str
-        Định danh duy nhất của cấu trúc
-    name : str
-        Tên của cấu trúc (ví dụ: PTV, CTV, Spinal Cord, v.v.)
-    type : str
-        Loại cấu trúc (ví dụ: TARGET, OAR, EXTERNAL, v.v.)
-    color : Tuple[int, int, int]
-        Màu RGB của cấu trúc, mỗi thành phần từ 0-255
-    volume_cc : float
-        Thể tích cấu trúc tính bằng cm³
-    contours : List
-        Danh sách các contour theo lát cắt
-    mask : np.ndarray
-        Mặt nạ nhị phân 3D biểu diễn cấu trúc trong không gian ảnh
-    """
+    name: str
+    id: str
+    roi_number: Optional[int] = None
+    structure_type: str = "OTHER"
+    color: Tuple[float, float, float] = (1.0, 0.0, 0.0)
+    visible: bool = True
 
-    def __init__(
-        self,
-        id: str,
-        name: str,
-        type: str = "UNKNOWN",
-        color: Tuple[int, int, int] = (255, 0, 0),
-    ):
-        """
-        Khởi tạo Structure mới.
+    # Geometric properties
+    volume: float = 0.0  # cm³
+    centroid: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-        Parameters
-        ----------
-        id : str
-            Định danh duy nhất của cấu trúc
-        name : str
-            Tên của cấu trúc
-        type : str, optional
-            Loại cấu trúc, mặc định là "UNKNOWN"
-        color : Tuple[int, int, int], optional
-            Màu RGB của cấu trúc, mặc định là đỏ (255, 0, 0)
-        """
-        self.id = id
-        self.name = name
-        self.type = type
-        self.color = color
-        self.volume_cc = 0.0
-        self.contours = []
-        self._mask = None
-        self._voxel_spacing = (1.0, 1.0, 1.0)
-
-    def get_binary_mask(self) -> np.ndarray:
-        """
-        Lấy mặt nạ nhị phân của cấu trúc.
-
-        Returns
-        -------
-        np.ndarray
-            Mặt nạ nhị phân 3D biểu diễn cấu trúc
-        """
-        if self._mask is None:
-            # Thông thường mask nên được tính từ contours, nhưng ở đây chỉ tạo mock
-            return np.zeros((10, 10, 10), dtype=bool)
-        return self._mask
-
-    def set_binary_mask(self, mask: np.ndarray):
-        """
-        Thiết lập mặt nạ nhị phân cho cấu trúc.
-
-        Parameters
-        ----------
-        mask : np.ndarray
-            Mặt nạ nhị phân 3D biểu diễn cấu trúc
-        """
-        self._mask = mask.astype(bool)
-
-    def get_voxel_spacing(self) -> Tuple[float, float, float]:
-        """
-        Lấy khoảng cách voxel của cấu trúc.
-
-        Returns
-        -------
-        Tuple[float, float, float]
-            Khoảng cách voxel theo 3 chiều (mm)
-        """
-        return self._voxel_spacing
-
-    def set_voxel_spacing(self, spacing: Tuple[float, float, float]):
-        """
-        Thiết lập khoảng cách voxel cho cấu trúc.
-
-        Parameters
-        ----------
-        spacing : Tuple[float, float, float]
-            Khoảng cách voxel theo 3 chiều (mm)
-        """
-        self._voxel_spacing = spacing
-
-    def calculate_volume(self) -> float:
-        """
-        Tính toán thể tích của cấu trúc dựa trên mặt nạ và khoảng cách voxel.
-
-        Returns
-        -------
-        float
-            Thể tích cấu trúc (cm³)
-        """
-        if self._mask is None:
-            return 0.0
-
-        # Chuyển đổi mm³ thành cm³ (chia cho 1000)
-        volume_mm3 = (
-            np.sum(self._mask)
-            * self._voxel_spacing[0]
-            * self._voxel_spacing[1]
-            * self._voxel_spacing[2]
-        )
-        self.volume_cc = volume_mm3 / 1000.0
-        return self.volume_cc
+    # Clinical properties
+    priority: int = 3  # 1 = highest, 4 = lowest
+    is_target: bool = False
+    is_oar: bool = False
 
 
-class Image:
-    """
-    Lớp mô tả hình ảnh y tế trong kế hoạch xạ trị.
+@dataclass
+class DoseInfo:
+    """Thông tin liều xạ trị."""
 
-    Attributes
-    ----------
-    id : str
-        Định danh duy nhất của hình ảnh
-    modality : str
-        Phương thức hình ảnh (ví dụ: CT, MR, PET, v.v.)
-    data : np.ndarray
-        Dữ liệu hình ảnh 3D
-    pixel_spacing : Tuple[float, float]
-        Khoảng cách pixel theo hai chiều x, y (mm)
-    slice_thickness : float
-        Độ dày lát cắt (mm)
-    """
+    # Grid properties
+    grid_shape: Tuple[int, int, int] = (100, 100, 50)
+    grid_spacing: Tuple[float, float, float] = (2.0, 2.0, 3.0)
+    grid_origin: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-    def __init__(self, id: str, modality: str = "CT"):
-        """
-        Khởi tạo Image mới.
+    # Dose properties
+    dose_unit: str = "Gy"
+    dose_type: str = "PHYSICAL"  # PHYSICAL, EFFECTIVE, ERROR
+    summation_type: str = "PLAN"  # PLAN, BEAM, BRACHY, etc.
 
-        Parameters
-        ----------
-        id : str
-            Định danh duy nhất của hình ảnh
-        modality : str, optional
-            Phương thức hình ảnh, mặc định là "CT"
-        """
-        self.id = id
-        self.modality = modality
-        self.data = None
-        self.pixel_spacing = (1.0, 1.0)
-        self.slice_thickness = 1.0
+    # Statistics
+    max_dose: float = 0.0
+    min_dose: float = 0.0
+    mean_dose: float = 0.0
+
+
+@dataclass
+class BeamInfo:
+    """Thông tin chùm tia."""
+
+    beam_number: int
+    beam_name: str
+    beam_type: str = "STATIC"  # STATIC, DYNAMIC
+    radiation_type: str = "PHOTON"  # PHOTON, ELECTRON, PROTON
+
+    # Geometry
+    gantry_angle: float = 0.0  # degrees
+    collimator_angle: float = 0.0  # degrees
+    couch_angle: float = 0.0  # degrees
+
+    # Energy and dose
+    nominal_energy: float = 6.0  # MV or MeV
+    dose_rate: float = 400.0  # MU/min
+    meterset: float = 100.0  # MU
+
+    # Beam limiting device
+    jaw_positions: Optional[Tuple[float, float, float, float]] = None  # X1, X2, Y1, Y2
+
+    # Treatment machine
+    treatment_machine_name: str = "TrueBeam"
+
+    # Status
+    is_setup_beam: bool = False
+    beam_on: bool = False
+
+
+@dataclass
+class PlanInfo:
+    """Thông tin kế hoạch điều trị."""
+
+    plan_id: str
+    plan_name: str
+    plan_label: Optional[str] = None
+    plan_description: str = ""
+
+    # Treatment information
+    treatment_type: TreatmentType = TreatmentType.EXTERNAL_BEAM
+    treatment_technique: TreatmentTechnique = TreatmentTechnique.VMAT
+    treatment_intent: str = "CURATIVE"
+
+    # Prescription
+    prescribed_dose: float = 0.0  # Gy
+    number_of_fractions: int = 1
+    dose_per_fraction: float = 0.0  # Gy
+
+    # Planning
+    planning_system: str = "QuangTPS"
+    planner_name: str = ""
+    physicist_name: str = ""
+    physician_name: str = ""
+
+    # Status and dates
+    status: TreatmentStatus = TreatmentStatus.PLANNING
+    created_date: datetime = field(default_factory=datetime.now)
+    approved_date: Optional[datetime] = None
+
+    # References
+    referenced_structures: List[str] = field(default_factory=list)
+    referenced_images: List[str] = field(default_factory=list)
 
 
 class Plan:
     """
-    Lớp mô tả kế hoạch xạ trị.
+    Lớp đại diện cho kế hoạch điều trị.
 
-    Attributes
-    ----------
-    id : str
-        Định danh duy nhất của kế hoạch
-    name : str
-        Tên kế hoạch
-    structures : Dict[str, Structure]
-        Từ điển các cấu trúc trong kế hoạch (ID -> Structure)
-    beams : List
-        Danh sách các chùm tia
-    dose : Any
-        Phân bố liều
+    Plan chứa tất cả thông tin về một kế hoạch điều trị bao gồm
+    thông tin bệnh nhân, prescription, beams, structures và dose.
     """
 
-    def __init__(self, id: str, name: str):
-        """
-        Khởi tạo Plan mới.
+    def __init__(self, plan_id: str, plan_name: str, **kwargs):
+        """Khởi tạo Plan."""
+        self.plan_info = PlanInfo(plan_id=plan_id, plan_name=plan_name, **kwargs)
 
-        Parameters
-        ----------
-        id : str
-            Định danh duy nhất của kế hoạch
-        name : str
-            Tên kế hoạch
-        """
-        self.id = id
+        # Components
+        self.beams: List[BeamInfo] = []
+        self.structures: List[StructureInfo] = []
+        self.dose_info: Optional[DoseInfo] = None
+
+        # Images
+        self.primary_image: Optional["Image"] = None
+        self.secondary_images: List["Image"] = []
+
+        # Dose data
+        self.dose_grid: Optional["DoseGrid"] = None
+
+        # Metadata
+        self.metadata: Dict[str, Any] = {}
+
+        logger.debug(f"Tạo Plan: {plan_id} - {plan_name}")
+
+    def add_beam(self, beam_info: BeamInfo):
+        """Thêm beam vào plan."""
+        self.beams.append(beam_info)
+        self.plan_info.referenced_structures.append(f"BEAM_{beam_info.beam_number}")
+
+    def add_structure(self, structure_info: StructureInfo):
+        """Thêm structure vào plan."""
+        self.structures.append(structure_info)
+        self.plan_info.referenced_structures.append(structure_info.id)
+
+    def set_dose_grid(self, dose_grid: "DoseGrid"):
+        """Đặt dose grid cho plan."""
+        self.dose_grid = dose_grid
+
+        # Update dose info
+        if hasattr(dose_grid, "get_shape"):
+            shape = dose_grid.get_shape()
+        else:
+            shape = (100, 100, 50)
+
+        if hasattr(dose_grid, "get_spacing"):
+            spacing = dose_grid.get_spacing()
+        else:
+            spacing = (2.0, 2.0, 3.0)
+
+        if hasattr(dose_grid, "get_origin"):
+            origin = dose_grid.get_origin()
+        else:
+            origin = (0.0, 0.0, 0.0)
+
+        self.dose_info = DoseInfo(
+            grid_shape=shape, grid_spacing=spacing, grid_origin=origin
+        )
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Lấy summary của plan."""
+        return {
+            "plan_id": self.plan_info.plan_id,
+            "plan_name": self.plan_info.plan_name,
+            "treatment_type": self.plan_info.treatment_type.value,
+            "treatment_technique": self.plan_info.treatment_technique.value,
+            "prescribed_dose": self.plan_info.prescribed_dose,
+            "number_of_fractions": self.plan_info.number_of_fractions,
+            "number_of_beams": len(self.beams),
+            "number_of_structures": len(self.structures),
+            "status": self.plan_info.status.value,
+            "created_date": self.plan_info.created_date.isoformat(),
+        }
+
+    def __str__(self) -> str:
+        return f"Plan({self.plan_info.plan_id}: {self.plan_info.plan_name})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+class Treatment:
+    """
+    Lớp đại diện cho một course điều trị hoàn chỉnh.
+
+    Treatment có thể chứa nhiều plans và quản lý toàn bộ
+    quá trình điều trị của bệnh nhân.
+    """
+
+    def __init__(
+        self, treatment_id: str, patient_id: str, course_id: Optional[str] = None
+    ):
+        """Khởi tạo Treatment."""
+        self.treatment_id = treatment_id
+        self.patient_id = patient_id
+        self.course_id = course_id or f"C1_{treatment_id}"
+
+        # Plans
+        self.plans: List[Plan] = []
+        self.active_plan: Optional[Plan] = None
+
+        # Treatment information
+        self.treatment_site: str = ""
+        self.diagnosis: str = ""
+        self.stage: str = ""
+        self.treatment_intent: str = "CURATIVE"
+
+        # Prescription information
+        self.total_dose: float = 0.0  # Gy
+        self.dose_per_fraction: float = 0.0  # Gy
+        self.number_of_fractions: int = 0
+
+        # Status tracking
+        self.status = TreatmentStatus.PLANNING
+        self.start_date: Optional[date] = None
+        self.end_date: Optional[date] = None
+
+        # Images
+        self.simulation_ct: Optional["Image"] = None
+        self.planning_images: List["Image"] = []
+        self.verification_images: List["Image"] = []
+
+        # Clinical team
+        self.physician: str = ""
+        self.physicist: str = ""
+        self.therapist: str = ""
+
+        logger.debug(f"Tạo Treatment: {treatment_id} cho patient {patient_id}")
+
+    def add_plan(self, plan: Plan) -> None:
+        """Thêm plan vào treatment."""
+        self.plans.append(plan)
+
+        # Set as active plan if it's the first one
+        if self.active_plan is None:
+            self.active_plan = plan
+
+        logger.debug(
+            f"Thêm plan {plan.plan_info.plan_id} vào treatment {self.treatment_id}"
+        )
+
+    def set_active_plan(self, plan_id: str) -> bool:
+        """Đặt plan làm active plan."""
+        for plan in self.plans:
+            if plan.plan_info.plan_id == plan_id:
+                self.active_plan = plan
+                logger.debug(f"Đặt plan {plan_id} làm active plan")
+                return True
+
+        logger.warning(f"Không tìm thấy plan {plan_id}")
+        return False
+
+    def get_plan_by_id(self, plan_id: str) -> Optional[Plan]:
+        """Tìm plan theo ID."""
+        for plan in self.plans:
+            if plan.plan_info.plan_id == plan_id:
+                return plan
+        return None
+
+    def calculate_total_prescription(self) -> Tuple[float, int]:
+        """Tính tổng prescription từ tất cả plans."""
+        total_dose = 0.0
+        total_fractions = 0
+
+        for plan in self.plans:
+            total_dose += plan.plan_info.prescribed_dose
+            total_fractions += plan.plan_info.number_of_fractions
+
+        return total_dose, total_fractions
+
+    def get_treatment_summary(self) -> Dict[str, Any]:
+        """Lấy summary của treatment."""
+        total_dose, total_fractions = self.calculate_total_prescription()
+
+        return {
+            "treatment_id": self.treatment_id,
+            "patient_id": self.patient_id,
+            "course_id": self.course_id,
+            "treatment_site": self.treatment_site,
+            "diagnosis": self.diagnosis,
+            "treatment_intent": self.treatment_intent,
+            "total_dose": total_dose,
+            "total_fractions": total_fractions,
+            "number_of_plans": len(self.plans),
+            "active_plan": self.active_plan.plan_info.plan_id
+            if self.active_plan
+            else None,
+            "status": self.status.value,
+            "physician": self.physician,
+            "physicist": self.physicist,
+        }
+
+    def __str__(self) -> str:
+        return f"Treatment({self.treatment_id}: {self.treatment_site})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+class Structure:
+    """
+    Lớp đại diện cho cấu trúc giải phẫu đơn giản.
+
+    Đây là version đơn giản cho compatibility.
+    """
+
+    def __init__(self, name: str = "", structure_type: str = "OTHER"):
+        """Khởi tạo Structure."""
         self.name = name
-        self.structures = {}
-        self.beams = []
-        self.dose = None
+        self.type = structure_type
+        self.id = f"struct_{hash(name)}"
+        self.color = (1.0, 0.0, 0.0)
+        self.visible = True
+        self.mask = None
+
+    def __str__(self) -> str:
+        return f"Structure({self.name})"
+
+
+class DoseGrid:
+    """
+    Lớp đại diện cho lưới liều đơn giản.
+
+    Đây là version đơn giản cho compatibility.
+    """
+
+    def __init__(self, grid_data=None, origin=None, spacing=None):
+        """Khởi tạo DoseGrid."""
+        self.grid_data = grid_data if grid_data is not None else np.zeros((50, 50, 30))
+        self.origin = origin or (0.0, 0.0, 0.0)
+        self.spacing = spacing or (2.0, 2.0, 3.0)
+
+    def get_shape(self):
+        """Lấy shape của grid."""
+        return self.grid_data.shape
+
+    def get_spacing(self):
+        """Lấy spacing của grid."""
+        return self.spacing
+
+    def get_origin(self):
+        """Lấy origin của grid."""
+        return self.origin
+
+    def __str__(self) -> str:
+        return f"DoseGrid(shape={self.get_shape()})"
+
+
+class Image:
+    """
+    Lớp đại diện cho hình ảnh y tế đơn giản.
+
+    Đây là version đơn giản cho compatibility.
+    """
+
+    def __init__(self, image_data=None, properties=None):
+        """Khởi tạo Image."""
+        self.image_data = image_data if image_data is not None else np.zeros((100, 100))
+        self.properties = properties or ImageProperties()
+
+    def get_shape(self):
+        """Lấy shape của image."""
+        return self.image_data.shape
+
+    def __str__(self) -> str:
+        return f"Image(shape={self.get_shape()}, modality={self.properties.modality})"
+
+
+class BeamParameters:
+    """
+    Lớp chứa các tham số của chùm tia.
+
+    Đây là version đơn giản cho compatibility.
+    """
+
+    def __init__(self):
+        """Khởi tạo BeamParameters."""
+        self.energy = 6.0  # MV
+        self.dose_rate = 600.0  # MU/min
+        self.gantry_angle = 0.0  # degrees
+        self.collimator_angle = 0.0  # degrees
+        self.couch_angle = 0.0  # degrees
+        self.monitor_units = 100.0  # MU
+        self.weight = 1.0
+
+        # Beam geometry
+        self.jaw_x1 = -5.0  # cm
+        self.jaw_x2 = 5.0  # cm
+        self.jaw_y1 = -5.0  # cm
+        self.jaw_y2 = 5.0  # cm
+
+        # Machine parameters
+        self.machine_name = "TrueBeam"
+        self.technique = "STATIC"
+
+    def __str__(self) -> str:
+        return f"BeamParameters(energy={self.energy}MV, mu={self.monitor_units})"
+
+
+# Factory functions
+def create_plan(plan_id: str, plan_name: str, **kwargs) -> Plan:
+    """Factory function để tạo Plan."""
+    return Plan(plan_id=plan_id, plan_name=plan_name, **kwargs)
+
+
+def create_treatment(treatment_id: str, patient_id: str, **kwargs) -> Treatment:
+    """Factory function để tạo Treatment."""
+    return Treatment(treatment_id=treatment_id, patient_id=patient_id, **kwargs)
+
+
+def create_beam_info(beam_number: int, beam_name: str, **kwargs) -> BeamInfo:
+    """Factory function để tạo BeamInfo."""
+    return BeamInfo(beam_number=beam_number, beam_name=beam_name, **kwargs)
+
+
+def create_structure_info(name: str, structure_id: str, **kwargs) -> StructureInfo:
+    """Factory function để tạo StructureInfo."""
+    return StructureInfo(name=name, id=structure_id, **kwargs)
+
+
+# Type aliases cho compatibility
+TreatmentPlan = Plan
+PlanningImageSet = List[Image]
+StructureSet = List[Structure]
+BeamSet = List[BeamInfo]
