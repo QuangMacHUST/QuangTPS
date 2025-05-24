@@ -20,7 +20,7 @@ from datetime import datetime
 
 # Thử import các thư viện phụ thuộc
 try:
-    from vtk
+    import vtk
     from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
     VTK_AVAILABLE = True

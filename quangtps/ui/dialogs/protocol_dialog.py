@@ -655,4 +655,8 @@ if __name__ == "__main__":
         print(f"Error: {e}")
     except Exception as e:
         logger.error(f"Lỗi không xác định khi chạy test ClinicalProtocolDialog: {e}")
-        print(f"Unexpected error: {e}")
+        QMessageBox.critical(None, "Error", f"Unexpected error: {str(e)}")
+
+
+# Alias cho tương thích với code cũ
+ProtocolDialog = ClinicalProtocolDialog

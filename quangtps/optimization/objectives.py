@@ -792,3 +792,149 @@ class ObjectiveCollection:
             },
             "structure_objectives": self.structure_objectives,
         }
+
+
+class ObjectiveResult:
+    """
+    Lớp lưu trữ kết quả đánh giá objective function.
+
+    Chứa thông tin về giá trị objective, gradient và các thông tin
+    bổ sung khác từ quá trình đánh giá.
+    """
+
+    def __init__(
+        self,
+        objective_id: str,
+        structure_name: str,
+        objective_type: ObjectiveType,
+        value: float,
+        gradient: Optional[np.ndarray] = None,
+        is_feasible: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Khởi tạo ObjectiveResult.
+
+        Parameters
+        ----------
+        objective_id : str
+            ID của objective
+        structure_name : str
+            Tên cấu trúc
+        objective_type : ObjectiveType
+            Loại objective
+        value : float
+            Giá trị objective function
+        gradient : np.ndarray, optional
+            Gradient của objective function
+        is_feasible : bool, optional
+            Có khả thi hay không
+        metadata : Dict[str, Any], optional
+            Thông tin bổ sung
+        """
+        self.objective_id = objective_id
+        self.structure_name = structure_name
+        self.objective_type = objective_type
+        self.value = value
+        self.gradient = gradient
+        self.is_feasible = is_feasible
+        self.metadata = metadata or {}
+
+        # Thông tin thời gian
+        from datetime import datetime
+
+        self.evaluation_time = datetime.now()
+
+    def get_weighted_value(self, weight: float) -> float:
+        """
+        Lấy giá trị objective đã nhân với trọng số.
+
+        Parameters
+        ----------
+        weight : float
+            Trọng số
+
+        Returns
+        -------
+        float
+            Giá trị đã nhân trọng số
+        """
+        return self.value * weight
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi thành dictionary.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary representation
+        """
+        result = {
+            "objective_id": self.objective_id,
+            "structure_name": self.structure_name,
+            "objective_type": self.objective_type.name if self.objective_type else None,
+            "value": self.value,
+            "is_feasible": self.is_feasible,
+            "evaluation_time": self.evaluation_time.isoformat(),
+            "metadata": self.metadata,
+        }
+
+        if self.gradient is not None:
+            result["gradient_shape"] = self.gradient.shape
+            result["gradient_norm"] = float(np.linalg.norm(self.gradient))
+
+        return result
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ObjectiveResult":
+        """
+        Tạo ObjectiveResult từ dictionary.
+
+        Parameters
+        ----------
+        data : Dict[str, Any]
+            Dictionary chứa dữ liệu
+
+        Returns
+        -------
+        ObjectiveResult
+            Instance được tạo từ dictionary
+        """
+        objective_type = None
+        if data.get("objective_type"):
+            try:
+                objective_type = ObjectiveType[data["objective_type"]]
+            except KeyError:
+                logger.warning(f"Unknown objective type: {data['objective_type']}")
+
+        result = cls(
+            objective_id=data["objective_id"],
+            structure_name=data["structure_name"],
+            objective_type=objective_type,
+            value=data["value"],
+            is_feasible=data.get("is_feasible", True),
+            metadata=data.get("metadata", {}),
+        )
+
+        # Khôi phục thời gian đánh giá
+        if "evaluation_time" in data:
+            from datetime import datetime
+
+            result.evaluation_time = datetime.fromisoformat(data["evaluation_time"])
+
+        return result
+
+    def __str__(self) -> str:
+        """String representation."""
+        return (
+            f"ObjectiveResult(id={self.objective_id}, "
+            f"structure={self.structure_name}, "
+            f"type={self.objective_type.name if self.objective_type else 'None'}, "
+            f"value={self.value:.4f}, "
+            f"feasible={self.is_feasible})"
+        )
+
+    def __repr__(self) -> str:
+        """Detailed representation."""
+        return self.__str__()

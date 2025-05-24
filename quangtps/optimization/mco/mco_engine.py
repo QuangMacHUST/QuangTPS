@@ -34,8 +34,8 @@ from quangtps.optimization.objectives import (
 )
 from quangtps.optimization.constraints import Constraint
 from quangtps.optimization.optimizer_factory import create_optimizer
-from quangtps.treatment.techniques.imrt import IMRTTreatment
-from quangtps.treatment.techniques.vmat import VMATTreatment
+from quangtps.treatment.techniques.imrt import IMRT as IMRTTreatment
+from quangtps.treatment.techniques.vmat import VMAT as VMATTreatment
 from quangtps.core.logging import get_logger
 from quangtps.core.patient import Patient
 from quangtps.evaluation.dvh.dvh_calculation import DVHCalculator, calculate_dvh_metrics

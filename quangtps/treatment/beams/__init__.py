@@ -8,7 +8,14 @@ Module này chứa các lớp và hàm để quản lý các chùm tia, bao gồ
 thông số vật lý, hình học và các thành phần liên quan khác.
 """
 
-from quangtps.treatment.beams.beam import Beam, BeamType
+from quangtps.treatment.beams.beam import (
+    Beam,
+    BeamType,
+    PhotonBeam,
+    ElectronBeam,
+    ProtonBeam,
+    BeamParameters,
+)
 from quangtps.treatment.beams.beam_modifiers import Wedge, Compensator, Block
 from quangtps.treatment.beams.beam_geometry import (
     BeamGeometry,
@@ -100,6 +107,10 @@ except ImportError:
 __all__ = [
     "Beam",
     "BeamType",
+    "PhotonBeam",
+    "ElectronBeam",
+    "ProtonBeam",
+    "BeamParameters",
     "BeamSet",
     "Wedge",
     "Compensator",

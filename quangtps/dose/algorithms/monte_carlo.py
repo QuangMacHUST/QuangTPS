@@ -27,7 +27,8 @@ from quangtps.imaging.image import Image
 from quangtps.planning.beam import Beam
 from quangtps.dose.beam_data_processor import BeamModel, BeamModelParameter
 from quangtps.dose.algorithms.base import (
-    DoseCalculationAlgorithm,
+    DoseAlgorithm,
+    DoseAlgorithmType,
     DoseCalculationResult,
 )
 from quangtps.dose.physics.terma import calculate_terma_from_beam
@@ -77,7 +78,7 @@ if not HAS_GPU:
     )
 
 
-class MonteCarloAlgorithm(DoseCalculationAlgorithm):
+class MonteCarloAlgorithm(DoseAlgorithm):
     """
     Monte Carlo algorithm for dose calculation in radiotherapy.
 
@@ -99,51 +100,54 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
 
     def __init__(self):
         """Initialize the Monte Carlo algorithm with default parameters."""
-        super().__init__("Monte Carlo")
+        super().__init__(
+            algorithm_type=DoseAlgorithmType.MONTE_CARLO,
+            use_heterogeneity_correction=True,
+            grid_size=0.3,
+        )
+        self.name = "Monte Carlo"
         self.version = "3.0"
 
         # Default parameters
-        self.parameters.update(
-            {
-                "num_histories": 1000000,  # Number of particle histories to simulate
-                "grid_size": 0.3,  # Calculation grid size in cm
-                "threads": max(
-                    1, multiprocessing.cpu_count() - 1
-                ),  # Number of parallel threads
-                "max_energy": 20.0,  # Maximum energy in MeV
-                "particle_type": "photon",  # Particle type: 'photon', 'electron', 'mixed'
-                "statistical_uncertainty": 2.0,  # Target statistical uncertainty in %
-                "voxel_scale_factor": 1.0,  # Scaling factor for voxel size
-                "electron_cutoff": 0.2,  # Energy cutoff for electron transport in MeV
-                "photon_cutoff": 0.01,  # Energy cutoff for photon transport in MeV
-                "use_variance_reduction": True,  # Whether to use variance reduction techniques
-                "seed": None,  # Random seed (None for random initialization)
-                "save_phase_space": False,  # Whether to save phase space data
-                "phase_space_file": "",  # Path to phase space file
-                "density_threshold": 0.01,  # Density threshold for considering a voxel
-                "use_gpu": HAS_GPU,  # Whether to use GPU acceleration
-                "gpu_batch_size": 10000,  # Batch size for GPU calculations
-                "use_importance_sampling": True,  # Whether to use importance sampling
-                "use_photon_splitting": True,  # Use photon splitting variance reduction
-                "split_factor": 5,  # Number of split photons
-                "use_interaction_forcing": True,  # Use interaction forcing for variance reduction
-                "cross_section_table": "NIST",  # Cross-section data source: 'NIST', 'ICRP', 'custom'
-                "report_progress": True,  # Whether to report calculation progress
-                "use_denoising": True,  # Enable dose denoising
-                "denoising_method": "adaptive",  # Denoising method: 'gaussian', 'svd', 'adaptive', 'none'
-                "denoising_strength": 0.5,  # Strength of denoising (0-1)
-                "use_kernel_density_estimator": True,  # Use KDE scoring
-                "use_track_length_estimator": True,  # Use track length scoring
-                "enable_russian_roulette": True,  # Russian roulette variance reduction
-                "use_opencl_fallback": True,  # Use OpenCL if CUDA is not available
-                "use_multilevel_parallelism": True,  # Nested parallelism
-                "multi_gpu": True,  # Use multiple GPUs if available
-                "gpu_ids": [],  # Specific GPU IDs to use (empty=all available)
-                "adaptive_histories": True,  # Adaptively adjust histories based on uncertainty
-                "use_fmm_acceleration": True,  # Use Fast Multipole Method for acceleration
-                "use_avx_vectorization": True,  # Use AVX vectorization for CPU calculations
-            }
-        )
+        self.parameters = {
+            "num_histories": 1000000,  # Number of particle histories to simulate
+            "grid_size": 0.3,  # Calculation grid size in cm
+            "threads": max(
+                1, multiprocessing.cpu_count() - 1
+            ),  # Number of parallel threads
+            "max_energy": 20.0,  # Maximum energy in MeV
+            "particle_type": "photon",  # Particle type: 'photon', 'electron', 'mixed'
+            "statistical_uncertainty": 2.0,  # Target statistical uncertainty in %
+            "voxel_scale_factor": 1.0,  # Scaling factor for voxel size
+            "electron_cutoff": 0.2,  # Energy cutoff for electron transport in MeV
+            "photon_cutoff": 0.01,  # Energy cutoff for photon transport in MeV
+            "use_variance_reduction": True,  # Whether to use variance reduction techniques
+            "seed": None,  # Random seed (None for random initialization)
+            "save_phase_space": False,  # Whether to save phase space data
+            "phase_space_file": "",  # Path to phase space file
+            "density_threshold": 0.01,  # Density threshold for considering a voxel
+            "use_gpu": HAS_GPU,  # Whether to use GPU acceleration
+            "gpu_batch_size": 10000,  # Batch size for GPU calculations
+            "use_importance_sampling": True,  # Whether to use importance sampling
+            "use_photon_splitting": True,  # Use photon splitting variance reduction
+            "split_factor": 5,  # Number of split photons
+            "use_interaction_forcing": True,  # Use interaction forcing for variance reduction
+            "cross_section_table": "NIST",  # Cross-section data source: 'NIST', 'ICRP', 'custom'
+            "report_progress": True,  # Whether to report calculation progress
+            "use_denoising": True,  # Enable dose denoising
+            "denoising_method": "adaptive",  # Denoising method: 'gaussian', 'svd', 'adaptive', 'none'
+            "denoising_strength": 0.5,  # Strength of denoising (0-1)
+            "use_kernel_density_estimator": True,  # Use KDE scoring
+            "use_track_length_estimator": True,  # Use track length scoring
+            "enable_russian_roulette": True,  # Russian roulette variance reduction
+            "use_opencl_fallback": True,  # Use OpenCL if CUDA is not available
+            "use_multilevel_parallelism": True,  # Nested parallelism
+            "multi_gpu": True,  # Use multiple GPUs if available
+            "gpu_ids": [],  # Specific GPU IDs to use (empty=all available)
+            "adaptive_histories": True,  # Adaptively adjust histories based on uncertainty
+            "use_fmm_acceleration": True,  # Use Fast Multipole Method for acceleration
+            "use_avx_vectorization": True,  # Use AVX vectorization for CPU calculations
+        }
 
         self.beam_model = None
         self.interaction_data = None
@@ -915,10 +919,10 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             )
 
             result = DoseCalculationResult(
-                dose=dose_image,
-                algorithm_name=self.name,
+                dose_grid=dose_image,
+                algorithm_used=self.name,
                 calculation_time=calculation_time,
-                additional_data={
+                calculation_parameters={
                     "beam_name": beam.name,
                     "uncertainty": uncertainty_grid,
                     "parameters": self.get_parameters(),
@@ -2188,3 +2192,83 @@ class MonteCarloAlgorithm(DoseCalculationAlgorithm):
             logger.info(f"Normalized dose to isocenter. Original value: {iso_dose:.4f}")
         else:
             logger.warning("Isocenter dose is zero or negative, cannot normalize")
+
+    def _initialize_rng(self):
+        """Initialize random number generator."""
+        seed = self.parameters.get("seed")
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
+        self.rng = np.random.default_rng(seed)
+
+    def _initialize_interaction_data(self):
+        """Initialize interaction data tables."""
+        # Simplified interaction data - in real implementation this would load
+        # comprehensive cross-section tables
+        self.interaction_data = {
+            "photoelectric": {
+                "energies": np.logspace(-2, 2, 100),
+                "cross_sections": np.random.rand(100),
+            },
+            "compton": {
+                "energies": np.logspace(-2, 2, 100),
+                "cross_sections": np.random.rand(100),
+            },
+            "pair_production": {
+                "energies": np.logspace(-2, 2, 100),
+                "cross_sections": np.random.rand(100),
+            },
+        }
+
+    def get_parameter(self, name: str, default=None):
+        """Lấy giá trị tham số."""
+        return self.parameters.get(name, default)
+
+    def set_parameter(self, name: str, value):
+        """Đặt giá trị tham số."""
+        self.parameters[name] = value
+
+    def get_parameters(self):
+        """Lấy tất cả tham số."""
+        return self.parameters.copy()
+
+    def initialize(self, geometry_data: Any, beam_data: Any) -> bool:
+        """
+        Khởi tạo thuật toán với dữ liệu hình học và dữ liệu chùm tia.
+
+        Args:
+            geometry_data: Dữ liệu hình học (CT, cấu trúc,...)
+            beam_data: Dữ liệu chùm tia
+
+        Returns:
+            True nếu khởi tạo thành công, False nếu không
+        """
+        try:
+            # Khởi tạo với dữ liệu được cung cấp
+            self.is_initialized = True
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khởi tạo Monte Carlo algorithm: {e}")
+            return False
+
+    def calculate_dose(self, beam_arrangement: Any) -> np.ndarray:
+        """
+        Tính toán phân bố liều cho một cấu hình chùm tia.
+
+        Args:
+            beam_arrangement: Cấu hình chùm tia
+
+        Returns:
+            Mảng 3D chứa phân bố liều tính toán
+        """
+        # Placeholder implementation - sẽ được thay thế bởi calculate method
+        return np.zeros((64, 64, 32), dtype=np.float32)
+
+    def _validate_calculation_completed(self, dose_grid):
+        """Validate that calculation completed successfully."""
+        if dose_grid is None:
+            raise DoseCalculationError("Dose grid is None")
+        if np.all(dose_grid == 0):
+            logger.warning("All dose values are zero - check beam setup")
+        if np.any(np.isnan(dose_grid)) or np.any(np.isinf(dose_grid)):
+            raise DoseCalculationError("Invalid dose values (NaN or Inf) detected")

@@ -15,20 +15,19 @@ from quangtps.dose.dose_grid import DoseGrid
 
 logger = logging.getLogger(__name__)
 
+
 class DoseAnalysis:
     """
     Lớp phân tích liều cho kế hoạch xạ trị.
-    
+
     Lớp này cung cấp các phương thức để phân tích phân bố liều, tính toán
     thống kê liều, và tạo các đồ thị biểu diễn dữ liệu liều.
     """
-    
-    def __init__(self, 
-                dose_grid: DoseGrid, 
-                structures: Dict[str, np.ndarray] = None):
+
+    def __init__(self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray] = None):
         """
         Khởi tạo đối tượng phân tích liều.
-        
+
         Parameters:
             dose_grid (DoseGrid): Lưới liều cần phân tích
             structures (dict, optional): Dict các cấu trúc (ROI), với key là tên cấu trúc
@@ -37,22 +36,22 @@ class DoseAnalysis:
         self.dose_grid = dose_grid
         self.structures = structures if structures is not None else {}
         self.dvh_data = {}  # Lưu trữ dữ liệu DVH đã tính toán
-        
+
         # Thông tin chung
         self.dose_array = dose_grid.get_grid_data()
         self.shape = dose_grid.get_shape()
         self.spacing = dose_grid.spacing
         self.origin = dose_grid.origin
-        
+
         # Tính thống kê toàn cục
         self.min_dose = np.min(self.dose_array)
         self.max_dose = np.max(self.dose_array)
         self.mean_dose = np.mean(self.dose_array)
-    
+
     def set_structures(self, structures: Dict[str, np.ndarray]):
         """
         Đặt cấu trúc (ROI) để phân tích.
-        
+
         Parameters:
             structures (dict): Dict các cấu trúc, với key là tên cấu trúc
                               và value là mảng mask 3D
@@ -60,42 +59,46 @@ class DoseAnalysis:
         self.structures = structures
         # Xóa dữ liệu DVH đã tính toán trước đó
         self.dvh_data = {}
-    
+
     def add_structure(self, name: str, mask: np.ndarray):
         """
         Thêm một cấu trúc (ROI) mới để phân tích.
-        
+
         Parameters:
             name (str): Tên cấu trúc
             mask (np.ndarray): Mảng mask 3D của cấu trúc
-        
+
         Raises:
             ValueError: Nếu kích thước mask không khớp với lưới liều
         """
         if mask.shape != self.shape:
-            raise ValueError(f"Mask shape {mask.shape} does not match dose grid shape {self.shape}")
-        
+            raise ValueError(
+                f"Mask shape {mask.shape} does not match dose grid shape {self.shape}"
+            )
+
         self.structures[name] = mask
         # Xóa dữ liệu DVH đã tính toán cho cấu trúc này
         if name in self.dvh_data:
             del self.dvh_data[name]
-    
-    def calculate_dvh(self, 
-                     structure_name: str, 
-                     bins: int = 100, 
-                     dose_range: Optional[Tuple[float, float]] = None,
-                     relative_volume: bool = True,
-                     cumulative: bool = True) -> Dict[str, np.ndarray]:
+
+    def calculate_dvh(
+        self,
+        structure_name: str,
+        bins: int = 100,
+        dose_range: Optional[Tuple[float, float]] = None,
+        relative_volume: bool = True,
+        cumulative: bool = True,
+    ) -> Dict[str, np.ndarray]:
         """
         Tính toán Dose Volume Histogram (DVH) cho một cấu trúc.
-        
+
         Parameters:
             structure_name (str): Tên cấu trúc
             bins (int, optional): Số lượng bins trong histogram
             dose_range (tuple, optional): Khoảng liều (min, max) để tính DVH
             relative_volume (bool, optional): Sử dụng thể tích tương đối (%)
             cumulative (bool, optional): Tính DVH tích lũy (True) hoặc vi phân (False)
-        
+
         Returns:
             dict: Dict chứa thông tin DVH với các key:
                 - 'dose': Mảng giá trị liều
@@ -103,75 +106,83 @@ class DoseAnalysis:
                 - 'type': Loại DVH ('cumulative' hoặc 'differential')
                 - 'structure_name': Tên cấu trúc
                 - 'relative_volume': Sử dụng thể tích tương đối hay không
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc
         """
         # Kiểm tra cấu trúc có tồn tại không
         if structure_name not in self.structures:
             raise ValueError(f"Structure '{structure_name}' not found")
-        
+
         # Kiểm tra nếu DVH đã được tính toán trước đó
-        cache_key = f"{structure_name}_{bins}_{dose_range}_{relative_volume}_{cumulative}"
+        cache_key = (
+            f"{structure_name}_{bins}_{dose_range}_{relative_volume}_{cumulative}"
+        )
         if cache_key in self.dvh_data:
             return self.dvh_data[cache_key]
-        
+
         # Lấy mask của cấu trúc
         mask = self.structures[structure_name]
-        
+
         # Lấy giá trị liều trong cấu trúc
         dose_in_structure = self.dose_array[mask > 0]
-        
+
         # Nếu không có voxel nào trong cấu trúc
         if len(dose_in_structure) == 0:
             logger.warning(f"No voxels found in structure '{structure_name}'")
             return {
-                'dose': np.array([0]),
-                'volume': np.array([0]),
-                'type': 'cumulative' if cumulative else 'differential',
-                'structure_name': structure_name,
-                'relative_volume': relative_volume
+                "dose": np.array([0]),
+                "volume": np.array([0]),
+                "type": "cumulative" if cumulative else "differential",
+                "structure_name": structure_name,
+                "relative_volume": relative_volume,
             }
-        
+
         # Xác định khoảng liều
         if dose_range is None:
             min_dose = 0
             max_dose = np.max(dose_in_structure) * 1.05  # Thêm lề 5%
         else:
             min_dose, max_dose = dose_range
-        
+
         # Tính histogram
-        hist, bin_edges = np.histogram(dose_in_structure, bins=bins, range=(min_dose, max_dose))
-        
+        hist, bin_edges = np.histogram(
+            dose_in_structure, bins=bins, range=(min_dose, max_dose)
+        )
+
         # Tính giá trị thể tích
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        volume = hist / len(dose_in_structure) * 100 if relative_volume else hist * np.prod(self.spacing)
-        
+        volume = (
+            hist / len(dose_in_structure) * 100
+            if relative_volume
+            else hist * np.prod(self.spacing)
+        )
+
         # Tính DVH tích lũy nếu yêu cầu
         if cumulative:
             volume = np.cumsum(volume[::-1])[::-1]
-        
+
         # Lưu kết quả
         result = {
-            'dose': bin_centers,
-            'volume': volume,
-            'type': 'cumulative' if cumulative else 'differential',
-            'structure_name': structure_name,
-            'relative_volume': relative_volume
+            "dose": bin_centers,
+            "volume": volume,
+            "type": "cumulative" if cumulative else "differential",
+            "structure_name": structure_name,
+            "relative_volume": relative_volume,
         }
-        
+
         # Lưu vào cache
         self.dvh_data[cache_key] = result
-        
+
         return result
-    
+
     def calculate_dose_statistics(self, structure_name: str) -> Dict[str, float]:
         """
         Tính toán các thống kê liều cho một cấu trúc.
-        
+
         Parameters:
             structure_name (str): Tên cấu trúc
-        
+
         Returns:
             dict: Dict các thống kê liều với các key:
                 - 'min': Liều tối thiểu (Gy)
@@ -179,144 +190,144 @@ class DoseAnalysis:
                 - 'mean': Liều trung bình (Gy)
                 - 'median': Liều trung vị (Gy)
                 - 'std': Độ lệch chuẩn liều (Gy)
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc
         """
         # Kiểm tra cấu trúc có tồn tại không
         if structure_name not in self.structures:
             raise ValueError(f"Structure '{structure_name}' not found")
-        
+
         # Lấy mask của cấu trúc
         mask = self.structures[structure_name]
-        
+
         # Lấy giá trị liều trong cấu trúc
         dose_in_structure = self.dose_array[mask > 0]
-        
+
         # Nếu không có voxel nào trong cấu trúc
         if len(dose_in_structure) == 0:
             logger.warning(f"No voxels found in structure '{structure_name}'")
-            return {
-                'min': 0.0,
-                'max': 0.0,
-                'mean': 0.0,
-                'median': 0.0,
-                'std': 0.0
-            }
-        
+            return {"min": 0.0, "max": 0.0, "mean": 0.0, "median": 0.0, "std": 0.0}
+
         # Tính các thống kê
         return {
-            'min': np.min(dose_in_structure),
-            'max': np.max(dose_in_structure),
-            'mean': np.mean(dose_in_structure),
-            'median': np.median(dose_in_structure),
-            'std': np.std(dose_in_structure)
+            "min": np.min(dose_in_structure),
+            "max": np.max(dose_in_structure),
+            "mean": np.mean(dose_in_structure),
+            "median": np.median(dose_in_structure),
+            "std": np.std(dose_in_structure),
         }
-    
+
     def calculate_dx(self, structure_name: str, x: float) -> float:
         """
         Tính toán liều nhận bởi x% thể tích (Dx).
-        
+
         Parameters:
             structure_name (str): Tên cấu trúc
             x (float): Phần trăm thể tích (0-100)
-        
+
         Returns:
             float: Giá trị liều Dx (Gy)
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc hoặc x không hợp lệ
         """
         if x < 0 or x > 100:
             raise ValueError(f"Percentage x must be between 0 and 100, got {x}")
-        
+
         # Tính DVH tích lũy
-        dvh = self.calculate_dvh(structure_name, bins=1000, cumulative=True, relative_volume=True)
-        
+        dvh = self.calculate_dvh(
+            structure_name, bins=1000, cumulative=True, relative_volume=True
+        )
+
         # Nội suy để tìm liều tại x% thể tích
-        dose = np.interp(x, dvh['volume'][::-1], dvh['dose'][::-1])
-        
+        dose = np.interp(x, dvh["volume"][::-1], dvh["dose"][::-1])
+
         return dose
-    
-    def calculate_vx(self, structure_name: str, x: float, relative: bool = True) -> float:
+
+    def calculate_vx(
+        self, structure_name: str, x: float, relative: bool = True
+    ) -> float:
         """
         Tính toán thể tích nhận liều ≥ x Gy (Vx).
-        
+
         Parameters:
             structure_name (str): Tên cấu trúc
             x (float): Ngưỡng liều (Gy)
-            relative (bool, optional): Trả về thể tích tương đối (%) nếu True, 
+            relative (bool, optional): Trả về thể tích tương đối (%) nếu True,
                                       ngược lại trả về thể tích tuyệt đối (cc)
-        
+
         Returns:
             float: Giá trị thể tích Vx (% hoặc cc)
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc
         """
         # Tính DVH tích lũy
-        dvh = self.calculate_dvh(structure_name, bins=1000, cumulative=True, relative_volume=relative)
-        
+        dvh = self.calculate_dvh(
+            structure_name, bins=1000, cumulative=True, relative_volume=relative
+        )
+
         # Nội suy để tìm thể tích tại liều x Gy
-        volume = np.interp(x, dvh['dose'], dvh['volume'])
-        
+        volume = np.interp(x, dvh["dose"], dvh["volume"])
+
         return volume
-    
-    def calculate_conformity_index(self, 
-                                  target_name: str, 
-                                  reference_dose: float) -> float:
+
+    def calculate_conformity_index(
+        self, target_name: str, reference_dose: float
+    ) -> float:
         """
         Tính toán chỉ số phù hợp (Conformity Index).
-        
+
         CI = V_ref / V_target, với V_ref là thể tích nhận ít nhất liều tham chiếu
         và V_target là thể tích của target.
-        
+
         Parameters:
             target_name (str): Tên cấu trúc target
             reference_dose (float): Liều tham chiếu (Gy)
-        
+
         Returns:
             float: Chỉ số phù hợp (CI)
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc target
         """
         # Kiểm tra cấu trúc có tồn tại không
         if target_name not in self.structures:
             raise ValueError(f"Target structure '{target_name}' not found")
-        
+
         # Lấy mask của target
         target_mask = self.structures[target_name]
-        
+
         # Tính thể tích target (cc)
         target_volume = np.sum(target_mask) * np.prod(self.spacing) / 1000.0
-        
+
         # Tạo mask vùng nhận ít nhất liều tham chiếu
         reference_mask = self.dose_array >= reference_dose
-        
+
         # Tính thể tích vùng nhận ít nhất liều tham chiếu (cc)
         reference_volume = np.sum(reference_mask) * np.prod(self.spacing) / 1000.0
-        
+
         # Tính CI
-        ci = reference_volume / target_volume if target_volume > 0 else float('inf')
-        
+        ci = reference_volume / target_volume if target_volume > 0 else float("inf")
+
         return ci
-    
-    def calculate_homogeneity_index(self, 
-                                   target_name: str, 
-                                   prescription_dose: float) -> float:
+
+    def calculate_homogeneity_index(
+        self, target_name: str, prescription_dose: float
+    ) -> float:
         """
         Tính toán chỉ số đồng nhất (Homogeneity Index).
-        
+
         HI = (D2% - D98%) / D50%, với Dx% là liều nhận bởi x% thể tích.
-        
+
         Parameters:
             target_name (str): Tên cấu trúc target
             prescription_dose (float): Liều kê đơn (Gy)
-        
+
         Returns:
             float: Chỉ số đồng nhất (HI)
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc target
         """
@@ -324,111 +335,225 @@ class DoseAnalysis:
         d2 = self.calculate_dx(target_name, 2)
         d98 = self.calculate_dx(target_name, 98)
         d50 = self.calculate_dx(target_name, 50)
-        
+
         # Tính HI
-        hi = (d2 - d98) / d50 if d50 > 0 else float('inf')
-        
+        hi = (d2 - d98) / d50 if d50 > 0 else float("inf")
+
         return hi
-    
-    def calculate_gradient_index(self, 
-                               target_name: str, 
-                               reference_dose: float,
-                               half_reference_dose: Optional[float] = None) -> float:
+
+    def calculate_gradient_index(
+        self,
+        target_name: str,
+        reference_dose: float,
+        half_reference_dose: Optional[float] = None,
+    ) -> float:
         """
         Tính toán chỉ số gradient (Gradient Index).
-        
+
         GI = V_(0.5*Rx) / V_Rx, với V_Rx là thể tích nhận ít nhất liều Rx
         và V_(0.5*Rx) là thể tích nhận ít nhất một nửa liều Rx.
-        
+
         Parameters:
             target_name (str): Tên cấu trúc target
             reference_dose (float): Liều tham chiếu (Gy)
-            half_reference_dose (float, optional): Nửa liều tham chiếu, nếu không 
+            half_reference_dose (float, optional): Nửa liều tham chiếu, nếu không
                                                   cung cấp sẽ mặc định là reference_dose / 2
-        
+
         Returns:
             float: Chỉ số gradient (GI)
-        
+
         Raises:
             ValueError: Nếu không tìm thấy cấu trúc target
         """
         # Kiểm tra half_reference_dose
         if half_reference_dose is None:
             half_reference_dose = reference_dose / 2.0
-        
+
         # Tạo mask vùng nhận ít nhất liều tham chiếu
         reference_mask = self.dose_array >= reference_dose
-        
+
         # Tạo mask vùng nhận ít nhất nửa liều tham chiếu
         half_reference_mask = self.dose_array >= half_reference_dose
-        
+
         # Tính thể tích (cc)
         reference_volume = np.sum(reference_mask) * np.prod(self.spacing) / 1000.0
-        half_reference_volume = np.sum(half_reference_mask) * np.prod(self.spacing) / 1000.0
-        
+        half_reference_volume = (
+            np.sum(half_reference_mask) * np.prod(self.spacing) / 1000.0
+        )
+
         # Tính GI
-        gi = half_reference_volume / reference_volume if reference_volume > 0 else float('inf')
-        
+        gi = (
+            half_reference_volume / reference_volume
+            if reference_volume > 0
+            else float("inf")
+        )
+
         return gi
-    
-    def plot_dvh(self, 
-                structure_names: List[str], 
-                title: str = "Dose Volume Histogram",
-                figsize: Tuple[int, int] = (10, 6),
-                colors: Optional[Dict[str, str]] = None,
-                save_path: Optional[str] = None) -> Any:
+
+    def plot_dvh(
+        self,
+        structure_names: List[str],
+        title: str = "Dose Volume Histogram",
+        figsize: Tuple[int, int] = (10, 6),
+        colors: Optional[Dict[str, str]] = None,
+        save_path: Optional[str] = None,
+    ) -> Any:
         """
         Vẽ đồ thị DVH cho một hoặc nhiều cấu trúc.
-        
+
         Parameters:
             structure_names (list): Danh sách tên các cấu trúc
             title (str, optional): Tiêu đề đồ thị
             figsize (tuple, optional): Kích thước đồ thị (inch)
             colors (dict, optional): Dict màu sắc cho mỗi cấu trúc (key: tên cấu trúc, value: mã màu)
             save_path (str, optional): Đường dẫn để lưu đồ thị, nếu không cung cấp sẽ hiển thị đồ thị
-        
+
         Returns:
             matplotlib.figure.Figure: Đối tượng Figure
-        
+
         Raises:
             ValueError: Nếu không tìm thấy một trong các cấu trúc
         """
         fig, ax = plt.subplots(figsize=figsize)
-        
+
         # Màu sắc mặc định
         default_colors = plt.cm.Set1.colors
-        
+
         if colors is None:
             colors = {}
-        
+
         for i, name in enumerate(structure_names):
             # Tính DVH tích lũy
             try:
-                dvh = self.calculate_dvh(name, bins=100, cumulative=True, relative_volume=True)
+                dvh = self.calculate_dvh(
+                    name, bins=100, cumulative=True, relative_volume=True
+                )
             except ValueError as e:
                 logger.error(f"Error calculating DVH for structure '{name}': {str(e)}")
                 continue
-            
+
             # Chọn màu
             color = colors.get(name, default_colors[i % len(default_colors)])
-            
+
             # Vẽ đường DVH
-            ax.plot(dvh['dose'], dvh['volume'], label=name, color=color, linewidth=2)
-        
+            ax.plot(dvh["dose"], dvh["volume"], label=name, color=color, linewidth=2)
+
         # Thiết lập đồ thị
-        ax.set_xlabel('Dose (Gy)')
-        ax.set_ylabel('Volume (%)')
+        ax.set_xlabel("Dose (Gy)")
+        ax.set_ylabel("Volume (%)")
         ax.set_title(title)
-        ax.grid(True, linestyle='--', alpha=0.7)
+        ax.grid(True, linestyle="--", alpha=0.7)
         ax.set_xlim(0, None)
         ax.set_ylim(0, 100.5)  # Đảm bảo biểu đồ bắt đầu từ 0 và kết thúc trên 100%
-        ax.legend(loc='best')
-        
+        ax.legend(loc="best")
+
         plt.tight_layout()
-        
+
         # Lưu hoặc hiển thị
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            plt.savefig(save_path, dpi=300, bbox_inches="tight")
             plt.close(fig)
-        
+
         return fig
+
+
+def analyze_dose_distribution(
+    dose_grid: DoseGrid,
+    structures: Dict[str, np.ndarray] = None,
+    prescription_dose: float = None,
+) -> Dict[str, Any]:
+    """
+    Phân tích phân bố liều toàn diện cho kế hoạch xạ trị.
+
+    Function này cung cấp phân tích tổng quan về phân bố liều,
+    bao gồm thống kê toàn cục và thống kê cho từng cấu trúc.
+
+    Parameters
+    ----------
+    dose_grid : DoseGrid
+        Lưới liều cần phân tích
+    structures : Dict[str, np.ndarray], optional
+        Dictionary các cấu trúc với key là tên và value là mask 3D
+    prescription_dose : float, optional
+        Liều kê đơn (Gy) để tính toán các chỉ số
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary chứa kết quả phân tích với các key:
+        - 'global_stats': Thống kê toàn cục
+        - 'structure_stats': Thống kê cho từng cấu trúc
+        - 'dvh_data': Dữ liệu DVH cho từng cấu trúc
+        - 'quality_indices': Các chỉ số chất lượng kế hoạch
+    """
+    # Tạo đối tượng phân tích liều
+    analyzer = DoseAnalysis(dose_grid, structures)
+
+    # Thống kê toàn cục
+    global_stats = {
+        "min_dose": analyzer.min_dose,
+        "max_dose": analyzer.max_dose,
+        "mean_dose": analyzer.mean_dose,
+        "dose_grid_shape": analyzer.shape,
+        "dose_grid_spacing": analyzer.spacing,
+        "dose_grid_origin": analyzer.origin,
+    }
+
+    # Thống kê cho từng cấu trúc
+    structure_stats = {}
+    dvh_data = {}
+    quality_indices = {}
+
+    if structures:
+        for structure_name in structures.keys():
+            try:
+                # Tính thống kê liều
+                stats = analyzer.calculate_dose_statistics(structure_name)
+                structure_stats[structure_name] = stats
+
+                # Tính DVH
+                dvh = analyzer.calculate_dvh(structure_name)
+                dvh_data[structure_name] = dvh
+
+                # Tính các chỉ số chất lượng nếu có liều kê đơn
+                if prescription_dose:
+                    indices = {}
+
+                    # Conformity Index (chỉ cho target structures)
+                    if (
+                        "ptv" in structure_name.lower()
+                        or "target" in structure_name.lower()
+                    ):
+                        try:
+                            ci = analyzer.calculate_conformity_index(
+                                structure_name, prescription_dose
+                            )
+                            indices["conformity_index"] = ci
+                        except Exception as e:
+                            logger.warning(
+                                f"Cannot calculate CI for {structure_name}: {e}"
+                            )
+
+                        try:
+                            hi = analyzer.calculate_homogeneity_index(
+                                structure_name, prescription_dose
+                            )
+                            indices["homogeneity_index"] = hi
+                        except Exception as e:
+                            logger.warning(
+                                f"Cannot calculate HI for {structure_name}: {e}"
+                            )
+
+                    quality_indices[structure_name] = indices
+
+            except Exception as e:
+                logger.error(f"Error analyzing structure {structure_name}: {e}")
+                structure_stats[structure_name] = {"error": str(e)}
+
+    return {
+        "global_stats": global_stats,
+        "structure_stats": structure_stats,
+        "dvh_data": dvh_data,
+        "quality_indices": quality_indices,
+        "analyzer": analyzer,  # Trả về analyzer để sử dụng tiếp
+    }

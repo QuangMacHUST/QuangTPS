@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class OptimizationType(str, Enum):
     """Enum cho các loại tối ưu hóa."""
+
     FLUENCE = "Fluence"
     APERTURE = "Aperture"
     DIRECT_MACHINE_PARAMETER = "DirectMachineParameter"
@@ -28,50 +29,53 @@ class OptimizationType(str, Enum):
 
 class OptimizationAlgorithm(str, Enum):
     """Enum cho các thuật toán tối ưu hóa."""
-    GRADIENT_DESCENT = "GradientDescent"    # Thuật toán gradient descent
+
+    GRADIENT_DESCENT = "GradientDescent"  # Thuật toán gradient descent
     SIMULATED_ANNEALING = "SimulatedAnnealing"  # Thuật toán mô phỏng luyện kim
-    GENETIC = "Genetic"                  # Thuật toán di truyền
-    PARTICLE_SWARM = "ParticleSwarm"     # Thuật toán đàn bầy
-    NEWTON = "Newton"                    # Phương pháp Newton
-    QUASI_NEWTON = "QuasiNewton"         # Phương pháp Quasi-Newton
-    SEQUENTIAL = "Sequential"            # Quy hoạch tuần tự
+    GENETIC = "Genetic"  # Thuật toán di truyền
+    PARTICLE_SWARM = "ParticleSwarm"  # Thuật toán đàn bầy
+    NEWTON = "Newton"  # Phương pháp Newton
+    QUASI_NEWTON = "QuasiNewton"  # Phương pháp Quasi-Newton
+    SEQUENTIAL = "Sequential"  # Quy hoạch tuần tự
     BRANCH_AND_BOUND = "BranchAndBound"  # Nhánh và cận
-    MIXED_INTEGER = "MixedInteger"       # Số nguyên hỗn hợp
+    MIXED_INTEGER = "MixedInteger"  # Số nguyên hỗn hợp
     COLUMN_GENERATION = "ColumnGeneration"  # Tạo cột
 
 
 class OptimizationObjectiveType(str, Enum):
     """Enum cho các loại mục tiêu tối ưu hóa."""
-    MIN_DOSE = "MinDose"            # Liều tối thiểu
-    MAX_DOSE = "MaxDose"            # Liều tối đa
-    UNIFORM_DOSE = "UniformDose"    # Liều đồng đều
-    MEAN_DOSE = "MeanDose"          # Liều trung bình
-    EUD = "EUD"                     # Liều tương đương đồng đều (Equivalent Uniform Dose)
-    DVH = "DVH"                     # Dose Volume Histogram
-    CONFORMITY = "Conformity"       # Độ phù hợp
-    HOMOGENEITY = "Homogeneity"     # Độ đồng đều
-    GRADIENT = "Gradient"           # Độ dốc (gradient)
+
+    MIN_DOSE = "MinDose"  # Liều tối thiểu
+    MAX_DOSE = "MaxDose"  # Liều tối đa
+    UNIFORM_DOSE = "UniformDose"  # Liều đồng đều
+    MEAN_DOSE = "MeanDose"  # Liều trung bình
+    EUD = "EUD"  # Liều tương đương đồng đều (Equivalent Uniform Dose)
+    DVH = "DVH"  # Dose Volume Histogram
+    CONFORMITY = "Conformity"  # Độ phù hợp
+    HOMOGENEITY = "Homogeneity"  # Độ đồng đều
+    GRADIENT = "Gradient"  # Độ dốc (gradient)
 
 
 class OptimizationConstraintType(str, Enum):
     """Enum cho các loại ràng buộc tối ưu hóa."""
-    MIN_DOSE = "MinDose"            # Liều tối thiểu
-    MAX_DOSE = "MaxDose"            # Liều tối đa
-    MEAN_DOSE = "MeanDose"          # Liều trung bình
-    VOLUME_AT_DOSE = "VolumeAtDose" # Thể tích tại liều
-    DOSE_AT_VOLUME = "DoseAtVolume" # Liều tại thể tích
-    MAX_EUD = "MaxEUD"              # EUD tối đa
-    MIN_EUD = "MinEUD"              # EUD tối thiểu
+
+    MIN_DOSE = "MinDose"  # Liều tối thiểu
+    MAX_DOSE = "MaxDose"  # Liều tối đa
+    MEAN_DOSE = "MeanDose"  # Liều trung bình
+    VOLUME_AT_DOSE = "VolumeAtDose"  # Thể tích tại liều
+    DOSE_AT_VOLUME = "DoseAtVolume"  # Liều tại thể tích
+    MAX_EUD = "MaxEUD"  # EUD tối đa
+    MIN_EUD = "MinEUD"  # EUD tối thiểu
 
 
 class OptimizationObjective:
     """
     Lớp đại diện cho một mục tiêu tối ưu hóa.
-    
+
     Lớp này chứa thông tin về một mục tiêu tối ưu hóa, bao gồm loại mục tiêu,
     cấu trúc liên quan, giá trị mục tiêu và trọng số.
     """
-    
+
     def __init__(
         self,
         structure_id: str,
@@ -79,11 +83,11 @@ class OptimizationObjective:
         dose_value: float,
         weight: float = 1.0,
         volume_value: Optional[float] = None,
-        parameters: Optional[Dict[str, Any]] = None
+        parameters: Optional[Dict[str, Any]] = None,
     ):
         """
         Khởi tạo một mục tiêu tối ưu hóa.
-        
+
         Parameters
         ----------
         structure_id : str
@@ -106,22 +110,22 @@ class OptimizationObjective:
         self.weight = weight
         self.volume_value = volume_value
         self.parameters = parameters or {}
-    
+
     def set_weight(self, weight: float):
         """
         Đặt trọng số cho mục tiêu tối ưu hóa.
-        
+
         Parameters
         ----------
         weight : float
             Trọng số mới
         """
         self.weight = weight
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Chuyển đổi đối tượng mục tiêu tối ưu hóa thành dictionary.
-        
+
         Returns
         -------
         Dict[str, Any]
@@ -134,19 +138,19 @@ class OptimizationObjective:
             "dose_value": self.dose_value,
             "weight": self.weight,
             "volume_value": self.volume_value,
-            "parameters": self.parameters
+            "parameters": self.parameters,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'OptimizationObjective':
+    def from_dict(cls, data: Dict[str, Any]) -> "OptimizationObjective":
         """
         Tạo đối tượng OptimizationObjective từ dictionary.
-        
+
         Parameters
         ----------
         data : Dict[str, Any]
             Dictionary chứa thông tin mục tiêu tối ưu hóa
-            
+
         Returns
         -------
         OptimizationObjective
@@ -157,17 +161,19 @@ class OptimizationObjective:
             objective_type=OptimizationObjectiveType(data["objective_type"]),
             dose_value=data["dose_value"],
             weight=data.get("weight", 1.0),
-            volume_value=data.get("volume_value")
+            volume_value=data.get("volume_value"),
         )
-        
+
         obj.obj_id = data.get("obj_id", str(uuid.uuid4()))
         obj.parameters = data.get("parameters", {})
-        
+
         return obj
-    
+
     def __str__(self) -> str:
         """Biểu diễn chuỗi của mục tiêu tối ưu hóa."""
-        result = f"{self.objective_type.value} for {self.structure_id}: {self.dose_value} Gy"
+        result = (
+            f"{self.objective_type.value} for {self.structure_id}: {self.dose_value} Gy"
+        )
         if self.volume_value is not None:
             result += f" at {self.volume_value}%"
         result += f" (weight: {self.weight})"
@@ -177,11 +183,11 @@ class OptimizationObjective:
 class OptimizationConstraint:
     """
     Lớp đại diện cho một ràng buộc tối ưu hóa.
-    
+
     Lớp này chứa thông tin về một ràng buộc tối ưu hóa, bao gồm loại ràng buộc,
     cấu trúc liên quan, giá trị ràng buộc và mức độ ưu tiên.
     """
-    
+
     def __init__(
         self,
         structure_id: str,
@@ -189,11 +195,11 @@ class OptimizationConstraint:
         dose_value: float,
         priority: int = 1,
         volume_value: Optional[float] = None,
-        parameters: Optional[Dict[str, Any]] = None
+        parameters: Optional[Dict[str, Any]] = None,
     ):
         """
         Khởi tạo một ràng buộc tối ưu hóa.
-        
+
         Parameters
         ----------
         structure_id : str
@@ -216,22 +222,22 @@ class OptimizationConstraint:
         self.priority = priority
         self.volume_value = volume_value
         self.parameters = parameters or {}
-    
+
     def set_priority(self, priority: int):
         """
         Đặt mức độ ưu tiên cho ràng buộc tối ưu hóa.
-        
+
         Parameters
         ----------
         priority : int
             Mức độ ưu tiên mới
         """
         self.priority = priority
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Chuyển đổi đối tượng ràng buộc tối ưu hóa thành dictionary.
-        
+
         Returns
         -------
         Dict[str, Any]
@@ -244,19 +250,19 @@ class OptimizationConstraint:
             "dose_value": self.dose_value,
             "priority": self.priority,
             "volume_value": self.volume_value,
-            "parameters": self.parameters
+            "parameters": self.parameters,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'OptimizationConstraint':
+    def from_dict(cls, data: Dict[str, Any]) -> "OptimizationConstraint":
         """
         Tạo đối tượng OptimizationConstraint từ dictionary.
-        
+
         Parameters
         ----------
         data : Dict[str, Any]
             Dictionary chứa thông tin ràng buộc tối ưu hóa
-            
+
         Returns
         -------
         OptimizationConstraint
@@ -267,14 +273,14 @@ class OptimizationConstraint:
             constraint_type=OptimizationConstraintType(data["constraint_type"]),
             dose_value=data["dose_value"],
             priority=data.get("priority", 1),
-            volume_value=data.get("volume_value")
+            volume_value=data.get("volume_value"),
         )
-        
+
         constraint.constraint_id = data.get("constraint_id", str(uuid.uuid4()))
         constraint.parameters = data.get("parameters", {})
-        
+
         return constraint
-    
+
     def __str__(self) -> str:
         """Biểu diễn chuỗi của ràng buộc tối ưu hóa."""
         result = f"{self.constraint_type.value} for {self.structure_id}: {self.dose_value} Gy"
@@ -287,21 +293,21 @@ class OptimizationConstraint:
 class OptimizationSettings:
     """
     Lớp đại diện cho thiết lập tối ưu hóa kế hoạch xạ trị.
-    
+
     Lớp này chứa thông tin về thiết lập tối ưu hóa, bao gồm loại tối ưu hóa,
     mục tiêu, ràng buộc, và các tham số tối ưu hóa khác.
     """
-    
+
     def __init__(
         self,
         optimization_type: OptimizationType = OptimizationType.FLUENCE,
         max_iterations: int = 100,
         convergence_threshold: float = 0.001,
-        parameters: Optional[Dict[str, Any]] = None
+        parameters: Optional[Dict[str, Any]] = None,
     ):
         """
         Khởi tạo thiết lập tối ưu hóa.
-        
+
         Parameters
         ----------
         optimization_type : OptimizationType, optional
@@ -317,46 +323,46 @@ class OptimizationSettings:
         self.max_iterations = max_iterations
         self.convergence_threshold = convergence_threshold
         self.parameters = parameters or {}
-        
+
         self.objectives = []
         self.constraints = []
-        
+
         # Các thông số phân tích
         self.current_iteration = 0
         self.current_value = 0.0
         self.history = []
-        
+
     def add_objective(self, objective: OptimizationObjective):
         """
         Thêm mục tiêu tối ưu hóa.
-        
+
         Parameters
         ----------
         objective : OptimizationObjective
             Đối tượng mục tiêu tối ưu hóa
         """
         self.objectives.append(objective)
-    
+
     def add_constraint(self, constraint: OptimizationConstraint):
         """
         Thêm ràng buộc tối ưu hóa.
-        
+
         Parameters
         ----------
         constraint : OptimizationConstraint
             Đối tượng ràng buộc tối ưu hóa
         """
         self.constraints.append(constraint)
-    
+
     def remove_objective(self, objective_id: str) -> bool:
         """
         Xóa mục tiêu tối ưu hóa.
-        
+
         Parameters
         ----------
         objective_id : str
             ID của mục tiêu cần xóa
-            
+
         Returns
         -------
         bool
@@ -367,16 +373,16 @@ class OptimizationSettings:
                 self.objectives.pop(i)
                 return True
         return False
-    
+
     def remove_constraint(self, constraint_id: str) -> bool:
         """
         Xóa ràng buộc tối ưu hóa.
-        
+
         Parameters
         ----------
         constraint_id : str
             ID của ràng buộc cần xóa
-            
+
         Returns
         -------
         bool
@@ -387,49 +393,57 @@ class OptimizationSettings:
                 self.constraints.pop(i)
                 return True
         return False
-    
-    def get_objectives_for_structure(self, structure_id: str) -> List[OptimizationObjective]:
+
+    def get_objectives_for_structure(
+        self, structure_id: str
+    ) -> List[OptimizationObjective]:
         """
         Lấy danh sách các mục tiêu tối ưu hóa cho một cấu trúc cụ thể.
-        
+
         Parameters
         ----------
         structure_id : str
             ID của cấu trúc
-            
+
         Returns
         -------
         List[OptimizationObjective]
             Danh sách các mục tiêu tối ưu hóa
         """
         return [obj for obj in self.objectives if obj.structure_id == structure_id]
-    
-    def get_constraints_for_structure(self, structure_id: str) -> List[OptimizationConstraint]:
+
+    def get_constraints_for_structure(
+        self, structure_id: str
+    ) -> List[OptimizationConstraint]:
         """
         Lấy danh sách các ràng buộc tối ưu hóa cho một cấu trúc cụ thể.
-        
+
         Parameters
         ----------
         structure_id : str
             ID của cấu trúc
-            
+
         Returns
         -------
         List[OptimizationConstraint]
             Danh sách các ràng buộc tối ưu hóa
         """
-        return [constraint for constraint in self.constraints if constraint.structure_id == structure_id]
-    
+        return [
+            constraint
+            for constraint in self.constraints
+            if constraint.structure_id == structure_id
+        ]
+
     def reset_optimization(self):
         """Đặt lại trạng thái tối ưu hóa."""
         self.current_iteration = 0
         self.current_value = 0.0
         self.history = []
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Chuyển đổi đối tượng thiết lập tối ưu hóa thành dictionary.
-        
+
         Returns
         -------
         Dict[str, Any]
@@ -444,44 +458,237 @@ class OptimizationSettings:
             "constraints": [constraint.to_dict() for constraint in self.constraints],
             "current_iteration": self.current_iteration,
             "current_value": self.current_value,
-            "history": self.history
+            "history": self.history,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'OptimizationSettings':
+    def from_dict(cls, data: Dict[str, Any]) -> "OptimizationSettings":
         """
         Tạo đối tượng OptimizationSettings từ dictionary.
-        
+
         Parameters
         ----------
         data : Dict[str, Any]
             Dictionary chứa thông tin thiết lập tối ưu hóa
-            
+
         Returns
         -------
         OptimizationSettings
             Đối tượng OptimizationSettings được tạo từ dữ liệu
         """
         settings = cls(
-            optimization_type=OptimizationType(data.get("optimization_type", OptimizationType.FLUENCE.value)),
+            optimization_type=OptimizationType(
+                data.get("optimization_type", OptimizationType.FLUENCE.value)
+            ),
             max_iterations=data.get("max_iterations", 100),
             convergence_threshold=data.get("convergence_threshold", 0.001),
-            parameters=data.get("parameters", {})
+            parameters=data.get("parameters", {}),
         )
-        
+
         # Tạo các mục tiêu
         if "objectives" in data:
             for obj_data in data["objectives"]:
                 settings.objectives.append(OptimizationObjective.from_dict(obj_data))
-        
+
         # Tạo các ràng buộc
         if "constraints" in data:
             for constraint_data in data["constraints"]:
-                settings.constraints.append(OptimizationConstraint.from_dict(constraint_data))
-        
+                settings.constraints.append(
+                    OptimizationConstraint.from_dict(constraint_data)
+                )
+
         # Cập nhật trạng thái tối ưu hóa
         settings.current_iteration = data.get("current_iteration", 0)
         settings.current_value = data.get("current_value", 0.0)
         settings.history = data.get("history", [])
-        
+
         return settings
+
+
+class PlanOptimizer:
+    """
+    Lớp chính để thực hiện tối ưu hóa kế hoạch xạ trị.
+
+    Lớp này tích hợp các thuật toán tối ưu hóa khác nhau và quản lý
+    quá trình tối ưu hóa kế hoạch điều trị.
+    """
+
+    def __init__(
+        self, algorithm: OptimizationAlgorithm = OptimizationAlgorithm.GRADIENT_DESCENT
+    ):
+        """
+        Khởi tạo PlanOptimizer.
+
+        Parameters
+        ----------
+        algorithm : OptimizationAlgorithm
+            Thuật toán tối ưu hóa sử dụng
+        """
+        self.algorithm = algorithm
+        self.settings = OptimizationSettings()
+        self.is_running = False
+        self.current_iteration = 0
+        self.convergence_history = []
+
+        logger.info(f"Khởi tạo PlanOptimizer với thuật toán {algorithm.value}")
+
+    def set_optimization_settings(self, settings: OptimizationSettings):
+        """
+        Đặt cài đặt tối ưu hóa.
+
+        Parameters
+        ----------
+        settings : OptimizationSettings
+            Cài đặt tối ưu hóa
+        """
+        self.settings = settings
+        logger.info("Đã cập nhật cài đặt tối ưu hóa")
+
+    def optimize_plan(self, plan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Thực hiện tối ưu hóa kế hoạch.
+
+        Parameters
+        ----------
+        plan_data : Dict[str, Any]
+            Dữ liệu kế hoạch cần tối ưu hóa
+
+        Returns
+        -------
+        Dict[str, Any]
+            Kết quả tối ưu hóa
+        """
+        try:
+            self.is_running = True
+            self.current_iteration = 0
+            self.convergence_history = []
+
+            logger.info(
+                f"Bắt đầu tối ưu hóa kế hoạch với {len(self.settings.objectives)} mục tiêu"
+            )
+
+            # Giả lập quá trình tối ưu hóa
+            for iteration in range(self.settings.max_iterations):
+                self.current_iteration = iteration + 1
+
+                # Tính toán objective function (giả lập)
+                objective_value = self._calculate_objective_function(plan_data)
+                self.convergence_history.append(objective_value)
+
+                # Kiểm tra hội tụ
+                if self._check_convergence():
+                    logger.info(
+                        f"Tối ưu hóa hội tụ tại iteration {self.current_iteration}"
+                    )
+                    break
+
+                # Cập nhật parameters (giả lập)
+                plan_data = self._update_plan_parameters(plan_data)
+
+            self.is_running = False
+
+            result = {
+                "optimized_plan": plan_data,
+                "iterations": self.current_iteration,
+                "final_objective": self.convergence_history[-1]
+                if self.convergence_history
+                else 0,
+                "convergence_history": self.convergence_history,
+                "status": "converged"
+                if self._check_convergence()
+                else "max_iterations_reached",
+            }
+
+            logger.info(
+                f"Hoàn thành tối ưu hóa sau {self.current_iteration} iterations"
+            )
+            return result
+
+        except Exception as e:
+            self.is_running = False
+            logger.error(f"Lỗi trong quá trình tối ưu hóa: {e}")
+            raise
+
+    def _calculate_objective_function(self, plan_data: Dict[str, Any]) -> float:
+        """
+        Tính toán giá trị hàm mục tiêu.
+
+        Parameters
+        ----------
+        plan_data : Dict[str, Any]
+            Dữ liệu kế hoạch
+
+        Returns
+        -------
+        float
+            Giá trị hàm mục tiêu
+        """
+        # Giả lập tính toán objective function
+        import random
+
+        base_value = 100.0
+        noise = random.uniform(-5, 5)
+        decay = self.current_iteration * 0.1
+        return max(0, base_value - decay + noise)
+
+    def _check_convergence(self) -> bool:
+        """
+        Kiểm tra điều kiện hội tụ.
+
+        Returns
+        -------
+        bool
+            True nếu đã hội tụ
+        """
+        if len(self.convergence_history) < 2:
+            return False
+
+        recent_change = abs(self.convergence_history[-1] - self.convergence_history[-2])
+        return recent_change < self.settings.convergence_threshold
+
+    def _update_plan_parameters(self, plan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Cập nhật parameters của kế hoạch.
+
+        Parameters
+        ----------
+        plan_data : Dict[str, Any]
+            Dữ liệu kế hoạch hiện tại
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dữ liệu kế hoạch đã cập nhật
+        """
+        # Giả lập cập nhật parameters
+        updated_plan = plan_data.copy()
+
+        # Thêm thông tin iteration
+        updated_plan["optimization_iteration"] = self.current_iteration
+        updated_plan["algorithm"] = self.algorithm.value
+
+        return updated_plan
+
+    def stop_optimization(self):
+        """Dừng quá trình tối ưu hóa."""
+        self.is_running = False
+        logger.info("Đã dừng quá trình tối ưu hóa")
+
+    def get_optimization_status(self) -> Dict[str, Any]:
+        """
+        Lấy trạng thái hiện tại của quá trình tối ưu hóa.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Thông tin trạng thái tối ưu hóa
+        """
+        return {
+            "is_running": self.is_running,
+            "current_iteration": self.current_iteration,
+            "max_iterations": self.settings.max_iterations,
+            "algorithm": self.algorithm.value,
+            "num_objectives": len(self.settings.objectives),
+            "num_constraints": len(self.settings.constraints),
+            "convergence_history": self.convergence_history,
+        }

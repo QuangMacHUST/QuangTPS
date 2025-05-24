@@ -11,7 +11,7 @@ import os
 import json
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any, Tuple, Union
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -580,20 +580,18 @@ class PatientManager:
     ) -> Optional[Patient]:
         """Tạo patient mới."""
         try:
+            # Sử dụng fields() để lấy dataclass fields
+            demographics_fields = {f.name for f in fields(PatientDemographics)}
+            diagnosis_fields = {f.name for f in fields(DiagnosisInfo)}
+
             demographics = PatientDemographics(
                 patient_id=patient_id,
                 patient_name=patient_name,
-                **{
-                    k: v
-                    for k, v in kwargs.items()
-                    if k in PatientDemographics.__dataclass_fields__
-                },
+                **{k: v for k, v in kwargs.items() if k in demographics_fields},
             )
 
             diagnosis_kwargs = {
-                k: v
-                for k, v in kwargs.items()
-                if k in DiagnosisInfo.__dataclass_fields__
+                k: v for k, v in kwargs.items() if k in diagnosis_fields
             }
             diagnosis = DiagnosisInfo(
                 primary_diagnosis=kwargs.get("primary_diagnosis", ""),
@@ -603,7 +601,9 @@ class PatientManager:
             patient = Patient(demographics, diagnosis)
 
             if self.database.add_patient(patient):
-                logger.info(f"Tạo patient thành công: {patient.get_display_name()}")
+                logger.info(
+                    f"Tạo patient thành công: {patient.demographics.get_display_name()}"
+                )
                 return patient
             else:
                 logger.error(f"Không thể lưu patient {patient_id}")

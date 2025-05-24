@@ -71,6 +71,36 @@ class VolumeUnit(Enum):
     LITER = "liter"
 
 
+class BeamEnergyType(Enum):
+    """Loại năng lượng chùm tia."""
+
+    PHOTON_6MV = "6MV"
+    PHOTON_10MV = "10MV"
+    PHOTON_15MV = "15MV"
+    PHOTON_18MV = "18MV"
+    PHOTON_6FFF = "6FFF"
+    PHOTON_10FFF = "10FFF"
+    ELECTRON_6MEV = "6MeV"
+    ELECTRON_9MEV = "9MeV"
+    ELECTRON_12MEV = "12MeV"
+    ELECTRON_15MEV = "15MeV"
+    ELECTRON_18MEV = "18MeV"
+    PROTON = "PROTON"
+
+
+class TechniqueType(Enum):
+    """Loại kỹ thuật điều trị."""
+
+    CONFORMAL_3D = "3D_CONFORMAL"
+    IMRT = "IMRT"
+    VMAT = "VMAT"
+    SBRT = "SBRT"
+    SRS = "SRS"
+    ELECTRON = "ELECTRON"
+    PROTON = "PROTON"
+    BRACHYTHERAPY = "BRACHYTHERAPY"
+
+
 @dataclass
 class ImageProperties:
     """Thuộc tính hình ảnh y tế."""

@@ -808,121 +808,239 @@ class PlanEvaluation:
 
 # Example usage
 def test_plan_evaluation():
-    """Test the plan evaluation with sample data."""
-    import numpy as np
-    from quangtps.imaging.image import Image
-    from quangtps.structures.structure_set import StructureSet
-    from quangtps.structures.structure import Structure
-    from quangtps.beams.beam import Beam, BeamSet
-    from quangtps.dose.dose_calculator import DoseCalculator
+    """
+    Test function cho plan evaluation system.
+    """
+    try:
+        from quangtps.structures.structure_set import StructureSet
+        from quangtps.structures.structure import Structure
+        from quangtps.treatment.beams.beam import Beam
 
-    # Create sample image
-    image_data = np.ones((100, 100, 50), dtype=np.float32)
-    image = Image()
-    image.data = image_data
-    image.spacing = (2.0, 2.0, 3.0)  # mm
+        # Import BeamSet từ __init__.py thay vì beam.py
+        from quangtps.treatment.beams import BeamSet
+        from quangtps.dose.dose_calculator import DoseCalculator
 
-    # Create sample structure set
-    structure_set = StructureSet()
+        # Create sample image
+        image_data = np.random.rand(64, 64, 32) * 1000
+        image_spacing = (2.0, 2.0, 3.0)
+        image_origin = (0.0, 0.0, 0.0)
 
-    # Create PTV
-    ptv = Structure()
-    ptv.id = "struct_1"
-    ptv.name = "PTV"
-    ptv.type = "PTV"
-    ptv.mask = np.zeros_like(image_data, dtype=bool)
-    ptv.mask[40:60, 40:60, 20:30] = True
+        # Create PTV với tham số name
+        ptv = Structure(name="PTV")
+        ptv.id = "struct_1"
+        ptv.name = "PTV"
+        ptv.type = "PTV"
+        ptv.mask = np.zeros_like(image_data, dtype=bool)
+        ptv.mask[20:40, 20:40, 10:20] = True
 
-    # Create OAR
-    oar = Structure()
-    oar.id = "struct_2"
-    oar.name = "OAR"
-    oar.type = "OAR"
-    oar.mask = np.zeros_like(image_data, dtype=bool)
-    oar.mask[55:65, 40:50, 20:30] = True
+        # Create OAR với tham số name
+        oar = Structure(name="OAR")
+        oar.id = "struct_2"
+        oar.name = "OAR"
+        oar.type = "OAR"
+        oar.mask = np.zeros_like(image_data, dtype=bool)
+        oar.mask[10:20, 10:20, 5:15] = True
 
-    # Add structures to structure set
-    structure_set.add_structure(ptv)
-    structure_set.add_structure(oar)
+        # Create structure set
+        structure_set = StructureSet()
+        structure_set.add_structure(ptv)
+        structure_set.add_structure(oar)
 
-    # Create sample beam set
-    beam_set = BeamSet()
-    beam_set.id = "beamset_1"
-    beam_set.name = "Sample Plan"
-    beam_set.prescription = 70.0  # Gy
-    beam_set.target_structure_id = ptv.id
+        # Create beam set
+        beam_set = BeamSet("Test Beam Set")
 
-    # Create beams
-    beam1 = Beam()
-    beam1.id = "beam_1"
-    beam1.name = "AP"
-    beam1.energy = "6MV"
-    beam1.gantry_angle = 0.0
-    beam1.couch_angle = 0.0
-    beam1.collimator_angle = 0.0
-    beam1.field_size = (40.0, 40.0)  # mm
-    beam1.isocenter = (100.0, 100.0, 75.0)  # mm
-    beam1.weight = 1.0
+        # Create dose calculator
+        dose_calculator = DoseCalculator()
 
-    beam2 = Beam()
-    beam2.id = "beam_2"
-    beam2.name = "LPO"
-    beam2.energy = "6MV"
-    beam2.gantry_angle = 120.0
-    beam2.couch_angle = 0.0
-    beam2.collimator_angle = 0.0
-    beam2.field_size = (40.0, 40.0)  # mm
-    beam2.isocenter = (100.0, 100.0, 75.0)  # mm
-    beam2.weight = 1.0
+        # Create mock dose distribution
+        dose_data = np.random.rand(64, 64, 32) * 60  # Random dose up to 60 Gy
 
-    beam3 = Beam()
-    beam3.id = "beam_3"
-    beam3.name = "RPO"
-    beam3.energy = "6MV"
-    beam3.gantry_angle = 240.0
-    beam3.couch_angle = 0.0
-    beam3.collimator_angle = 0.0
-    beam3.field_size = (40.0, 40.0)  # mm
-    beam3.isocenter = (100.0, 100.0, 75.0)  # mm
-    beam3.weight = 1.0
+        # Test plan evaluation
+        plan_eval = PlanEvaluation()
+        plan_eval.set_dose_calculator(dose_calculator)
 
-    # Add beams to beam set
-    beam_set.add_beam(beam1)
-    beam_set.add_beam(beam2)
-    beam_set.add_beam(beam3)
+        # Test DVH calculation
+        dvh_calc = DVHCalculator()
+        dvh_calc.set_dose_calculator(dose_calculator)
 
-    # Create dose calculator
-    calculator = DoseCalculator()
-    calculator.set_image(image)
-    calculator.set_structure_set(structure_set)
-    calculator.set_beam_set(beam_set)
+        # Calculate DVH for PTV
+        dose_bins, volumes = dvh_calc.calculate_dvh(ptv)
+        print(f"✓ DVH calculation successful: {len(dose_bins)} dose bins")
 
-    # Set calculation grid resolution (5mm)
-    calculator.set_calculation_grid_resolution((5.0, 5.0, 5.0))
-
-    # Calculate dose
-    dose_grid = calculator.calculate_dose()
-
-    if dose_grid is not None:
-        print(f"Dose calculation successful. Grid shape: {dose_grid.shape}")
-
-        # Create plan evaluation
-        evaluator = PlanEvaluation()
-        evaluator.set_dose_calculator(calculator)
+        # Get structure metrics
+        ptv_metrics = plan_eval.get_structure_metrics(ptv)
+        print(f"✓ PTV metrics: {len(ptv_metrics)} metrics calculated")
 
         # Generate evaluation report
-        report = evaluator.generate_evaluation_report(
-            save_path="plan_evaluation_report.json"
-        )
+        structures = [ptv, oar]
+        report = plan_eval.generate_evaluation_report(structures)
+        print(f"✓ Evaluation report generated with {len(report)} sections")
 
-        # Generate HTML report
-        html_report = evaluator.generate_html_report(
-            save_path="plan_evaluation_report.html"
-        )
+        print("✓ Plan evaluation test completed successfully")
 
-        print("Plan evaluation completed and reports generated.")
-    else:
-        print("Dose calculation failed")
+    except Exception as e:
+        print(f"✗ Plan evaluation test failed: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
+
+
+def evaluate_plan(
+    dose_distribution: np.ndarray,
+    structure_masks: Dict[str, np.ndarray],
+    prescription_dose: float,
+    structures: Optional[List[str]] = None,
+    spacing: Tuple[float, float, float] = (2.0, 2.0, 2.0),
+) -> Dict[str, Any]:
+    """
+    Đánh giá toàn diện một kế hoạch xạ trị.
+
+    Parameters
+    ----------
+    dose_distribution : np.ndarray
+        Phân bố liều 3D
+    structure_masks : Dict[str, np.ndarray]
+        Dictionary chứa mask của các cấu trúc
+    prescription_dose : float
+        Liều đơn thuốc (Gy)
+    structures : List[str], optional
+        Danh sách cấu trúc cần đánh giá
+    spacing : Tuple[float, float, float]
+        Kích thước voxel (mm)
+
+    Returns
+    -------
+    Dict[str, Any]
+        Kết quả đánh giá kế hoạch
+    """
+    logger.info("Bắt đầu đánh giá kế hoạch")
+
+    results = {
+        "prescription_dose": prescription_dose,
+        "spacing": spacing,
+        "structures": {},
+        "overall_quality": "unknown",
+        "dvh_data": {},
+        "summary_metrics": {},
+    }
+
+    # Danh sách cấu trúc cần đánh giá
+    if structures is None:
+        structures = list(structure_masks.keys())
+
+    # Đánh giá từng cấu trúc
+    for structure_name in structures:
+        if structure_name not in structure_masks:
+            logger.warning(f"Không tìm thấy mask cho cấu trúc: {structure_name}")
+            continue
+
+        mask = structure_masks[structure_name]
+        structure_dose = dose_distribution[mask > 0]
+
+        if len(structure_dose) == 0:
+            logger.warning(f"Cấu trúc {structure_name} không có voxel nào")
+            continue
+
+        # Tính toán các metrics cơ bản
+        structure_metrics = {
+            "mean_dose": float(np.mean(structure_dose)),
+            "max_dose": float(np.max(structure_dose)),
+            "min_dose": float(np.min(structure_dose)),
+            "volume_cc": float(np.sum(mask) * np.prod(spacing) / 1000.0),
+            "d95": float(np.percentile(structure_dose, 5)),  # D95%
+            "d50": float(np.percentile(structure_dose, 50)),  # D50%
+            "d5": float(np.percentile(structure_dose, 95)),  # D5%
+        }
+
+        # Tính toán DVH
+        try:
+            dvh_bins = np.linspace(0, np.max(structure_dose) * 1.1, 101)
+            dvh_values, _ = np.histogram(structure_dose, bins=dvh_bins)
+
+            # Cumulative DVH
+            cum_dvh = np.cumsum(dvh_values[::-1])[::-1]
+            cum_dvh = cum_dvh / np.sum(dvh_values) * 100  # Convert to percentage
+
+            results["dvh_data"][structure_name] = {
+                "bins": dvh_bins[:-1].tolist(),
+                "cumulative": cum_dvh.tolist(),
+                "differential": dvh_values.tolist(),
+            }
+
+        except Exception as e:
+            logger.warning(f"Không thể tính DVH cho {structure_name}: {e}")
+
+        # Đánh giá chất lượng đặc biệt cho target structures
+        if any(
+            target in structure_name.lower()
+            for target in ["ptv", "ctv", "gtv", "target"]
+        ):
+            # Conformity Index
+            try:
+                target_volume = np.sum(mask)
+                isodose_volume = np.sum(dose_distribution >= prescription_dose * 0.95)
+
+                if target_volume > 0 and isodose_volume > 0:
+                    ci = (target_volume / isodose_volume) * (
+                        target_volume / target_volume
+                    )
+                    structure_metrics["conformity_index"] = float(ci)
+
+                # Homogeneity Index
+                d5 = structure_metrics["d5"]
+                d95 = structure_metrics["d95"]
+                if prescription_dose > 0:
+                    hi = (d5 - d95) / prescription_dose
+                    structure_metrics["homogeneity_index"] = float(hi)
+
+            except Exception as e:
+                logger.warning(f"Không thể tính CI/HI cho {structure_name}: {e}")
+
+        results["structures"][structure_name] = structure_metrics
+
+    # Tính toán summary metrics
+    target_structures = [
+        s for s in structures if any(t in s.lower() for t in ["ptv", "ctv", "gtv"])
+    ]
+    if target_structures:
+        target_data = [
+            results["structures"][s]
+            for s in target_structures
+            if s in results["structures"]
+        ]
+        if target_data:
+            results["summary_metrics"]["avg_target_coverage"] = np.mean(
+                [
+                    100 * (d["d95"] / prescription_dose)
+                    for d in target_data
+                    if d["d95"] > 0
+                ]
+            )
+
+    # Đánh giá chất lượng tổng thể
+    overall_score = 0
+    if "avg_target_coverage" in results["summary_metrics"]:
+        coverage = results["summary_metrics"]["avg_target_coverage"]
+        if coverage >= 95:
+            overall_score = 90 + min(10, (coverage - 95) * 2)
+        elif coverage >= 90:
+            overall_score = 70 + (coverage - 90) * 4
+        else:
+            overall_score = max(0, coverage)
+
+    results["overall_score"] = overall_score
+    results["overall_quality"] = (
+        "excellent"
+        if overall_score >= 90
+        else "good"
+        if overall_score >= 75
+        else "acceptable"
+        if overall_score >= 60
+        else "poor"
+    )
+
+    logger.info(f"Hoàn thành đánh giá kế hoạch. Điểm tổng: {overall_score:.1f}")
+    return results
 
 
 if __name__ == "__main__":

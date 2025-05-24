@@ -40,6 +40,7 @@
 		},
 		"testing.showAllMessages": true,
 		"testing.followRunningTest": true,
-		"scm.defaultViewMode": "tree"
+		"scm.defaultViewMode": "tree",
+		"cSpell.enabled": false
 	}
 }

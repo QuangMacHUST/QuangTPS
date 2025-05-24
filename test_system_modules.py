@@ -150,26 +150,20 @@ def test_optimization():
     print("=" * 60)
 
     try:
-        from quangtps.optimization.objectives import Objective, ObjectiveType
+        from quangtps.optimization.objectives import (
+            DoseObjective,
+            VolumeObjective,
+            ObjectiveType,
+        )
         from quangtps.optimization.optimizer import PlanOptimizer
 
-        # Tạo objectives
-        ptv_objective = Objective(
-            structure_name="PTV",
-            objective_type=ObjectiveType.MEAN,
-            parameter=50.0,
-            weight=10.0,
-        )
+        # Tạo objectives với constructor đúng
+        ptv_objective = DoseObjective(structure_name="PTV", dose_limit=50.0)
 
-        oar_objective = Objective(
-            structure_name="Spinal_Cord",
-            objective_type=ObjectiveType.UPPER,
-            parameter=45.0,
-            weight=5.0,
-        )
+        oar_objective = DoseObjective(structure_name="Spinal_Cord", dose_limit=45.0)
 
-        print(f"✓ Tạo PTV objective: {ptv_objective}")
-        print(f"✓ Tạo OAR objective: {oar_objective}")
+        print(f"✓ Tạo PTV objective: {ptv_objective.structure_name}")
+        print(f"✓ Tạo OAR objective: {oar_objective.structure_name}")
 
         # Test optimizer
         optimizer = PlanOptimizer()

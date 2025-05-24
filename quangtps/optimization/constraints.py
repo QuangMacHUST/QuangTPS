@@ -1175,3 +1175,229 @@ class DoseConstraint:
         """
         # Thực hiện trong các lớp con
         return False, 0.0
+
+
+class Constraint:
+    """
+    Lớp tổng quát cho các ràng buộc tối ưu hóa.
+
+    Đây là lớp wrapper để tương thích với các module khác
+    và cung cấp interface đơn giản cho việc tạo và quản lý constraints.
+    """
+
+    def __init__(
+        self,
+        structure_name: str,
+        constraint_type: str,
+        value: float,
+        priority: int = 1,
+        is_enabled: bool = True,
+        is_hard: bool = False,
+        **kwargs,
+    ):
+        """
+        Khởi tạo Constraint.
+
+        Parameters
+        ----------
+        structure_name : str
+            Tên cấu trúc
+        constraint_type : str
+            Loại constraint ('max_dose', 'min_dose', 'mean_dose', etc.)
+        value : float
+            Giá trị constraint
+        priority : int, optional
+            Độ ưu tiên (1-5)
+        is_enabled : bool, optional
+            Có kích hoạt không
+        is_hard : bool, optional
+            Có phải hard constraint không
+        **kwargs
+            Các tham số bổ sung
+        """
+        self.structure_name = structure_name
+        self.constraint_type = constraint_type
+        self.value = value
+        self.priority = priority
+        self.is_enabled = is_enabled
+        self.is_hard = is_hard
+        self.parameters = kwargs
+
+        # Tạo ID duy nhất
+        self.constraint_id = str(uuid.uuid4())[:8]
+
+        # Tạo constraint object tương ứng
+        self._constraint_obj = self._create_constraint_object()
+
+    def _create_constraint_object(self) -> ConstraintBase:
+        """
+        Tạo constraint object tương ứng dựa trên loại constraint.
+
+        Returns
+        -------
+        ConstraintBase
+            Constraint object
+        """
+        constraint_type_lower = self.constraint_type.lower()
+
+        if constraint_type_lower in ["max_dose", "maxdose"]:
+            return MaxDoseConstraint(
+                structure_name=self.structure_name,
+                dose_limit=self.value,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+        elif constraint_type_lower in ["min_dose", "mindose"]:
+            return MinDoseConstraint(
+                structure_name=self.structure_name,
+                dose_limit=self.value,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+        elif constraint_type_lower in ["mean_dose", "meandose"]:
+            return MeanDoseConstraint(
+                structure_name=self.structure_name,
+                dose_limit=self.value,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+        elif constraint_type_lower in ["dose_volume", "dosevolume"]:
+            volume_percent = self.parameters.get("volume_percent", 50.0)
+            direction = self.parameters.get("direction", "upper")
+            return DoseVolumeConstraint(
+                structure_name=self.structure_name,
+                dose=self.value,
+                volume_percent=volume_percent,
+                direction=direction,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+        elif constraint_type_lower in ["homogeneity"]:
+            prescription_dose = self.parameters.get("prescription_dose", self.value)
+            max_hi = self.parameters.get("max_hi", 0.15)
+            return HomogeneityConstraint(
+                structure_name=self.structure_name,
+                prescription_dose=prescription_dose,
+                max_hi=max_hi,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+        elif constraint_type_lower in ["conformity"]:
+            reference_dose = self.value
+            min_ci = self.parameters.get("min_ci", 0.8)
+            return ConformityConstraint(
+                structure_name=self.structure_name,
+                reference_dose=reference_dose,
+                min_ci=min_ci,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+        else:
+            # Fallback to generic constraint
+            logger.warning(
+                f"Unknown constraint type: {self.constraint_type}. Using MaxDoseConstraint as fallback."
+            )
+            return MaxDoseConstraint(
+                structure_name=self.structure_name,
+                dose_limit=self.value,
+                is_enabled=self.is_enabled,
+                priority=self.priority,
+                is_hard_constraint=self.is_hard,
+            )
+
+    def evaluate(
+        self, dose_grid: DoseGrid, structures: Dict[str, np.ndarray]
+    ) -> Tuple[bool, float]:
+        """
+        Đánh giá constraint.
+
+        Parameters
+        ----------
+        dose_grid : DoseGrid
+            Phân bố liều
+        structures : Dict[str, np.ndarray]
+            Dictionary chứa structure masks
+
+        Returns
+        -------
+        Tuple[bool, float]
+            (is_satisfied, violation_amount)
+        """
+        return self._constraint_obj.check(dose_grid, structures)
+
+    def get_description(self) -> str:
+        """
+        Lấy mô tả constraint.
+
+        Returns
+        -------
+        str
+            Mô tả constraint
+        """
+        return self._constraint_obj.get_description()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Chuyển đổi thành dictionary.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary representation
+        """
+        return {
+            "constraint_id": self.constraint_id,
+            "structure_name": self.structure_name,
+            "constraint_type": self.constraint_type,
+            "value": self.value,
+            "priority": self.priority,
+            "is_enabled": self.is_enabled,
+            "is_hard": self.is_hard,
+            "parameters": self.parameters,
+            "description": self.get_description(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Constraint":
+        """
+        Tạo Constraint từ dictionary.
+
+        Parameters
+        ----------
+        data : Dict[str, Any]
+            Dictionary chứa dữ liệu
+
+        Returns
+        -------
+        Constraint
+            Instance được tạo từ dictionary
+        """
+        constraint = cls(
+            structure_name=data["structure_name"],
+            constraint_type=data["constraint_type"],
+            value=data["value"],
+            priority=data.get("priority", 1),
+            is_enabled=data.get("is_enabled", True),
+            is_hard=data.get("is_hard", False),
+            **data.get("parameters", {}),
+        )
+
+        # Khôi phục ID nếu có
+        if "constraint_id" in data:
+            constraint.constraint_id = data["constraint_id"]
+
+        return constraint
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"Constraint({self.constraint_type} for {self.structure_name}: {self.value})"
+
+    def __repr__(self) -> str:
+        """Detailed representation."""
+        return self.__str__()

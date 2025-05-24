@@ -18,7 +18,8 @@ from quangtps.imaging.image import Image
 from quangtps.planning.beam import Beam
 from quangtps.dose.beam_data_processor import BeamModel, BeamModelParameter
 from quangtps.dose.algorithms.base import (
-    DoseCalculationAlgorithm,
+    DoseAlgorithm,
+    DoseAlgorithmType,
     DoseCalculationResult,
 )
 from quangtps.dose.physics.terma import calculate_terma_from_beam
@@ -26,7 +27,7 @@ from quangtps.dose.physics.terma import calculate_terma_from_beam
 logger = logging.getLogger(__name__)
 
 
-class PencilBeamAlgorithm(DoseCalculationAlgorithm):
+class PencilBeamAlgorithm(DoseAlgorithm):
     """
     Implementation of the Pencil Beam dose calculation algorithm.
 
@@ -38,24 +39,35 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
         """
         Initialize the Pencil Beam algorithm.
         """
-        super().__init__("Pencil Beam")
+        super().__init__(
+            algorithm_type=DoseAlgorithmType.PDD_SAR,
+            use_heterogeneity_correction=True,
+            grid_size=0.2,
+        )
+        self.name = "Pencil Beam"
         self.version = "1.0"
 
         # Default parameters
-        self.parameters.update(
-            {
-                "grid_size": 0.2,  # Calculation grid size in cm
-                "threads": 4,  # Number of parallel threads
-                "tissue_air_ratio_correction": True,  # Whether to apply TAR correction
-                "use_gpu": False,  # Whether to use GPU acceleration
-                "pencil_spacing": 0.1,  # Spacing between pencil beams in cm
-                "integration_step": 0.5,  # Integration step size in cm for ray tracing
-            }
-        )
+        self.parameters = {
+            "grid_size": 0.2,  # Calculation grid size in cm
+            "threads": 4,  # Number of parallel threads
+            "tissue_air_ratio_correction": True,  # Whether to apply TAR correction
+            "use_gpu": False,  # Whether to use GPU acceleration
+            "pencil_spacing": 0.1,  # Spacing between pencil beams in cm
+            "integration_step": 0.5,  # Integration step size in cm for ray tracing
+        }
 
         logger.info(f"Initialized {self.name} algorithm version {self.version}")
 
         self.beam_model = None
+
+    def get_parameter(self, name: str, default=None):
+        """Lấy giá trị tham số."""
+        return self.parameters.get(name, default)
+
+    def set_parameter(self, name: str, value):
+        """Đặt giá trị tham số."""
+        self.parameters[name] = value
 
     def set_beam_model(self, beam_model: BeamModel):
         """
@@ -298,9 +310,9 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
             # Create and return the result
             result = DoseCalculationResult(
                 dose_grid=dose_image,
-                algorithm_name=self.name,
+                algorithm_used=self.name,
                 calculation_time=calculation_time,
-                metadata={
+                calculation_parameters={
                     "beam": beam.name,
                     "grid_size": grid_size,
                     "threads": threads,
@@ -1130,7 +1142,7 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
             Dose image
         """
         result = self.calculate(ct_image, beam)
-        return result.dose
+        return result.dose_grid
 
     def create_generic_beam_model(self, energy: str) -> BeamModel:
         """
@@ -1278,3 +1290,35 @@ class PencilBeamAlgorithm(DoseCalculationAlgorithm):
                 "range": [0.1, 1.0],
             },
         }
+
+    def initialize(self, geometry_data: Any, beam_data: Any) -> bool:
+        """
+        Khởi tạo thuật toán với dữ liệu hình học và dữ liệu chùm tia.
+
+        Args:
+            geometry_data: Dữ liệu hình học (CT, cấu trúc,...)
+            beam_data: Dữ liệu chùm tia
+
+        Returns:
+            True nếu khởi tạo thành công, False nếu không
+        """
+        try:
+            # Khởi tạo với dữ liệu được cung cấp
+            self.is_initialized = True
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khởi tạo Pencil Beam algorithm: {e}")
+            return False
+
+    def calculate_dose(self, beam_arrangement: Any) -> np.ndarray:
+        """
+        Tính toán phân bố liều cho một cấu hình chùm tia.
+
+        Args:
+            beam_arrangement: Cấu hình chùm tia
+
+        Returns:
+            Mảng 3D chứa phân bố liều tính toán
+        """
+        # Placeholder implementation - sẽ được thay thế bởi calculate method
+        return np.zeros((64, 64, 32), dtype=np.float32)

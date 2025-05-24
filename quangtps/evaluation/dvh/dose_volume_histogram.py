@@ -155,8 +155,19 @@ class DVHData:
             metrics.d_mean = np.average(
                 self.dose_bins, weights=self._get_differential_volume()
             )
-            metrics.d_max = np.max(self.dose_bins[self.volume_data > 0])
-            metrics.d_min = np.min(self.dose_bins[self.volume_data > 0])
+
+            # Tìm indices có volume > 0
+            valid_indices = self.volume_data > 0
+            if np.any(valid_indices):
+                metrics.d_max = np.max(self.dose_bins[valid_indices])
+                metrics.d_min = np.min(self.dose_bins[valid_indices])
+            else:
+                metrics.d_max = (
+                    np.max(self.dose_bins) if len(self.dose_bins) > 0 else 0.0
+                )
+                metrics.d_min = (
+                    np.min(self.dose_bins) if len(self.dose_bins) > 0 else 0.0
+                )
 
             # Dx metrics (liều tại x% thể tích)
             metrics.d95 = self._get_dose_at_volume(95.0)

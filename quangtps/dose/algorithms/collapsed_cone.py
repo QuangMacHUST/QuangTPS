@@ -20,7 +20,8 @@ from quangtps.imaging.image import Image
 from quangtps.planning.beam import Beam
 from quangtps.dose.beam_data_processor import BeamModel, BeamProfileData
 from quangtps.dose.algorithms.base import (
-    DoseCalculationAlgorithm,
+    DoseAlgorithm,
+    DoseAlgorithmType,
     DoseCalculationResult,
 )
 from quangtps.dose.physics.terma import calculate_terma
@@ -28,7 +29,7 @@ from quangtps.dose.physics.terma import calculate_terma
 logger = logging.getLogger(__name__)
 
 
-class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
+class CollapsedConeAlgorithm(DoseAlgorithm):
     """
     Implementation of the Collapsed Cone Convolution/Superposition algorithm.
 
@@ -42,25 +43,28 @@ class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
         """
         Initialize the Collapsed Cone algorithm.
         """
-        super().__init__("Collapsed Cone")
+        super().__init__(
+            algorithm_type=DoseAlgorithmType.CCC,
+            use_heterogeneity_correction=True,
+            grid_size=0.3,
+        )
+        self.name = "Collapsed Cone"
         self.version = "1.1"
 
         # Default parameters
-        self.parameters.update(
-            {
-                "grid_size": 0.3,  # Calculation grid size in cm
-                "threads": 8,  # Number of parallel threads
-                "num_cones": 32,  # Number of angular cones (higher value = more accurate but slower)
-                "max_scatter_radius": 30,  # Maximum radius in cm for scatter consideration
-                "use_heterogeneity_correction": True,  # Whether to account for tissue heterogeneity
-                "use_adaptive_grid": True,  # Whether to use variable grid spacing
-                "use_gpu": False,  # Whether to use GPU acceleration
-                "photon_cutoff": 0.01,  # Energy cutoff for photon transport
-                "electron_cutoff": 0.001,  # Energy cutoff for electron transport
-                "density_threshold": 0.01,  # Density threshold for considering a voxel
-                "normalization_depth": 10.0,  # Depth in cm for dose normalization
-            }
-        )
+        self.parameters = {
+            "grid_size": 0.3,  # Calculation grid size in cm
+            "threads": 8,  # Number of parallel threads
+            "num_cones": 32,  # Number of angular cones (higher value = more accurate but slower)
+            "max_scatter_radius": 30,  # Maximum radius in cm for scatter consideration
+            "use_heterogeneity_correction": True,  # Whether to account for tissue heterogeneity
+            "use_adaptive_grid": True,  # Whether to use variable grid spacing
+            "use_gpu": False,  # Whether to use GPU acceleration
+            "photon_cutoff": 0.01,  # Energy cutoff for photon transport
+            "electron_cutoff": 0.001,  # Energy cutoff for electron transport
+            "density_threshold": 0.01,  # Density threshold for considering a voxel
+            "normalization_depth": 10.0,  # Depth in cm for dose normalization
+        }
 
         # Initialize cone directions based on spherical coordinates (theta, phi)
         # with uniform distribution over the unit sphere
@@ -651,17 +655,17 @@ class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
 
             # Create and return result
             result = DoseCalculationResult(
-                dose_data=dose_data,
+                dose_grid=dose_data,
+                algorithm_used=self.name,
                 calculation_time=calculation_time,
-                algorithm=self.name,
-                version=self.version,
-                parameters=self.parameters.copy(),
-                beam_info={
+                calculation_parameters={
                     "name": beam.name,
                     "energy": getattr(beam, "energy", "Unknown"),
                     "gantry_angle": getattr(beam, "gantry_angle", 0),
                     "collimator_angle": getattr(beam, "collimator_angle", 0),
                     "field_size": getattr(beam, "field_size", (10, 10)),
+                    "version": self.version,
+                    "parameters": self.parameters.copy(),
                 },
             )
 
@@ -969,7 +973,7 @@ class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
 
         # Create a new image with the dose data
         dose_image = Image(
-            data=result.dose_data,
+            data=result.dose_grid,
             spacing=ct_image.spacing,
             origin=ct_image.origin,
             direction=ct_image.direction,
@@ -982,7 +986,7 @@ class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
             "version": self.version,
             "calculation_time": result.calculation_time,
             "beam_name": beam.name,
-            "parameters": self.parameters,
+            "parameters": result.calculation_parameters["parameters"],
         }
 
         return dose_image
@@ -1059,3 +1063,43 @@ class CollapsedConeAlgorithm(DoseCalculationAlgorithm):
                 "range": [0.0001, 0.01],
             },
         }
+
+    def get_parameter(self, name: str, default=None):
+        """Lấy giá trị tham số."""
+        return self.parameters.get(name, default)
+
+    def set_parameter(self, name: str, value):
+        """Đặt giá trị tham số."""
+        self.parameters[name] = value
+
+    def initialize(self, geometry_data: Any, beam_data: Any) -> bool:
+        """
+        Khởi tạo thuật toán với dữ liệu hình học và dữ liệu chùm tia.
+
+        Args:
+            geometry_data: Dữ liệu hình học (CT, cấu trúc,...)
+            beam_data: Dữ liệu chùm tia
+
+        Returns:
+            True nếu khởi tạo thành công, False nếu không
+        """
+        try:
+            # Khởi tạo với dữ liệu được cung cấp
+            self.is_initialized = True
+            return True
+        except Exception as e:
+            logger.error(f"Lỗi khởi tạo Collapsed Cone algorithm: {e}")
+            return False
+
+    def calculate_dose(self, beam_arrangement: Any) -> np.ndarray:
+        """
+        Tính toán phân bố liều cho một cấu hình chùm tia.
+
+        Args:
+            beam_arrangement: Cấu hình chùm tia
+
+        Returns:
+            Mảng 3D chứa phân bố liều tính toán
+        """
+        # Placeholder implementation - sẽ được thay thế bởi calculate method
+        return np.zeros((64, 64, 32), dtype=np.float32)
