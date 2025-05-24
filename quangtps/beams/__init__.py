@@ -50,14 +50,17 @@ try:
 
     # MLC-related imports if available
     try:
-        from quangtps.treatment.beams.mlc import (
+        from quangtps.treatment.mlc import (
             MLCModel,
-            MLCType,
-            MLCLeaf,
-            MLCPosition,
+            MLCController,
+            MLCSimulation,
+            MLCViewer,
         )
+
+        MLC_AVAILABLE = True
     except ImportError as e:
         logger.warning(f"Could not import MLC classes: {e}")
+        MLC_AVAILABLE = False
 
     # Forward all imported names to maintain backward compatibility
     __all__ = [
@@ -77,9 +80,9 @@ try:
         "Bolus",
         # MLC
         "MLCModel",
-        "MLCType",
-        "MLCLeaf",
-        "MLCPosition",
+        "MLCController",
+        "MLCSimulation",
+        "MLCViewer",
     ]
 
 except ImportError as e:

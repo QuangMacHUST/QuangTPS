@@ -39,14 +39,14 @@ from quangtps import ui
 # Thiết lập logging
 import os
 import logging
-from quangtps.utils.logging_config import setup_logging
+from quangtps.utils.logging_config import configure_quangtps_logging
 
 # Thư mục mặc định cho log
 LOG_DIR = os.path.join(os.path.expanduser("~"), ".quangtps", "logs")
 DEFAULT_LOG_LEVEL = logging.INFO
 
-# Thiết lập logging
-setup_logging(log_dir=LOG_DIR, log_level=DEFAULT_LOG_LEVEL)
+# Thiết lập logging - sử dụng configure_quangtps_logging thay vì setup_logging
+configure_quangtps_logging(log_dir=LOG_DIR, debug=(DEFAULT_LOG_LEVEL == logging.DEBUG))
 
 # Logger cho module này
 logger = logging.getLogger(__name__)

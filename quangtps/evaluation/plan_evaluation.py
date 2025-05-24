@@ -805,6 +805,163 @@ class PlanEvaluation:
 
         return "Unknown"
 
+    def get_target_coverage(self) -> float:
+        """
+        Tính độ phủ cho structure PTV.
+
+        Returns:
+            float: Tỷ lệ phần trăm của PTV được bao phủ bởi 95% liều kê đơn
+        """
+        if self.dose_calculator is None or self.structure_set is None:
+            logger.warning("Dose calculator hoặc structure set chưa được thiết lập")
+            return 0.0
+
+        # Tìm PTV structure
+        ptv_structure = None
+        for structure in self.structure_set.structures:
+            if "ptv" in structure.name.lower():
+                ptv_structure = structure
+                break
+
+        if ptv_structure is None:
+            logger.warning("Không tìm thấy structure PTV")
+            return 0.0
+
+        # Tính độ phủ 95%
+        if hasattr(self.dose_calculator, "beam_set") and hasattr(
+            self.dose_calculator.beam_set, "prescription"
+        ):
+            prescription_dose = self.dose_calculator.beam_set.prescription
+            target_dose = prescription_dose * 0.95
+
+            # Lấy dose trong PTV
+            if hasattr(ptv_structure, "mask") and ptv_structure.mask is not None:
+                mask = self.dose_calculator._resize_structure_mask(ptv_structure.mask)
+                structure_dose = self.dose_calculator.dose_grid[mask]
+
+                # Tính tỷ lệ voxel đạt target dose
+                coverage = (
+                    np.sum(structure_dose >= target_dose) / len(structure_dose) * 100
+                )
+                return coverage
+
+        return 0.0
+
+    def get_global_max_dose(self) -> float:
+        """
+        Lấy liều tối đa toàn cục trong dose grid.
+
+        Returns:
+            float: Liều tối đa (Gy)
+        """
+        if self.dose_calculator is None or self.dose_calculator.dose_grid is None:
+            logger.warning("Dose grid chưa có sẵn")
+            return 0.0
+
+        return float(np.max(self.dose_calculator.dose_grid))
+
+    def get_homogeneity_index(self) -> float:
+        """
+        Tính chỉ số đồng nhất (Homogeneity Index) cho PTV.
+        HI = (D2% - D98%) / Dprescription
+
+        Returns:
+            float: Chỉ số đồng nhất
+        """
+        if self.dose_calculator is None or self.structure_set is None:
+            logger.warning("Dose calculator hoặc structure set chưa được thiết lập")
+            return 0.0
+
+        # Tìm PTV structure
+        ptv_structure = None
+        for structure in self.structure_set.structures:
+            if "ptv" in structure.name.lower():
+                ptv_structure = structure
+                break
+
+        if ptv_structure is None:
+            logger.warning("Không tìm thấy structure PTV")
+            return 0.0
+
+        # Tính D2% và D98%
+        try:
+            dose_bins, volume_data = self.dvh_calculator.calculate_cumulative_dvh(
+                ptv_structure
+            )
+            if len(dose_bins) == 0:
+                return 0.0
+
+            # Tìm D2% và D98%
+            d2_idx = np.argmin(np.abs(volume_data - 2.0))
+            d98_idx = np.argmin(np.abs(volume_data - 98.0))
+
+            d2 = dose_bins[d2_idx] if d2_idx < len(dose_bins) else 0.0
+            d98 = dose_bins[d98_idx] if d98_idx < len(dose_bins) else 0.0
+
+            # Lấy prescription dose
+            if hasattr(self.dose_calculator, "beam_set") and hasattr(
+                self.dose_calculator.beam_set, "prescription"
+            ):
+                prescription = self.dose_calculator.beam_set.prescription
+                if prescription > 0:
+                    hi = (d2 - d98) / prescription
+                    return hi
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính homogeneity index: {e}")
+
+        return 0.0
+
+    def get_conformity_index(self) -> float:
+        """
+        Tính chỉ số phù hợp (Conformity Index) cho PTV.
+        CI = V95% / VPTV
+
+        Returns:
+            float: Chỉ số phù hợp
+        """
+        if self.dose_calculator is None or self.structure_set is None:
+            logger.warning("Dose calculator hoặc structure set chưa được thiết lập")
+            return 0.0
+
+        # Tìm PTV structure
+        ptv_structure = None
+        for structure in self.structure_set.structures:
+            if "ptv" in structure.name.lower():
+                ptv_structure = structure
+                break
+
+        if ptv_structure is None:
+            logger.warning("Không tìm thấy structure PTV")
+            return 0.0
+
+        try:
+            if hasattr(self.dose_calculator, "beam_set") and hasattr(
+                self.dose_calculator.beam_set, "prescription"
+            ):
+                prescription = self.dose_calculator.beam_set.prescription
+                target_dose = prescription * 0.95
+
+                # Tính thể tích PTV
+                if hasattr(ptv_structure, "mask") and ptv_structure.mask is not None:
+                    ptv_mask = self.dose_calculator._resize_structure_mask(
+                        ptv_structure.mask
+                    )
+                    ptv_volume = np.sum(ptv_mask)
+
+                    # Tính thể tích nhận 95% prescription dose
+                    dose_mask = self.dose_calculator.dose_grid >= target_dose
+                    v95_volume = np.sum(dose_mask)
+
+                    if ptv_volume > 0:
+                        ci = v95_volume / ptv_volume
+                        return ci
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính conformity index: {e}")
+
+        return 0.0
+
 
 # Example usage
 def test_plan_evaluation():

@@ -24,46 +24,46 @@ logger = logging.getLogger(__name__)
 
 # Import với try-except để xử lý lỗi import
 try:
-from PyQt5.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QSplitter,
-    QDialog,
-    QColorDialog,
-    QComboBox,
-    QLineEdit,
-    QFormLayout,
-    QMessageBox,
-    QFileDialog,
-    QTabWidget,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QHeaderView,
-    QProgressDialog,
-    QMenu,
-    QAction,
-    QToolBar,
-    QGroupBox,
-    QRadioButton,
-    QButtonGroup,
-    QCheckBox,
-    QSlider,
-    QSpinBox,
-    QDoubleSpinBox,
-    QToolButton,
-    QFrame,
-    QScrollArea,
-    QStatusBar,
-    QTableWidget,
-    QTableWidgetItem,
-    QDateEdit,
-    QInputDialog,
-    QSizePolicy,
+    from PyQt5.QtWidgets import (
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+        QPushButton,
+        QLabel,
+        QListWidget,
+        QListWidgetItem,
+        QSplitter,
+        QDialog,
+        QColorDialog,
+        QComboBox,
+        QLineEdit,
+        QFormLayout,
+        QMessageBox,
+        QFileDialog,
+        QTabWidget,
+        QTreeWidget,
+        QTreeWidgetItem,
+        QHeaderView,
+        QProgressDialog,
+        QMenu,
+        QAction,
+        QToolBar,
+        QGroupBox,
+        QRadioButton,
+        QButtonGroup,
+        QCheckBox,
+        QSlider,
+        QSpinBox,
+        QDoubleSpinBox,
+        QToolButton,
+        QFrame,
+        QScrollArea,
+        QStatusBar,
+        QTableWidget,
+        QTableWidgetItem,
+        QDateEdit,
+        QInputDialog,
+        QSizePolicy,
         QProgressBar,
         QGridLayout,
         QApplication,
@@ -78,7 +78,7 @@ from PyQt5.QtWidgets import (
         QPen,
         QCursor,
     )
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QDate
+    from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QDate
 
     HAS_PYQT = True
 except ImportError:
@@ -200,8 +200,8 @@ try:
 
     # Kiểm tra module MCO một cách riêng biệt
     try:
-    # Import MCO-related modules
-    from quangtps.optimization.mco.mco_engine import MCOEngine
+        # Import MCO-related modules
+        from quangtps.optimization.mco.mco_engine import MCOEngine
 
         HAS_MCO_MODULE = True
     except ImportError:
@@ -713,8 +713,8 @@ class ExternalBeamPlanningTab(QWidget):
             ["Cấu trúc", "Loại", "Liều/Thể tích", "Giá trị", "Trọng số"]
         )
         self.objectives_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.Stretch
-            )
+            QHeaderView.Stretch
+        )
         layout.addWidget(self.objectives_table)
 
         # Nút điều khiển
@@ -818,7 +818,7 @@ class ExternalBeamPlanningTab(QWidget):
             self.planning_mode = BeamPlanningMode.MULTI_CRITERIA
             self.status_label.setText(
                 "Chế độ tối ưu hóa đa tiêu chí (MCO) đã được kích hoạt"
-                )
+            )
         else:
             return
 
@@ -881,8 +881,8 @@ class ExternalBeamPlanningTab(QWidget):
 
             QMessageBox.information(
                 self, "Tối ưu hóa", f"Đã hoàn tất tối ưu hóa: {message}"
-                        )
-            else:
+            )
+        else:
             self.status_label.setText(f"Tối ưu hóa thất bại: {message}")
             QMessageBox.warning(self, "Tối ưu hóa", f"Lỗi khi tối ưu hóa: {message}")
 
@@ -1426,7 +1426,7 @@ class ExternalBeamPlanningTab(QWidget):
                 step_message = f"{message} - Đang tính kernel liều..."
             elif i < 85:
                 step_message = f"{message} - Đang tích hợp phân phối liều..."
-        else:
+            else:
                 step_message = f"{message} - Đang hoàn tất..."
 
             self.status_label.setText(step_message)

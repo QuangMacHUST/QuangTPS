@@ -481,9 +481,27 @@ class MCONavigatorWidget(QWidget):
 
 
 # Factory function
-def create_mco_navigator_widget(parent=None) -> MCONavigatorWidget:
+def create_mco_navigator_widget(
+    parent=None, objectives=None, **kwargs
+) -> MCONavigatorWidget:
     """Tạo MCO Navigator Widget."""
-    return MCONavigatorWidget(parent)
+    try:
+        widget = MCONavigatorWidget(parent)
+
+        # Nếu có objectives, thiết lập chúng
+        if objectives:
+            if hasattr(widget, "set_objectives"):
+                widget.set_objectives(
+                    list(objectives.keys())
+                    if isinstance(objectives, dict)
+                    else objectives
+                )
+
+        logger.info("Tạo MCO Navigator Widget thành công")
+        return widget
+    except Exception as e:
+        logger.error(f"Lỗi tạo MCO Navigator Widget: {e}")
+        return MCONavigatorWidget(parent)  # Fallback
 
 
 # Export classes

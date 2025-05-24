@@ -314,11 +314,27 @@ if HAS_PYQT and HAS_VTK:
             vtk_image.SetOrigin(0, 0, 0)
 
             # Convert numpy array to VTK
-            flat_array = image_data.flatten(order="F")
+            flat_array = image_data.flatten(order="F").astype(
+                np.float32
+            )  # Đảm bảo kiểu float32
             vtk_array = vtk.vtkFloatArray()
             vtk_array.SetName("ImageArray")
             vtk_array.SetNumberOfComponents(1)
-            vtk_array.SetArray(flat_array, len(flat_array), 1)
+            vtk_array.SetNumberOfTuples(len(flat_array))
+
+            # Sử dụng SetData thay vì SetArray để tránh lỗi
+            try:
+                # Thử cách mới trước
+                vtk_array.SetData(vtk.numpy_to_vtk(flat_array))
+            except (AttributeError, TypeError):
+                # Fallback cho VTK cũ
+                try:
+                    for i, value in enumerate(flat_array):
+                        vtk_array.SetValue(i, float(value))
+                except Exception as e:
+                    logger.error(f"Không thể thiết lập VTK array: {e}")
+                    return
+
             vtk_image.GetPointData().SetScalars(vtk_array)
 
             # Create volume mapper
@@ -407,7 +423,21 @@ if HAS_PYQT and HAS_VTK:
             flat_mask = mask.astype(np.uint8).flatten(order="F")
             vtk_array = vtk.vtkUnsignedCharArray()
             vtk_array.SetName("MaskArray")
-            vtk_array.SetArray(flat_mask, len(flat_mask), 1)
+            vtk_array.SetNumberOfTuples(len(flat_mask))
+
+            # Sử dụng SetData thay vì SetArray để tránh lỗi
+            try:
+                # Thử cách mới trước
+                vtk_array.SetData(vtk.numpy_to_vtk(flat_mask))
+            except (AttributeError, TypeError):
+                # Fallback cho VTK cũ
+                try:
+                    for i, value in enumerate(flat_mask):
+                        vtk_array.SetValue(i, int(value))
+                except Exception as e:
+                    logger.error(f"Không thể thiết lập VTK mask array: {e}")
+                    return
+
             vtk_mask.GetPointData().SetScalars(vtk_array)
 
             # Create contour filter

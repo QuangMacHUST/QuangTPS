@@ -299,6 +299,25 @@ except ImportError:
 # Import Patient từ quangtps.core.patient
 from quangtps.core.patient import Patient
 
+# Import StructureSet và Structure với fallback
+try:
+    from quangtps.segmentation.structures.structure_set import StructureSet
+    from quangtps.segmentation.structures.structure import Structure
+except ImportError:
+    # Fallback classes nếu import thất bại
+    class StructureSet:
+        def __init__(self, *args, **kwargs):
+            self.structures = []
+            self.id = "unknown"
+            self.name = "Unknown StructureSet"
+
+    class Structure:
+        def __init__(self, *args, **kwargs):
+            self.id = "unknown"
+            self.name = "Unknown Structure"
+            self.color = (1.0, 0.0, 0.0)
+            self.visible = True
+
 
 class ObjectExplorerPanel(QWidget):
     """

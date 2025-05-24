@@ -1,872 +1,688 @@
-"""
-Module tính toán NTCP (Normal Tissue Complication Probability) cho đánh giá kế hoạch xạ trị.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-Module này cung cấp các hàm để tính toán xác suất biến chứng mô lành (NTCP) dựa trên
-các mô hình sinh học khác nhau như Lyman-Kutcher-Burman (LKB), mô hình Niemierko,
-và mô hình Relative Seriality.
+"""
+Module tính xác suất biến chứng mô lành (NTCP).
+
+Module này cung cấp các hàm để tính xác suất biến chứng mô lành
+theo các mô hình Lyman-Kutcher-Burman, Niemierko, và Relative Seriality.
 """
 
-import numpy as np
 import logging
-from scipy import stats, integrate
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable
-
-from quangtps.dose.dose_grid import DoseGrid
+import numpy as np
+import math
+from typing import Dict, List, Optional, Tuple, Union, Any
+from dataclasses import dataclass
+from scipy import integrate
+from scipy.special import erf
 
 logger = logging.getLogger(__name__)
 
+# Đảm bảo import an toàn
+try:
+    from quangtps.evaluation.dvh.dose_volume_histogram import DoseVolumeHistogram
 
-def calculate_ntcp_lkb(
-    dose_array: np.ndarray,
-    structure_mask: np.ndarray,
-    num_fractions: int,
-    td50: float = None,
-    n: float = None,
-    m: float = None,
-    alpha_beta: float = 3.0,
-    dose_threshold: Optional[float] = None,
-    organ_parameters: Optional[Dict[str, Dict[str, float]]] = None,
-    organ_type: Optional[str] = None,
-) -> float:
+    HAS_DVH = True
+except ImportError:
+    logger.warning("Không thể import module DVH. Tính năng NTCP bị giới hạn.")
+    HAS_DVH = False
+
+
+@dataclass
+class LKBParameters:
+    """Tham số mô hình Lyman-Kutcher-Burman."""
+
+    TD50: float  # Liều gây 50% biến chứng (Gy)
+    m: float  # Độ dốc của đường cong liều-đáp ứng
+    n: float  # Tham số thể hiện hiệu ứng thể tích
+    alpha_beta: float = 3.0  # Tỷ lệ α/β cho phân đoạn (Gy)
+
+
+@dataclass
+class NiemierkoParameters:
+    """Tham số mô hình Niemierko."""
+
+    TD50: float  # Liều gây 50% biến chứng (Gy)
+    gamma_50: float  # Độ dốc của đường cong liều-đáp ứng tại TD50
+    a: float  # Tham số EUD
+    alpha_beta: float = 3.0  # Tỷ lệ α/β cho phân đoạn (Gy)
+
+
+@dataclass
+class RelativeSerialityParameters:
+    """Tham số mô hình Relative Seriality."""
+
+    D50: float  # Liều gây 50% biến chứng (Gy)
+    gamma: float  # Độ dốc chuẩn hóa của đường cong liều-đáp ứng tại D50
+    s: float  # Tham số seriality
+    alpha_beta: float = 3.0  # Tỷ lệ α/β cho phân đoạn (Gy)
+
+
+# Từ điển tham số NTCP cho các cơ quan theo mô hình LKB
+# Tham khảo: QUANTEC (Quantitative Analysis of Normal Tissue Effects in the Clinic)
+DEFAULT_LKB_PARAMETERS = {
+    # Tham số cho não
+    "brain": LKBParameters(TD50=60.0, m=0.15, n=0.25, alpha_beta=2.5),
+    # Tham số cho tủy sống
+    "spinal_cord": LKBParameters(TD50=66.5, m=0.175, n=0.05, alpha_beta=2.0),
+    # Tham số cho phổi
+    "lung": LKBParameters(TD50=24.5, m=0.18, n=0.87, alpha_beta=3.0),
+    # Tham số cho tim
+    "heart": LKBParameters(TD50=48.0, m=0.1, n=0.35, alpha_beta=3.0),
+    # Tham số cho gan
+    "liver": LKBParameters(TD50=40.0, m=0.12, n=0.97, alpha_beta=2.5),
+    # Tham số cho thận
+    "kidney": LKBParameters(TD50=28.0, m=0.1, n=0.7, alpha_beta=2.5),
+    # Tham số cho tuyến mang tai
+    "parotid": LKBParameters(TD50=31.4, m=0.18, n=1.0, alpha_beta=3.0),
+    # Tham số cho thực quản
+    "esophagus": LKBParameters(TD50=68.0, m=0.11, n=0.34, alpha_beta=3.0),
+    # Tham số cho bàng quang
+    "bladder": LKBParameters(TD50=80.0, m=0.11, n=0.5, alpha_beta=3.0),
+    # Tham số cho trực tràng
+    "rectum": LKBParameters(TD50=76.9, m=0.13, n=0.12, alpha_beta=3.0),
+    # Tham số cho ruột non
+    "small_bowel": LKBParameters(TD50=55.0, m=0.16, n=0.15, alpha_beta=3.0),
+}
+
+
+# Từ điển tham số NTCP cho các cơ quan theo mô hình Niemierko
+DEFAULT_NIEMIERKO_PARAMETERS = {
+    # Tham số cho não
+    "brain": NiemierkoParameters(TD50=60.0, gamma_50=3.0, a=5.0, alpha_beta=2.5),
+    # Tham số cho tủy sống
+    "spinal_cord": NiemierkoParameters(TD50=66.5, gamma_50=2.5, a=20.0, alpha_beta=2.0),
+    # Tham số cho phổi
+    "lung": NiemierkoParameters(TD50=24.5, gamma_50=2.0, a=1.0, alpha_beta=3.0),
+    # Tham số cho tim
+    "heart": NiemierkoParameters(TD50=48.0, gamma_50=3.0, a=3.0, alpha_beta=3.0),
+    # Tham số cho gan
+    "liver": NiemierkoParameters(TD50=40.0, gamma_50=2.3, a=1.0, alpha_beta=2.5),
+    # Tham số cho thận
+    "kidney": NiemierkoParameters(TD50=28.0, gamma_50=3.0, a=1.5, alpha_beta=2.5),
+    # Tham số cho tuyến mang tai
+    "parotid": NiemierkoParameters(TD50=31.4, gamma_50=2.0, a=1.0, alpha_beta=3.0),
+    # Tham số cho thực quản
+    "esophagus": NiemierkoParameters(TD50=68.0, gamma_50=2.6, a=3.0, alpha_beta=3.0),
+    # Tham số cho bàng quang
+    "bladder": NiemierkoParameters(TD50=80.0, gamma_50=2.5, a=2.0, alpha_beta=3.0),
+    # Tham số cho trực tràng
+    "rectum": NiemierkoParameters(TD50=76.9, gamma_50=2.3, a=8.0, alpha_beta=3.0),
+    # Tham số cho ruột non
+    "small_bowel": NiemierkoParameters(TD50=55.0, gamma_50=2.3, a=6.0, alpha_beta=3.0),
+}
+
+
+# Từ điển tham số NTCP cho các cơ quan theo mô hình Relative Seriality
+DEFAULT_RELATIVE_SERIALITY_PARAMETERS = {
+    # Tham số cho não
+    "brain": RelativeSerialityParameters(D50=60.0, gamma=2.5, s=1.0, alpha_beta=2.5),
+    # Tham số cho tủy sống
+    "spinal_cord": RelativeSerialityParameters(
+        D50=66.5, gamma=2.0, s=1.0, alpha_beta=2.0
+    ),
+    # Tham số cho phổi
+    "lung": RelativeSerialityParameters(D50=24.5, gamma=1.8, s=0.0061, alpha_beta=3.0),
+    # Tham số cho tim
+    "heart": RelativeSerialityParameters(D50=48.0, gamma=3.0, s=0.2, alpha_beta=3.0),
+    # Tham số cho gan
+    "liver": RelativeSerialityParameters(D50=40.0, gamma=2.3, s=0.01, alpha_beta=2.5),
+    # Tham số cho thận
+    "kidney": RelativeSerialityParameters(D50=28.0, gamma=3.0, s=0.7, alpha_beta=2.5),
+    # Tham số cho tuyến mang tai
+    "parotid": RelativeSerialityParameters(D50=31.4, gamma=1.8, s=0.01, alpha_beta=3.0),
+    # Tham số cho thực quản
+    "esophagus": RelativeSerialityParameters(
+        D50=68.0, gamma=2.6, s=0.5, alpha_beta=3.0
+    ),
+    # Tham số cho bàng quang
+    "bladder": RelativeSerialityParameters(D50=80.0, gamma=2.5, s=0.18, alpha_beta=3.0),
+    # Tham số cho trực tràng
+    "rectum": RelativeSerialityParameters(D50=76.9, gamma=2.2, s=0.7, alpha_beta=3.0),
+    # Tham số cho ruột non
+    "small_bowel": RelativeSerialityParameters(
+        D50=55.0, gamma=2.3, s=0.6, alpha_beta=3.0
+    ),
+}
+
+
+def calculate_eud(doses: np.ndarray, volume_fractions: np.ndarray, a: float) -> float:
     """
-    Tính toán NTCP dựa trên mô hình Lyman-Kutcher-Burman (LKB).
+    Tính liều đồng đều tương đương (Equivalent Uniform Dose).
 
-    NTCP = 1/√2π ∫_{-∞}^t exp(-x²/2)dx, với t = (EUD - TD50)/(m*TD50)
+    EUD = (Σ(v_i × D_i^a))^(1/a)
 
     Parameters:
-        dose_array (np.ndarray): Mảng phân bố liều 3D (Gy)
-        structure_mask (np.ndarray): Mảng mask 3D của cơ quan nguy cấp
-        num_fractions (int): Số phân liều
-        td50 (float, optional): Liều đồng nhất gây ra biến chứng với xác suất 50% (Gy)
-        n (float, optional): Tham số thể hiện tính nối tiếp/song song của cơ quan (0 < n < 1)
-        m (float, optional): Tham số thể hiện độ dốc của đường cong liều-đáp ứng
-        alpha_beta (float, optional): Tỉ lệ alpha/beta cho cơ quan (Gy)
-        dose_threshold (float, optional): Ngưỡng liều để tính NTCP, voxel có liều < ngưỡng sẽ bị bỏ qua
-        organ_parameters (dict, optional): Dict tham số cho các cơ quan khác nhau
-        organ_type (str, optional): Loại cơ quan, dùng để lấy tham số từ organ_parameters
+        doses: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        a: Tham số mô (âm cho khối u, dương cho mô lành)
 
     Returns:
-        float: Giá trị NTCP (0-1)
-
-    Raises:
-        ValueError: Nếu không có đủ tham số và không xác định được loại cơ quan
+        Liều đồng đều tương đương (Gy)
     """
-    # Kiểm tra mask và dose có cùng kích thước
-    if dose_array.shape != structure_mask.shape:
-        raise ValueError(
-            f"Dose array shape {dose_array.shape} does not match structure mask shape {structure_mask.shape}"
-        )
-
-    # Nếu không cung cấp trực tiếp tham số td50, n, m, thử lấy từ organ_parameters
-    if (
-        (td50 is None or n is None or m is None)
-        and organ_type is not None
-        and organ_parameters is not None
-    ):
-        if organ_type in organ_parameters:
-            params = organ_parameters[organ_type]
-            td50 = params.get("td50", td50)
-            n = params.get("n", n)
-            m = params.get("m", m)
-        else:
-            logger.warning(f"Organ type '{organ_type}' not found in organ_parameters")
-
-    # Kiểm tra nếu vẫn thiếu tham số
-    if td50 is None or n is None or m is None:
-        # Cung cấp tham số mặc định cho một số cơ quan phổ biến
-        default_params = {
-            "lung": {"td50": 24.5, "n": 0.87, "m": 0.18, "endpoint": "Pneumonitis"},
-            "heart": {"td50": 48.0, "n": 0.35, "m": 0.10, "endpoint": "Pericarditis"},
-            "parotid": {"td50": 46.0, "n": 0.7, "m": 0.18, "endpoint": "Xerostomia"},
-            "liver": {"td50": 40.0, "n": 0.97, "m": 0.12, "endpoint": "Liver failure"},
-            "kidney": {"td50": 28.0, "n": 0.7, "m": 0.1, "endpoint": "Nephropathy"},
-            "brain": {"td50": 60.0, "n": 0.25, "m": 0.15, "endpoint": "Necrosis"},
-            "spinal_cord": {
-                "td50": 66.5,
-                "n": 0.05,
-                "m": 0.175,
-                "endpoint": "Myelopathy",
-            },
-            "rectum": {"td50": 80.0, "n": 0.12, "m": 0.15, "endpoint": "Proctitis"},
-            "bladder": {"td50": 80.0, "n": 0.5, "m": 0.11, "endpoint": "Contracture"},
-            "esophagus": {"td50": 68.0, "n": 0.06, "m": 0.11, "endpoint": "Stricture"},
-            "small_bowel": {
-                "td50": 55.0,
-                "n": 0.15,
-                "m": 0.16,
-                "endpoint": "Obstruction",
-            },
-            "larynx": {"td50": 70.0, "n": 0.08, "m": 0.17, "endpoint": "Edema"},
-            "optic_chiasm": {
-                "td50": 65.0,
-                "n": 0.25,
-                "m": 0.14,
-                "endpoint": "Blindness",
-            },
-            "brainstem": {"td50": 65.0, "n": 0.16, "m": 0.14, "endpoint": "Necrosis"},
-        }
-
-        # Nếu có organ_type và nó tồn tại trong default_params
-        if organ_type is not None and organ_type.lower() in default_params:
-            params = default_params[organ_type.lower()]
-            td50 = params.get("td50", 50.0)
-            n = params.get("n", 0.5)
-            m = params.get("m", 0.1)
-            logger.info(
-                f"Using default parameters for {organ_type}: TD50={td50}, n={n}, m={m}"
-            )
-        else:
-            # Sử dụng giá trị mặc định chung
-            td50 = 50.0
-            n = 0.5
-            m = 0.1
-            logger.warning(f"Using generic parameters: TD50={td50}, n={n}, m={m}")
-
-    # Chỉ xét các voxel trong cơ quan
-    mask = structure_mask > 0
-    if dose_threshold is not None:
-        mask = mask & (dose_array >= dose_threshold)
-
-    # Nếu không có voxel nào thỏa điều kiện
-    if not np.any(mask):
-        logger.warning("No valid voxels found for NTCP calculation")
+    if len(doses) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu liều hoặc thể tích trống.")
         return 0.0
 
-    # Lấy liều tại các voxel trong cơ quan
-    organ_doses = dose_array[mask]
+    # Chuẩn hóa volume_fractions để tổng bằng 1
+    volume_fractions_normalized = volume_fractions / np.sum(volume_fractions)
 
-    # Liều mỗi phân liều (Gy)
-    dose_per_fraction = organ_doses / num_fractions
+    # Tính EUD
+    eud_sum = np.sum(volume_fractions_normalized * np.power(doses, a))
+    eud = np.power(eud_sum, 1.0 / a)
 
-    # Tính EQD2 cho mỗi voxel
-    eqd2 = organ_doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
+    return eud
 
-    # Tính tỉ lệ thể tích của mỗi voxel (tất cả voxel có cùng kích thước)
-    num_voxels = np.sum(mask)
-    volume_fraction = 1.0 / num_voxels
 
-    # Tính gEUD theo công thức Niemierko với tham số a = 1/n
-    a = 1.0 / n
-    geud = np.power(np.sum(volume_fraction * np.power(eqd2, a)), 1.0 / a)
+def probit(x: float) -> float:
+    """
+    Hàm probit (tích phân xác suất chuẩn).
 
-    # Tính giá trị t trong mô hình Lyman
-    t = (geud - td50) / (m * td50)
+    Parameters:
+        x: Giá trị đầu vào
 
-    # Tính NTCP theo mô hình Lyman sử dụng hàm lỗi
-    ntcp = 0.5 * (1 + stats.norm.cdf(t))
+    Returns:
+        Giá trị hàm probit
+    """
+    return 0.5 * (1 + erf(x / math.sqrt(2)))
+
+
+def logistic(x: float) -> float:
+    """
+    Hàm logistic.
+
+    Parameters:
+        x: Giá trị đầu vào
+
+    Returns:
+        Giá trị hàm logistic
+    """
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def calculate_ntcp_lkb(
+    dvh_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    parameters: LKBParameters,
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+) -> float:
+    """
+    Tính NTCP theo mô hình Lyman-Kutcher-Burman.
+
+    Parameters:
+        dvh_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        parameters: Tham số mô hình LKB
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn (nếu None, tính từ liều tổng)
+
+    Returns:
+        NTCP (0-1)
+    """
+    if len(dvh_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu DVH trống.")
+        return 0.0
+
+    # Tính toán liều hiệu dụng sinh học (BED)
+    if total_fractions is None:
+        # Ước tính số phân đoạn từ liều tổng và kích thước phân đoạn
+        estimated_fractions = np.ceil(np.max(dvh_data) / fraction_size)
+        total_fractions = int(estimated_fractions)
+
+    # Chuyển đổi sang liều 2Gy tương đương (EQD2)
+    alpha_beta = parameters.alpha_beta
+    eqd2 = dvh_data * ((dvh_data / total_fractions + alpha_beta) / (2.0 + alpha_beta))
+
+    # Tính gEUD với tham số n
+    geud = calculate_eud(eqd2, volume_fractions, 1 / parameters.n)
+
+    # Tính t
+    t = (geud - parameters.TD50) / (parameters.m * parameters.TD50)
+
+    # Tính NTCP
+    ntcp = probit(t)
+
+    return ntcp
+
+
+def calculate_ntcp_niemierko(
+    dvh_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    parameters: NiemierkoParameters,
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+) -> float:
+    """
+    Tính NTCP theo mô hình Niemierko.
+
+    Parameters:
+        dvh_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        parameters: Tham số mô hình Niemierko
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn (nếu None, tính từ liều tổng)
+
+    Returns:
+        NTCP (0-1)
+    """
+    if len(dvh_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu DVH trống.")
+        return 0.0
+
+    # Tính toán liều hiệu dụng sinh học (BED)
+    if total_fractions is None:
+        # Ước tính số phân đoạn từ liều tổng và kích thước phân đoạn
+        estimated_fractions = np.ceil(np.max(dvh_data) / fraction_size)
+        total_fractions = int(estimated_fractions)
+
+    # Chuyển đổi sang liều 2Gy tương đương (EQD2)
+    alpha_beta = parameters.alpha_beta
+    eqd2 = dvh_data * ((dvh_data / total_fractions + alpha_beta) / (2.0 + alpha_beta))
+
+    # Tính gEUD với tham số a
+    geud = calculate_eud(eqd2, volume_fractions, parameters.a)
+
+    # Tính NTCP theo mô hình logistic
+    ntcp = 1.0 / (1.0 + (parameters.TD50 / geud) ** (4 * parameters.gamma_50))
 
     return ntcp
 
 
 def calculate_ntcp_relative_seriality(
-    dose_array: np.ndarray,
-    structure_mask: np.ndarray,
-    num_fractions: int,
-    d50: float,
-    gamma50: float,
-    seriality: float,
-    alpha_beta: float = 3.0,
-    dose_threshold: Optional[float] = None,
+    dvh_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    parameters: RelativeSerialityParameters,
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
 ) -> float:
     """
-    Tính toán NTCP dựa trên mô hình Relative Seriality.
+    Tính NTCP theo mô hình Relative Seriality.
 
     Parameters:
-        dose_array (np.ndarray): Mảng phân bố liều 3D (Gy)
-        structure_mask (np.ndarray): Mảng mask 3D của cơ quan nguy cấp
-        num_fractions (int): Số phân liều
-        d50 (float): Liều đồng nhất gây ra biến chứng với xác suất 50% (Gy)
-        gamma50 (float): Độ dốc của đường cong liều-đáp ứng tại 50%
-        seriality (float): Tham số thể hiện tính nối tiếp của cơ quan (0-1)
-        alpha_beta (float, optional): Tỉ lệ alpha/beta cho cơ quan (Gy)
-        dose_threshold (float, optional): Ngưỡng liều để tính NTCP, voxel có liều < ngưỡng sẽ bị bỏ qua
+        dvh_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        parameters: Tham số mô hình Relative Seriality
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn (nếu None, tính từ liều tổng)
 
     Returns:
-        float: Giá trị NTCP (0-1)
+        NTCP (0-1)
     """
-    # Kiểm tra mask và dose có cùng kích thước
-    if dose_array.shape != structure_mask.shape:
-        raise ValueError(
-            f"Dose array shape {dose_array.shape} does not match structure mask shape {structure_mask.shape}"
-        )
-
-    # Chỉ xét các voxel trong cơ quan
-    mask = structure_mask > 0
-    if dose_threshold is not None:
-        mask = mask & (dose_array >= dose_threshold)
-
-    # Nếu không có voxel nào thỏa điều kiện
-    if not np.any(mask):
-        logger.warning("No valid voxels found for NTCP calculation")
+    if len(dvh_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu DVH trống.")
         return 0.0
 
-    # Lấy liều tại các voxel trong cơ quan
-    organ_doses = dose_array[mask]
+    # Tính toán liều hiệu dụng sinh học (BED)
+    if total_fractions is None:
+        # Ước tính số phân đoạn từ liều tổng và kích thước phân đoạn
+        estimated_fractions = np.ceil(np.max(dvh_data) / fraction_size)
+        total_fractions = int(estimated_fractions)
 
-    # Liều mỗi phân liều (Gy)
-    dose_per_fraction = organ_doses / num_fractions
+    # Chuyển đổi sang liều 2Gy tương đương (EQD2)
+    alpha_beta = parameters.alpha_beta
+    eqd2 = dvh_data * ((dvh_data / total_fractions + alpha_beta) / (2.0 + alpha_beta))
 
-    # Tính EQD2 cho mỗi voxel
-    eqd2 = organ_doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
+    # Chuẩn hóa volume_fractions để tổng bằng 1
+    volume_fractions_normalized = volume_fractions / np.sum(volume_fractions)
 
-    # Tính tỉ lệ thể tích của mỗi voxel (tất cả voxel có cùng kích thước)
-    num_voxels = np.sum(mask)
-    dv = 1.0 / num_voxels
+    # Tính xác suất biến chứng cho từng voxel
+    p_i = np.zeros_like(eqd2)
+    for i in range(len(eqd2)):
+        p_i[i] = 2 ** (-np.exp(parameters.gamma * (1 - eqd2[i] / parameters.D50)))
 
-    # Tính xác suất biến chứng cho mỗi voxel
-    e = np.exp(gamma50 * (1 - eqd2 / d50))
-    p = 1.0 / (1.0 + e)
+    # Tính NTCP theo mô hình relative seriality
+    prod = 1.0
+    for i in range(len(p_i)):
+        prod *= (1 - p_i[i] ** parameters.s) ** volume_fractions_normalized[i]
 
-    # Tính NTCP theo mô hình Relative Seriality
-    ntcp = np.power(np.prod(np.power(1.0 - p, dv * seriality)), 1.0 / seriality)
-    ntcp = 1.0 - ntcp
+    ntcp = 1 - prod
 
     return ntcp
 
 
-def calculate_ntcp_logit(
-    dose_array: np.ndarray,
-    structure_mask: np.ndarray,
-    num_fractions: int,
-    d50: float,
-    k: float,
-    alpha_beta: float = 3.0,
-    dose_threshold: Optional[float] = None,
-) -> float:
+def calculate_ntcp_from_dvh(
+    dvh: Any,
+    organ_name: str,
+    model: str = "lkb",
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+    custom_parameters: Optional[Dict[str, float]] = None,
+) -> Dict[str, float]:
     """
-    Tính toán NTCP dựa trên mô hình Logit.
-
-    NTCP = 1 / (1 + (D50/D)^k)
+    Tính NTCP từ DVH của một cơ quan.
 
     Parameters:
-        dose_array (np.ndarray): Mảng phân bố liều 3D (Gy)
-        structure_mask (np.ndarray): Mảng mask 3D của cơ quan nguy cấp
-        num_fractions (int): Số phân liều
-        d50 (float): Liều đồng nhất gây ra biến chứng với xác suất 50% (Gy)
-        k (float): Tham số k trong mô hình Logit
-        alpha_beta (float, optional): Tỉ lệ alpha/beta cho cơ quan (Gy)
-        dose_threshold (float, optional): Ngưỡng liều để tính NTCP, voxel có liều < ngưỡng sẽ bị bỏ qua
+        dvh: Đối tượng DVH (DoseVolumeHistogram hoặc dict chứa dữ liệu DVH)
+        organ_name: Tên cơ quan
+        model: Mô hình NTCP ("lkb", "niemierko", hoặc "relative_seriality")
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn
+        custom_parameters: Tham số tùy chỉnh
 
     Returns:
-        float: Giá trị NTCP (0-1)
+        Dict chứa NTCP và thông tin liên quan
     """
-    # Kiểm tra mask và dose có cùng kích thước
-    if dose_array.shape != structure_mask.shape:
-        raise ValueError(
-            f"Dose array shape {dose_array.shape} does not match structure mask shape {structure_mask.shape}"
-        )
-
-    # Chỉ xét các voxel trong cơ quan
-    mask = structure_mask > 0
-    if dose_threshold is not None:
-        mask = mask & (dose_array >= dose_threshold)
-
-    # Nếu không có voxel nào thỏa điều kiện
-    if not np.any(mask):
-        logger.warning("No valid voxels found for NTCP calculation")
-        return 0.0
-
-    # Lấy liều tại các voxel trong cơ quan
-    organ_doses = dose_array[mask]
-
-    # Liều mỗi phân liều (Gy)
-    dose_per_fraction = organ_doses / num_fractions
-
-    # Tính EQD2 cho mỗi voxel
-    eqd2 = organ_doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-
-    # Tính liều trung bình
-    mean_dose = np.mean(eqd2)
-
-    # Tính NTCP theo mô hình Logit
-    ntcp = 1.0 / (1.0 + np.power(d50 / mean_dose, k))
-
-    return ntcp
-
-
-def calculate_ntcp_poisson(
-    dose_array: np.ndarray,
-    structure_mask: np.ndarray,
-    num_fractions: int,
-    d50: float,
-    gamma50: float,
-    alpha_beta: float = 3.0,
-    dose_threshold: Optional[float] = None,
-) -> float:
-    """
-    Tính toán NTCP dựa trên mô hình Poisson.
-
-    NTCP = 1 - exp(-exp(e0 + gamma * (D - D50)/D50))
-
-    Parameters:
-        dose_array (np.ndarray): Mảng phân bố liều 3D (Gy)
-        structure_mask (np.ndarray): Mảng mask 3D của cơ quan nguy cấp
-        num_fractions (int): Số phân liều
-        d50 (float): Liều đồng nhất gây ra biến chứng với xác suất 50% (Gy)
-        gamma50 (float): Độ dốc của đường cong liều-đáp ứng tại 50%
-        alpha_beta (float, optional): Tỉ lệ alpha/beta cho cơ quan (Gy)
-        dose_threshold (float, optional): Ngưỡng liều để tính NTCP, voxel có liều < ngưỡng sẽ bị bỏ qua
-
-    Returns:
-        float: Giá trị NTCP (0-1)
-    """
-    # Kiểm tra mask và dose có cùng kích thước
-    if dose_array.shape != structure_mask.shape:
-        raise ValueError(
-            f"Dose array shape {dose_array.shape} does not match structure mask shape {structure_mask.shape}"
-        )
-
-    # Chỉ xét các voxel trong cơ quan
-    mask = structure_mask > 0
-    if dose_threshold is not None:
-        mask = mask & (dose_array >= dose_threshold)
-
-    # Nếu không có voxel nào thỏa điều kiện
-    if not np.any(mask):
-        logger.warning("No valid voxels found for NTCP calculation")
-        return 0.0
-
-    # Lấy liều tại các voxel trong cơ quan
-    organ_doses = dose_array[mask]
-
-    # Liều mỗi phân liều (Gy)
-    dose_per_fraction = organ_doses / num_fractions
-
-    # Tính EQD2 cho mỗi voxel
-    eqd2 = organ_doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-
-    # Tính liều trung bình
-    mean_dose = np.mean(eqd2)
-
-    # Hằng số e0
-    e0 = -np.log(np.log(2))
-
-    # Tính NTCP theo mô hình Poisson
-    ntcp = 1.0 - np.exp(-np.exp(e0 + gamma50 * (mean_dose - d50) / d50))
-
-    return ntcp
-
-
-def calculate_cutoff_ntcp(
-    dose_array: np.ndarray,
-    structure_mask: np.ndarray,
-    tolerance_dose: float,
-    critical_volume: float,
-    alpha_beta: float = 3.0,
-    num_fractions: int = 1,
-) -> float:
-    """
-    Tính toán NTCP dựa trên mô hình ngưỡng đơn giản.
-
-    Nếu thể tích nhận liều > tolerance_dose vượt quá critical_volume, NTCP = 1, ngược lại NTCP = 0.
-
-    Parameters:
-        dose_array (np.ndarray): Mảng phân bố liều 3D (Gy)
-        structure_mask (np.ndarray): Mảng mask 3D của cơ quan nguy cấp
-        tolerance_dose (float): Ngưỡng liều tới hạn (Gy)
-        critical_volume (float): Thể tích tới hạn (%)
-        alpha_beta (float, optional): Tỉ lệ alpha/beta cho cơ quan (Gy)
-        num_fractions (int, optional): Số phân liều
-
-    Returns:
-        float: Giá trị NTCP (0 hoặc 1)
-    """
-    # Kiểm tra mask và dose có cùng kích thước
-    if dose_array.shape != structure_mask.shape:
-        raise ValueError(
-            f"Dose array shape {dose_array.shape} does not match structure mask shape {structure_mask.shape}"
-        )
-
-    # Chỉ xét các voxel trong cơ quan
-    mask = structure_mask > 0
-
-    # Nếu không có voxel nào trong cơ quan
-    if not np.any(mask):
-        logger.warning("No voxels found in the structure")
-        return 0.0
-
-    # Lấy liều tại các voxel trong cơ quan
-    organ_doses = dose_array[mask]
-
-    # Liều mỗi phân liều (Gy)
-    if num_fractions > 1:
-        dose_per_fraction = organ_doses / num_fractions
-        # Tính EQD2 cho mỗi voxel
-        organ_doses = (
-            organ_doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-        )
-
-    # Tính thể tích nhận liều > tolerance_dose
-    volume_over_tolerance = (
-        np.sum(organ_doses > tolerance_dose) / len(organ_doses) * 100.0
-    )
-
-    # Nếu thể tích nhận liều > tolerance_dose vượt quá critical_volume, NTCP = 1
-    if volume_over_tolerance > critical_volume:
-        return 1.0
+    # Kiểm tra xem dvh có phải đối tượng DoseVolumeHistogram không
+    if HAS_DVH and isinstance(dvh, DoseVolumeHistogram):
+        # Lấy dữ liệu từ đối tượng DVH
+        doses = dvh.doses
+        volumes = dvh.volumes
     else:
-        return 0.0
+        # Giả sử dvh là dict chứa dữ liệu cần thiết
+        doses = dvh.get("doses", [])
+        volumes = dvh.get("volumes", [])
+
+    if len(doses) == 0 or len(volumes) == 0:
+        logger.warning(f"Dữ liệu DVH trống cho cơ quan {organ_name}.")
+        return {"ntcp": 0.0, "error": "Dữ liệu DVH trống"}
+
+    # Chuẩn bị dữ liệu
+    doses_array = np.array(doses)
+    volumes_array = np.array(volumes)
+
+    # Kết quả
+    result = {"organ": organ_name, "model": model, "ntcp": 0.0, "parameters": {}}
+
+    try:
+        # Tính NTCP theo mô hình đã chọn
+        if model.lower() == "lkb":
+            # Lấy tham số mặc định cho cơ quan
+            organ_key = organ_name.lower().replace(" ", "_")
+            parameters = DEFAULT_LKB_PARAMETERS.get(organ_key)
+
+            # Nếu không có tham số mặc định, sử dụng tham số của "other"
+            if parameters is None:
+                parameters = LKBParameters(TD50=50.0, m=0.1, n=0.5, alpha_beta=3.0)
+
+            # Ghi đè tham số với tham số tùy chỉnh nếu có
+            if custom_parameters:
+                if "TD50" in custom_parameters:
+                    parameters.TD50 = custom_parameters["TD50"]
+                if "m" in custom_parameters:
+                    parameters.m = custom_parameters["m"]
+                if "n" in custom_parameters:
+                    parameters.n = custom_parameters["n"]
+                if "alpha_beta" in custom_parameters:
+                    parameters.alpha_beta = custom_parameters["alpha_beta"]
+
+            # Lưu tham số vào kết quả
+            result["parameters"] = {
+                "TD50": parameters.TD50,
+                "m": parameters.m,
+                "n": parameters.n,
+                "alpha_beta": parameters.alpha_beta,
+            }
+
+            # Tính NTCP
+            ntcp = calculate_ntcp_lkb(
+                doses_array, volumes_array, parameters, fraction_size, total_fractions
+            )
+            result["ntcp"] = float(ntcp)
+
+        elif model.lower() == "niemierko":
+            # Lấy tham số mặc định cho cơ quan
+            organ_key = organ_name.lower().replace(" ", "_")
+            parameters = DEFAULT_NIEMIERKO_PARAMETERS.get(organ_key)
+
+            # Nếu không có tham số mặc định, sử dụng tham số của "other"
+            if parameters is None:
+                parameters = NiemierkoParameters(
+                    TD50=50.0, gamma_50=2.0, a=1.0, alpha_beta=3.0
+                )
+
+            # Ghi đè tham số với tham số tùy chỉnh nếu có
+            if custom_parameters:
+                if "TD50" in custom_parameters:
+                    parameters.TD50 = custom_parameters["TD50"]
+                if "gamma_50" in custom_parameters:
+                    parameters.gamma_50 = custom_parameters["gamma_50"]
+                if "a" in custom_parameters:
+                    parameters.a = custom_parameters["a"]
+                if "alpha_beta" in custom_parameters:
+                    parameters.alpha_beta = custom_parameters["alpha_beta"]
+
+            # Lưu tham số vào kết quả
+            result["parameters"] = {
+                "TD50": parameters.TD50,
+                "gamma_50": parameters.gamma_50,
+                "a": parameters.a,
+                "alpha_beta": parameters.alpha_beta,
+            }
+
+            # Tính NTCP
+            ntcp = calculate_ntcp_niemierko(
+                doses_array, volumes_array, parameters, fraction_size, total_fractions
+            )
+            result["ntcp"] = float(ntcp)
+
+        elif model.lower() == "relative_seriality":
+            # Lấy tham số mặc định cho cơ quan
+            organ_key = organ_name.lower().replace(" ", "_")
+            parameters = DEFAULT_RELATIVE_SERIALITY_PARAMETERS.get(organ_key)
+
+            # Nếu không có tham số mặc định, sử dụng tham số của "other"
+            if parameters is None:
+                parameters = RelativeSerialityParameters(
+                    D50=50.0, gamma=2.0, s=0.5, alpha_beta=3.0
+                )
+
+            # Ghi đè tham số với tham số tùy chỉnh nếu có
+            if custom_parameters:
+                if "D50" in custom_parameters:
+                    parameters.D50 = custom_parameters["D50"]
+                if "gamma" in custom_parameters:
+                    parameters.gamma = custom_parameters["gamma"]
+                if "s" in custom_parameters:
+                    parameters.s = custom_parameters["s"]
+                if "alpha_beta" in custom_parameters:
+                    parameters.alpha_beta = custom_parameters["alpha_beta"]
+
+            # Lưu tham số vào kết quả
+            result["parameters"] = {
+                "D50": parameters.D50,
+                "gamma": parameters.gamma,
+                "s": parameters.s,
+                "alpha_beta": parameters.alpha_beta,
+            }
+
+            # Tính NTCP
+            ntcp = calculate_ntcp_relative_seriality(
+                doses_array, volumes_array, parameters, fraction_size, total_fractions
+            )
+            result["ntcp"] = float(ntcp)
+
+        else:
+            result["error"] = f"Mô hình NTCP không hỗ trợ: {model}"
+            logger.warning(f"Mô hình NTCP không hỗ trợ: {model}")
+
+        # Thêm các thông tin bổ sung
+        # Mean dose
+        result["mean_dose"] = float(np.average(doses_array, weights=volumes_array))
+        # Max dose
+        result["max_dose"] = float(np.max(doses_array))
+
+    except Exception as e:
+        logger.error(f"Lỗi khi tính NTCP cho {organ_name}: {e}")
+        result["error"] = str(e)
+
+    return result
 
 
-def get_ntcp_constraints(
-    organ_type: str, endpoint: Optional[str] = None
-) -> Dict[str, Any]:
+def calculate_multiple_ntcp(
+    dvhs: Dict[str, Any],
+    models: Optional[Dict[str, str]] = None,
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+    custom_parameters: Optional[Dict[str, Dict[str, float]]] = None,
+) -> Dict[str, Dict[str, float]]:
     """
-    Lấy các ràng buộc NTCP cho một cơ quan cụ thể.
+    Tính NTCP cho nhiều cơ quan với nhiều mô hình.
 
     Parameters:
-        organ_type (str): Loại cơ quan
-        endpoint (str, optional): Điểm cuối cụ thể cần xem xét
+        dvhs: Dict chứa DVH của các cơ quan
+        models: Dict chỉ định mô hình cho từng cơ quan
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn
+        custom_parameters: Dict chứa tham số tùy chỉnh cho từng cơ quan
 
     Returns:
-        dict: Dict chứa các ràng buộc và tham số NTCP
+        Dict chứa kết quả NTCP cho từng cơ quan
     """
-    # Dict các ràng buộc NTCP cho các cơ quan khác nhau
-    # Dựa trên các nghiên cứu và hướng dẫn lâm sàng
-    constraints = {
-        "lung": {
-            "pneumonitis": {
-                "model": "lkb",
-                "parameters": {"td50": 24.5, "n": 0.87, "m": 0.18, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V20", "value": 30, "unit": "%", "priority": "high"},
-                    {"type": "V5", "value": 60, "unit": "%", "priority": "medium"},
-                    {"type": "MLD", "value": 20, "unit": "Gy", "priority": "high"},
-                ],
-                "ntcp_threshold": 0.2,
-            }
-        },
-        "heart": {
-            "pericarditis": {
-                "model": "lkb",
-                "parameters": {"td50": 48.0, "n": 0.35, "m": 0.10, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V25", "value": 10, "unit": "%", "priority": "high"},
-                    {"type": "Mean", "value": 26, "unit": "Gy", "priority": "high"},
-                ],
-                "ntcp_threshold": 0.15,
-            }
-        },
-        "parotid": {
-            "xerostomia": {
-                "model": "lkb",
-                "parameters": {"td50": 46.0, "n": 0.7, "m": 0.18, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "Mean", "value": 26, "unit": "Gy", "priority": "high"},
-                    {"type": "V30", "value": 45, "unit": "%", "priority": "medium"},
-                ],
-                "ntcp_threshold": 0.25,
-            }
-        },
-        "liver": {
-            "liver_failure": {
-                "model": "lkb",
-                "parameters": {"td50": 40.0, "n": 0.97, "m": 0.12, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V30", "value": 30, "unit": "%", "priority": "high"},
-                    {"type": "Mean", "value": 30, "unit": "Gy", "priority": "high"},
-                ],
-                "ntcp_threshold": 0.1,
-            }
-        },
-        "kidney": {
-            "nephropathy": {
-                "model": "lkb",
-                "parameters": {"td50": 28.0, "n": 0.7, "m": 0.1, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V18", "value": 33, "unit": "%", "priority": "high"},
-                    {"type": "Mean", "value": 18, "unit": "Gy", "priority": "high"},
-                ],
-                "ntcp_threshold": 0.05,
-            }
-        },
-        "brain": {
-            "necrosis": {
-                "model": "lkb",
-                "parameters": {"td50": 60.0, "n": 0.25, "m": 0.15, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "Max", "value": 60, "unit": "Gy", "priority": "high"}
-                ],
-                "ntcp_threshold": 0.05,
-            }
-        },
-        "spinal_cord": {
-            "myelopathy": {
-                "model": "lkb",
-                "parameters": {"td50": 66.5, "n": 0.05, "m": 0.175, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "Max", "value": 45, "unit": "Gy", "priority": "high"},
-                    {"type": "V40", "value": 0.1, "unit": "cc", "priority": "high"},
-                ],
-                "ntcp_threshold": 0.01,
-            }
-        },
-        "rectum": {
-            "proctitis": {
-                "model": "lkb",
-                "parameters": {"td50": 80.0, "n": 0.12, "m": 0.15, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V70", "value": 15, "unit": "%", "priority": "high"},
-                    {"type": "V50", "value": 50, "unit": "%", "priority": "medium"},
-                ],
-                "ntcp_threshold": 0.15,
-            }
-        },
-        "bladder": {
-            "contracture": {
-                "model": "lkb",
-                "parameters": {"td50": 80.0, "n": 0.5, "m": 0.11, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V70", "value": 35, "unit": "%", "priority": "high"},
-                    {"type": "V65", "value": 50, "unit": "%", "priority": "medium"},
-                ],
-                "ntcp_threshold": 0.15,
-            }
-        },
-        "esophagus": {
-            "stricture": {
-                "model": "lkb",
-                "parameters": {"td50": 68.0, "n": 0.06, "m": 0.11, "alpha_beta": 3.0},
-                "constraints": [
-                    {"type": "V55", "value": 30, "unit": "%", "priority": "high"},
-                    {"type": "Mean", "value": 34, "unit": "Gy", "priority": "medium"},
-                ],
-                "ntcp_threshold": 0.2,
-            }
-        },
+    result = {}
+
+    # Mô hình mặc định cho từng cơ quan nếu không chỉ định
+    default_models = {
+        "spinal_cord": "lkb",
+        "brain": "lkb",
+        "brainstem": "lkb",
+        "lung": "lkb",
+        "heart": "relative_seriality",
+        "esophagus": "lkb",
+        "parotid": "niemierko",
+        "liver": "lkb",
+        "kidney": "niemierko",
+        "rectum": "lkb",
+        "bladder": "niemierko",
+        "small_bowel": "relative_seriality",
     }
 
-    # Trường hợp đặc biệt: organ_type = 'all' - trả về danh sách tên cơ quan
-    if organ_type.lower() == "all":
-        return list(constraints.keys())
+    # Tính NTCP cho từng cơ quan
+    for organ_name, dvh in dvhs.items():
+        # Xác định mô hình NTCP
+        model = "lkb"  # Mặc định
+        organ_key = organ_name.lower().replace(" ", "_")
 
-    # Lấy thông tin cho cơ quan cụ thể
-    organ_info = constraints.get(organ_type.lower())
-    if organ_info is None:
-        logger.warning(f"No NTCP constraints found for organ '{organ_type}'")
-        return {}
+        # Kiểm tra xem có mô hình được chỉ định không
+        if models and organ_name in models:
+            model = models[organ_name]
+        elif organ_key in default_models:
+            model = default_models[organ_key]
 
-    # Nếu không chỉ định endpoint, lấy endpoint đầu tiên
-    if endpoint is None:
-        endpoint = list(organ_info.keys())[0]
-    elif endpoint.lower() not in organ_info:
-        logger.warning(
-            f"Endpoint '{endpoint}' not found for organ '{organ_type}', using default"
+        # Lấy tham số tùy chỉnh nếu có
+        organ_params = None
+        if custom_parameters and organ_name in custom_parameters:
+            organ_params = custom_parameters[organ_name]
+
+        # Tính NTCP
+        ntcp_result = calculate_ntcp_from_dvh(
+            dvh, organ_name, model, fraction_size, total_fractions, organ_params
         )
-        endpoint = list(organ_info.keys())[0]
 
-    return organ_info[endpoint.lower()]
+        result[organ_name] = ntcp_result
+
+    return result
 
 
-def calculate_ntcp_for_dvh(
-    dvh_data: Dict[str, np.ndarray],
-    model: str = "lkb",
-    parameters: Dict[str, float] = None,
-    organ_type: Optional[str] = None,
-    num_fractions: int = 30,
-) -> float:
+def get_ntcp_risk_level(ntcp: float) -> str:
     """
-    Tính toán NTCP từ dữ liệu DVH sử dụng các mô hình khác nhau.
+    Phân loại mức độ rủi ro dựa trên giá trị NTCP.
 
     Parameters:
-        dvh_data (dict): Dict chứa dữ liệu DVH với các key:
-            - 'dose': Mảng giá trị liều (Gy)
-            - 'volume': Mảng giá trị thể tích (% hoặc cc)
-            - 'type': Loại DVH ('cumulative' hoặc 'differential')
-        model (str, optional): Mô hình NTCP ('lkb', 'relative_seriality', 'logit', 'poisson')
-        parameters (dict, optional): Tham số cho mô hình
-        organ_type (str, optional): Loại cơ quan, dùng để lấy tham số mặc định
-        num_fractions (int, optional): Số phân liều
+        ntcp: Giá trị NTCP (0-1)
 
     Returns:
-        float: Giá trị NTCP (0-1)
-
-    Raises:
-        ValueError: Nếu không có đủ tham số và không xác định được loại cơ quan
+        Mức độ rủi ro
     """
-    # Kiểm tra loại DVH
-    is_cumulative = dvh_data.get("type", "cumulative") == "cumulative"
-
-    # Lấy dữ liệu từ DVH
-    doses = dvh_data["dose"]
-    volumes = dvh_data["volume"]
-
-    # Nếu là DVH tích lũy, chuyển thành DVH vi phân
-    if is_cumulative:
-        # Tính delta volume
-        diff_volumes = np.abs(np.diff(volumes, append=0))
+    if ntcp < 0.05:
+        return "Thấp"
+    elif ntcp < 0.1:
+        return "Thấp-Trung bình"
+    elif ntcp < 0.2:
+        return "Trung bình"
+    elif ntcp < 0.3:
+        return "Trung bình-Cao"
     else:
-        diff_volumes = volumes
+        return "Cao"
 
-    # Nếu không cung cấp tham số, thử lấy từ organ_type
-    if parameters is None:
-        if organ_type is None:
-            raise ValueError("Either parameters or organ_type must be provided")
 
-        # Lấy tham số cho cơ quan cụ thể
-        organ_info = get_ntcp_constraints(organ_type)
-        if not organ_info:
-            raise ValueError(f"No parameters found for organ '{organ_type}'")
+def get_standard_ntcp_parameters(
+    organ_name: str, model: str = "lkb"
+) -> Dict[str, float]:
+    """
+    Lấy tham số tiêu chuẩn cho một cơ quan và mô hình.
 
-        parameters = organ_info.get("parameters", {})
-        model = organ_info.get("model", model)
+    Parameters:
+        organ_name: Tên cơ quan
+        model: Mô hình NTCP
 
-    # Tính NTCP theo mô hình được chọn
+    Returns:
+        Dict chứa tham số
+    """
+    organ_key = organ_name.lower().replace(" ", "_")
+
     if model.lower() == "lkb":
-        # Cần có td50, n, m
-        td50 = parameters.get("td50", 50.0)
-        n = parameters.get("n", 0.5)
-        m = parameters.get("m", 0.1)
-        alpha_beta = parameters.get("alpha_beta", 3.0)
-
-        # Tính gEUD
-        a = 1.0 / n
-        # Chuẩn hóa diff_volumes
-        norm_volumes = diff_volumes / np.sum(diff_volumes)
-        # Tính EQD2
-        dose_per_fraction = doses / num_fractions
-        eqd2 = doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-
-        # Tính gEUD
-        geud = np.power(np.sum(norm_volumes * np.power(eqd2, a)), 1.0 / a)
-
-        # Tính giá trị t
-        t = (geud - td50) / (m * td50)
-
-        # Tính NTCP
-        ntcp = 0.5 * (1 + stats.norm.cdf(t))
-
+        if organ_key in DEFAULT_LKB_PARAMETERS:
+            params = DEFAULT_LKB_PARAMETERS[organ_key]
+            return {
+                "TD50": params.TD50,
+                "m": params.m,
+                "n": params.n,
+                "alpha_beta": params.alpha_beta,
+            }
+    elif model.lower() == "niemierko":
+        if organ_key in DEFAULT_NIEMIERKO_PARAMETERS:
+            params = DEFAULT_NIEMIERKO_PARAMETERS[organ_key]
+            return {
+                "TD50": params.TD50,
+                "gamma_50": params.gamma_50,
+                "a": params.a,
+                "alpha_beta": params.alpha_beta,
+            }
     elif model.lower() == "relative_seriality":
-        d50 = parameters.get("d50", 50.0)
-        gamma50 = parameters.get("gamma50", 2.0)
-        seriality = parameters.get("seriality", 0.5)
-        alpha_beta = parameters.get("alpha_beta", 3.0)
+        if organ_key in DEFAULT_RELATIVE_SERIALITY_PARAMETERS:
+            params = DEFAULT_RELATIVE_SERIALITY_PARAMETERS[organ_key]
+            return {
+                "D50": params.D50,
+                "gamma": params.gamma,
+                "s": params.s,
+                "alpha_beta": params.alpha_beta,
+            }
 
-        # Chuẩn hóa diff_volumes
-        norm_volumes = diff_volumes / np.sum(diff_volumes)
-
-        # Tính EQD2
-        dose_per_fraction = doses / num_fractions
-        eqd2 = doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-
-        # Tính xác suất biến chứng cho mỗi bin
-        e = np.exp(gamma50 * (1 - eqd2 / d50))
-        p = 1.0 / (1.0 + e)
-
-        # Tính NTCP
-        ntcp = np.power(
-            np.prod(np.power(1.0 - p, norm_volumes * seriality)), 1.0 / seriality
-        )
-        ntcp = 1.0 - ntcp
-
-    elif model.lower() == "logit":
-        d50 = parameters.get("d50", 50.0)
-        k = parameters.get("k", 4.0)
-        alpha_beta = parameters.get("alpha_beta", 3.0)
-
-        # Chuẩn hóa diff_volumes
-        norm_volumes = diff_volumes / np.sum(diff_volumes)
-
-        # Tính EQD2
-        dose_per_fraction = doses / num_fractions
-        eqd2 = doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-
-        # Tính liều trung bình
-        mean_dose = np.sum(norm_volumes * eqd2)
-
-        # Tính NTCP
-        ntcp = 1.0 / (1.0 + np.power(d50 / mean_dose, k))
-
-    elif model.lower() == "poisson":
-        d50 = parameters.get("d50", 50.0)
-        gamma50 = parameters.get("gamma50", 2.0)
-        alpha_beta = parameters.get("alpha_beta", 3.0)
-
-        # Chuẩn hóa diff_volumes
-        norm_volumes = diff_volumes / np.sum(diff_volumes)
-
-        # Tính EQD2
-        dose_per_fraction = doses / num_fractions
-        eqd2 = doses * (1 + dose_per_fraction / alpha_beta) / (1 + 2 / alpha_beta)
-
-        # Tính liều trung bình
-        mean_dose = np.sum(norm_volumes * eqd2)
-
-        # Hằng số e0
-        e0 = -np.log(np.log(2))
-
-        # Tính NTCP
-        ntcp = 1.0 - np.exp(-np.exp(e0 + gamma50 * (mean_dose - d50) / d50))
-
+    # Trả về tham số mặc định nếu không tìm thấy
+    if model.lower() == "lkb":
+        return {"TD50": 50.0, "m": 0.1, "n": 0.5, "alpha_beta": 3.0}
+    elif model.lower() == "niemierko":
+        return {"TD50": 50.0, "gamma_50": 2.0, "a": 1.0, "alpha_beta": 3.0}
+    elif model.lower() == "relative_seriality":
+        return {"D50": 50.0, "gamma": 2.0, "s": 0.5, "alpha_beta": 3.0}
     else:
-        raise ValueError(f"Unknown NTCP model '{model}'")
-
-    return ntcp
+        return {}
 
 
-class NTCPModels:
+def list_supported_organs() -> List[str]:
     """
-    Lớp cung cấp các phương thức tính xác suất biến chứng mô lành (NTCP).
+    Liệt kê tất cả các cơ quan được hỗ trợ.
 
-    Lớp này bao gồm các mô hình sinh học khác nhau như Lyman-Kutcher-Burman (LKB),
-    mô hình Relative Seriality, mô hình Logit, và mô hình Poisson.
+    Returns:
+        Danh sách tên cơ quan được hỗ trợ
     """
+    return list(DEFAULT_LKB_PARAMETERS.keys())
 
-    @staticmethod
-    def calculate_ntcp_lkb(
-        dose_array: np.ndarray,
-        structure_mask: np.ndarray,
-        num_fractions: int,
-        td50: float = None,
-        n: float = None,
-        m: float = None,
-        alpha_beta: float = 3.0,
-        dose_threshold: Optional[float] = None,
-        organ_parameters: Optional[Dict[str, Dict[str, float]]] = None,
-        organ_type: Optional[str] = None,
-    ) -> float:
-        """
-        Tính toán NTCP dựa trên mô hình Lyman-Kutcher-Burman (LKB).
 
-        Xem hàm calculate_ntcp_lkb của module để biết thêm chi tiết.
-        """
-        return calculate_ntcp_lkb(
-            dose_array,
-            structure_mask,
-            num_fractions,
-            td50,
-            n,
-            m,
-            alpha_beta,
-            dose_threshold,
-            organ_parameters,
-            organ_type,
-        )
+def list_supported_models() -> List[str]:
+    """
+    Liệt kê tất cả các mô hình NTCP được hỗ trợ.
 
-    @staticmethod
-    def calculate_ntcp_relative_seriality(
-        dose_array: np.ndarray,
-        structure_mask: np.ndarray,
-        num_fractions: int,
-        d50: float,
-        gamma50: float,
-        seriality: float,
-        alpha_beta: float = 3.0,
-        dose_threshold: Optional[float] = None,
-    ) -> float:
-        """
-        Tính toán NTCP dựa trên mô hình Relative Seriality.
+    Returns:
+        Danh sách tên mô hình được hỗ trợ
+    """
+    return ["lkb", "niemierko", "relative_seriality"]
 
-        Xem hàm calculate_ntcp_relative_seriality của module để biết thêm chi tiết.
-        """
-        return calculate_ntcp_relative_seriality(
-            dose_array,
-            structure_mask,
-            num_fractions,
-            d50,
-            gamma50,
-            seriality,
-            alpha_beta,
-            dose_threshold,
-        )
 
-    @staticmethod
-    def calculate_ntcp_logit(
-        dose_array: np.ndarray,
-        structure_mask: np.ndarray,
-        num_fractions: int,
-        d50: float,
-        k: float,
-        alpha_beta: float = 3.0,
-        dose_threshold: Optional[float] = None,
-    ) -> float:
-        """
-        Tính toán NTCP dựa trên mô hình Logit.
-
-        Xem hàm calculate_ntcp_logit của module để biết thêm chi tiết.
-        """
-        return calculate_ntcp_logit(
-            dose_array,
-            structure_mask,
-            num_fractions,
-            d50,
-            k,
-            alpha_beta,
-            dose_threshold,
-        )
-
-    @staticmethod
-    def calculate_ntcp_poisson(
-        dose_array: np.ndarray,
-        structure_mask: np.ndarray,
-        num_fractions: int,
-        d50: float,
-        gamma50: float,
-        alpha_beta: float = 3.0,
-        dose_threshold: Optional[float] = None,
-    ) -> float:
-        """
-        Tính toán NTCP dựa trên mô hình Poisson.
-
-        Xem hàm calculate_ntcp_poisson của module để biết thêm chi tiết.
-        """
-        return calculate_ntcp_poisson(
-            dose_array,
-            structure_mask,
-            num_fractions,
-            d50,
-            gamma50,
-            alpha_beta,
-            dose_threshold,
-        )
-
-    @staticmethod
-    def calculate_cutoff_ntcp(
-        dose_array: np.ndarray,
-        structure_mask: np.ndarray,
-        tolerance_dose: float,
-        critical_volume: float,
-        alpha_beta: float = 3.0,
-        num_fractions: int = 1,
-    ) -> float:
-        """
-        Tính toán NTCP dựa trên mô hình ngưỡng đơn giản.
-
-        Xem hàm calculate_cutoff_ntcp của module để biết thêm chi tiết.
-        """
-        return calculate_cutoff_ntcp(
-            dose_array,
-            structure_mask,
-            tolerance_dose,
-            critical_volume,
-            alpha_beta,
-            num_fractions,
-        )
-
-    @staticmethod
-    def get_ntcp_constraints(
-        organ_type: str, endpoint: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Lấy các ràng buộc NTCP cho một cơ quan cụ thể.
-
-        Xem hàm get_ntcp_constraints của module để biết thêm chi tiết.
-        """
-        return get_ntcp_constraints(organ_type, endpoint)
-
-    @staticmethod
-    def calculate_ntcp_for_dvh(
-        dvh_data: Dict[str, np.ndarray],
-        model: str = "lkb",
-        parameters: Dict[str, float] = None,
-        organ_type: Optional[str] = None,
-        num_fractions: int = 30,
-    ) -> float:
-        """
-        Tính toán NTCP từ dữ liệu DVH sử dụng các mô hình khác nhau.
-
-        Xem hàm calculate_ntcp_for_dvh của module để biết thêm chi tiết.
-        """
-        return calculate_ntcp_for_dvh(
-            dvh_data, model, parameters, organ_type, num_fractions
-        )
+# Export
+__all__ = [
+    "LKBParameters",
+    "NiemierkoParameters",
+    "RelativeSerialityParameters",
+    "calculate_eud",
+    "calculate_ntcp_lkb",
+    "calculate_ntcp_niemierko",
+    "calculate_ntcp_relative_seriality",
+    "calculate_ntcp_from_dvh",
+    "calculate_multiple_ntcp",
+    "get_ntcp_risk_level",
+    "get_standard_ntcp_parameters",
+    "list_supported_organs",
+    "list_supported_models",
+]

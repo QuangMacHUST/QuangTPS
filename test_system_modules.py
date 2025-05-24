@@ -270,6 +270,19 @@ def test_3d_viewer():
     print("=" * 60)
 
     try:
+        # Kiểm tra và tạo QApplication nếu cần
+        app = None
+        try:
+            from PyQt5.QtWidgets import QApplication
+            import sys
+
+            # Kiểm tra xem QApplication đã tồn tại chưa
+            if not QApplication.instance():
+                app = QApplication(sys.argv)
+                print("✓ Tạo QApplication cho test")
+        except ImportError:
+            print("⚠ PyQt5 không khả dụng, bỏ qua QApplication")
+
         # Import module với tên file chứa số
         import importlib
 
@@ -289,6 +302,10 @@ def test_3d_viewer():
         structure_mask[10:20, 20:40, 20:40] = 1
         viewer.add_structure("Test_Structure", structure_mask, color=(1.0, 0.0, 0.0))
         print(f"✓ Add structure: Test_Structure")
+
+        # Dọn dẹp QApplication nếu đã tạo
+        if app:
+            app.quit()
 
     except Exception as e:
         print(f"✗ Lỗi 3D viewer: {str(e)}")

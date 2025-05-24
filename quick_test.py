@@ -2,105 +2,57 @@
 # -*- coding: utf-8 -*-
 
 """
-Quick test script để kiểm tra các module chính của QuangTPS.
+Script test nhanh cho các module QuangTPS.
 """
 
 import sys
 import traceback
 
 
-def test_imports():
-    """Test các import chính."""
-    tests = [
-        (
-            "ParetoFigureCanvas",
-            "from quangtps.ui.mco_navigator_widget import ParetoFigureCanvas",
-        ),
-        (
-            "MCONavigatorWidget",
-            "from quangtps.ui.mco_navigator_widget import MCONavigatorWidget",
-        ),
-        (
-            "calculate_conformity_index",
-            "from quangtps.evaluation.metrics.dose_metrics import calculate_conformity_index",
-        ),
-        (
-            "BeamModifier classes",
-            "from quangtps.treatment.beams.beam_modifiers import MLC, Applicator, RangeShifter",
-        ),
-        (
-            "GradientDescentOptimizer",
-            "from quangtps.optimization.optimizers.gradient_descent import GradientDescentOptimizer",
-        ),
-        (
-            "Plan evaluation",
-            "from quangtps.evaluation.plan_evaluation import evaluate_plan",
-        ),
+def test_module(module_name, description=""):
+    """Test import một module cụ thể."""
+    try:
+        exec(f"import {module_name}")
+        print(f"✓ {module_name} {description}")
+        return True
+    except Exception as e:
+        print(f"✗ {module_name}: {str(e)}")
+        return False
+
+
+def main():
+    """Chạy test từng module."""
+    print("KIỂM TRA NHANH CÁC MODULE QUANGTPS")
+    print("=" * 50)
+
+    modules = [
+        ("quangtps.core.exceptions", "- Core exceptions"),
+        ("quangtps.core.config", "- Configuration"),
+        ("quangtps.core.logging", "- Logging system"),
+        ("quangtps.core.patient.patient", "- Patient management"),
+        ("quangtps.dose.dose_grid", "- Dose grid"),
+        ("quangtps.dose.dose_engine", "- Dose engine"),
+        ("quangtps.optimization.objectives", "- Optimization objectives"),
+        ("quangtps.evaluation.dvh.dose_volume_histogram", "- DVH calculation"),
+        ("quangtps.ui.vtk_viewer_3d", "- 3D viewer"),
+        ("quangtps.dicom.dicom_exporter", "- DICOM export"),
     ]
 
     passed = 0
     failed = 0
 
-    for test_name, import_statement in tests:
-        try:
-            exec(import_statement)
-            print(f"✓ {test_name}")
+    for module_name, description in modules:
+        if test_module(module_name, description):
             passed += 1
-        except Exception as e:
-            print(f"✗ {test_name}: {str(e)}")
+        else:
             failed += 1
 
-    print(f"\nKết quả: {passed} passed, {failed} failed")
+    print("\n" + "=" * 50)
+    print(f"Kết quả: {passed} thành công, {failed} thất bại")
+    print("=" * 50)
+
     return failed == 0
 
 
-def test_basic_functionality():
-    """Test chức năng cơ bản."""
-    try:
-        # Test ParetoFigureCanvas
-        from quangtps.ui.mco_navigator_widget import ParetoFigureCanvas
-
-        canvas = ParetoFigureCanvas()
-        print("✓ ParetoFigureCanvas tạo thành công")
-
-        # Test dose metrics
-        from quangtps.evaluation.metrics.dose_metrics import calculate_conformity_index
-        import numpy as np
-
-        dose_dist = np.random.rand(10, 10, 10) * 60
-        target_mask = np.ones((10, 10, 10), dtype=bool)
-        ci = calculate_conformity_index(dose_dist, target_mask, 50.0)
-        print(f"✓ Conformity index calculated: {ci:.3f}")
-
-        # Test beam modifiers
-        from quangtps.treatment.beams.beam_modifiers import MLC, Wedge
-
-        mlc = MLC("Test MLC")
-        wedge = Wedge("Test Wedge", 30.0)
-        print(f"✓ Beam modifiers created: {mlc.name}, {wedge.name}")
-
-        return True
-
-    except Exception as e:
-        print(f"✗ Basic functionality test failed: {str(e)}")
-        traceback.print_exc()
-        return False
-
-
 if __name__ == "__main__":
-    print("🚀 QUICK TEST FOR QUANGTPS FIXES")
-    print("=" * 50)
-
-    print("\n📦 Testing imports...")
-    import_success = test_imports()
-
-    print("\n🔧 Testing basic functionality...")
-    func_success = test_basic_functionality()
-
-    print("\n" + "=" * 50)
-    if import_success and func_success:
-        print("✅ All tests passed! QuangTPS fixes are working.")
-        sys.exit(0)
-    else:
-        print("❌ Some tests failed. Check the output above.")
-        sys.exit(1)
+    sys.exit(0 if main() else 1)

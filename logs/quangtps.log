@@ -12163,3 +12163,81 @@ AttributeError: 'Config' object has no attribute 'check_for_updates_on_startup'
 2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
 2025-04-02 05:06:31 [ERROR] quangtps.ui.image_viewer (image_viewer.py:468): Lỗi khi cập nhật hiển thị: 'ImageDisplay' object has no attribute 'set_image_data'
 2025-04-02 06:01:59 [INFO] quangtps.ui.qa_tab (qa_tab.py:489): Đã tải 0 bài kiểm tra QA
+2025-05-24 20:39:40,202 - root - INFO - QuangTPS logging system initialized
+2025-05-24 20:39:40,222 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 20:39:40,223 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 20:39:40,223 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 20:39:40,225 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 20:39:40,225 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 20:39:40,226 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_PTV
+2025-05-24 20:39:40,227 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_Spinal_Cord
+2025-05-24 20:39:40,227 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 20:39:40,228 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 20:39:40,228 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 20:39:40,229 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 20:39:40,229 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 20:39:40,230 - quangtps.optimization.optimizer - INFO - Khởi tạo PlanOptimizer
+2025-05-24 20:39:40,230 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000002151AFE25D0>
+2025-05-24 20:39:40,230 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000002151A601280>
+2025-05-24 20:39:40,231 - quangtps.evaluation.dvh.dose_volume_histogram - ERROR - Lỗi khi tính toán DVH cho Test_Structure: arrays used as indices must be of integer (or boolean) type
+2025-05-24 20:39:40,261 - quangtps.dicom.dicom_exporter - INFO - Exported 10 CT slices to C:\Users\ROG\AppData\Local\Temp\tmpbfgtdbmr
+2025-05-24 20:39:40,276 - quangtps.ui.3d_viewer - INFO - Sử dụng VTK3DViewer
+2025-05-24 22:19:38,337 - root - INFO - QuangTPS logging system initialized
+2025-05-24 22:19:38,379 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 22:19:38,379 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 22:19:38,380 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 22:19:38,381 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 22:19:38,382 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 22:19:38,384 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_PTV
+2025-05-24 22:19:38,385 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_Spinal_Cord
+2025-05-24 22:19:38,385 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 22:19:38,386 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 22:19:38,386 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 22:19:38,387 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 22:19:38,387 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 22:19:38,387 - quangtps.optimization.optimizer - INFO - Khởi tạo PlanOptimizer
+2025-05-24 22:19:38,387 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000001498EBCDC40>
+2025-05-24 22:19:38,387 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x0000014991866BA0>
+2025-05-24 22:19:38,388 - quangtps.evaluation.dvh.dose_volume_histogram - ERROR - Lỗi khi tính toán DVH cho Test_Structure: arrays used as indices must be of integer (or boolean) type
+2025-05-24 22:19:38,426 - quangtps.dicom.dicom_exporter - INFO - Exported 10 CT slices to C:\Users\ROG\AppData\Local\Temp\tmp68jzf93r
+2025-05-24 22:19:38,432 - quangtps.ui.3d_viewer - INFO - Sử dụng VTK3DViewer
+2025-05-24 22:21:36,962 - root - INFO - QuangTPS logging system initialized
+2025-05-24 22:21:36,993 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 22:21:36,993 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 22:21:36,995 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 22:21:36,997 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 22:21:36,998 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 22:21:36,999 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_PTV
+2025-05-24 22:21:37,000 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_Spinal_Cord
+2025-05-24 22:21:37,000 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 22:21:37,001 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 22:21:37,001 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 22:21:37,002 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 22:21:37,002 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 22:21:37,002 - quangtps.optimization.optimizer - INFO - Khởi tạo PlanOptimizer
+2025-05-24 22:21:37,003 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000001FFFFA50560>
+2025-05-24 22:21:37,003 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000001FFFF859E80>
+2025-05-24 22:21:37,010 - quangtps.evaluation.dvh.dose_volume_histogram - INFO - Đã tính toán DVH cho cấu trúc Test_Structure
+2025-05-24 22:21:37,055 - quangtps.dicom.dicom_exporter - INFO - Exported 10 CT slices to C:\Users\ROG\AppData\Local\Temp\tmpp4trd3t1
+2025-05-24 22:21:37,166 - quangtps.ui.3d_viewer - INFO - Sử dụng VTK3DViewer
+2025-05-24 22:23:39,296 - root - INFO - QuangTPS logging system initialized
+2025-05-24 22:23:39,333 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 22:23:39,334 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 22:23:39,334 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 22:23:39,337 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 22:23:39,337 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 22:23:39,338 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_PTV
+2025-05-24 22:23:39,339 - quangtps.optimization.objectives - INFO - Khởi tạo fallback ObjectiveFunction: DoseObjective_Spinal_Cord
+2025-05-24 22:23:39,340 - quangtps.dose.algorithms.collapsed_cone - INFO - Initialized Collapsed Cone algorithm version 1.1
+2025-05-24 22:23:39,341 - quangtps.dose.algorithms.pencil_beam - INFO - Initialized Pencil Beam algorithm version 1.0
+2025-05-24 22:23:39,341 - quangtps.dose.algorithms.monte_carlo - INFO - Initialized Monte Carlo algorithm version 3.0
+2025-05-24 22:23:39,342 - quangtps.dose.dose_engine - INFO - Loaded 3 dose calculation algorithm implementers
+2025-05-24 22:23:39,343 - quangtps.dose.dose_engine - INFO - Initialized dose calculation algorithm: Collapsed Cone Convolution
+2025-05-24 22:23:39,343 - quangtps.optimization.optimizer - INFO - Khởi tạo PlanOptimizer
+2025-05-24 22:23:39,344 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000001BE541F4830>
+2025-05-24 22:23:39,344 - quangtps.optimization.optimizer - INFO - Đã thêm mục tiêu: <quangtps.optimization.objectives.DoseObjective object at 0x000001BE530BEBA0>
+2025-05-24 22:23:39,345 - quangtps.evaluation.dvh.dose_volume_histogram - INFO - Đã tính toán DVH cho cấu trúc Test_Structure
+2025-05-24 22:23:39,385 - quangtps.dicom.dicom_exporter - INFO - Exported 10 CT slices to C:\Users\ROG\AppData\Local\Temp\tmpbj_wfj3k
+2025-05-24 22:23:39,416 - quangtps.ui.3d_viewer - INFO - Sử dụng VTK3DViewer
+2025-05-24 22:28:28,313 - root - INFO - QuangTPS logging system initialized
+2025-05-24 22:35:37,659 - root - INFO - QuangTPS logging system initialized

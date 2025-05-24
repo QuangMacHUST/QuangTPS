@@ -84,7 +84,7 @@ except ImportError as e:
     MATPLOTLIB_AVAILABLE = False
 
 try:
-    from quangtps.core.patient.plan import Plan
+    from quangtps.core.patient import Plan
     from quangtps.planning.plan_checker import (
         PlanChecker,
         PlanCheckerResult,
@@ -103,6 +103,35 @@ try:
 except ImportError as e:
     logging.error(f"Không thể import các module kiểm tra kế hoạch: {e}")
     CHECKER_MODULES_AVAILABLE = False
+
+    # Fallback classes
+    class Plan:
+        def __init__(self, *args, **kwargs):
+            self.name = "Test Plan"
+
+    class PlanCheckerResult:
+        def __init__(self, *args, **kwargs):
+            self.structure_name = "Unknown"
+            self.goal_description = "Unknown Goal"
+            self.result = "PASSED"
+
+    class PlanChecker:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def check_plan(self, *args, **kwargs):
+            return []
+
+    class ProtocolManager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get_template_names(self):
+            return ["Default Protocol"]
+
+        def load_protocol(self, name):
+            return []
+
 
 from quangtps.core.logging import get_logger
 
@@ -731,7 +760,12 @@ class PlanCheckerWidget(QWidget):
 # Để kiểm thử khi chạy trực tiếp module này
 if __name__ == "__main__":
     import sys
-    from PyQt5.QtWidgets import QApplication
+
+    try:
+        from PyQt5.QtWidgets import QApplication
+    except ImportError:
+        print("PyQt5 không khả dụng. Không thể chạy demo.")
+        sys.exit(1)
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")

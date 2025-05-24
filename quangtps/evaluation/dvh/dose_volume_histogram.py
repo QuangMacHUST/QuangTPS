@@ -28,86 +28,8 @@ except ImportError:
     HAS_MATPLOTLIB = False
     logger.warning("Matplotlib not available - DVH plotting will be limited")
 
-
-class DVHType(str, Enum):
-    """Loại DVH."""
-
-    CUMULATIVE = "cumulative"  # DVH tích lũy
-    DIFFERENTIAL = "differential"  # DVH vi phân
-
-
-class VolumeUnits(str, Enum):
-    """Đơn vị thể tích cho DVH."""
-
-    PERCENT = "percent"  # Phần trăm
-    CC = "cc"  # Centimet khối (cm³)
-
-
-@dataclass
-class DVHPoint:
-    """Điểm dữ liệu trong DVH."""
-
-    dose: float  # Liều (Gy)
-    volume: float  # Thể tích (% hoặc cc)
-
-    def __str__(self) -> str:
-        return f"D={self.dose:.2f}Gy, V={self.volume:.2f}"
-
-
-@dataclass
-class DVHMetrics:
-    """Các chỉ số đánh giá từ DVH."""
-
-    # Chỉ số liều tại thể tích cụ thể (Dx)
-    d95: Optional[float] = None  # Liều tại 95% thể tích
-    d50: Optional[float] = None  # Liều trung vị
-    d2: Optional[float] = None  # Liều gần max (D2%)
-    d98: Optional[float] = None  # Liều gần min (D98%)
-    d_mean: Optional[float] = None  # Liều trung bình
-    d_max: Optional[float] = None  # Liều tối đa
-    d_min: Optional[float] = None  # Liều tối thiểu
-
-    # Chỉ số thể tích tại liều cụ thể (Vx)
-    v_5gy: Optional[float] = None  # Thể tích nhận 5Gy
-    v_10gy: Optional[float] = None  # Thể tích nhận 10Gy
-    v_20gy: Optional[float] = None  # Thể tích nhận 20Gy
-    v_30gy: Optional[float] = None  # Thể tích nhận 30Gy
-    v_50gy: Optional[float] = None  # Thể tích nhận 50Gy
-
-    # Chỉ số chất lượng
-    conformity_index: Optional[float] = None  # Chỉ số đồng dạng
-    homogeneity_index: Optional[float] = None  # Chỉ số đồng nhất
-    coverage: Optional[float] = None  # Độ phủ
-
-    # Thể tích cấu trúc
-    total_volume: Optional[float] = None  # Tổng thể tích
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Chuyển đổi thành dictionary."""
-        return {
-            "dose_metrics": {
-                "D95": self.d95,
-                "D50": self.d50,
-                "D2": self.d2,
-                "D98": self.d98,
-                "D_mean": self.d_mean,
-                "D_max": self.d_max,
-                "D_min": self.d_min,
-            },
-            "volume_metrics": {
-                "V5Gy": self.v_5gy,
-                "V10Gy": self.v_10gy,
-                "V20Gy": self.v_20gy,
-                "V30Gy": self.v_30gy,
-                "V50Gy": self.v_50gy,
-            },
-            "quality_metrics": {
-                "CI": self.conformity_index,
-                "HI": self.homogeneity_index,
-                "Coverage": self.coverage,
-            },
-            "total_volume": self.total_volume,
-        }
+# Import DVH metrics và types từ module riêng
+from .dvh_metrics import DVHMetrics, DVHType, VolumeUnits, DVHPoint
 
 
 @dataclass
@@ -156,17 +78,18 @@ class DVHData:
                 self.dose_bins, weights=self._get_differential_volume()
             )
 
-            # Tìm indices có volume > 0
-            valid_indices = self.volume_data > 0
-            if np.any(valid_indices):
-                metrics.d_max = np.max(self.dose_bins[valid_indices])
-                metrics.d_min = np.min(self.dose_bins[valid_indices])
+            # Tìm indices có volume > 0 - sửa lỗi indexing
+            valid_indices = np.where(self.volume_data > 0)[0]
+            if len(valid_indices) > 0:
+                valid_doses = self.dose_bins[valid_indices]
+                metrics.d_max = float(np.max(valid_doses))
+                metrics.d_min = float(np.min(valid_doses))
             else:
                 metrics.d_max = (
-                    np.max(self.dose_bins) if len(self.dose_bins) > 0 else 0.0
+                    float(np.max(self.dose_bins)) if len(self.dose_bins) > 0 else 0.0
                 )
                 metrics.d_min = (
-                    np.min(self.dose_bins) if len(self.dose_bins) > 0 else 0.0
+                    float(np.min(self.dose_bins)) if len(self.dose_bins) > 0 else 0.0
                 )
 
             # Dx metrics (liều tại x% thể tích)
@@ -327,7 +250,11 @@ class DVHCalculator:
             if dose_grid.shape != structure_mask.shape:
                 raise ValueError("Kích thước dose_grid và structure_mask không khớp")
 
-            # Lấy liều trong cấu trúc
+            # Đảm bảo structure_mask là boolean array để tránh lỗi indexing
+            if structure_mask.dtype != bool:
+                structure_mask = structure_mask.astype(bool)
+
+            # Lấy liều trong cấu trúc - sử dụng boolean indexing
             structure_doses = dose_grid[structure_mask]
 
             if len(structure_doses) == 0:
