@@ -70,6 +70,120 @@ class DVHMetrics:
     # Thể tích cấu trúc
     total_volume: Optional[float] = None  # Tổng thể tích
 
+    # Dữ liệu DVH
+    _doses: Optional[list] = None  # Mảng liều
+    _volumes: Optional[list] = None  # Mảng thể tích
+
+    def get_dose_at_volume(self, volume_percent: float) -> float:
+        """
+        Lấy giá trị liều tại một phần trăm thể tích cụ thể.
+
+        Parameters:
+            volume_percent: Phần trăm thể tích (0-100)
+
+        Returns:
+            Giá trị liều (Gy) tại volume_percent, hoặc 0 nếu không tìm thấy
+        """
+        try:
+            # Nếu có sẵn dữ liệu tính toán
+            if volume_percent == 95:
+                return self.d95 if self.d95 is not None else 0.0
+            elif volume_percent == 50:
+                return self.d50 if self.d50 is not None else 0.0
+            elif volume_percent == 2:
+                return self.d2 if self.d2 is not None else 0.0
+            elif volume_percent == 98:
+                return self.d98 if self.d98 is not None else 0.0
+
+            # Nếu có dữ liệu gốc, tính toán trực tiếp từ đó
+            if self._doses is not None and self._volumes is not None:
+                import numpy as np
+                from scipy.interpolate import interp1d
+
+                # Kiểm tra nếu thể tích được lưu dưới dạng phần trăm
+                if max(self._volumes) <= 1.0:
+                    # Chuyển đổi sang phần trăm (0-100)
+                    target_volume = volume_percent / 100.0
+                else:
+                    # Đã ở dạng phần trăm (0-100)
+                    target_volume = volume_percent
+
+                # Đảm bảo thứ tự DVH giảm dần theo thể tích
+                sorted_indices = np.argsort(self._doses)
+                sorted_doses = np.array(self._doses)[sorted_indices]
+                sorted_volumes = np.array(self._volumes)[sorted_indices]
+
+                # Nội suy để tìm liều tại thể tích
+                if target_volume >= min(sorted_volumes) and target_volume <= max(
+                    sorted_volumes
+                ):
+                    interp_func = interp1d(
+                        sorted_volumes,
+                        sorted_doses,
+                        bounds_error=False,
+                        fill_value="extrapolate",
+                    )
+                    return float(interp_func(target_volume))
+
+            # Trường hợp không có dữ liệu
+            logger.warning(f"Không thể tính liều tại thể tích {volume_percent}%")
+            return 0.0
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính dose at volume {volume_percent}%: {str(e)}")
+            return 0.0
+
+    def get_volume_at_dose(self, dose_gy: float) -> float:
+        """
+        Lấy phần trăm thể tích nhận một liều cụ thể.
+
+        Parameters:
+            dose_gy: Giá trị liều (Gy)
+
+        Returns:
+            Phần trăm thể tích (%) nhận liều dose_gy, hoặc 0 nếu không tìm thấy
+        """
+        try:
+            # Kiểm tra các giá trị tính sẵn
+            if abs(dose_gy - 5.0) < 0.01 and self.v_5gy is not None:
+                return self.v_5gy
+            elif abs(dose_gy - 10.0) < 0.01 and self.v_10gy is not None:
+                return self.v_10gy
+            elif abs(dose_gy - 20.0) < 0.01 and self.v_20gy is not None:
+                return self.v_20gy
+            elif abs(dose_gy - 30.0) < 0.01 and self.v_30gy is not None:
+                return self.v_30gy
+            elif abs(dose_gy - 50.0) < 0.01 and self.v_50gy is not None:
+                return self.v_50gy
+
+            # Nếu có dữ liệu gốc, tính toán trực tiếp từ đó
+            if self._doses is not None and self._volumes is not None:
+                import numpy as np
+                from scipy.interpolate import interp1d
+
+                # Đảm bảo thứ tự DVH giảm dần theo thể tích
+                sorted_indices = np.argsort(self._doses)
+                sorted_doses = np.array(self._doses)[sorted_indices]
+                sorted_volumes = np.array(self._volumes)[sorted_indices]
+
+                # Nội suy để tìm thể tích tại liều
+                if dose_gy >= min(sorted_doses) and dose_gy <= max(sorted_doses):
+                    interp_func = interp1d(
+                        sorted_doses,
+                        sorted_volumes,
+                        bounds_error=False,
+                        fill_value="extrapolate",
+                    )
+                    return float(interp_func(dose_gy))
+
+            # Trường hợp không có dữ liệu
+            logger.warning(f"Không thể tính thể tích tại liều {dose_gy} Gy")
+            return 0.0
+
+        except Exception as e:
+            logger.error(f"Lỗi khi tính volume at dose {dose_gy} Gy: {str(e)}")
+            return 0.0
+
     def to_dict(self) -> Dict[str, Any]:
         """Chuyển đổi thành dictionary."""
         return {

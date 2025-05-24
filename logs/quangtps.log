@@ -12241,3 +12241,4 @@ AttributeError: 'Config' object has no attribute 'check_for_updates_on_startup'
 2025-05-24 22:23:39,416 - quangtps.ui.3d_viewer - INFO - Sử dụng VTK3DViewer
 2025-05-24 22:28:28,313 - root - INFO - QuangTPS logging system initialized
 2025-05-24 22:35:37,659 - root - INFO - QuangTPS logging system initialized
+2025-05-25 04:28:37,897 - root - INFO - QuangTPS logging system initialized

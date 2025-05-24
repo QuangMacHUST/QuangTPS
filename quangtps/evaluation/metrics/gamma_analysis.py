@@ -153,6 +153,15 @@ def calculate_gamma_3d(
     spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0),
     settings: Optional[GammaAnalysisSettings] = None,
     progress_callback: Optional[Callable] = None,
+    # Các tham số tương thích với API cũ
+    reference: np.ndarray = None,
+    evaluation: np.ndarray = None,
+    dta_mm: float = None,
+    dd_percent: float = None,
+    threshold: float = None,
+    voxel_size: Tuple[float, float, float] = None,
+    max_gamma: float = 5.0,
+    local_normalization: bool = False,
 ) -> GammaAnalysisResult:
     """
     Tính toán gamma index 3D với các tùy chọn nâng cao.
@@ -167,12 +176,38 @@ def calculate_gamma_3d(
         settings: Advanced settings
         progress_callback: Callback function cho progress
 
+        # Tham số tương thích API cũ
+        reference: Alias cho reference_dose
+        evaluation: Alias cho evaluated_dose
+        dta_mm: Alias cho distance_mm
+        dd_percent: Alias cho dose_percent
+        threshold: Alias cho dose_threshold_percent
+        voxel_size: Alias cho spacing
+        max_gamma: Giá trị gamma tối đa
+        local_normalization: Dùng local thay vì global normalization
+
     Returns:
         GammaAnalysisResult: Kết quả gamma analysis
     """
     start_time = time.time()
 
     try:
+        # Xử lý các tham số API cũ
+        if reference is not None:
+            reference_dose = reference
+        if evaluation is not None:
+            evaluated_dose = evaluation
+        if dta_mm is not None:
+            distance_mm = dta_mm
+        if dd_percent is not None:
+            dose_percent = dd_percent
+        if threshold is not None:
+            dose_threshold_percent = (
+                threshold * 100.0
+            )  # Chuyển đổi từ tỷ lệ sang phần trăm
+        if voxel_size is not None:
+            spacing = voxel_size
+
         # Use settings if provided
         if settings is None:
             settings = GammaAnalysisSettings(
@@ -180,6 +215,12 @@ def calculate_gamma_3d(
                 dose_percent=dose_percent,
                 dose_threshold_percent=dose_threshold_percent,
             )
+
+            # Cập nhật settings từ tham số API cũ
+            if local_normalization:
+                settings.use_global_dose = False
+            if max_gamma:
+                settings.max_gamma = max_gamma
 
         logger.info(
             f"Starting gamma analysis with {settings.distance_mm}mm/{settings.dose_percent}%"

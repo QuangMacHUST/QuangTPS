@@ -37,6 +37,7 @@ try:
         QSizePolicy,
         QSplitter,
         QFrame,
+        QMessageBox,
     )
     from PyQt5.QtCore import Qt, pyqtSignal, QTimer
     from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
@@ -51,9 +52,85 @@ try:
     from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
     HAS_VTK = True
-except ImportError:
+    logger.info("VTK đã được import thành công cho 3D viewer")
+
+    # Định nghĩa hàm helper để truy cập thuộc tính vtk an toàn
+    def get_vtk_attribute(attr_name, default_value=None):
+        """Truy cập thuộc tính của vtk một cách an toàn"""
+        return getattr(vtk, attr_name, default_value)
+
+    # Kiểm tra version để xử lý tương thích
+    vtk_version = get_vtk_attribute("vtkVersion")
+    if vtk_version is not None:
+        vtk_version = vtk_version.GetVTKVersion()
+        logger.info(f"VTK version: {vtk_version}")
+    else:
+        logger.warning("Không thể xác định phiên bản VTK")
+
+    # Chuẩn bị ánh xạ kiểu dữ liệu numpy sang VTK
+    NUMPY_TO_VTK_TYPE_MAP = {
+        np.uint8: get_vtk_attribute("VTK_UNSIGNED_CHAR", 3),
+        np.int8: get_vtk_attribute("VTK_CHAR", 2),
+        np.uint16: get_vtk_attribute("VTK_UNSIGNED_SHORT", 5),
+        np.int16: get_vtk_attribute("VTK_SHORT", 4),
+        np.uint32: get_vtk_attribute("VTK_UNSIGNED_INT", 7),
+        np.int32: get_vtk_attribute("VTK_INT", 6),
+        np.float32: get_vtk_attribute("VTK_FLOAT", 10),
+        np.float64: get_vtk_attribute("VTK_DOUBLE", 11),
+    }
+
+    # Kiểm tra sẵn có của các class VTK cần thiết
+    VTK_CLASSES = [
+        "vtkRenderer",
+        "vtkImageData",
+        "vtkGPUVolumeRayCastMapper",
+        "vtkVolume",
+        "vtkVolumeProperty",
+        "vtkColorTransferFunction",
+        "vtkPiecewiseFunction",
+        "vtkImageMapToColors",
+        "vtkImageSliceMapper",
+        "vtkImageActor",
+        "vtkUnsignedCharArray",
+        "vtkMarchingCubes",
+        "vtkPolyDataMapper",
+        "vtkActor",
+        "vtkDataArray",
+    ]
+
+    VTK_CLASSES_AVAILABLE = {}
+    for cls_name in VTK_CLASSES:
+        VTK_CLASSES_AVAILABLE[cls_name] = hasattr(vtk, cls_name)
+        if not VTK_CLASSES_AVAILABLE[cls_name]:
+            logger.warning(f"VTK class {cls_name} không khả dụng")
+
+    # Kiểm tra nếu thiếu quá nhiều class cần thiết
+    if sum(VTK_CLASSES_AVAILABLE.values()) < len(VTK_CLASSES) * 0.8:
+        logger.warning(
+            "Nhiều class VTK cần thiết không khả dụng, chuyển sang chế độ fallback"
+        )
+        HAS_VTK = False
+
+except ImportError as e:
     HAS_VTK = False
-    logger.warning("VTK không có sẵn - 3D rendering sẽ bị giới hạn")
+    logger.warning(f"VTK không khả dụng ({str(e)}). Sử dụng Matplotlib fallback.")
+    NUMPY_TO_VTK_TYPE_MAP = {}  # Dummy map
+    VTK_CLASSES_AVAILABLE = {}
+
+    def get_vtk_attribute(attr_name, default_value=None):
+        """Dummy function khi VTK không khả dụng"""
+        return default_value
+
+except Exception as e:
+    HAS_VTK = False
+    logger.error(f"Lỗi không mong đợi khi import VTK: {str(e)}")
+    NUMPY_TO_VTK_TYPE_MAP = {}  # Dummy map
+    VTK_CLASSES_AVAILABLE = {}
+
+    def get_vtk_attribute(attr_name, default_value=None):
+        """Dummy function khi VTK không khả dụng"""
+        return default_value
+
 
 try:
     import matplotlib.pyplot as plt
@@ -121,21 +198,44 @@ if HAS_PYQT and HAS_VTK:
         structure_selected = pyqtSignal(str)  # structure_name
 
         def __init__(self, parent=None):
-            super().__init__(parent)
-            self.image_data = None
-            self.dose_data = None
-            self.structures = {}  # Dict[str, np.ndarray]
-            self.structure_settings = {}  # Dict[str, StructureDisplaySettings]
+            """
+            Khởi tạo VTK3DViewer.
 
-            # VTK objects
+            Parameters
+            ----------
+            parent : QWidget, optional
+                Widget cha
+            """
+            super().__init__(parent)
+
+            # Khởi tạo biến trạng thái
+            self._vtk_available = (
+                HAS_VTK  # Theo mặc định, trạng thái dựa trên việc import VTK
+            )
+            self.structures = {}  # Dictionary lưu trữ structure masks
+            self.structure_controls = {}  # Dictionary lưu trữ structure control widgets
+            self.structure_actors = {}  # Dictionary lưu trữ structure actors
+            self.slice_actors = {}  # Dictionary lưu trữ slice actors
+
+            # Khởi tạo các biến VTK
             self.renderer = None
             self.render_window = None
             self.interactor = None
-            self.volume_mapper = None
             self.volume_actor = None
-            self.slice_actors = {}
-            self.structure_actors = {}
+            self.volume_mapper = None
+            self.slice_mapper = None
+            self.slice_actor = None
 
+            # Khởi tạo biến dữ liệu
+            self.image_data = None
+            self.image_spacing = (1.0, 1.0, 1.0)
+            self.dose_data = None
+
+            # Chế độ xem
+            self.current_view_mode = ViewMode.AXIAL
+            self.current_render_mode = RenderingMode.VOLUME_RENDERING
+
+            # Thiết lập UI
             self.init_ui()
             self.setup_vtk()
 
@@ -270,124 +370,247 @@ if HAS_PYQT and HAS_VTK:
 
         def setup_vtk(self):
             """Thiết lập VTK rendering."""
-            # Create renderer
-            self.renderer = vtk.vtkRenderer()
-            self.renderer.SetBackground(0.1, 0.1, 0.1)  # Dark background
+            try:
+                # Create renderer
+                if VTK_CLASSES_AVAILABLE.get("vtkRenderer", False):
+                    self.renderer = getattr(vtk, "vtkRenderer")()
+                    self.renderer.SetBackground(0.1, 0.1, 0.1)  # Dark background
 
-            # Create render window
-            self.render_window = self.vtk_widget.GetRenderWindow()
-            self.render_window.AddRenderer(self.renderer)
+                    # Create render window
+                    self.render_window = self.vtk_widget.GetRenderWindow()
+                    self.render_window.AddRenderer(self.renderer)
 
-            # Create interactor
-            self.interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
+                    # Create interactor
+                    self.interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
 
-            # Set up camera
-            camera = self.renderer.GetActiveCamera()
-            camera.SetPosition(0, 0, 300)
-            camera.SetFocalPoint(0, 0, 0)
-            camera.SetViewUp(0, 1, 0)
+                    # Set up camera
+                    camera = self.renderer.GetActiveCamera()
+                    camera.SetPosition(0, 0, 300)
+                    camera.SetFocalPoint(0, 0, 0)
+                    camera.SetViewUp(0, 1, 0)
 
-            # Start interactor
-            self.interactor.Initialize()
-            self.interactor.Start()
+                    # Start interactor
+                    self.interactor.Initialize()
+                    self.interactor.Start()
+
+                    logger.info("VTK rendering setup thành công")
+                else:
+                    raise ValueError("Class vtkRenderer không khả dụng")
+            except Exception as e:
+                logger.error(f"Lỗi khi thiết lập VTK rendering: {str(e)}")
+                # Hiển thị thông báo lỗi cho người dùng
+                if HAS_PYQT:
+                    QMessageBox.warning(
+                        self,
+                        "VTK Error",
+                        f"Không thể khởi tạo VTK renderer: {str(e)}\n"
+                        "Viewer sẽ chuyển sang chế độ giới hạn.",
+                    )
+                # Đánh dấu là không khả dụng để sử dụng fallback
+                self._vtk_available = False
+                self._setup_fallback_display()
 
         def set_image_data(
             self,
             image_data: np.ndarray,
             spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0),
         ):
-            """Thiết lập dữ liệu ảnh."""
-            self.image_data = image_data
+            """
+            Thiết lập dữ liệu hình ảnh.
 
-            if image_data is None:
-                return
-
-            # Update slice controls
-            self.slice_slider.setRange(0, image_data.shape[2] - 1)
-            self.slice_spinbox.setRange(0, image_data.shape[2] - 1)
-            self.slice_slider.setValue(image_data.shape[2] // 2)
-
-            # Create VTK image data
-            vtk_image = vtk.vtkImageData()
-            vtk_image.SetDimensions(image_data.shape)
-            vtk_image.SetSpacing(spacing)
-            vtk_image.SetOrigin(0, 0, 0)
-
-            # Convert numpy array to VTK
-            flat_array = image_data.flatten(order="F").astype(
-                np.float32
-            )  # Đảm bảo kiểu float32
-            vtk_array = vtk.vtkFloatArray()
-            vtk_array.SetName("ImageArray")
-            vtk_array.SetNumberOfComponents(1)
-            vtk_array.SetNumberOfTuples(len(flat_array))
-
-            # Sử dụng SetData thay vì SetArray để tránh lỗi
+            Parameters
+            ----------
+            image_data : np.ndarray
+                Dữ liệu hình ảnh 3D
+            spacing : Tuple[float, float, float]
+                Khoảng cách giữa các voxel theo mm
+            """
             try:
-                # Thử cách mới trước
-                vtk_array.SetData(vtk.numpy_to_vtk(flat_array))
-            except (AttributeError, TypeError):
-                # Fallback cho VTK cũ
-                try:
-                    for i, value in enumerate(flat_array):
-                        vtk_array.SetValue(i, float(value))
-                except Exception as e:
-                    logger.error(f"Không thể thiết lập VTK array: {e}")
+                if image_data is None:
+                    logger.error(
+                        "Không thể thiết lập dữ liệu hình ảnh: image_data là None"
+                    )
                     return
 
-            vtk_image.GetPointData().SetScalars(vtk_array)
+                if not isinstance(image_data, np.ndarray):
+                    logger.warning(
+                        f"image_data không phải là numpy array, đang chuyển đổi từ {type(image_data)}"
+                    )
+                    try:
+                        image_data = np.array(image_data)
+                    except Exception as e:
+                        logger.error(
+                            f"Không thể chuyển đổi image_data thành numpy array: {str(e)}"
+                        )
+                        return
 
-            # Create volume mapper
-            self.volume_mapper = vtk.vtkGPUVolumeRayCastMapper()
-            self.volume_mapper.SetInputData(vtk_image)
+                # Lưu trữ dữ liệu
+                self.image_data = image_data
+                self.image_spacing = spacing
 
-            # Create volume actor
-            self.volume_actor = vtk.vtkVolume()
-            self.volume_actor.SetMapper(self.volume_mapper)
+                # Điều chỉnh giá trị và kích thước sliders
+                shape = image_data.shape
+                self.slice_slider.setMaximum(shape[2] - 1)
+                self.slice_slider.setValue(shape[2] // 2)
+                self.slice_spinbox.setMaximum(shape[2] - 1)
+                self.slice_spinbox.setValue(shape[2] // 2)
 
-            # Set up volume properties
-            self.setup_volume_properties()
+                # Kiểm tra nếu VTK không khả dụng hoặc bị lỗi trước đó
+                if not HAS_VTK or not self._vtk_available:
+                    logger.warning(
+                        "VTK không khả dụng, sử dụng chế độ hiển thị giới hạn"
+                    )
+                    self._setup_fallback_display()
+                    return
 
-            # Add to renderer
-            self.renderer.AddVolume(self.volume_actor)
-            self.render_window.Render()
+                # Get VTK classes
+                vtkImageData = get_vtk_attribute("vtkImageData")
+                vtkGPUVolumeRayCastMapper = get_vtk_attribute(
+                    "vtkGPUVolumeRayCastMapper"
+                )
+                vtkVolume = get_vtk_attribute("vtkVolume")
+
+                if None in [vtkImageData, vtkGPUVolumeRayCastMapper, vtkVolume]:
+                    logger.error("Một hoặc nhiều class VTK cần thiết không khả dụng")
+                    self._setup_fallback_display()
+                    return
+
+                # Tạo vtk ImageData
+                vtk_image = vtkImageData()
+                vtk_image.SetDimensions(shape[0], shape[1], shape[2])
+                vtk_image.SetSpacing(spacing[0], spacing[1], spacing[2])
+                vtk_image.SetOrigin(0, 0, 0)
+
+                # Xác định kiểu dữ liệu cho VTK dựa vào kiểu dữ liệu numpy
+                vtk_data_type = NUMPY_TO_VTK_TYPE_MAP.get(image_data.dtype.type)
+
+                if vtk_data_type is None:
+                    logger.warning(
+                        f"Kiểu dữ liệu {image_data.dtype} không được hỗ trợ trực tiếp, chuyển sang float32"
+                    )
+                    image_data = image_data.astype(np.float32)
+                    vtk_data_type = get_vtk_attribute("VTK_FLOAT", 10)
+
+                vtk_image.AllocateScalars(vtk_data_type, 1)
+
+                # Sử dụng hàm tiện ích để chuyển đổi an toàn
+                vtk_array = numpy_to_vtk_array(image_data, vtk_data_type)
+
+                if vtk_array is None:
+                    logger.error("Không thể chuyển đổi dữ liệu sang VTK array")
+                    self._setup_fallback_display()
+                    return
+
+                # Đặt tên và gán vào point data
+                vtk_array.SetName("ImageScalars")
+                vtk_image.GetPointData().SetScalars(vtk_array)
+
+                # Tạo các actors
+                if self.renderer is None:
+                    self.setup_vtk()
+
+                # Kiểm tra lại nếu setup_vtk thất bại
+                if not self._vtk_available:
+                    self._setup_fallback_display()
+                    return
+
+                # Volume Rendering
+                self.volume_mapper = vtkGPUVolumeRayCastMapper()
+                self.volume_mapper.SetInputData(vtk_image)
+
+                self.volume_actor = vtkVolume()
+                self.volume_actor.SetMapper(self.volume_mapper)
+
+                # Thiết lập thuộc tính hiển thị
+                self.setup_volume_properties()
+
+                # Thêm vào renderer
+                self.renderer.AddViewProp(self.volume_actor)
+
+                # Reset view để hiển thị toàn bộ dữ liệu
+                self.renderer.ResetCamera()
+                self.render_window.Render()
+
+                logger.info(
+                    f"Đã thiết lập dữ liệu hình ảnh {image_data.shape} thành công"
+                )
+
+            except Exception as e:
+                logger.error(f"Lỗi khi thiết lập dữ liệu hình ảnh: {str(e)}")
+                import traceback
+
+                logger.debug(traceback.format_exc())
+
+                # Chuyển sang fallback mode
+                self._setup_fallback_display()
+
+                # Thông báo cho người dùng
+                if HAS_PYQT:
+                    QMessageBox.warning(
+                        self,
+                        "Rendering Error",
+                        f"Không thể render dữ liệu 3D: {str(e)}\n"
+                        "Hiển thị 2D đơn giản sẽ được sử dụng thay thế.",
+                    )
 
         def setup_volume_properties(self):
             """Thiết lập thuộc tính volume."""
-            volume_property = vtk.vtkVolumeProperty()
+            try:
+                if not self._vtk_available:
+                    logger.warning(
+                        "VTK không khả dụng, không thể thiết lập volume properties"
+                    )
+                    return
 
-            # Color transfer function
-            color_tf = vtk.vtkColorTransferFunction()
-            color_tf.AddRGBPoint(-1000, 0.0, 0.0, 0.0)  # Air - black
-            color_tf.AddRGBPoint(-300, 0.4, 0.2, 0.0)  # Fat - brown
-            color_tf.AddRGBPoint(0, 0.8, 0.6, 0.4)  # Soft tissue - beige
-            color_tf.AddRGBPoint(300, 1.0, 1.0, 1.0)  # Bone - white
-            color_tf.AddRGBPoint(3000, 1.0, 1.0, 1.0)  # Dense bone - white
+                # Get VTK classes
+                vtkVolumeProperty = get_vtk_attribute("vtkVolumeProperty")
+                vtkColorTransferFunction = get_vtk_attribute("vtkColorTransferFunction")
+                vtkPiecewiseFunction = get_vtk_attribute("vtkPiecewiseFunction")
 
-            # Opacity transfer function
-            opacity_tf = vtk.vtkPiecewiseFunction()
-            opacity_tf.AddPoint(-1000, 0.0)  # Air - transparent
-            opacity_tf.AddPoint(-300, 0.1)  # Fat - slightly visible
-            opacity_tf.AddPoint(0, 0.3)  # Soft tissue - visible
-            opacity_tf.AddPoint(300, 0.8)  # Bone - opaque
-            opacity_tf.AddPoint(3000, 1.0)  # Dense bone - opaque
+                if None in [
+                    vtkVolumeProperty,
+                    vtkColorTransferFunction,
+                    vtkPiecewiseFunction,
+                ]:
+                    logger.error("Một hoặc nhiều class VTK cần thiết không khả dụng")
+                    return
 
-            # Gradient opacity
-            gradient_tf = vtk.vtkPiecewiseFunction()
-            gradient_tf.AddPoint(0, 0.0)
-            gradient_tf.AddPoint(90, 0.5)
-            gradient_tf.AddPoint(100, 1.0)
+                volume_property = vtkVolumeProperty()
 
-            volume_property.SetColor(color_tf)
-            volume_property.SetScalarOpacity(opacity_tf)
-            volume_property.SetGradientOpacity(gradient_tf)
-            volume_property.SetInterpolationTypeToLinear()
-            volume_property.ShadeOn()
-            volume_property.SetAmbient(0.4)
-            volume_property.SetDiffuse(0.6)
-            volume_property.SetSpecular(0.2)
+                # Color transfer function
+                color_tf = vtkColorTransferFunction()
+                color_tf.AddRGBPoint(-1000, 0.0, 0.0, 0.0)  # Air - black
+                color_tf.AddRGBPoint(-300, 0.4, 0.2, 0.0)  # Fat - brown
+                color_tf.AddRGBPoint(0, 0.8, 0.6, 0.4)  # Soft tissue - beige
+                color_tf.AddRGBPoint(400, 1.0, 0.8, 0.6)  # Bone - white-ish
+                color_tf.AddRGBPoint(1000, 1.0, 1.0, 1.0)  # Dense bone - white
 
-            self.volume_actor.SetProperty(volume_property)
+                # Opacity transfer function
+                opacity_tf = vtkPiecewiseFunction()
+                opacity_tf.AddPoint(-1000, 0.0)  # Air - transparent
+                opacity_tf.AddPoint(-300, 0.1)  # Fat - slightly visible
+                opacity_tf.AddPoint(0, 0.3)  # Soft tissue - visible
+                opacity_tf.AddPoint(400, 0.5)  # Bone - more visible
+                opacity_tf.AddPoint(1000, 0.8)  # Dense bone - most visible
+
+                # Gradient opacity
+                gradient_tf = vtkPiecewiseFunction()
+                gradient_tf.AddPoint(0, 0.0)
+                gradient_tf.AddPoint(90, 0.5)
+                gradient_tf.AddPoint(100, 1.0)
+
+                # Set volume properties
+                volume_property.SetColor(color_tf)
+                volume_property.SetScalarOpacity(opacity_tf)
+                volume_property.SetGradientOpacity(gradient_tf)
+                volume_property.SetInterpolationTypeToLinear()
+                volume_property.ShadeOn()
+
+                if self.volume_actor is not None:
+                    self.volume_actor.SetProperty(volume_property)
+
+            except Exception as e:
+                logger.error(f"Lỗi khi thiết lập volume properties: {str(e)}")
 
         def add_structure(
             self,
@@ -395,76 +618,153 @@ if HAS_PYQT and HAS_VTK:
             mask: np.ndarray,
             color: Tuple[float, float, float] = (1.0, 0.0, 0.0),
         ):
-            """Thêm cấu trúc."""
-            self.structures[name] = mask
+            """
+            Thêm cấu trúc để hiển thị.
 
-            settings = StructureDisplaySettings(visible=True, color=color, opacity=0.3)
-            self.structure_settings[name] = settings
+            Parameters
+            ----------
+            name : str
+                Tên cấu trúc
+            mask : np.ndarray
+                Mảng 3D chứa mask của cấu trúc
+            color : Tuple[float, float, float], optional
+                Màu sắc (RGB) của cấu trúc, mặc định là (1.0, 0.0, 0.0) (đỏ)
+            """
+            try:
+                if not self._vtk_available:
+                    logger.warning("VTK không khả dụng, không thể thêm structure")
+                    return
 
-            # Create structure actor
-            self.create_structure_actor(name, mask, settings)
+                if mask is None or not np.any(mask):
+                    logger.warning(f"Structure mask '{name}' trống hoặc không hợp lệ")
+                    return
 
-            # Add to control panel
-            self.add_structure_control(name, settings)
+                # Lưu mask
+                self.structures[name] = mask
+
+                # Tạo settings mặc định
+                settings = StructureDisplaySettings(
+                    visible=True,
+                    color=color,
+                    opacity=0.7,
+                    wireframe=False,
+                    outline_width=1.0,
+                )
+                self.structure_controls[name] = settings
+
+                # Tạo actor cho cấu trúc
+                if self.renderer is not None:
+                    actor = self.create_structure_actor(name, mask, settings)
+                    if actor is not None:
+                        self.structure_actors[name] = actor
+                        self.renderer.AddActor(actor)
+                        actor.SetVisibility(settings.visible)
+
+                        # Cập nhật view
+                        if self.render_window is not None:
+                            self.render_window.Render()
+                    else:
+                        logger.warning(f"Không thể tạo actor cho structure '{name}'")
+
+                # Thêm control cho cấu trúc vào panel
+                self.add_structure_control(name, settings)
+
+            except Exception as e:
+                logger.error(f"Lỗi khi thêm structure '{name}': {str(e)}")
 
         def create_structure_actor(
             self, name: str, mask: np.ndarray, settings: StructureDisplaySettings
         ):
-            """Tạo VTK actor cho cấu trúc."""
-            if mask is None or not np.any(mask):
-                return
+            """
+            Tạo actor VTK cho cấu trúc.
 
-            # Create VTK image data from mask
-            vtk_mask = vtk.vtkImageData()
-            vtk_mask.SetDimensions(mask.shape)
-            vtk_mask.SetSpacing(1.0, 1.0, 1.0)
+            Parameters
+            ----------
+            name : str
+                Tên cấu trúc
+            mask : np.ndarray
+                Mảng 3D chứa mask của cấu trúc
+            settings : StructureDisplaySettings
+                Cài đặt hiển thị cho cấu trúc
 
-            # Convert mask to VTK
-            flat_mask = mask.astype(np.uint8).flatten(order="F")
-            vtk_array = vtk.vtkUnsignedCharArray()
-            vtk_array.SetName("MaskArray")
-            vtk_array.SetNumberOfTuples(len(flat_mask))
-
-            # Sử dụng SetData thay vì SetArray để tránh lỗi
+            Returns
+            -------
+            vtk.vtkActor
+                Actor VTK cho cấu trúc
+            """
             try:
-                # Thử cách mới trước
-                vtk_array.SetData(vtk.numpy_to_vtk(flat_mask))
-            except (AttributeError, TypeError):
-                # Fallback cho VTK cũ
-                try:
-                    for i, value in enumerate(flat_mask):
-                        vtk_array.SetValue(i, int(value))
-                except Exception as e:
-                    logger.error(f"Không thể thiết lập VTK mask array: {e}")
-                    return
+                if not self._vtk_available:
+                    logger.warning("VTK không khả dụng, không thể tạo structure actor")
+                    return None
 
-            vtk_mask.GetPointData().SetScalars(vtk_array)
+                # Create VTK image data from mask
+                vtkImageData = get_vtk_attribute("vtkImageData")
+                if vtkImageData is None:
+                    logger.error("vtkImageData không khả dụng")
+                    return None
 
-            # Create contour filter
-            contour = vtk.vtkMarchingCubes()
-            contour.SetInputData(vtk_mask)
-            contour.SetValue(0, 0.5)
-            contour.Update()
+                vtk_mask = vtkImageData()
+                vtk_mask.SetDimensions(mask.shape)
+                vtk_mask.SetSpacing(1.0, 1.0, 1.0)
 
-            # Create mapper
-            mapper = vtk.vtkPolyDataMapper()
-            mapper.SetInputConnection(contour.GetOutputPort())
-            mapper.ScalarVisibilityOff()
+                # Convert mask to VTK
+                flat_mask = mask.astype(np.uint8).flatten(order="F")
 
-            # Create actor
-            actor = vtk.vtkActor()
-            actor.SetMapper(mapper)
-            actor.GetProperty().SetColor(settings.color)
-            actor.GetProperty().SetOpacity(settings.opacity)
-            actor.SetVisibility(settings.visible)
+                vtkUnsignedCharArray = get_vtk_attribute("vtkUnsignedCharArray")
+                if vtkUnsignedCharArray is None:
+                    logger.error("vtkUnsignedCharArray không khả dụng")
+                    return None
 
-            if settings.wireframe:
-                actor.GetProperty().SetRepresentationToWireframe()
-            else:
-                actor.GetProperty().SetRepresentationToSurface()
+                vtk_array = vtkUnsignedCharArray()
+                vtk_array.SetName("MaskArray")
+                vtk_array.SetNumberOfTuples(len(flat_mask))
 
-            self.structure_actors[name] = actor
-            self.renderer.AddActor(actor)
+                # Manually set the values (safer than SetArray which is not always available)
+                for i in range(len(flat_mask)):
+                    vtk_array.SetValue(i, flat_mask[i])
+
+                vtk_mask.GetPointData().SetScalars(vtk_array)
+
+                # Create contour filter
+                vtkMarchingCubes = get_vtk_attribute("vtkMarchingCubes")
+                if vtkMarchingCubes is None:
+                    logger.error("vtkMarchingCubes không khả dụng")
+                    return None
+
+                contour = vtkMarchingCubes()
+                contour.SetInputData(vtk_mask)
+                contour.SetValue(0, 0.5)
+                contour.Update()
+
+                # Create mapper
+                vtkPolyDataMapper = get_vtk_attribute("vtkPolyDataMapper")
+                if vtkPolyDataMapper is None:
+                    logger.error("vtkPolyDataMapper không khả dụng")
+                    return None
+
+                mapper = vtkPolyDataMapper()
+                mapper.SetInputConnection(contour.GetOutputPort())
+                mapper.ScalarVisibilityOff()
+
+                # Create actor
+                vtkActor = get_vtk_attribute("vtkActor")
+                if vtkActor is None:
+                    logger.error("vtkActor không khả dụng")
+                    return None
+
+                actor = vtkActor()
+                actor.SetMapper(mapper)
+                actor.GetProperty().SetColor(settings.color)
+                actor.GetProperty().SetOpacity(settings.opacity)
+
+                if settings.wireframe:
+                    actor.GetProperty().SetRepresentationToWireframe()
+                    actor.GetProperty().SetLineWidth(settings.outline_width)
+
+                return actor
+            except Exception as e:
+                logger.error(f"Lỗi khi tạo structure actor: {str(e)}")
+                return None
 
         def add_structure_control(self, name: str, settings: StructureDisplaySettings):
             """Thêm điều khiển cho cấu trúc."""
@@ -505,16 +805,36 @@ if HAS_PYQT and HAS_VTK:
             # TODO: Implement dose visualization
 
         def on_view_mode_changed(self, mode: str):
-            """Xử lý thay đổi chế độ xem."""
-            mode_map = {
-                "Axial": ViewMode.AXIAL,
-                "Sagittal": ViewMode.SAGITTAL,
-                "Coronal": ViewMode.CORONAL,
-                "3D Volume": ViewMode.VOLUME_3D,
-            }
+            """
+            Xử lý khi chế độ xem thay đổi.
 
-            view_mode = mode_map.get(mode, ViewMode.AXIAL)
-            # TODO: Implement view mode switching
+            Parameters
+            ----------
+            mode : str
+                Chế độ xem mới
+            """
+            mode = mode.lower()
+
+            # Ẩn tất cả các slice actors
+            for actor in self.slice_actors.values():
+                self.renderer.RemoveActor(actor)
+
+            # Hiển thị actor phù hợp với chế độ xem
+            if mode == "axial" and "axial" in self.slice_actors:
+                self.renderer.AddActor(self.slice_actors["axial"])
+            elif mode == "sagittal" and "sagittal" in self.slice_actors:
+                self.renderer.AddActor(self.slice_actors["sagittal"])
+            elif mode == "coronal" and "coronal" in self.slice_actors:
+                self.renderer.AddActor(self.slice_actors["coronal"])
+            elif mode == "3d volume" or mode == "3d":
+                # Không hiển thị slice actors trong chế độ 3D
+                pass
+
+            # Cập nhật viewport
+            self.render_window.Render()
+
+            # Gọi lại on_slice_changed để cập nhật slice hiện tại
+            self.on_slice_changed(self.slice_slider.value())
 
         def on_render_mode_changed(self, mode: str):
             """Xử lý thay đổi chế độ render."""
@@ -522,9 +842,44 @@ if HAS_PYQT and HAS_VTK:
             pass
 
         def on_slice_changed(self, slice_index: int):
-            """Xử lý thay đổi slice."""
-            self.slice_spinbox.setValue(slice_index)
-            self.slice_changed.emit(slice_index, "axial")
+            """
+            Xử lý khi slice thay đổi.
+
+            Parameters
+            ----------
+            slice_index : int
+                Chỉ số slice mới
+            """
+            try:
+                # Đồng bộ giá trị với spinbox
+                if self.slice_spinbox.value() != slice_index:
+                    self.slice_spinbox.setValue(slice_index)
+
+                if not self._vtk_available:
+                    # Cập nhật hiển thị fallback
+                    self._update_fallback_display()
+                    return
+
+                # Cập nhật slice mapper dựa trên chế độ xem hiện tại
+                view_mode = self.view_mode_combo.currentText().lower()
+
+                if view_mode == "axial" and "axial" in self.slice_actors:
+                    mapper = self.slice_actors["axial"].GetMapper()
+                    mapper.SetSliceNumber(slice_index)
+                elif view_mode == "sagittal" and "sagittal" in self.slice_actors:
+                    mapper = self.slice_actors["sagittal"].GetMapper()
+                    mapper.SetSliceNumber(slice_index)
+                elif view_mode == "coronal" and "coronal" in self.slice_actors:
+                    mapper = self.slice_actors["coronal"].GetMapper()
+                    mapper.SetSliceNumber(slice_index)
+
+                # Render lại scene
+                self.render_window.Render()
+
+                # Phát signal
+                self.slice_changed.emit(slice_index, view_mode)
+            except Exception as e:
+                logger.error(f"Lỗi khi thay đổi slice: {str(e)}")
 
         def on_slice_spinbox_changed(self, slice_index: int):
             """Xử lý thay đổi từ spinbox."""
@@ -541,14 +896,14 @@ if HAS_PYQT and HAS_VTK:
             """Xử lý thay đổi hiển thị cấu trúc."""
             if name in self.structure_actors:
                 self.structure_actors[name].SetVisibility(visible)
-                self.structure_settings[name].visible = visible
+                self.structure_controls[name].visible = visible
                 self.render_window.Render()
 
         def on_structure_opacity_changed(self, name: str, opacity: float):
             """Xử lý thay đổi độ trong suốt cấu trúc."""
             if name in self.structure_actors:
                 self.structure_actors[name].GetProperty().SetOpacity(opacity)
-                self.structure_settings[name].opacity = opacity
+                self.structure_controls[name].opacity = opacity
                 self.render_window.Render()
 
         def change_structure_color(self, name: str):
@@ -575,6 +930,184 @@ if HAS_PYQT and HAS_VTK:
             """Chụp màn hình."""
             # TODO: Implement screenshot functionality
             pass
+
+        def create_slice_actors(self, vtk_image):
+            """
+            Tạo các actors cho hiển thị slice 2D.
+
+            Parameters
+            ----------
+            vtk_image : vtkImageData
+                Dữ liệu hình ảnh VTK
+            """
+            try:
+                if not self._vtk_available or self.renderer is None:
+                    logger.warning(
+                        "VTK không khả dụng hoặc renderer chưa được khởi tạo"
+                    )
+                    return
+
+                # Get VTK classes
+                vtkImageMapToColors = get_vtk_attribute("vtkImageMapToColors")
+                vtkImageSliceMapper = get_vtk_attribute("vtkImageSliceMapper")
+                vtkImageActor = get_vtk_attribute("vtkImageActor")
+
+                if None in [vtkImageMapToColors, vtkImageSliceMapper, vtkImageActor]:
+                    logger.error("Một hoặc nhiều class VTK cần thiết không khả dụng")
+                    return
+
+                # Lấy kích thước dữ liệu
+                dimensions = vtk_image.GetDimensions()
+
+                # Xóa các slice actors cũ nếu có
+                for actor in self.slice_actors.values():
+                    self.renderer.RemoveActor(actor)
+                self.slice_actors = {}
+
+                # Tạo slice actors cho 3 mặt phẳng
+                # 1. Axial (XY plane)
+                axial_colors = vtkImageMapToColors()
+                axial_colors.SetInputData(vtk_image)
+                if (
+                    self.volume_actor is not None
+                    and self.volume_actor.GetProperty() is not None
+                ):
+                    axial_colors.SetLookupTable(
+                        self.volume_actor.GetProperty().GetRGBTransferFunction()
+                    )
+
+                axial_mapper = vtkImageSliceMapper()
+                axial_mapper.SetInputConnection(axial_colors.GetOutputPort())
+                axial_mapper.SetOrientationToZ()
+                axial_mapper.SetSliceNumber(dimensions[2] // 2)
+
+                axial_actor = vtkImageActor()
+                axial_actor.SetMapper(axial_mapper)
+                self.slice_actors["axial"] = axial_actor
+
+                # 2. Sagittal (YZ plane)
+                sagittal_colors = vtkImageMapToColors()
+                sagittal_colors.SetInputData(vtk_image)
+                if (
+                    self.volume_actor is not None
+                    and self.volume_actor.GetProperty() is not None
+                ):
+                    sagittal_colors.SetLookupTable(
+                        self.volume_actor.GetProperty().GetRGBTransferFunction()
+                    )
+
+                sagittal_mapper = vtkImageSliceMapper()
+                sagittal_mapper.SetInputConnection(sagittal_colors.GetOutputPort())
+                sagittal_mapper.SetOrientationToX()
+                sagittal_mapper.SetSliceNumber(dimensions[0] // 2)
+
+                sagittal_actor = vtkImageActor()
+                sagittal_actor.SetMapper(sagittal_mapper)
+                self.slice_actors["sagittal"] = sagittal_actor
+
+                # 3. Coronal (XZ plane)
+                coronal_colors = vtkImageMapToColors()
+                coronal_colors.SetInputData(vtk_image)
+                if (
+                    self.volume_actor is not None
+                    and self.volume_actor.GetProperty() is not None
+                ):
+                    coronal_colors.SetLookupTable(
+                        self.volume_actor.GetProperty().GetRGBTransferFunction()
+                    )
+
+                coronal_mapper = vtkImageSliceMapper()
+                coronal_mapper.SetInputConnection(coronal_colors.GetOutputPort())
+                coronal_mapper.SetOrientationToY()
+                coronal_mapper.SetSliceNumber(dimensions[1] // 2)
+
+                coronal_actor = vtkImageActor()
+                coronal_actor.SetMapper(coronal_mapper)
+                self.slice_actors["coronal"] = coronal_actor
+
+                # Thêm actors vào renderer nếu ở chế độ slice
+                if self.current_render_mode == RenderingMode.SLICE_RENDERING:
+                    if self.current_view_mode == ViewMode.AXIAL:
+                        self.renderer.AddActor(self.slice_actors["axial"])
+                    elif self.current_view_mode == ViewMode.SAGITTAL:
+                        self.renderer.AddActor(self.slice_actors["sagittal"])
+                    elif self.current_view_mode == ViewMode.CORONAL:
+                        self.renderer.AddActor(self.slice_actors["coronal"])
+
+                logger.info("Đã tạo slice actors thành công")
+
+            except Exception as e:
+                logger.error(f"Lỗi khi tạo slice actors: {str(e)}")
+                import traceback
+
+                logger.debug(traceback.format_exc())
+
+        def _setup_fallback_display(self):
+            """Thiết lập hiển thị 2D đơn giản khi VTK không khả dụng."""
+            try:
+                if not HAS_MATPLOTLIB:
+                    logger.warning(
+                        "Cả VTK và Matplotlib đều không khả dụng, không thể hiển thị dữ liệu"
+                    )
+                    return
+
+                # Xóa layout hiện tại
+                if hasattr(self, "vtk_widget") and self.vtk_widget is not None:
+                    self.vtk_widget.setParent(None)
+
+                # Tạo matplotlib widget
+                self.figure = Figure(figsize=(8, 6), dpi=100)
+                self.canvas = FigureCanvas(self.figure)
+
+                # Thay thế vtk_widget bằng matplotlib canvas
+                self.main_layout.insertWidget(0, self.canvas)
+
+                # Hiển thị slice hiện tại
+                self._update_fallback_display()
+
+                logger.info("Đã thiết lập fallback display với Matplotlib")
+            except Exception as e:
+                logger.error(f"Lỗi khi thiết lập fallback display: {str(e)}")
+
+        def _update_fallback_display(self):
+            """Cập nhật hiển thị 2D khi ở chế độ fallback."""
+            try:
+                if not hasattr(self, "figure") or not hasattr(self, "canvas"):
+                    return
+
+                if not hasattr(self, "image_data") or self.image_data is None:
+                    return
+
+                # Lấy slice hiện tại
+                current_slice = self.slice_slider.value()
+                if current_slice >= self.image_data.shape[2]:
+                    current_slice = self.image_data.shape[2] - 1
+
+                # Hiển thị slice
+                self.figure.clear()
+                ax = self.figure.add_subplot(111)
+
+                # Hiển thị CT data
+                if self.image_data is not None:
+                    slice_data = self.image_data[:, :, current_slice]
+                    ax.imshow(slice_data.T, cmap="gray", aspect="auto")
+
+                # Hiển thị cấu trúc nếu có
+                for name, data in self.structures.items():
+                    if data["visible"] and data["mask"].shape[2] > current_slice:
+                        mask_slice = data["mask"][:, :, current_slice]
+                        if np.any(mask_slice):
+                            mask_display = np.ma.masked_where(
+                                mask_slice.T == 0, mask_slice.T
+                            )
+                            ax.imshow(mask_display, alpha=0.3, cmap="jet")
+
+                ax.set_title(f"Slice {current_slice}")
+                ax.set_axis_off()
+                self.canvas.draw()
+
+            except Exception as e:
+                logger.error(f"Lỗi khi cập nhật fallback display: {str(e)}")
 
 elif HAS_PYQT and HAS_MATPLOTLIB:
 
@@ -776,3 +1309,113 @@ else:
 def create_3d_viewer(parent=None) -> QWidget:
     """Factory function để tạo 3D viewer phù hợp."""
     return Viewer3D(parent)
+
+
+# Function để chuyển đổi numpy array sang VTK array một cách an toàn
+def numpy_to_vtk_array(np_array, vtk_data_type=None):
+    """
+    Chuyển đổi numpy array sang VTK array một cách an toàn.
+
+    Parameters
+    ----------
+    np_array : np.ndarray
+        Mảng numpy cần chuyển đổi
+    vtk_data_type : int, optional
+        Kiểu dữ liệu VTK, nếu None sẽ tự động xác định
+
+    Returns
+    -------
+    vtk.vtkDataArray
+        VTK array đã chuyển đổi hoặc None nếu gặp lỗi
+    """
+    if not HAS_VTK:
+        logger.warning("VTK không khả dụng, không thể chuyển đổi array")
+        return None
+
+    try:
+        # Xác định kiểu dữ liệu VTK tự động nếu không được chỉ định
+        if vtk_data_type is None:
+            # Sử dụng get_vtk_attribute thay vì truy cập trực tiếp vtk.VTK_FLOAT
+            vtk_data_type = NUMPY_TO_VTK_TYPE_MAP.get(
+                np_array.dtype.type, get_vtk_attribute("VTK_FLOAT", 10)
+            )
+
+        # Đảm bảo dữ liệu ở định dạng C-contiguous để xử lý đúng trong VTK
+        if not np_array.flags["C_CONTIGUOUS"]:
+            logger.warning("Chuyển đổi dữ liệu sang C-contiguous format")
+            np_array = np.ascontiguousarray(np_array)
+
+        # Sử dụng phương pháp thay thế dựa vào kiểu dữ liệu
+        vtk_array = None
+
+        # Chọn loại array phù hợp với kiểu dữ liệu numpy
+        if np_array.dtype.type == np.float32:
+            vtkFloatArray = get_vtk_attribute("vtkFloatArray")
+            if vtkFloatArray is not None:
+                vtk_array = vtkFloatArray()
+            else:
+                logger.error("vtkFloatArray không khả dụng")
+                return None
+        elif np_array.dtype.type == np.float64:
+            vtkDoubleArray = get_vtk_attribute("vtkDoubleArray")
+            if vtkDoubleArray is not None:
+                vtk_array = vtkDoubleArray()
+            else:
+                logger.error("vtkDoubleArray không khả dụng")
+                return None
+        elif np_array.dtype.type == np.int32:
+            vtkIntArray = get_vtk_attribute("vtkIntArray")
+            if vtkIntArray is not None:
+                vtk_array = vtkIntArray()
+            else:
+                logger.error("vtkIntArray không khả dụng")
+                return None
+        elif np_array.dtype.type == np.uint8:
+            vtkUnsignedCharArray = get_vtk_attribute("vtkUnsignedCharArray")
+            if vtkUnsignedCharArray is not None:
+                vtk_array = vtkUnsignedCharArray()
+            else:
+                logger.error("vtkUnsignedCharArray không khả dụng")
+                return None
+        else:
+            # Fallback to float if specific type not available
+            vtkFloatArray = get_vtk_attribute("vtkFloatArray")
+            if vtkFloatArray is not None:
+                vtk_array = vtkFloatArray()
+                # Convert data to float32
+                np_array = np_array.astype(np.float32)
+            else:
+                logger.error("Không có loại VTK array nào khả dụng")
+                return None
+
+        if vtk_array is None:
+            logger.error("Không thể tạo VTK array phù hợp")
+            return None
+
+        vtk_array.SetNumberOfComponents(1)
+        vtk_array.SetNumberOfTuples(np_array.size)
+
+        # Phương pháp 1: Sử dụng SetArray
+        success = False
+        try:
+            if hasattr(vtk_array, "SetArray"):
+                vtk_array.SetArray(np_array.ravel(), np_array.size, 1)
+                success = True
+        except Exception as e:
+            logger.warning(f"Lỗi khi sử dụng SetArray: {str(e)}")
+            success = False
+
+        # Phương pháp 2: Thủ công set từng giá trị nếu phương pháp 1 thất bại
+        if not success:
+            flat_data = np_array.ravel()
+            for i in range(len(flat_data)):
+                vtk_array.SetValue(i, float(flat_data[i]))
+
+        return vtk_array
+
+    except Exception as e:
+        logger.error(f"Lỗi khi chuyển đổi numpy array sang VTK array: {str(e)}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
+        return None

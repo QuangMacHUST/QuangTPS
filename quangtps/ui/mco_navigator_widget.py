@@ -484,24 +484,82 @@ class MCONavigatorWidget(QWidget):
 def create_mco_navigator_widget(
     parent=None, objectives=None, **kwargs
 ) -> MCONavigatorWidget:
-    """Tạo MCO Navigator Widget."""
+    """
+    Tạo MCO Navigator Widget.
+
+    Parameters
+    ----------
+    parent : QWidget, optional
+        Widget cha
+    objectives : List[str] or Dict[str, Any], optional
+        Danh sách hoặc dictionary các objective functions
+    **kwargs : Any
+        Các tham số khác
+
+    Returns
+    -------
+    MCONavigatorWidget
+        Widget MCO Navigator
+    """
     try:
+        # Khởi tạo widget
         widget = MCONavigatorWidget(parent)
 
-        # Nếu có objectives, thiết lập chúng
-        if objectives:
+        # Xử lý objectives
+        if objectives is not None:
+            if isinstance(objectives, dict):
+                objective_names = list(objectives.keys())
+            elif isinstance(objectives, (list, tuple)):
+                objective_names = list(objectives)
+            else:
+                logger.warning(f"Loại objectives không hợp lệ: {type(objectives)}")
+                objective_names = ["Objective 1", "Objective 2", "Objective 3"]
+
+            # Thiết lập objectives cho widget
             if hasattr(widget, "set_objectives"):
-                widget.set_objectives(
-                    list(objectives.keys())
-                    if isinstance(objectives, dict)
-                    else objectives
-                )
+                widget.set_objectives(objective_names)
+
+            # Tạo dữ liệu Pareto giả lập nếu có ít nhất 2 objectives
+            if len(objective_names) >= 2 and hasattr(widget, "pareto_canvas"):
+                # Tạo dữ liệu Pareto giả lập
+                import numpy as np
+
+                num_points = 20
+                points = []
+
+                for i in range(num_points):
+                    point = {}
+                    for obj in objective_names:
+                        # Giá trị ngẫu nhiên từ 0 đến 1
+                        point[obj] = np.random.rand()
+                    points.append(point)
+
+                # Cập nhật dữ liệu Pareto
+                if hasattr(widget.pareto_canvas, "set_pareto_data"):
+                    widget.pareto_canvas.set_pareto_data(points, objective_names)
+        else:
+            logger.warning("Không có objectives được cung cấp cho MCO Navigator Widget")
+            # Thiết lập objectives mặc định
+            default_objectives = ["Target Coverage", "OAR Sparing", "Conformity"]
+            if hasattr(widget, "set_objectives"):
+                widget.set_objectives(default_objectives)
+
+        # Xử lý các tham số khác
+        if "title" in kwargs and hasattr(widget, "setWindowTitle"):
+            widget.setWindowTitle(kwargs["title"])
+
+        if "size" in kwargs and hasattr(widget, "resize"):
+            widget.resize(*kwargs["size"])
 
         logger.info("Tạo MCO Navigator Widget thành công")
         return widget
     except Exception as e:
         logger.error(f"Lỗi tạo MCO Navigator Widget: {e}")
-        return MCONavigatorWidget(parent)  # Fallback
+        # Tạo widget fallback đơn giản
+        fallback_widget = MCONavigatorWidget(parent)
+        if hasattr(fallback_widget, "setup_fallback_ui"):
+            fallback_widget.setup_fallback_ui()
+        return fallback_widget
 
 
 # Export classes

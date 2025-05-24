@@ -458,17 +458,35 @@ def calculate_all_metrics(
     # Tính các chỉ số toàn cục nếu có dose_grid và target_mask
     if dose_grid is not None and target_mask is not None:
         try:
+            # Kiểm tra và đảm bảo target_mask là kiểu boolean
+            if target_mask.dtype != bool:
+                logger.info(
+                    f"Chuyển đổi target_mask từ {target_mask.dtype} sang boolean"
+                )
+                target_mask_bool = target_mask.astype(bool)
+            else:
+                target_mask_bool = target_mask
+
+            # Xác nhận target_mask hợp lệ, không chỉ chứa giá trị 0
+            if not np.any(target_mask_bool):
+                logger.warning(
+                    "Target mask không chứa giá trị True, không thể tính toán metrics"
+                )
+                return result
+
             # Tính thể tích nhận liều kê đơn
             prescription_dose_voxels = dose_grid >= prescription_dose_gy
             half_prescription_dose_voxels = dose_grid >= 0.5 * prescription_dose_gy
 
             # Số voxel trong mỗi vùng
-            target_voxels = np.sum(target_mask)
+            target_voxels = np.sum(target_mask_bool)
             prescription_dose_voxels_count = np.sum(prescription_dose_voxels)
             half_prescription_dose_voxels_count = np.sum(half_prescription_dose_voxels)
 
             # Vùng giao
-            target_prescription_voxels = np.sum(target_mask & prescription_dose_voxels)
+            target_prescription_voxels = np.sum(
+                target_mask_bool & prescription_dose_voxels
+            )
 
             # Tính các chỉ số
             if target_voxels > 0 and prescription_dose_voxels_count > 0:
@@ -499,8 +517,20 @@ def calculate_all_metrics(
                 result["plan"]["HTCI"] = calculate_healthy_tissue_conformity_index(
                     target_prescription_voxels, prescription_dose_voxels_count
                 )
+
+                # Tính toán chỉ số thống kê dose trong target
+                target_dose = dose_grid[target_mask_bool]
+                if len(target_dose) > 0:
+                    result["plan"]["D_min_target"] = float(np.min(target_dose))
+                    result["plan"]["D_max_target"] = float(np.max(target_dose))
+                    result["plan"]["D_mean_target"] = float(np.mean(target_dose))
+                    result["plan"]["D_median_target"] = float(np.median(target_dose))
+                    result["plan"]["D_std_target"] = float(np.std(target_dose))
         except Exception as e:
             logger.error(f"Lỗi khi tính toán các chỉ số từ dose_grid: {e}")
+            import traceback
+
+            logger.debug(traceback.format_exc())
 
     return result
 

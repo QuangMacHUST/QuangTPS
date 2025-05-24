@@ -169,37 +169,109 @@ class DVHData:
         float
             Dose in Gy covering percent_volume of the structure
         """
-        if not self.is_cumulative:
-            raise ValueError("Dx values are only defined for cumulative DVHs")
+        try:
+            if not self.is_cumulative:
+                raise ValueError("Dx values are only defined for cumulative DVHs")
 
-        if percent_volume in self.d_x:
-            return self.d_x[percent_volume]
+            if percent_volume in self.d_x:
+                return self.d_x[percent_volume]
 
-        if percent_volume < 0 or percent_volume > 100:
-            raise ValueError("Percentage must be between 0 and 100")
+            if percent_volume < 0 or percent_volume > 100:
+                raise ValueError(
+                    f"Percentage must be between 0 and 100, got {percent_volume}"
+                )
 
-        if len(self.dose_bins) == 0:
-            return 0.0
+            if len(self.dose_bins) == 0 or len(self.volume_bins) == 0:
+                logger.warning(f"Empty DVH data for structure {self.structure_name}")
+                return 0.0
 
-        # Normalize volume bins to percent if needed
-        vol_percent = self.volume_bins
-        if np.max(vol_percent) > 1.1:  # Already in percent (0-100)
-            pass
-        else:  # In fraction (0-1), convert to percent
-            vol_percent = vol_percent * 100
+            # Đảm bảo dữ liệu là numpy arrays
+            dose_bins = np.array(self.dose_bins)
+            volume_bins = np.array(self.volume_bins)
 
-        # For cumulative DVH, volume typically decreases with dose
-        # Interpolate to find dose at the specified volume
-        if vol_percent[0] < vol_percent[-1]:  # If not decreasing, reverse
-            dose_interp = np.interp(percent_volume, vol_percent, self.dose_bins)
-        else:
-            dose_interp = np.interp(
-                percent_volume, vol_percent[::-1], self.dose_bins[::-1]
+            # Chuẩn hóa volume bins thành percent nếu cần
+            vol_percent = volume_bins
+            if np.max(vol_percent) <= 1.1:  # Nếu đang ở dạng phân số (0-1)
+                vol_percent = vol_percent * 100
+
+            # Kiểm tra xem vol_percent có giảm dần theo dose không
+            is_decreasing = vol_percent[0] > vol_percent[-1]
+
+            # Đảm bảo vol_percent giảm dần theo dose (thông thường của DVH tích lũy)
+            if not is_decreasing:
+                # Đảo ngược dữ liệu để vol_percent giảm dần
+                vol_percent = vol_percent[::-1]
+                dose_bins = dose_bins[::-1]
+
+            # Thử sử dụng scipy.interpolate cho nội suy chính xác hơn
+            try:
+                from scipy.interpolate import interp1d
+
+                # Loại bỏ các giá trị trùng lặp trong vol_percent để tránh lỗi
+                # Lấy indices của các phần tử duy nhất, theo thứ tự giảm dần
+                unique_indices = []
+                seen_values = set()
+
+                for i, val in enumerate(vol_percent):
+                    if val not in seen_values:
+                        seen_values.add(val)
+                        unique_indices.append(i)
+
+                unique_indices = sorted(
+                    unique_indices, key=lambda i: vol_percent[i], reverse=True
+                )
+
+                if len(unique_indices) < 2:
+                    # Không đủ điểm dữ liệu duy nhất để nội suy
+                    logger.warning(
+                        f"Insufficient unique points for interpolation in structure {self.structure_name}"
+                    )
+                    if len(unique_indices) == 1:
+                        # Trả về giá trị duy nhất hiện có
+                        self.d_x[percent_volume] = dose_bins[unique_indices[0]]
+                        return self.d_x[percent_volume]
+                    else:
+                        return 0.0
+
+                # Tạo tập dữ liệu duy nhất, giảm dần theo vol_percent
+                unique_vol = np.array([vol_percent[i] for i in unique_indices])
+                unique_dose = np.array([dose_bins[i] for i in unique_indices])
+
+                # Tạo hàm nội suy, giới hạn giá trị để tránh extrapolation errors
+                f_interp = interp1d(
+                    unique_vol,
+                    unique_dose,
+                    kind="linear",
+                    bounds_error=False,
+                    fill_value=(
+                        unique_dose[-1],
+                        unique_dose[0],
+                    ),  # (min_dose, max_dose)
+                )
+
+                # Nội suy
+                result = float(f_interp(percent_volume))
+
+                # Cache kết quả
+                self.d_x[percent_volume] = result
+                return result
+
+            except ImportError:
+                # Fallback to numpy interp if scipy is not available
+                logger.warning(
+                    "SciPy not available, using NumPy interp for DVH calculation"
+                )
+                dose_interp = np.interp(percent_volume, vol_percent, dose_bins)
+
+                # Cache kết quả
+                self.d_x[percent_volume] = dose_interp
+                return dose_interp
+
+        except Exception as e:
+            logger.error(
+                f"Error calculating D{percent_volume} for structure {self.structure_name}: {str(e)}"
             )
-
-        # Cache result
-        self.d_x[percent_volume] = dose_interp
-        return dose_interp
+            return 0.0
 
     def get_vx(self, dose: float, percent: bool = True) -> float:
         """
@@ -218,37 +290,120 @@ class DVHData:
         float
             Volume (in cc or %) receiving at least the specified dose
         """
-        if not self.is_cumulative:
-            raise ValueError("Vx values are only defined for cumulative DVHs")
+        try:
+            if not self.is_cumulative:
+                raise ValueError("Vx values are only defined for cumulative DVHs")
 
-        # Generate a key that combines dose and units
-        key = (dose, percent)
-        if key in self.v_x:
-            return self.v_x[key]
+            # Tạo key kết hợp liều và đơn vị
+            key = (dose, percent)
+            if key in self.v_x:
+                return self.v_x[key]
 
-        if len(self.dose_bins) == 0:
-            return 0.0
+            if len(self.dose_bins) == 0 or len(self.volume_bins) == 0:
+                logger.warning(f"Empty DVH data for structure {self.structure_name}")
+                return 0.0
 
-        # Find the volume receiving at least the specified dose
-        # For cumulative DVH, interpolate dose vs volume curve
-        if np.max(self.volume_bins) > 1.1:  # In percent (0-100)
-            vol_bins = self.volume_bins
-        else:  # In fraction (0-1)
-            vol_bins = (
-                self.volume_bins * 100
-                if percent
-                else self.volume_bins * self.structure_volume
+            # Đảm bảo dữ liệu là numpy arrays
+            dose_bins = np.array(self.dose_bins)
+            volume_bins = np.array(self.volume_bins)
+
+            # Chuẩn hóa thể tích thành % hoặc cc
+            if np.max(volume_bins) <= 1.1:  # Nếu đang ở dạng phân số (0-1)
+                vol_bins = (
+                    volume_bins * 100
+                    if percent
+                    else volume_bins * self.structure_volume
+                )
+            else:  # Đã ở dạng phần trăm (0-100)
+                vol_bins = (
+                    volume_bins
+                    if percent
+                    else volume_bins * self.structure_volume / 100
+                )
+
+            # Kiểm tra xem vol_bins có giảm dần theo dose không (điển hình của DVH tích lũy)
+            is_decreasing = vol_bins[0] > vol_bins[-1]
+
+            # Đảm bảo dữ liệu phù hợp với DVH tích lũy tiêu chuẩn
+            if not is_decreasing:
+                # Đảo ngược dữ liệu để vol_bins giảm dần
+                vol_bins = vol_bins[::-1]
+                dose_bins = dose_bins[::-1]
+
+            # Thử sử dụng scipy.interpolate cho nội suy chính xác hơn
+            try:
+                from scipy.interpolate import interp1d
+
+                # Loại bỏ các giá trị trùng lặp trong dose_bins để tránh lỗi
+                unique_indices = []
+                seen_values = set()
+
+                for i, val in enumerate(dose_bins):
+                    if val not in seen_values:
+                        seen_values.add(val)
+                        unique_indices.append(i)
+
+                if len(unique_indices) < 2:
+                    # Không đủ điểm dữ liệu duy nhất để nội suy
+                    logger.warning(
+                        f"Insufficient unique dose points for V{dose} in structure {self.structure_name}"
+                    )
+                    if len(unique_indices) == 1:
+                        # Trả về giá trị duy nhất hiện có nếu dose nằm trong khoảng
+                        if dose <= dose_bins[unique_indices[0]]:
+                            self.v_x[key] = vol_bins[unique_indices[0]]
+                            return self.v_x[key]
+                        else:
+                            return 0.0
+                    else:
+                        return 0.0
+
+                # Tạo tập dữ liệu duy nhất
+                unique_dose = np.array([dose_bins[i] for i in unique_indices])
+                unique_vol = np.array([vol_bins[i] for i in unique_indices])
+
+                # Tạo hàm nội suy, giới hạn giá trị để tránh extrapolation errors
+                f_interp = interp1d(
+                    unique_dose,
+                    unique_vol,
+                    kind="linear",
+                    bounds_error=False,
+                    fill_value=(unique_vol[0], 0.0),  # (max_vol, min_vol)
+                )
+
+                # Nội suy
+                result = float(f_interp(dose))
+
+                # Giới hạn giá trị không âm
+                result = max(0.0, result)
+
+                # Cache kết quả
+                self.v_x[key] = result
+                return result
+
+            except ImportError:
+                # Fallback to numpy interp if scipy is not available
+                logger.warning(
+                    "SciPy not available, using NumPy interp for DVH calculation"
+                )
+
+                # Nội suy để tìm thể tích tại liều cụ thể
+                volume_interp = np.interp(
+                    dose,
+                    dose_bins,
+                    vol_bins,
+                    right=0.0,  # Trả về 0 nếu dose > max_dose
+                )
+
+                # Cache kết quả
+                self.v_x[key] = volume_interp
+                return volume_interp
+
+        except Exception as e:
+            logger.error(
+                f"Error calculating V{dose} for structure {self.structure_name}: {str(e)}"
             )
-
-        # Interpolate to find volume at the specified dose
-        if vol_bins[0] > vol_bins[-1]:  # Decreasing with dose (typical cumulative DVH)
-            volume_interp = np.interp(dose, self.dose_bins, vol_bins)
-        else:  # If not decreasing, reverse
-            volume_interp = np.interp(dose, self.dose_bins[::-1], vol_bins[::-1])
-
-        # Cache result
-        self.v_x[key] = volume_interp
-        return volume_interp
+            return 0.0
 
 
 class DVHCalculator:
