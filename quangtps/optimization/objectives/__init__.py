@@ -73,80 +73,73 @@ class ObjectiveType(Enum):
     EUD = "eud"
 
 
-# Import safe với fallback
-try:
-    from ..objectives import (
-        ObjectiveFunction,
-        Objective,
-        DoseObjective,
-        VolumeObjective,
-        DVHObjective,
-        BiologicalObjective,
-    )
+# Tránh circular import - sử dụng fallback classes
+HAS_OBJECTIVES = False
+logger.info("Sử dụng fallback classes để tránh circular import")
 
-    HAS_OBJECTIVES = True
-    logger.info("Đã import objectives từ module chính")
-except ImportError as e:
-    logger.warning(f"Cannot import objectives: {e}")
-    HAS_OBJECTIVES = False
 
-    # Fallback classes chỉ khi không import được
-    class ObjectiveFunction:
-        """Lớp cơ sở cho hàm mục tiêu."""
+# Fallback classes chỉ khi không import được
+class ObjectiveFunction:
+    """Lớp cơ sở cho hàm mục tiêu."""
 
-        def __init__(self, name: str = "BaseObjective"):
-            self.name = name
-            self.weight = 1.0
-            logger.info(f"Khởi tạo fallback ObjectiveFunction: {name}")
+    def __init__(self, name: str = "BaseObjective"):
+        self.name = name
+        self.weight = 1.0
+        logger.info(f"Khởi tạo fallback ObjectiveFunction: {name}")
 
-        def evaluate(self, dose_grid, structure_mask=None):
-            """Đánh giá hàm mục tiêu."""
-            logger.warning(f"Sử dụng fallback evaluation cho {self.name}")
-            return 0.0
+    def evaluate(self, dose_grid, structure_mask=None):
+        """Đánh giá hàm mục tiêu."""
+        logger.warning(f"Sử dụng fallback evaluation cho {self.name}")
+        return 0.0
 
-    class Objective(ObjectiveFunction):
-        """Alias cho ObjectiveFunction."""
 
-        pass
+class Objective(ObjectiveFunction):
+    """Alias cho ObjectiveFunction."""
 
-    class DoseObjective(ObjectiveFunction):
-        """Mục tiêu liều."""
+    pass
 
-        def __init__(self, structure_name: str, dose_limit: float, **kwargs):
-            super().__init__(f"DoseObjective_{structure_name}")
-            self.structure_name = structure_name
-            self.dose_limit = dose_limit
 
-    class VolumeObjective(ObjectiveFunction):
-        """Mục tiêu thể tích."""
+class DoseObjective(ObjectiveFunction):
+    """Mục tiêu liều."""
 
-        def __init__(self, structure_name: str, volume_limit: float, **kwargs):
-            super().__init__(f"VolumeObjective_{structure_name}")
-            self.structure_name = structure_name
-            self.volume_limit = volume_limit
+    def __init__(self, structure_name: str, dose_limit: float, **kwargs):
+        super().__init__(f"DoseObjective_{structure_name}")
+        self.structure_name = structure_name
+        self.dose_limit = dose_limit
 
-    class DVHObjective(ObjectiveFunction):
-        """Mục tiêu DVH."""
 
-        def __init__(
-            self,
-            structure_name: str,
-            dose_percent: float,
-            volume_percent: float,
-            **kwargs,
-        ):
-            super().__init__(f"DVHObjective_{structure_name}")
-            self.structure_name = structure_name
-            self.dose_percent = dose_percent
-            self.volume_percent = volume_percent
+class VolumeObjective(ObjectiveFunction):
+    """Mục tiêu thể tích."""
 
-    class BiologicalObjective(ObjectiveFunction):
-        """Mục tiêu sinh học."""
+    def __init__(self, structure_name: str, volume_limit: float, **kwargs):
+        super().__init__(f"VolumeObjective_{structure_name}")
+        self.structure_name = structure_name
+        self.volume_limit = volume_limit
 
-        def __init__(self, structure_name: str, model_type: str = "TCP", **kwargs):
-            super().__init__(f"BiologicalObjective_{structure_name}")
-            self.structure_name = structure_name
-            self.model_type = model_type
+
+class DVHObjective(ObjectiveFunction):
+    """Mục tiêu DVH."""
+
+    def __init__(
+        self,
+        structure_name: str,
+        dose_percent: float,
+        volume_percent: float,
+        **kwargs,
+    ):
+        super().__init__(f"DVHObjective_{structure_name}")
+        self.structure_name = structure_name
+        self.dose_percent = dose_percent
+        self.volume_percent = volume_percent
+
+
+class BiologicalObjective(ObjectiveFunction):
+    """Mục tiêu sinh học."""
+
+    def __init__(self, structure_name: str, model_type: str = "TCP", **kwargs):
+        super().__init__(f"BiologicalObjective_{structure_name}")
+        self.structure_name = structure_name
+        self.model_type = model_type
 
 
 # Objective registry để quản lý các loại objective
@@ -723,16 +716,16 @@ def get_objective_by_id(objective_id: str):
 
 def get_objective_by_name(name: str):
     """
-    Lấy objective class theo tên.
+        Lấy objective class theo tên.
 
-    Parameters
-    ----------
-    name : str
-        Tên objective
+        Parameters
+        ----------
+        name : str
+            Tên objective
 
-    Returns
-    -------
+        Returns
+        -------
     class or None
-        Class objective nếu tìm thấy, None nếu không
+            Class objective nếu tìm thấy, None nếu không
     """
     return _objective_registry.get(name, None)

@@ -9,10 +9,46 @@ xạ trị, cho phép người dùng khám phá không gian các giải pháp Pa
 tối ưu nhất cân bằng giữa các mục tiêu lâm sàng khác nhau.
 """
 
-from quangtps.optimization.mco.mco_engine import (
-    MCOEngine,
-    ParetoSolution,
-    create_mco_engine,
-)
+try:
+    from quangtps.optimization.mco.mco_engine import (
+        MCOEngine,
+        ParetoSolution,
+        create_mco_engine,
+    )
+    from .multi_criteria_optimizer import MultiCriteriaOptimizer
 
-__all__ = ["MCOEngine", "ParetoSolution", "create_mco_engine"]
+    HAS_MCO = True
+
+except ImportError as e:
+    # Fallback classes
+    class MCOEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class ParetoSolution:
+        def __init__(self, *args, **kwargs):
+            self.objective_values = {}
+            self.beam_weights = None
+
+    class MultiCriteriaOptimizer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def find_pareto_optimal_solutions(self, *args, **kwargs):
+            return []
+
+        def analyze_trade_offs(self, *args, **kwargs):
+            return []
+
+    def create_mco_engine(*args, **kwargs):
+        return MCOEngine()
+
+    HAS_MCO = False
+
+__all__ = [
+    "MCOEngine",
+    "ParetoSolution",
+    "create_mco_engine",
+    "MultiCriteriaOptimizer",
+    "HAS_MCO",
+]

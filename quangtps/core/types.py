@@ -18,6 +18,100 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class Dose:
+    """Thông tin liều xạ trị."""
+
+    dose_grid: np.ndarray
+    origin: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    spacing: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+    units: str = "Gy"
+
+    # Metadata
+    calculation_algorithm: str = ""
+    calculation_time: Optional[datetime] = None
+    grid_size: Optional[Tuple[int, int, int]] = None
+
+    def __post_init__(self):
+        """Xử lý sau khi khởi tạo."""
+        if self.grid_size is None:
+            self.grid_size = self.dose_grid.shape
+
+    def get_max_dose(self) -> float:
+        """Lấy liều tối đa."""
+        return float(np.max(self.dose_grid))
+
+    def get_mean_dose(self) -> float:
+        """Lấy liều trung bình."""
+        return float(np.mean(self.dose_grid))
+
+    def get_dose_at_point(self, x: float, y: float, z: float) -> float:
+        """Lấy liều tại một điểm cụ thể."""
+        # Convert physical coordinates to grid indices
+        i = int((x - self.origin[0]) / self.spacing[0])
+        j = int((y - self.origin[1]) / self.spacing[1])
+        k = int((z - self.origin[2]) / self.spacing[2])
+
+        # Check bounds
+        if (
+            0 <= i < self.grid_size[0]
+            and 0 <= j < self.grid_size[1]
+            and 0 <= k < self.grid_size[2]
+        ):
+            return float(self.dose_grid[i, j, k])
+        else:
+            return 0.0
+
+
+@dataclass
+class Patient:
+    """Thông tin bệnh nhân."""
+
+    patient_id: str
+    patient_name: str = ""
+    birth_date: Optional[date] = None
+    sex: str = "O"  # M, F, O
+
+    # Medical information
+    medical_record_number: str = ""
+    referring_physician: str = ""
+
+    # Physical properties
+    height: Optional[float] = None  # cm
+    weight: Optional[float] = None  # kg
+
+    # Treatment information
+    diagnosis: str = ""
+    treatment_site: str = ""
+
+    # System information
+    created_date: datetime = field(default_factory=datetime.now)
+    last_modified: datetime = field(default_factory=datetime.now)
+
+    def get_age(self) -> Optional[int]:
+        """Tính tuổi bệnh nhân."""
+        if self.birth_date:
+            today = date.today()
+            return (
+                today.year
+                - self.birth_date.year
+                - (
+                    (today.month, today.day)
+                    < (self.birth_date.month, self.birth_date.day)
+                )
+            )
+        return None
+
+    def get_bsa(self) -> Optional[float]:
+        """Tính diện tích bề mặt cơ thể (BSA) theo công thức DuBois."""
+        if self.height and self.weight:
+            return 0.007184 * (self.weight**0.425) * (self.height**0.725)
+        return None
+
+    def __str__(self) -> str:
+        return f"Patient({self.patient_id}: {self.patient_name})"
+
+
 class TreatmentType(Enum):
     """Loại điều trị xạ trị."""
 

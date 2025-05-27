@@ -278,3 +278,27 @@ class RobustnessAnalyzer:
         """
         # Mã mẫu để minh họa cấu trúc
         pass
+
+    def find_worst_case_scenario(
+        self, robustness_results, target_structures=None, metric="d95"
+    ):
+        """
+        Tìm kịch bản tệ nhất dựa trên các chỉ số.
+
+        Parameters
+        ----------
+        robustness_results : Dict
+            Kết quả phân tích độ bền vững
+        target_structures : List[str], optional
+            Danh sách cấu trúc mục tiêu
+        metric : str, optional
+            Chỉ số để đánh giá, default "d95"
+
+        Returns
+        -------
+        Dict
+            Thông tin kịch bản tệ nhất
+        """
+        from .analysis import find_worst_case_scenario
+
+        return find_worst_case_scenario(robustness_results, target_structures, metric)

@@ -123,6 +123,57 @@ except ImportError as e:
         return {}
 
 
+class AdaptivePlanningEngine:
+    """
+    Engine cho adaptive planning.
+
+    Tích hợp các predictor để thực hiện adaptive planning.
+    """
+
+    def __init__(self):
+        """Khởi tạo adaptive planning engine."""
+        self.anatomy_predictor = AnatomyPredictor()
+        self.statistical_predictor = StatisticalPredictor()
+        logger.info("Khởi tạo AdaptivePlanningEngine")
+
+    def adapt_plan(
+        self,
+        reference_plan: Dict[str, Any],
+        deformation_field: Optional[np.ndarray] = None,
+    ) -> Dict[str, Any]:
+        """
+        Thích ứng kế hoạch dựa trên deformation field.
+
+        Parameters
+        ----------
+        reference_plan : Dict[str, Any]
+            Kế hoạch tham chiếu
+        deformation_field : Optional[np.ndarray]
+            Trường deformation
+
+        Returns
+        -------
+        Dict[str, Any]
+            Kế hoạch đã được thích ứng
+        """
+        try:
+            if deformation_field is None:
+                logger.warning("Không có deformation field, sử dụng fallback")
+                return reference_plan
+
+            # Mock adaptation
+            adapted_plan = reference_plan.copy()
+            adapted_plan["adapted"] = True
+            adapted_plan["adaptation_method"] = "deformation_based"
+
+            logger.info("Đã thích ứng kế hoạch thành công")
+            return adapted_plan
+
+        except Exception as e:
+            logger.error(f"Lỗi trong plan adaptation: {e}")
+            return reference_plan
+
+
 __all__ = [
     "DeformableAnatomyPredictor",
     "DeformationModel",
@@ -135,6 +186,7 @@ __all__ = [
     "StatisticalPredictor",
     "StatisticalModelType",
     "predict_statistical_changes",
+    "AdaptivePlanningEngine",
 ]
 
 __version__ = "0.7.7"

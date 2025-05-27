@@ -558,10 +558,22 @@ class MonteCarloGPUAlgorithm(DoseCalculationAlgorithm):
                     continue
 
                 # Kiểm tra kết quả gamma
-                if gamma is None or gamma.size == 0:
-                    logger.warning(
-                        f"Kết quả gamma rỗng hoặc None cho tiêu chí {criterion_str}"
-                    )
+                if gamma is None:
+                    logger.warning(f"Kết quả gamma None cho tiêu chí {criterion_str}")
+                    continue
+
+                # Chuyển đổi thành numpy array nếu cần
+                if not isinstance(gamma, np.ndarray):
+                    try:
+                        gamma = np.array(gamma)
+                    except Exception:
+                        logger.warning(
+                            f"Không thể chuyển đổi gamma thành numpy array cho tiêu chí {criterion_str}"
+                        )
+                        continue
+
+                if gamma.size == 0:
+                    logger.warning(f"Kết quả gamma rỗng cho tiêu chí {criterion_str}")
                     continue
 
                 # Xử lý các giá trị NaN và Inf trong kết quả gamma
@@ -644,13 +656,26 @@ def register_algorithm():
     Đăng ký thuật toán Monte Carlo GPU với hệ thống.
     """
     try:
-        from quangtps.dose.algorithms import register_dose_algorithm
+        # Lazy import để tránh circular dependency
+        import sys
 
-        register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
-        logger.info("Đã đăng ký thuật toán Monte Carlo GPU thành công")
+        if "quangtps.dose.algorithms" in sys.modules:
+            # Module đã được load, có thể import function
+            from quangtps.dose.algorithms import register_dose_algorithm
+
+            register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+            logger.info("Đã đăng ký thuật toán Monte Carlo GPU thành công")
+        else:
+            # Module chưa được load, bỏ qua registration để tránh circular import
+            logger.debug("Bỏ qua registration do circular import dependency")
+    except ImportError as e:
+        logger.warning(f"Không thể import register_dose_algorithm: {e}")
     except Exception as e:
         logger.error(f"Không thể đăng ký thuật toán Monte Carlo GPU: {str(e)}")
 
 
-# Tự động đăng ký thuật toán khi import module
-register_algorithm()
+# Thay vì tự động đăng ký, chỉ đăng ký khi được gọi từ bên ngoài
+# register_algorithm()
+
+# Export algorithm class for manual registration
+__all__ = ["MonteCarloGPUAlgorithm", "register_algorithm"]

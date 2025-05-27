@@ -417,6 +417,42 @@ def calculate_plan_quality_metrics(
     return metrics
 
 
+def monitor_unit_efficiency(total_mu, prescription_dose, target_volume=None):
+    """
+    Tính toán hiệu suất Monitor Unit.
+
+    Parameters
+    ----------
+    total_mu : float
+        Tổng số Monitor Units
+    prescription_dose : float
+        Liều kê đơn (Gy)
+    target_volume : float, optional
+        Thể tích target (cc)
+
+    Returns
+    -------
+    float
+        Hiệu suất MU (Gy/MU hoặc Gy*cc/MU)
+    """
+    try:
+        if total_mu <= 0:
+            return 0.0
+
+        if target_volume is not None and target_volume > 0:
+            # MU efficiency per unit volume
+            efficiency = (prescription_dose * target_volume) / total_mu
+        else:
+            # Simple MU efficiency
+            efficiency = prescription_dose / total_mu
+
+        return float(efficiency)
+
+    except Exception as e:
+        print(f"Error calculating MU efficiency: {e}")
+        return 0.0
+
+
 __all__ = [
     "calculate_clinical_metrics",
     "calculate_quality_metrics",
@@ -433,6 +469,7 @@ __all__ = [
     "coverage_index",
     "gradient_index",
     "calculate_plan_quality_metrics",
+    "monitor_unit_efficiency",
 ]
 
 if HAS_GAMMA_MODULE:

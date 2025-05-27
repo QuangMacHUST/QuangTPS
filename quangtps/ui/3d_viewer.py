@@ -213,7 +213,7 @@ if HAS_PYQT and HAS_VTK:
                 HAS_VTK  # Theo mặc định, trạng thái dựa trên việc import VTK
             )
             self.structures = {}  # Dictionary lưu trữ structure masks
-            self.structure_controls = {}  # Dictionary lưu trữ structure control widgets
+            self.structure_controls = {}  # Dictionary lưu trữ structure control settings
             self.structure_actors = {}  # Dictionary lưu trữ structure actors
             self.slice_actors = {}  # Dictionary lưu trữ slice actors
 
@@ -342,9 +342,9 @@ if HAS_PYQT and HAS_VTK:
             structure_layout = QVBoxLayout(structure_group)
 
             # Add scrollable area for structures
-            self.structure_controls = QWidget()
-            self.structure_controls_layout = QVBoxLayout(self.structure_controls)
-            structure_layout.addWidget(self.structure_controls)
+            self.structure_controls_widget = QWidget()
+            self.structure_controls_layout = QVBoxLayout(self.structure_controls_widget)
+            structure_layout.addWidget(self.structure_controls_widget)
 
             layout.addWidget(structure_group)
 

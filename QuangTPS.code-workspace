@@ -41,6 +41,20 @@
 		"testing.showAllMessages": true,
 		"testing.followRunningTest": true,
 		"scm.defaultViewMode": "tree",
-		"cSpell.enabled": false
+		"cSpell.enabled": false,
+		"explorer.excludeGitIgnore": true,
+		"explorer.openEditors.visible": 20,
+		"terminal.integrated.allowMnemonics": true,
+		"terminal.integrated.confirmOnKill": "editor",
+		"terminal.integrated.confirmOnExit": "hasChildProcesses",
+		"terminal.integrated.defaultLocation": "editor",
+		"terminal.integrated.enableVisualBell": true,
+		"terminal.integrated.focusAfterRun": "terminal",
+		"terminal.integrated.suggest.enabled": true,
+		"terminal.integrated.suggest.quickSuggestions": true,
+		"terminal.integrated.suggest.enableExtensionCompletions": true,
+		"remote.downloadExtensionsLocally": true,
+		"notebook.multiCursor.enabled": false,
+		"notebook.outline.showCodeCells": true
 	}
 }

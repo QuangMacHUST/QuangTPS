@@ -289,6 +289,119 @@ def calculate_ntcp_niemierko(
     return ntcp
 
 
+def calculate_ntcp_poisson(
+    dvh_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    td50: float = 50.0,
+    gamma: float = 2.0,
+    n: float = 1.0,
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+    alpha_beta: float = 3.0,
+) -> float:
+    """
+    Tính NTCP theo mô hình Poisson.
+
+    Mô hình Poisson dựa trên xác suất thống kê để tính NTCP.
+
+    Parameters:
+        dvh_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        td50: Liều gây 50% biến chứng (Gy)
+        gamma: Tham số độ dốc
+        n: Tham số thể tích
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn
+        alpha_beta: Tỷ lệ α/β (Gy)
+
+    Returns:
+        Xác suất biến chứng mô lành (0-1)
+    """
+    if len(dvh_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu liều hoặc thể tích trống.")
+        return 0.0
+
+    # Chuẩn hóa volume_fractions
+    volume_fractions_normalized = volume_fractions / np.sum(volume_fractions)
+
+    # Tính EQD2 cho từng voxel
+    if total_fractions and total_fractions > 1:
+        fraction_dose = dvh_data / total_fractions
+        eqd2_data = dvh_data * (fraction_dose + alpha_beta) / (2.0 + alpha_beta)
+    else:
+        eqd2_data = dvh_data
+
+    # Tính EUD với tham số n
+    if n != 0:
+        eud = np.power(
+            np.sum(volume_fractions_normalized * np.power(eqd2_data, 1.0 / n)), n
+        )
+    else:
+        eud = np.average(eqd2_data, weights=volume_fractions_normalized)
+
+    # Tính NTCP theo mô hình Poisson với probit function
+    t = (eud - td50) / (gamma * td50)
+    ntcp = probit(t)
+
+    return float(np.clip(ntcp, 0.0, 1.0))
+
+
+def calculate_ntcp_logit(
+    dvh_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    td50: float = 50.0,
+    gamma: float = 2.0,
+    n: float = 1.0,
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+    alpha_beta: float = 3.0,
+) -> float:
+    """
+    Tính NTCP theo mô hình Logit.
+
+    Mô hình Logit sử dụng hàm logistic để tính NTCP.
+
+    Parameters:
+        dvh_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        td50: Liều gây 50% biến chứng (Gy)
+        gamma: Tham số độ dốc
+        n: Tham số thể tích
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn
+        alpha_beta: Tỷ lệ α/β (Gy)
+
+    Returns:
+        Xác suất biến chứng mô lành (0-1)
+    """
+    if len(dvh_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu liều hoặc thể tích trống.")
+        return 0.0
+
+    # Chuẩn hóa volume_fractions
+    volume_fractions_normalized = volume_fractions / np.sum(volume_fractions)
+
+    # Tính EQD2 cho từng voxel
+    if total_fractions and total_fractions > 1:
+        fraction_dose = dvh_data / total_fractions
+        eqd2_data = dvh_data * (fraction_dose + alpha_beta) / (2.0 + alpha_beta)
+    else:
+        eqd2_data = dvh_data
+
+    # Tính EUD với tham số n
+    if n != 0:
+        eud = np.power(
+            np.sum(volume_fractions_normalized * np.power(eqd2_data, 1.0 / n)), n
+        )
+    else:
+        eud = np.average(eqd2_data, weights=volume_fractions_normalized)
+
+    # Tính NTCP theo mô hình Logit
+    ntcp = logistic(gamma * (eud - td50) / td50)
+
+    return float(np.clip(ntcp, 0.0, 1.0))
+
+
 def calculate_ntcp_relative_seriality(
     dvh_data: np.ndarray,
     volume_fractions: np.ndarray,
@@ -670,18 +783,302 @@ def list_supported_models() -> List[str]:
     return ["lkb", "niemierko", "relative_seriality"]
 
 
+def calculate_cutoff_ntcp(
+    dvh_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    cutoff_dose: float,
+    organ_name: str = "generic",
+    model: str = "lkb",
+    fraction_size: float = 2.0,
+    total_fractions: Optional[int] = None,
+) -> Dict[str, float]:
+    """
+    Tính NTCP cho những voxel có liều trên ngưỡng cutoff.
+
+    Hàm này hữu ích để đánh giá nguy cơ biến chứng từ những vùng có liều cao.
+
+    Parameters:
+        dvh_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        cutoff_dose: Ngưỡng liều (Gy) để cắt bỏ liều thấp
+        organ_name: Tên cơ quan
+        model: Mô hình NTCP sử dụng
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+        total_fractions: Tổng số phân đoạn
+
+    Returns:
+        Dict chứa kết quả NTCP và thông tin bổ sung
+    """
+    try:
+        # Lọc chỉ những voxel có liều >= cutoff_dose
+        mask = dvh_data >= cutoff_dose
+
+        if not np.any(mask):
+            # Không có voxel nào trên ngưỡng cutoff
+            return {
+                "ntcp": 0.0,
+                "cutoff_dose": cutoff_dose,
+                "volume_above_cutoff": 0.0,
+                "volume_above_cutoff_percent": 0.0,
+                "max_dose_above_cutoff": 0.0,
+                "mean_dose_above_cutoff": 0.0,
+                "model": model,
+                "organ": organ_name,
+                "error": None,
+            }
+
+        # Lấy dữ liệu phía trên ngưỡng cutoff
+        filtered_doses = dvh_data[mask]
+        filtered_volumes = volume_fractions[mask]
+
+        # Tính toán NTCP cho vùng được lọc
+        ntcp_result = calculate_ntcp_from_dvh(
+            {"doses": filtered_doses, "volumes": filtered_volumes},
+            organ_name,
+            model,
+            fraction_size,
+            total_fractions,
+        )
+
+        # Tính toán thông tin bổ sung
+        total_volume = np.sum(volume_fractions)
+        volume_above_cutoff = np.sum(filtered_volumes)
+        volume_above_cutoff_percent = (
+            (volume_above_cutoff / total_volume * 100) if total_volume > 0 else 0.0
+        )
+
+        result = {
+            "ntcp": ntcp_result.get("ntcp", 0.0),
+            "cutoff_dose": cutoff_dose,
+            "volume_above_cutoff": volume_above_cutoff,
+            "volume_above_cutoff_percent": volume_above_cutoff_percent,
+            "max_dose_above_cutoff": float(np.max(filtered_doses)),
+            "mean_dose_above_cutoff": float(
+                np.average(filtered_doses, weights=filtered_volumes)
+            ),
+            "model": model,
+            "organ": organ_name,
+            "error": None,
+        }
+
+        # Thêm thông tin từ ntcp_result
+        if "risk_level" in ntcp_result:
+            result["risk_level"] = ntcp_result["risk_level"]
+        if "tcp" in ntcp_result:
+            result["tcp"] = ntcp_result["tcp"]
+        if "eud" in ntcp_result:
+            result["eud"] = ntcp_result["eud"]
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Lỗi khi tính cutoff NTCP cho {organ_name}: {e}")
+        return {
+            "ntcp": 0.0,
+            "cutoff_dose": cutoff_dose,
+            "volume_above_cutoff": 0.0,
+            "volume_above_cutoff_percent": 0.0,
+            "max_dose_above_cutoff": 0.0,
+            "mean_dose_above_cutoff": 0.0,
+            "model": model,
+            "organ": organ_name,
+            "error": str(e),
+        }
+
+
+def get_ntcp_constraints(
+    organ_name: Union[str, List[str]] = "all",
+) -> Union[Dict[str, Dict], List[str]]:
+    """
+    Lấy các ràng buộc NTCP cho cơ quan.
+
+    Parameters:
+        organ_name: Tên cơ quan hoặc "all" để lấy tất cả hoặc list các cơ quan
+
+    Returns:
+        Dictionary chứa ràng buộc NTCP hoặc danh sách tên cơ quan nếu organ_name="all"
+    """
+    # Định nghĩa ràng buộc NTCP chuẩn cho các cơ quan
+    ntcp_constraints = {
+        "spinal_cord": {
+            "ntcp_limit": 0.05,  # 5%
+            "description": "Tổn thương tủy sống",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "max_dose": 50.0,  # Gy
+                "v20": 0.0,  # %
+            },
+        },
+        "brainstem": {
+            "ntcp_limit": 0.05,  # 5%
+            "description": "Tổn thương thân não",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "max_dose": 54.0,  # Gy
+                "v50": 0.0,  # %
+            },
+        },
+        "brain": {
+            "ntcp_limit": 0.05,  # 5%
+            "description": "Hoại tử não",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "max_dose": 60.0,  # Gy
+                "v60": 30.0,  # %
+            },
+        },
+        "lung": {
+            "ntcp_limit": 0.20,  # 20%
+            "description": "Viêm phổi do xạ trị",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "mean_dose": 20.0,  # Gy
+                "v20": 30.0,  # %
+                "v5": 65.0,  # %
+            },
+        },
+        "heart": {
+            "ntcp_limit": 0.15,  # 15%
+            "description": "Bệnh tim mạch",
+            "recommended_model": "relative_seriality",
+            "dose_limits": {
+                "mean_dose": 26.0,  # Gy
+                "v30": 46.0,  # %
+                "v40": 100.0,  # % (không vượt quá)
+            },
+        },
+        "esophagus": {
+            "ntcp_limit": 0.20,  # 20%
+            "description": "Viêm thực quản",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "mean_dose": 34.0,  # Gy
+                "v55": 50.0,  # %
+                "v70": 20.0,  # %
+            },
+        },
+        "parotid": {
+            "ntcp_limit": 0.25,  # 25%
+            "description": "Khô miệng",
+            "recommended_model": "niemierko",
+            "dose_limits": {
+                "mean_dose": 26.0,  # Gy
+                "v30": 50.0,  # %
+            },
+        },
+        "liver": {
+            "ntcp_limit": 0.05,  # 5%
+            "description": "Bệnh gan do xạ trị",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "mean_dose": 30.0,  # Gy
+                "v30": 33.0,  # %
+            },
+        },
+        "kidney": {
+            "ntcp_limit": 0.05,  # 5%
+            "description": "Suy thận",
+            "recommended_model": "niemierko",
+            "dose_limits": {
+                "mean_dose": 18.0,  # Gy (cho cả 2 thận)
+                "v20": 32.0,  # %
+            },
+        },
+        "rectum": {
+            "ntcp_limit": 0.15,  # 15%
+            "description": "Viêm trực tràng",
+            "recommended_model": "lkb",
+            "dose_limits": {
+                "v65": 17.0,  # %
+                "v50": 50.0,  # %
+                "v40": 60.0,  # %
+            },
+        },
+        "bladder": {
+            "ntcp_limit": 0.10,  # 10%
+            "description": "Viêm bàng quang",
+            "recommended_model": "niemierko",
+            "dose_limits": {
+                "v65": 25.0,  # %
+                "v70": 15.0,  # %
+                "v80": 5.0,  # %
+            },
+        },
+        "small_bowel": {
+            "ntcp_limit": 0.10,  # 10%
+            "description": "Tắc ruột",
+            "recommended_model": "relative_seriality",
+            "dose_limits": {
+                "v45": 195.0,  # cc
+                "v15": 120.0,  # cc
+            },
+        },
+    }
+
+    if isinstance(organ_name, str):
+        if organ_name.lower() == "all":
+            # Trả về danh sách tất cả các cơ quan
+            return list(ntcp_constraints.keys())
+        else:
+            # Trả về ràng buộc cho cơ quan cụ thể
+            organ_key = organ_name.lower().replace(" ", "_")
+            return ntcp_constraints.get(organ_key, {})
+    elif isinstance(organ_name, list):
+        # Trả về ràng buộc cho nhiều cơ quan
+        result = {}
+        for organ in organ_name:
+            organ_key = organ.lower().replace(" ", "_")
+            if organ_key in ntcp_constraints:
+                result[organ] = ntcp_constraints[organ_key]
+        return result
+    else:
+        return {}
+
+
+# Alias để tương thích với tên cũ
+calculate_ntcp_for_dvh = calculate_ntcp_from_dvh
+
+
 # Export
+class NTCPModels:
+    """
+    Lớp chứa các mô hình NTCP được hỗ trợ.
+    """
+
+    LKB = "lkb"
+    NIEMIERKO = "niemierko"
+    POISSON = "poisson"
+    LOGIT = "logit"
+    RELATIVE_SERIALITY = "relative_seriality"
+
+    @classmethod
+    def get_all_models(cls) -> List[str]:
+        """Lấy danh sách tất cả các mô hình NTCP."""
+        return [cls.LKB, cls.NIEMIERKO, cls.POISSON, cls.LOGIT, cls.RELATIVE_SERIALITY]
+
+    @classmethod
+    def is_valid_model(cls, model: str) -> bool:
+        """Kiểm tra xem mô hình có hợp lệ không."""
+        return model in cls.get_all_models()
+
+
 __all__ = [
     "LKBParameters",
     "NiemierkoParameters",
     "RelativeSerialityParameters",
+    "NTCPModels",
     "calculate_eud",
     "calculate_ntcp_lkb",
     "calculate_ntcp_niemierko",
+    "calculate_ntcp_poisson",
+    "calculate_ntcp_logit",
     "calculate_ntcp_relative_seriality",
     "calculate_ntcp_from_dvh",
+    "calculate_ntcp_for_dvh",  # Alias cho tương thích
+    "calculate_cutoff_ntcp",
     "calculate_multiple_ntcp",
     "get_ntcp_risk_level",
+    "get_ntcp_constraints",
     "get_standard_ntcp_parameters",
     "list_supported_organs",
     "list_supported_models",

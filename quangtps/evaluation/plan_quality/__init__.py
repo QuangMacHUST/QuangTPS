@@ -452,6 +452,10 @@ class PlanQualityEvaluator:
 
 
 # Utility functions
+# Alias for compatibility
+PlanQualityAnalyzer = PlanQualityEvaluator
+
+
 def create_standard_goals(protocol_name: str, site: str) -> List[ClinicalGoal]:
     """Tạo các mục tiêu chuẩn cho site điều trị."""
     goals = []

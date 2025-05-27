@@ -355,6 +355,234 @@ def calculate_tcp_lq(
     return tcp
 
 
+def calculate_tcp_lq_poisson(
+    dose_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    alpha: float = 0.3,
+    beta: float = 0.03,
+    rho: float = 1e7,
+    clonogen_number: Optional[float] = None,
+    fractions: int = 1,
+    fraction_size: Optional[float] = None,
+) -> float:
+    """
+    Tính TCP theo mô hình Linear-Quadratic Poisson.
+
+    Parameters:
+        dose_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        alpha: Tham số α trong mô hình LQ (Gy⁻¹)
+        beta: Tham số β trong mô hình LQ (Gy⁻²)
+        rho: Mật độ tế bào khối u (cells/cm³)
+        clonogen_number: Số lượng tế bào sinh sản (nếu None thì tính từ rho)
+        fractions: Số phân đoạn
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+
+    Returns:
+        TCP (0-1)
+    """
+    if len(dose_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu DVH trống.")
+        return 0.0
+
+    # Tính kích thước phân đoạn nếu không được cung cấp
+    if fraction_size is None and fractions > 1:
+        fraction_size = np.max(dose_data) / fractions
+    elif fraction_size is None:
+        fraction_size = np.max(dose_data)
+
+    # Chuẩn hóa volume_fractions để tổng bằng 1
+    volume_fractions_normalized = volume_fractions / np.sum(volume_fractions)
+
+    # Tính số lượng tế bào ban đầu
+    if clonogen_number is None:
+        # Giả sử thể tích khối u khoảng 100 cm³
+        estimated_volume = 100.0  # cm³
+        N0 = rho * estimated_volume
+    else:
+        N0 = clonogen_number
+
+    # Tính TCP cho từng voxel
+    tcp_total = 1.0
+
+    for i in range(len(dose_data)):
+        # Liều tổng cho voxel
+        D_i = dose_data[i]
+
+        if D_i <= 0:
+            continue
+
+        # Liều mỗi phân đoạn
+        d_i = D_i / fractions if fractions > 1 else D_i
+
+        # Tính SF (survival fraction) theo mô hình LQ
+        sf = np.exp(-(alpha * d_i + beta * d_i * d_i))
+
+        # Số tế bào sống sót sau n phân đoạn
+        N_i = N0 * volume_fractions_normalized[i] * (sf**fractions)
+
+        # TCP voxel theo mô hình Poisson
+        tcp_i = np.exp(-N_i)
+
+        # TCP tổng cộng (tích của TCP các voxel)
+        tcp_total *= tcp_i
+
+    return float(np.clip(tcp_total, 0.0, 1.0))
+
+
+def calculate_tcp_lq_poisson_dvh(
+    dvh: Any,
+    alpha: float = 0.3,
+    beta: float = 0.03,
+    rho: float = 1e7,
+    volume_cc: float = 100.0,
+    fractions: int = 1,
+    fraction_size: Optional[float] = None,
+) -> float:
+    """
+    Tính TCP theo mô hình LQ-Poisson từ DVH.
+
+    Parameters:
+        dvh: Đối tượng DVH hoặc dict chứa dữ liệu DVH
+        alpha: Tham số α trong mô hình LQ (Gy⁻¹)
+        beta: Tham số β trong mô hình LQ (Gy⁻²)
+        rho: Mật độ tế bào khối u (cells/cm³)
+        volume_cc: Thể tích khối u (cm³)
+        fractions: Số phân đoạn
+        fraction_size: Kích thước mỗi phân đoạn (Gy)
+
+    Returns:
+        TCP (0-1)
+    """
+    # Kiểm tra xem dvh có phải đối tượng DoseVolumeHistogram không
+    if HAS_DVH and isinstance(dvh, DoseVolumeHistogram):
+        # Lấy dữ liệu từ đối tượng DVH
+        doses = dvh.doses
+        volumes = dvh.volumes
+    else:
+        # Giả sử dvh là dict chứa dữ liệu cần thiết
+        doses = dvh.get("doses", [])
+        volumes = dvh.get("volumes", [])
+
+    if len(doses) == 0 or len(volumes) == 0:
+        logger.warning("Dữ liệu DVH trống.")
+        return 0.0
+
+    # Chuyển đổi sang numpy arrays
+    doses_array = np.array(doses)
+    volumes_array = np.array(volumes)
+
+    # Tính số lượng tế bào ban đầu
+    clonogen_number = rho * volume_cc
+
+    # Gọi hàm tính TCP LQ-Poisson
+    return calculate_tcp_lq_poisson(
+        doses_array,
+        volumes_array,
+        alpha=alpha,
+        beta=beta,
+        rho=rho,
+        clonogen_number=clonogen_number,
+        fractions=fractions,
+        fraction_size=fraction_size,
+    )
+
+
+def calculate_tcp_webb(
+    dose_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    d50: float = 50.0,
+    gamma: float = 2.0,
+    fractions: int = 1,
+    alpha_beta: float = 10.0,
+) -> float:
+    """
+    Tính TCP theo mô hình Webb.
+
+    Mô hình Webb sử dụng phương pháp sigmoid để tính TCP.
+
+    Parameters:
+        dose_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        d50: Liều gây 50% kiểm soát khối u (Gy)
+        gamma: Tham số độ dốc
+        fractions: Số phân đoạn
+        alpha_beta: Tỷ lệ α/β (Gy)
+
+    Returns:
+        Xác suất kiểm soát khối u (0-1)
+    """
+    if len(dose_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu liều hoặc thể tích trống.")
+        return 0.0
+
+    # Chuẩn hóa volume_fractions
+    volume_fractions_normalized = volume_fractions / np.sum(volume_fractions)
+
+    # Tính EQD2 cho từng voxel
+    if fractions > 1:
+        fraction_dose = dose_data / fractions
+        eqd2_data = dose_data * (fraction_dose + alpha_beta) / (2.0 + alpha_beta)
+    else:
+        eqd2_data = dose_data
+
+    # Tính TCP theo mô hình Webb
+    tcp_values = 1.0 / (1.0 + np.exp(-gamma * (eqd2_data - d50) / d50))
+
+    # Tính TCP trung bình có trọng số theo thể tích
+    tcp = np.sum(volume_fractions_normalized * tcp_values)
+
+    return float(np.clip(tcp, 0.0, 1.0))
+
+
+def calculate_tcp_niemierko(
+    dose_data: np.ndarray,
+    volume_fractions: np.ndarray,
+    d50: float = 45.0,
+    gamma: float = 2.0,
+    a_parameter: float = -10.0,
+    fractions: int = 1,
+    alpha_beta: float = 10.0,
+) -> float:
+    """
+    Tính TCP theo mô hình Niemierko (gEUD-based).
+
+    Parameters:
+        dose_data: Mảng các giá trị liều (Gy)
+        volume_fractions: Mảng các phân đoạn thể tích tương ứng
+        d50: Liều gây 50% kiểm soát khối u (Gy)
+        gamma: Độ dốc của đường cong liều-đáp ứng
+        a_parameter: Tham số a cho gEUD (thường âm cho khối u, ví dụ -10)
+        fractions: Số phân đoạn
+        alpha_beta: Tỷ lệ α/β cho phân đoạn (Gy)
+
+    Returns:
+        TCP (0-1)
+    """
+    if len(dose_data) == 0 or len(volume_fractions) == 0:
+        logger.warning("Dữ liệu DVH trống.")
+        return 0.0
+
+    # Chuyển đổi sang liều 2Gy tương đương (EQD2) nếu có phân đoạn
+    if fractions > 1:
+        dose_per_fraction = dose_data / fractions
+        eqd2_data = dose_data * ((dose_per_fraction + alpha_beta) / (2.0 + alpha_beta))
+    else:
+        eqd2_data = dose_data
+
+    # Tính gEUD (generalized Equivalent Uniform Dose)
+    geud = calculate_eud(eqd2_data, volume_fractions, a_parameter)
+
+    # Tính TCP theo mô hình Niemierko
+    # TCP = 1 / (1 + (D50/gEUD)^(4*gamma))
+    if geud > 0:
+        tcp = 1.0 / (1.0 + (d50 / geud) ** (4.0 * gamma))
+    else:
+        tcp = 0.0
+
+    return float(np.clip(tcp, 0.0, 1.0))
+
+
 def calculate_tcp_from_dvh(
     dvh: Any,
     tumor_type: str,
@@ -737,6 +965,9 @@ def list_supported_models() -> List[str]:
     return ["poisson", "logit", "lq"]
 
 
+# Alias để tương thích với tên cũ
+calculate_tcp_logistic = calculate_tcp_logit
+
 # Export
 __all__ = [
     "PoissonTCPParameters",
@@ -745,7 +976,12 @@ __all__ = [
     "calculate_eud",
     "calculate_tcp_poisson",
     "calculate_tcp_logit",
+    "calculate_tcp_logistic",  # Alias cho tương thích
+    "calculate_tcp_webb",
     "calculate_tcp_lq",
+    "calculate_tcp_lq_poisson",
+    "calculate_tcp_lq_poisson_dvh",
+    "calculate_tcp_niemierko",
     "calculate_tcp_from_dvh",
     "calculate_multiple_tcp",
     "get_tcp_outcome_probability",
@@ -753,4 +989,79 @@ __all__ = [
     "get_standard_tcp_parameters",
     "list_supported_tumor_types",
     "list_supported_models",
+    "TCPModels",
 ]
+
+
+class TCPModels:
+    """
+    Lớp chứa các mô hình TCP được hỗ trợ.
+    """
+
+    POISSON = "poisson"
+    LOGIT = "logit"
+    LOGISTIC = "logistic"
+    WEBB = "webb"
+    LQ = "lq"
+    LQ_POISSON = "lq_poisson"
+    NIEMIERKO = "niemierko"
+
+    @classmethod
+    def get_all_models(cls) -> List[str]:
+        """Lấy danh sách tất cả mô hình TCP."""
+        return [
+            cls.POISSON,
+            cls.LOGIT,
+            cls.LOGISTIC,
+            cls.WEBB,
+            cls.LQ,
+            cls.LQ_POISSON,
+            cls.NIEMIERKO,
+        ]
+
+    @classmethod
+    def is_valid_model(cls, model: str) -> bool:
+        """Kiểm tra mô hình có hợp lệ không."""
+        return model in cls.get_all_models()
+
+    @classmethod
+    def poisson_tcp(
+        cls,
+        dose: float,
+        fractions: int,
+        tcd50: float,
+        gamma50: float,
+        alpha_beta: float = 10.0,
+    ) -> float:
+        """Tính TCP theo mô hình Poisson."""
+        from quangtps.evaluation.biological.tcp import calculate_tcp_poisson
+
+        return calculate_tcp_poisson(dose, fractions, tcd50, gamma50, alpha_beta)
+
+    @classmethod
+    def logistic_tcp(
+        cls,
+        dose: float,
+        fractions: int,
+        tcd50: float,
+        k: float,
+        alpha_beta: float = 10.0,
+    ) -> float:
+        """Tính TCP theo mô hình Logistic."""
+        from quangtps.evaluation.biological.tcp import calculate_tcp_logistic
+
+        return calculate_tcp_logistic(dose, fractions, tcd50, k, alpha_beta)
+
+    @classmethod
+    def lq_poisson_tcp(
+        cls,
+        dose: float,
+        fractions: int,
+        alpha: float,
+        rho: float,
+        alpha_beta: float = 10.0,
+    ) -> float:
+        """Tính TCP theo mô hình LQ-Poisson."""
+        from quangtps.evaluation.biological.tcp import calculate_tcp_lq_poisson
+
+        return calculate_tcp_lq_poisson(dose, fractions, alpha, rho, alpha_beta)

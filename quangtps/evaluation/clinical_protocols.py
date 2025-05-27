@@ -12,7 +12,7 @@ import logging
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
@@ -411,6 +411,20 @@ class ClinicalProtocolManager:
             self.logger.error(f"Error saving protocol {protocol.name}: {e}")
             return False
 
+    def get_protocol(self, protocol_name: str) -> Optional[ClinicalProtocol]:
+        """
+        Lấy protocol theo tên.
+
+        Alias cho load_protocol để tương thích với code hiện có.
+
+        Parameters:
+            protocol_name: Tên protocol
+
+        Returns:
+            ClinicalProtocol hoặc None nếu không tìm thấy
+        """
+        return self.load_protocol(protocol_name)
+
     def list_protocols(self) -> List[str]:
         """
         Liệt kê tất cả protocols có sẵn.
@@ -611,10 +625,218 @@ def get_default_protocol_manager() -> ClinicalProtocolManager:
     return _default_manager
 
 
+# Alias cho tương thích
+def get_protocol(protocol_name: str) -> Optional[ClinicalProtocol]:
+    """
+    Lấy protocol theo tên từ default manager.
+
+    Args:
+        protocol_name: Tên protocol
+
+    Returns:
+        Protocol hoặc None nếu không tìm thấy
+    """
+    try:
+        manager = get_default_protocol_manager()
+        return manager.get_protocol(protocol_name)
+    except Exception as e:
+        logger.error(f"Error getting protocol '{protocol_name}': {e}")
+        return None
+
+
+def select_protocol_dialog(parent=None):
+    """
+    Hiển thị dialog để chọn protocol lâm sàng.
+
+    Args:
+        parent: Widget cha
+
+    Returns:
+        Dict chứa thông tin protocol đã chọn hoặc None
+    """
+    try:
+        # Lazy import để tránh circular dependencies
+        from PyQt5.QtWidgets import QInputDialog, QMessageBox
+
+        manager = get_default_protocol_manager()
+        available_protocols = manager.list_protocols()
+
+        if not available_protocols:
+            if parent:
+                QMessageBox.information(
+                    parent, "Thông báo", "Không có protocol nào khả dụng."
+                )
+            return None
+
+        # Hiển thị dialog chọn protocol
+        protocol_name, ok = QInputDialog.getItem(
+            parent,
+            "Chọn Protocol Lâm sàng",
+            "Chọn protocol để đánh giá:",
+            available_protocols,
+            0,
+            False,
+        )
+
+        if ok and protocol_name:
+            protocol = manager.get_protocol(protocol_name)
+            if protocol:
+                # Chuyển đổi thành dict để compatibility
+                return {
+                    "name": protocol.name,
+                    "site": protocol.site,
+                    "description": protocol.description,
+                    "version": protocol.version,
+                    "clinical_goals": [goal.__dict__ for goal in protocol.goals],
+                    "created_by": protocol.created_by,
+                    "institution": protocol.institution,
+                    "department": protocol.department,
+                    "fractionation": protocol.fractionation,
+                    "prescription_dose": protocol.prescription_dose,
+                }
+
+        return None
+
+    except ImportError:
+        logger.warning("PyQt5 không khả dụng. Không thể hiển thị dialog.")
+        return None
+    except Exception as e:
+        logger.error(f"Error in select_protocol_dialog: {e}")
+        return None
+
+
+def create_simple_protocol_dialog(parent=None):
+    """
+    Tạo dialog đơn giản để chọn protocol khi UI phức tạp không khả dụng.
+
+    Args:
+        parent: Widget cha
+
+    Returns:
+        Dict chứa thông tin protocol đã chọn hoặc None
+    """
+    try:
+        manager = get_default_protocol_manager()
+        protocols = manager.list_protocols()
+
+        if not protocols:
+            logger.info("Không có protocol nào khả dụng")
+            return None
+
+        # Lấy protocol đầu tiên làm mặc định
+        protocol_name = protocols[0]
+        protocol = manager.get_protocol(protocol_name)
+
+        if protocol:
+            logger.info(f"Sử dụng protocol mặc định: {protocol_name}")
+            return {
+                "name": protocol.name,
+                "site": protocol.site,
+                "description": protocol.description,
+                "clinical_goals": [goal.__dict__ for goal in protocol.goals],
+            }
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error in create_simple_protocol_dialog: {e}")
+        return None
+
+
+def get_protocol_by_site(site: str) -> Optional[ClinicalProtocol]:
+    """
+    Lấy protocol phù hợp với site điều trị.
+
+    Args:
+        site: Vị trí điều trị
+
+    Returns:
+        Protocol phù hợp hoặc None
+    """
+    try:
+        manager = get_default_protocol_manager()
+        protocols_for_site = manager.get_protocols_by_site(site)
+
+        if protocols_for_site:
+            # Lấy protocol đầu tiên cho site này
+            return manager.get_protocol(protocols_for_site[0])
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting protocol for site '{site}': {e}")
+        return None
+
+
+def export_protocol_to_file(protocol: ClinicalProtocol, file_path: str) -> bool:
+    """
+    Xuất protocol ra file.
+
+    Args:
+        protocol: Protocol cần xuất
+        file_path: Đường dẫn file
+
+    Returns:
+        True nếu thành công
+    """
+    try:
+        manager = get_default_protocol_manager()
+        return manager.export_protocol(protocol.name, file_path)
+    except Exception as e:
+        logger.error(f"Error exporting protocol: {e}")
+        return False
+
+
+def import_protocol_from_file(file_path: str) -> Optional[str]:
+    """
+    Nhập protocol từ file.
+
+    Args:
+        file_path: Đường dẫn file
+
+    Returns:
+        Tên protocol đã nhập hoặc None
+    """
+    try:
+        manager = get_default_protocol_manager()
+        return manager.import_protocol(file_path)
+    except Exception as e:
+        logger.error(f"Error importing protocol: {e}")
+        return None
+
+
+def validate_protocol_data(protocol_data: Dict[str, Any]) -> Tuple[bool, str]:
+    """
+    Validate dữ liệu protocol.
+
+    Args:
+        protocol_data: Dữ liệu protocol
+
+    Returns:
+        Tuple (valid, error_message)
+    """
+    try:
+        if not protocol_data.get("name"):
+            return False, "Tên protocol là bắt buộc"
+
+        if not protocol_data.get("site"):
+            return False, "Vị trí điều trị là bắt buộc"
+
+        goals = protocol_data.get("clinical_goals", [])
+        if not goals:
+            return False, "Ít nhất một mục tiêu lâm sàng là bắt buộc"
+
+        return True, ""
+
+    except Exception as e:
+        return False, f"Lỗi validation: {e}"
+
+
 # Export
 __all__ = [
     "ClinicalProtocol",
     "ClinicalProtocolManager",
+    "get_protocol",
     "get_available_sites",
     "create_protocol_manager",
     "get_default_protocol_manager",

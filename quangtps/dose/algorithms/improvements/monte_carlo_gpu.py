@@ -1018,6 +1018,13 @@ class MonteCarloGPUAlgorithm(MonteCarloGPU):
         super().__init__(**kwargs)
         self.patient_data = None
         self.beam_arrangement = None
+
+        # Ensure GPU attributes are available
+        if not hasattr(self, "gpu_available"):
+            self.gpu_available = False
+        if not hasattr(self, "backend"):
+            self.backend = "cpu"
+
         self.calculation_status = {
             "initialized": False,
             "ready": False,
@@ -1173,6 +1180,42 @@ class MonteCarloGPUAlgorithm(MonteCarloGPU):
         """
         return self.calculation_status
 
+    def get_gpu_info(self):
+        """
+        Trả về thông tin GPU hiện tại.
+
+        Returns
+        -------
+        Dict
+            Thông tin GPU
+        """
+        gpu_info = {
+            "gpu_available": self.gpu_available,
+            "backend": self.backend,
+            "device_count": 0,
+            "memory_info": "N/A",
+        }
+
+        if self.gpu_available and self.backend == "cupy":
+            try:
+                import cupy as cp
+
+                gpu_info["device_count"] = cp.cuda.runtime.getDeviceCount()
+                gpu_info["memory_info"] = (
+                    f"{cp.get_default_memory_pool().used_bytes() / 1024**3:.2f} GB used"
+                )
+            except Exception:
+                pass
+        elif self.gpu_available and self.backend == "pycuda":
+            try:
+                import pycuda.driver as cuda
+
+                gpu_info["device_count"] = cuda.Device.count()
+            except Exception:
+                pass
+
+        return gpu_info
+
 
 class MonteCarloGPUResult:
     """
@@ -1265,3 +1308,56 @@ class MonteCarloGPUResult:
         except Exception as e:
             logger.error(f"Lỗi khi so sánh phân bố liều: {str(e)}")
             return None
+
+
+# Đăng ký thuật toán với hệ thống
+def register_algorithm():
+    """Đăng ký thuật toán Monte Carlo GPU với hệ thống."""
+    try:
+        # Thử import từ dose_engine
+        try:
+            from quangtps.dose.dose_engine import register_dose_algorithm
+
+            register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+            logger.info("Đã đăng ký MonteCarloGPUAlgorithm thành công")
+            return
+        except (ImportError, NameError) as e:
+            logger.debug(f"Không thể import từ dose_engine: {e}")
+
+        # Thử import từ algorithms module
+        try:
+            from quangtps.dose.algorithms import register_dose_algorithm
+
+            register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+            logger.info("Đã đăng ký MonteCarloGPUAlgorithm thành công")
+            return
+        except (ImportError, NameError) as e:
+            logger.debug(f"Không thể import từ algorithms: {e}")
+
+        # Fallback: tạo registry tự quản lý
+        try:
+            import quangtps.dose.algorithms as algorithms_module
+
+            if not hasattr(algorithms_module, "_dose_algorithms"):
+                algorithms_module._dose_algorithms = {}
+            algorithms_module._dose_algorithms["monte_carlo_gpu"] = (
+                MonteCarloGPUAlgorithm
+            )
+            logger.info("Đã đăng ký MonteCarloGPUAlgorithm vào registry local")
+        except Exception as e:
+            logger.warning(f"Không thể đăng ký MonteCarloGPUAlgorithm: {e}")
+            logger.info("MonteCarloGPUAlgorithm đã sẵn sàng để đăng ký thủ công")
+    except Exception as e:
+        logger.error(f"Lỗi khi đăng ký thuật toán: {e}")
+        logger.info("MonteCarloGPUAlgorithm đã sẵn sàng để đăng ký thủ công")
+
+
+# Thực thi đăng ký
+try:
+    register_algorithm()
+except Exception as e:
+    logger.error(f"Lỗi khi tự động đăng ký thuật toán: {e}")
+
+
+# Export main class để import từ __init__.py
+__all__ = ["MonteCarloGPUAlgorithm", "MonteCarloGPU", "MonteCarloGPUResult"]
