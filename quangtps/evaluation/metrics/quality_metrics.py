@@ -594,3 +594,48 @@ def calculate_all_quality_metrics(
         results["plan"] = plan_results
 
     return results
+
+
+# Alias function for backward compatibility
+def calculate_quality_metrics(
+    dose_grid: DoseGrid,
+    targets: Dict[str, np.ndarray],
+    oars: Dict[str, np.ndarray],
+    prescription_doses: Dict[str, float],
+) -> Dict[str, Dict[str, float]]:
+    """
+    Alias function cho calculate_all_quality_metrics
+
+    Parameters
+    ----------
+    dose_grid : DoseGrid
+        Lưới liều
+    targets : Dict[str, np.ndarray]
+        Dictionary chứa mặt nạ của các mục tiêu
+    oars : Dict[str, np.ndarray]
+        Dictionary chứa mặt nạ của các cơ quan nguy cấp
+    prescription_doses : Dict[str, float]
+        Dictionary chứa liều kê toa cho mỗi mục tiêu
+
+    Returns
+    -------
+    Dict[str, Dict[str, float]]
+        Dictionary chứa các metrics cho mỗi cấu trúc
+    """
+    return calculate_all_quality_metrics(dose_grid, targets, oars, prescription_doses)
+
+
+# Export cho convenience
+__all__ = [
+    "calculate_conformity_index",
+    "calculate_homogeneity_index",
+    "calculate_gradient_index",
+    "calculate_target_coverage",
+    "calculate_conformation_number",
+    "calculate_radiation_conformity_index",
+    "calculate_dvh_metrics",
+    "calculate_equivalent_uniform_dose",
+    "calculate_biological_metrics",
+    "calculate_all_quality_metrics",
+    "calculate_quality_metrics",  # Alias
+]

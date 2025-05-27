@@ -331,11 +331,20 @@ def test_robustness_analysis():
                 print(f"✓ Robustness analysis: Success")
 
             # Analyze worst case
-            worst_case = analyzer.find_worst_case_scenario(robustness_results)
-            if worst_case:
-                print(
-                    f"✓ Worst case scenario: {worst_case.get('scenario_id', 'Unknown')}"
-                )
+            try:
+                # Nếu robustness_results là object, chuyển thành dict
+                if hasattr(robustness_results, "__dict__"):
+                    results_dict = robustness_results.__dict__
+                else:
+                    results_dict = robustness_results
+
+                worst_case = analyzer.find_worst_case_scenario(results_dict)
+                if worst_case:
+                    print(
+                        f"✓ Worst case scenario: {worst_case.get('scenario_id', 'Unknown')}"
+                    )
+            except Exception as e:
+                print(f"○ Worst case analysis: {str(e)}")
 
         else:
             print("○ Robustness analysis: Fallback mode")

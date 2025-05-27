@@ -616,3 +616,7 @@ class PlanCollection:
     def __str__(self) -> str:
         """String representation of the collection."""
         return f"PlanCollection(id={self.id}, name={self.name}, num_plans={len(self.plans)})"
+
+
+# Alias for backward compatibility
+TreatmentPlan = Plan

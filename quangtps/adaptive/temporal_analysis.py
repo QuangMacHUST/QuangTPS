@@ -23,8 +23,8 @@ from quangtps.imaging.registration import ImageRegistration
 from quangtps.segmentation.contour.dice import calculate_dice
 from quangtps.evaluation.dvh.dvh_calculator import DVHCalculator
 from quangtps.evaluation.metrics.clinical_metrics import ClinicalMetricsCalculator
-from quangtps.dose.dose_accumulation import DoseAccumulator
-from quangtps.adaptive.deformation.deformable_registration import DeformableRegistration
+from quangtps.adaptive.dose_accumulation import DoseAccumulator
+from quangtps.adaptive.deformation import DeformableRegistration
 from quangtps.core.utils import get_timestamp, create_directory_if_not_exists
 
 logger = logging.getLogger(__name__)
@@ -581,7 +581,7 @@ class TemporalAnalyzer:
     def _generate_html_report(self, result: TemporalAnalysisResult, report_path: str):
         """Tạo báo cáo HTML với các đồ thị và bảng dữ liệu."""
         # TODO: Triển khai tạo báo cáo HTML
-        logger.info(f"Tạo báo cáo HTML tại {report_path}")
+        logger.info(f"Đã tạo báo cáo HTML tại {report_path}")
 
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(f"""<!DOCTYPE html>
@@ -635,4 +635,49 @@ class TemporalAnalyzer:
 </html>
 """)
 
-        logger.info(f"Đã tạo báo cáo HTML tại {report_path}")
+# Convenience function
+def analyze_temporal_changes(
+    reference_image: Image,
+    reference_structures: Dict[str, Structure],
+    timepoint_images: List[Image],
+    timepoint_structures: List[Dict[str, Structure]],
+    timepoint_dates: List[datetime.datetime],
+    output_dir: Optional[str] = None,
+    metrics: Optional[List[TemporalChangeMetric]] = None
+) -> TemporalAnalysisResult:
+    """
+    Convenience function để thực hiện phân tích temporal changes
+
+    Parameters
+    ----------
+    reference_image : Image
+        Hình ảnh tham chiếu
+    reference_structures : Dict[str, Structure]
+        Cấu trúc tham chiếu
+    timepoint_images : List[Image]
+        Danh sách hình ảnh theo thời gian
+    timepoint_structures : List[Dict[str, Structure]]
+        Danh sách cấu trúc theo thời gian
+    timepoint_dates : List[datetime.datetime]
+        Danh sách ngày
+    output_dir : str, optional
+        Thư mục xuất kết quả
+    metrics : List[TemporalChangeMetric], optional
+        Danh sách metrics cần tính
+
+    Returns
+    -------
+    TemporalAnalysisResult
+        Kết quả phân tích
+    """
+    analyzer = TemporalAnalyzer(default_output_dir=output_dir or "./temporal_analysis")
+
+    return analyzer.analyze_timepoints(
+        reference_image=reference_image,
+        reference_structures=reference_structures,
+        timepoint_images=timepoint_images,
+        timepoint_structures=timepoint_structures,
+        timepoint_dates=timepoint_dates,
+        metrics=metrics,
+        output_dir=output_dir
+    )

@@ -522,3 +522,42 @@ class ClinicalMetricsCalculator:
             return sorted_dvh[np.argmin(sorted_dvh[:, 1]), 0]
         else:
             return sorted_dvh[np.argmax(sorted_dvh[:, 1]), 0]
+
+
+# Convenience function
+def calculate_clinical_metrics(
+    dose_grid: np.ndarray,
+    structures: Dict[str, np.ndarray],
+    target_name: str,
+    prescription_dose: float,
+    dvh_data: Optional[Dict[str, np.ndarray]] = None,
+) -> Dict[str, ClinicalMetricResult]:
+    """
+    Convenience function để tính toán clinical metrics
+
+    Parameters
+    ----------
+    dose_grid : np.ndarray
+        Ma trận liều 3D
+    structures : Dict[str, np.ndarray]
+        Dictionary chứa masks của các cấu trúc
+    target_name : str
+        Tên cấu trúc mục tiêu (PTV)
+    prescription_dose : float
+        Liều kê toa
+    dvh_data : Dict[str, np.ndarray], optional
+        Dữ liệu DVH
+
+    Returns
+    -------
+    Dict[str, ClinicalMetricResult]
+        Dictionary chứa các clinical metrics
+    """
+    calculator = ClinicalMetricsCalculator()
+    return calculator.calculate_all_metrics(
+        dose_grid=dose_grid,
+        structures=structures,
+        target_name=target_name,
+        prescription_dose=prescription_dose,
+        dvh_data=dvh_data,
+    )

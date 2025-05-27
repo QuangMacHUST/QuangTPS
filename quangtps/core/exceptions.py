@@ -151,6 +151,20 @@ class DataProcessingError(QuangTPSError):
         super().__init__(message_with_type)
 
 
+class FourDProcessingError(QuangTPSError):
+    """Lỗi xử lý dữ liệu 4D"""
+
+    def __init__(self, message="4D processing error"):
+        super().__init__(message)
+
+
+class DeformationError(QuangTPSError):
+    """Lỗi trong quá trình deformation"""
+
+    def __init__(self, message="Deformation error"):
+        super().__init__(message)
+
+
 class DoseCalculationError(QuangTPSError):
     """Lỗi khi tính toán liều"""
 
@@ -263,10 +277,24 @@ class TemporalAnalysisError(AdaptationError):
         super().__init__(message)
 
 
+class SetupErrorAnalysisError(QuangTPSError):
+    """Lỗi phân tích setup error"""
+
+    def __init__(self, message="Setup error analysis error"):
+        super().__init__(message)
+
+
 class AnatomyPredictionError(AdaptationError):
     """Lỗi xảy ra khi dự đoán giải phẫu thất bại."""
 
     def __init__(self, message="Anatomy prediction error"):
+        super().__init__(message)
+
+
+class PredictionError(QuangTPSError):
+    """Lỗi trong quá trình prediction"""
+
+    def __init__(self, message="Prediction error"):
         super().__init__(message)
 
 

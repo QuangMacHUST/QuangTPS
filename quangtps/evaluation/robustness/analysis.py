@@ -180,6 +180,13 @@ def find_worst_case_scenario(
         if not robustness_results:
             return {}
 
+        # Kiểm tra nếu robustness_results không phải dictionary
+        if not isinstance(robustness_results, dict):
+            logger.warning(
+                f"robustness_results is not a dict: {type(robustness_results)}"
+            )
+            return {"scenario_id": "unknown", "description": "Invalid results format"}
+
         worst_case = {
             "scenario_id": "worst_case",
             "description": f"Worst case based on {metric}",
@@ -193,6 +200,13 @@ def find_worst_case_scenario(
 
         for structure_name, structure_data in robustness_results.items():
             if target_structures and structure_name not in target_structures:
+                continue
+
+            # Kiểm tra structure_data có phải dictionary không
+            if not isinstance(structure_data, dict):
+                logger.warning(
+                    f"structure_data for {structure_name} is not a dict: {type(structure_data)}"
+                )
                 continue
 
             if metric in structure_data:

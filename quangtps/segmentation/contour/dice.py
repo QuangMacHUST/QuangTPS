@@ -422,3 +422,34 @@ def batch_calculate_dice(
             print(f"Lỗi khi tính toán hệ số Dice cho {struct_name}: {str(e)}")
 
     return dice_scores
+
+# Alias functions for backward compatibility
+def calculate_dice(structure1, structure2, mask_threshold=0.5):
+    """
+    Alias function cho calculate_dice_coefficient
+
+    Parameters
+    ----------
+    structure1 : Union[Structure, np.ndarray]
+        Cấu trúc thứ nhất
+    structure2 : Union[Structure, np.ndarray]
+        Cấu trúc thứ hai
+    mask_threshold : float, optional
+        Ngưỡng cho mặt nạ nhị phân
+
+    Returns
+    -------
+    float
+        Hệ số Dice
+    """
+    return calculate_dice_coefficient(structure1, structure2, mask_threshold)
+
+__all__ = [
+    'calculate_dice_coefficient',
+    'calculate_dice',  # Alias
+    'calculate_jaccard_index',
+    'calculate_volumetric_similarity',
+    'calculate_hausdorff_distance',
+    'calculate_volume_overlap_metrics',
+    'batch_calculate_dice'
+]

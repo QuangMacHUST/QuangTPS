@@ -170,10 +170,19 @@ def plot_robustness_bands(
         fig, ax = plt.subplots(figsize=(12, 8))
 
         try:
+            # Thử tab10 trước
             colors = plt.cm.tab10(np.linspace(0, 1, len(structures)))
         except AttributeError:
-            # Fallback khi tab10 không khả dụng
-            colors = plt.cm.Set1(np.linspace(0, 1, len(structures)))
+            try:
+                # Fallback Set1
+                colors = plt.cm.Set1(np.linspace(0, 1, len(structures)))
+            except AttributeError:
+                try:
+                    # Fallback viridis
+                    colors = plt.cm.viridis(np.linspace(0, 1, len(structures)))
+                except AttributeError:
+                    # Fallback cuối cùng với rainbow
+                    colors = plt.cm.rainbow(np.linspace(0, 1, len(structures)))
 
         for i, structure in enumerate(structures):
             if structure not in dvh_bands:
@@ -301,7 +310,18 @@ def plot_dvh_bands_subplot(ax, dvh_bands):
         )
         return
 
-    colors = plt.cm.tab10(np.linspace(0, 1, len(dvh_bands)))
+    try:
+        colors = plt.cm.tab10(np.linspace(0, 1, len(dvh_bands)))
+    except AttributeError:
+        try:
+            colors = plt.cm.Set1(np.linspace(0, 1, len(dvh_bands)))
+        except AttributeError:
+            try:
+                # Sử dụng viridis
+                colors = plt.cm.viridis(np.linspace(0, 1, len(dvh_bands)))
+            except AttributeError:
+                # Fallback cuối cùng với rainbow
+                colors = plt.cm.rainbow(np.linspace(0, 1, len(dvh_bands)))
 
     for i, (structure, data) in enumerate(dvh_bands.items()):
         dose_bins = data["dose_bins"]
