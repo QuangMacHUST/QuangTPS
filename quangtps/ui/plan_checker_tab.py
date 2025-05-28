@@ -122,9 +122,15 @@ class PlanCheckerTab(QWidget):
             return
 
         # Lấy bệnh nhân hiện tại từ app
-        patient = self.app.get_current_patient()
-        if patient:
-            self.set_patient(patient)
+        try:
+            if hasattr(self.app, "get_current_patient"):
+                patient = self.app.get_current_patient()
+                if patient:
+                    self.set_patient(patient)
+            else:
+                logger.warning("App không có method get_current_patient")
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy current patient: {e}")
 
     def _update_plan_list(self):
         """Cập nhật danh sách kế hoạch từ bệnh nhân hiện tại."""

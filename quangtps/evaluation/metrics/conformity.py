@@ -46,7 +46,9 @@ class ConformityIndices:
         assurance guidelines. Int J Radiat Oncol Biol Phys., 27(5), 1231-1239.
         """
         if tv <= 0 or v_ri <= 0:
-            raise ValueError("Thể tích mục tiêu (TV) và thể tích tham chiếu (V_RI) phải lớn hơn 0")
+            raise ValueError(
+                "Thể tích mục tiêu (TV) và thể tích tham chiếu (V_RI) phải lớn hơn 0"
+            )
 
         return v_ri / tv
 
@@ -85,7 +87,7 @@ class ConformityIndices:
         if tv <= 0 or v_ri <= 0 or tv_ri <= 0:
             raise ValueError("Tất cả các thể tích phải lớn hơn 0")
 
-        return (tv_ri ** 2) / (tv * v_ri)
+        return (tv_ri**2) / (tv * v_ri)
 
     @staticmethod
     def ci_lomax(tv_ri: float, tv: float, v_ri: float) -> float:
@@ -348,7 +350,7 @@ class ConformityIndices:
                 "CI_Ohtakara": ConformityIndices.ci_ohtakara(tv_ri, tv, v_ri),
                 "CI_Knoos": ConformityIndices.ci_knoos(tv_ri, tv),
                 "Dice": ConformityIndices.ci_dice(tv_ri, tv, v_ri),
-                "Jaccard": ConformityIndices.ci_jaccard(tv_ri, tv, v_ri)
+                "Jaccard": ConformityIndices.ci_jaccard(tv_ri, tv, v_ri),
             }
             return metrics
         except ValueError as e:
@@ -413,13 +415,14 @@ class ConformityIndices:
         else:
             return "Kém (< 0.4)"
 
+
 # Convenience function
 def calculate_conformity_indices(
     dose_grid: np.ndarray,
     target_mask: np.ndarray,
     prescription_dose: float,
     dose_level: float = 0.95,
-    spacing: tuple = (1.0, 1.0, 1.0)
+    spacing: tuple = (1.0, 1.0, 1.0),
 ) -> Dict[str, float]:
     """
     Convenience function để tính toán tất cả các chỉ số conformity
@@ -461,23 +464,29 @@ def calculate_conformity_indices(
 
     results = {}
     try:
-        results['ci_rtog'] = conformity_indices.ci_rtog(v_ri, tv)
-        results['ci_paddick'] = conformity_indices.ci_paddick(tv_ri, tv, v_ri)
-        results['ci_lomax'] = conformity_indices.ci_lomax(tv_ri, tv, v_ri)
-        results['ci_van_t_riet'] = conformity_indices.ci_van_t_riet(tv_ri, tv, v_ri)
-        results['ci_ohtakara'] = conformity_indices.ci_ohtakara(tv_ri, tv, v_ri)
-        results['ci_knoos'] = conformity_indices.ci_knoos(tv_ri, tv)
-        results['ci_dice'] = conformity_indices.ci_dice(tv_ri, tv, v_ri)
-        results['ci_jaccard'] = conformity_indices.ci_jaccard(tv_ri, tv, v_ri)
+        results["ci_rtog"] = conformity_indices.ci_rtog(v_ri, tv)
+        results["ci_paddick"] = conformity_indices.ci_paddick(tv_ri, tv, v_ri)
+        results["ci_lomax"] = conformity_indices.ci_lomax(tv_ri, tv, v_ri)
+        results["ci_van_t_riet"] = conformity_indices.ci_van_t_riet(tv_ri, tv, v_ri)
+        results["ci_ohtakara"] = conformity_indices.ci_ohtakara(tv_ri, tv, v_ri)
+        results["ci_knoos"] = conformity_indices.ci_knoos(tv_ri, tv)
+        results["ci_dice"] = conformity_indices.ci_dice(tv_ri, tv, v_ri)
+        results["ci_jaccard"] = conformity_indices.ci_jaccard(tv_ri, tv, v_ri)
     except ValueError as e:
         # Trả về giá trị NaN nếu không thể tính toán
-        for key in ['ci_rtog', 'ci_paddick', 'ci_lomax', 'ci_van_t_riet',
-                   'ci_ohtakara', 'ci_knoos', 'ci_dice', 'ci_jaccard']:
+        for key in [
+            "ci_rtog",
+            "ci_paddick",
+            "ci_lomax",
+            "ci_van_t_riet",
+            "ci_ohtakara",
+            "ci_knoos",
+            "ci_dice",
+            "ci_jaccard",
+        ]:
             results[key] = np.nan
 
     return results
 
-__all__ = [
-    'ConformityIndices',
-    'calculate_conformity_indices'
-]
+
+__all__ = ["ConformityIndices", "calculate_conformity_indices"]

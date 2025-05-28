@@ -22,6 +22,42 @@ try:
     from vtkmodules.vtkCommonCore import vtkCommand
     from vtkmodules.vtkRenderingCore import vtkVolume, vtkRenderer
 
+    # Try to import specific VTK classes with fallback
+    try:
+        from vtkmodules.vtkRenderingCore import (
+            vtkRenderer,
+            vtkRenderWindow,
+            vtkRenderWindowInteractor,
+            vtkActor,
+            vtkPolyDataMapper,
+            vtkVolume,
+            vtkVolumeProperty,
+        )
+        from vtkmodules.vtkCommonDataModel import (
+            vtkPoints,
+            vtkCellArray,
+            vtkPolygon,
+            vtkPolyData,
+            vtkImageData,
+        )
+        from vtkmodules.vtkFiltersCore import vtkTriangleFilter
+        from vtkmodules.vtkFiltersGeneral import vtkPolyDataNormals
+        from vtkmodules.vtkCommonCore import vtkDoubleArray
+        from vtkmodules.vtkRenderingVolume import (
+            vtkFixedPointVolumeRayCastMapper,
+            vtkGPUVolumeRayCastMapper,
+        )
+        from vtkmodules.vtkRenderingCore import (
+            vtkColorTransferFunction,
+            vtkPiecewiseFunction,
+        )
+        from vtkmodules.vtkFiltersContour import vtkMarchingCubes
+        from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
+
+    except ImportError:
+        # Fallback to old-style VTK imports
+        pass
+
     HAS_VTK = True
 except ImportError:
     logger.warning("VTK không khả dụng. Chức năng hiển thị 3D sẽ bị hạn chế.")
@@ -161,6 +197,11 @@ class Visualization3D:
             logger.info("Đã khởi tạo thành công các thành phần VTK.")
         except Exception as e:
             logger.error(f"Lỗi khi khởi tạo VTK: {str(e)}")
+            # Create fallback components
+            self.renderer = None
+            self.render_window = None
+            self.interactor = None
+            self.camera = None
 
     def set_dose_data(
         self,
@@ -785,25 +826,40 @@ class Visualization3DWidget(QWidget):
 
 def create_3d_visualization_widget(parent=None) -> Optional[Visualization3DWidget]:
     """
-    Tạo widget hiển thị 3D nếu có thể.
+    Tạo widget hiển thị 3D.
 
-    Parameters
-    ----------
-    parent : QWidget, optional
-        Widget cha, mặc định là None
-
-    Returns
-    -------
-    Optional[Visualization3DWidget]
-        Widget hiển thị 3D hoặc None nếu không thể tạo
+    Returns:
+        Widget hiển thị 3D nếu VTK và PyQt5 có sẵn, ngược lại None.
     """
-    if not HAS_PYQT:
-        logger.error("PyQt5 không khả dụng. Không thể tạo widget 3D.")
+    if HAS_VTK and HAS_PYQT:
+        return Visualization3DWidget(parent)
+    else:
+        logger.warning("Không thể tạo widget hiển thị 3D do thiếu VTK hoặc PyQt5.")
         return None
 
-    try:
-        widget = Visualization3DWidget(parent)
-        return widget
-    except Exception as e:
-        logger.error(f"Lỗi khi tạo widget hiển thị 3D: {str(e)}")
-        return None
+
+# Alias cho backward compatibility
+StructureViewer3D = Visualization3DWidget
+Viewer3D = Visualization3DWidget
+
+# Fallback class nếu không có VTK
+if not HAS_VTK or not HAS_PYQT:
+
+    class StructureViewer3D(QWidget if HAS_PYQT else object):
+        """Fallback class when VTK is not available."""
+
+        def __init__(self, parent=None):
+            if HAS_PYQT:
+                super().__init__(parent)
+            else:
+                pass
+            logger.warning("StructureViewer3D fallback used - VTK not available")
+
+        def set_dose_data(self, *args, **kwargs):
+            pass
+
+        def add_structure(self, *args, **kwargs):
+            pass
+
+        def remove_structure(self, *args, **kwargs):
+            pass

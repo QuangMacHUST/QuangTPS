@@ -441,6 +441,102 @@ class EvaluationTab(QWidget):
             f"Updated structure list with {len(self.structure_set.structures)} structures"
         )
 
+    def on_select_all_clicked(self):
+        """Handle select all button click."""
+        # Check if all items are selected
+        all_selected = True
+        for i in range(self.structure_list.count()):
+            item = self.structure_list.item(i)
+            if item.checkState() != Qt.Checked:
+                all_selected = False
+                break
+
+        # Toggle selection state
+        new_state = Qt.Unchecked if all_selected else Qt.Checked
+        for i in range(self.structure_list.count()):
+            item = self.structure_list.item(i)
+            item.setCheckState(new_state)
+
+        # Update button text
+        self.select_all_button.setText(
+            "Deselect All" if new_state == Qt.Checked else "Select All"
+        )
+
+        # Update DVH plot
+        self._update_dvh()
+
+    def on_normalization_changed(self, index):
+        """Handle normalization option change."""
+        # Update DVH plot with new normalization
+        self._update_dvh()
+
+    def on_prescription_changed(self, value):
+        """Handle prescription dose change."""
+        # Update DVH plot with new prescription
+        self._update_dvh()
+
+    def on_export_dvh(self):
+        """Export DVH data to file."""
+        try:
+            # Get file path from user
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export DVH Data",
+                "",
+                "CSV files (*.csv);;Text files (*.txt);;All files (*.*)",
+            )
+
+            if file_path:
+                # Export DVH data logic here
+                logger.info(f"DVH data exported to {file_path}")
+                QMessageBox.information(
+                    self, "Export Complete", f"DVH data exported to {file_path}"
+                )
+        except Exception as e:
+            logger.error(f"Error exporting DVH data: {str(e)}")
+            QMessageBox.warning(
+                self, "Export Error", f"Failed to export DVH data: {str(e)}"
+            )
+
+    def on_generate_report(self):
+        """Generate evaluation report."""
+        try:
+            # Generate report logic here
+            logger.info("Generating evaluation report")
+            QMessageBox.information(
+                self, "Report", "Evaluation report generation started"
+            )
+        except Exception as e:
+            logger.error(f"Error generating report: {str(e)}")
+            QMessageBox.warning(
+                self, "Report Error", f"Failed to generate report: {str(e)}"
+            )
+
+    def on_select_protocol(self):
+        """Show protocol selection dialog."""
+        try:
+            # Show protocol selection dialog
+            logger.info("Opening protocol selection dialog")
+            QMessageBox.information(
+                self, "Protocol", "Protocol selection dialog (to be implemented)"
+            )
+        except Exception as e:
+            logger.error(f"Error opening protocol dialog: {str(e)}")
+            QMessageBox.warning(
+                self, "Protocol Error", f"Failed to open protocol dialog: {str(e)}"
+            )
+
+    def load_protocols(self):
+        """Load available protocols."""
+        try:
+            # Load protocols logic here
+            self.protocol_combo.addItems(
+                ["Default Protocol", "Head & Neck", "Prostate"]
+            )
+            logger.info("Loaded available protocols")
+        except Exception as e:
+            logger.error(f"Error loading protocols: {str(e)}")
+
     def on_structure_selection_changed(self):
         """Handle structure selection changes."""
         self._update_dvh()

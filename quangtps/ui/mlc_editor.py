@@ -256,7 +256,7 @@ class MLCCanvas(FigureCanvas):
                     if paired_leaf and new_position <= paired_leaf.position + 0.1:
                         new_position = paired_leaf.position + 0.1
 
-        # Cập nhật vị trí lá
+                # Cập nhật vị trí lá
                 leaf.position = new_position
                 self.leaf_position_changed.emit(leaf.index, new_position)
                 self.update_display()
@@ -370,6 +370,7 @@ class MLCEditor(QWidget):
         self.structures = structures or []
         self.target_structure = None
         self.oar_structures = []
+        self.current_mlc_type = "HD120"  # Default MLC type
 
         self._init_ui()
         self._create_default_mlc()
@@ -388,7 +389,7 @@ class MLCEditor(QWidget):
         config_layout = QFormLayout()
 
         self.mlc_type_combo = QComboBox()
-        for config in MLC_CONFIGURATIONS:
+        for mlc_type, config in MLC_CONFIGURATIONS.items():
             self.mlc_type_combo.addItem(
                 f"{config['name']} ({config['num_leaves']} leaves)"
             )
@@ -818,12 +819,15 @@ class MLCEditor(QWidget):
 
     def _on_mlc_type_changed(self, index):
         """Xử lý khi loại MLC thay đổi."""
-        mlc_type = self.mlc_type_combo.currentData()
-        if mlc_type != self.current_mlc_type:
-            self.current_mlc_type = mlc_type
-            self.mlc = MLC(self.current_mlc_type)
-            self._update_ui()
-            self.mlc_changed.emit(self.mlc)
+        if index >= 0:
+            mlc_types = list(MLC_CONFIGURATIONS.keys())
+            if index < len(mlc_types):
+                mlc_type = mlc_types[index]
+                if mlc_type != self.current_mlc_type:
+                    self.current_mlc_type = mlc_type
+                    self.mlc = MLC(self.current_mlc_type)
+                    self._update_ui()
+                    self.mlc_changed.emit(self.mlc)
 
     def _create_rectangular_field(self):
         """Tạo trường hình chữ nhật."""

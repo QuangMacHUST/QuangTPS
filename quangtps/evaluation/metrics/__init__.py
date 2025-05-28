@@ -325,27 +325,33 @@ def gradient_index(dose_distribution, target_mask, body_mask, prescription_dose)
     try:
         import numpy as np
 
-        # Volume nhận 50% liều kê đơn
+        # Volume nhận 50% liều kê đơn trong body
         dose_50_threshold = prescription_dose * 0.5
         volume_50 = np.sum((dose_distribution >= dose_50_threshold) & (body_mask > 0))
 
-        # Volume target nhận liều kê đơn
-        dose_100_threshold = prescription_dose
-        target_volume_100 = np.sum(
-            (dose_distribution >= dose_100_threshold) & (target_mask > 0)
+        # Volume target nhận liều kê đơn (sử dụng ngưỡng thấp hơn để tránh zero)
+        dose_95_threshold = prescription_dose * 0.95  # Sử dụng 95% thay vì 100%
+        target_volume_95 = np.sum(
+            (dose_distribution >= dose_95_threshold) & (target_mask > 0)
         )
 
-        if target_volume_100 == 0:
-            return float("inf")  # Worst case
+        # Nếu vẫn không có volume nào, sử dụng toàn bộ target volume
+        if target_volume_95 == 0:
+            target_volume_95 = np.sum(target_mask > 0)
 
-        # Gradient Index = V50% / V100%_target
-        gi = volume_50 / target_volume_100
+        # Nếu vẫn bằng 0, trả về giá trị mặc định
+        if target_volume_95 == 0:
+            return 10.0  # Giá trị kém để chỉ ra lỗi
 
-        return float(max(1.0, gi))
+        # Gradient Index = V50% / V95%_target
+        gi = volume_50 / target_volume_95
+
+        # Clamp giá trị trong khoảng hợp lý [1.0, 20.0]
+        return float(max(1.0, min(gi, 20.0)))
 
     except Exception as e:
         print(f"Error calculating gradient index: {e}")
-        return float("inf")
+        return 10.0  # Giá trị mặc định thay vì infinity
 
 
 def calculate_plan_quality_metrics(

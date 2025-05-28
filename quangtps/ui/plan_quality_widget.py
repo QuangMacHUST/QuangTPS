@@ -275,7 +275,7 @@ class PlanQualityWidget(QWidget):
         export_menu.addAction(export_pdf_action)
 
         export_button.setMenu(export_menu)
-        toolbar.addAction(export_button)
+        toolbar.addWidget(export_button)
 
         # Compare plans action
         compare_action = QAction(
@@ -1802,6 +1802,24 @@ class PlanQualityWidget(QWidget):
         except Exception as e:
             logger.error(f"Lỗi khi tạo HTML so sánh kế hoạch: {e}")
             raise
+
+    def _on_compare_plans(self):
+        """Handle plan comparison request."""
+        try:
+            from PyQt5.QtWidgets import QMessageBox
+
+            # Show a placeholder message for now
+            QMessageBox.information(
+                self,
+                "Plan Comparison",
+                "Plan comparison feature will be implemented in a future version.",
+            )
+
+            # TODO: Implement actual plan comparison dialog
+            logger.info("Plan comparison requested")
+
+        except Exception as e:
+            logger.error(f"Error in plan comparison: {e}")
 
 
 class PlanQualityReportGenerator:

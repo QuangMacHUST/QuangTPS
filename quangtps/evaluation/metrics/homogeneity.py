@@ -330,9 +330,17 @@ class HomogeneityIndices:
         return (d2 - d98) / d50
 
     @staticmethod
-    def calculate_all_metrics(d_max: float, d_min: float, d2: float, d5: float,
-                             d50: float, d95: float, d98: float, d_ref: float,
-                             d_mean: float) -> Dict[str, float]:
+    def calculate_all_metrics(
+        d_max: float,
+        d_min: float,
+        d2: float,
+        d5: float,
+        d50: float,
+        d95: float,
+        d98: float,
+        d_ref: float,
+        d_mean: float,
+    ) -> Dict[str, float]:
         """
         Tính toán tất cả các chỉ số đồng nhất và trả về dưới dạng từ điển
 
@@ -370,7 +378,7 @@ class HomogeneityIndices:
                 "HI_Immordino": HomogeneityIndices.hi_immordino(d5, d95),
                 "HI_Gunderson": HomogeneityIndices.hi_gunderson(d5, d95, d_ref),
                 "HI_Wu": HomogeneityIndices.hi_wu_with_mean(d5, d95, d_mean),
-                "HI_Kataria": HomogeneityIndices.hi_kataria_with_d50(d2, d98, d50)
+                "HI_Kataria": HomogeneityIndices.hi_kataria_with_d50(d2, d98, d50),
             }
             return metrics
         except ValueError as e:
@@ -429,11 +437,10 @@ class HomogeneityIndices:
         else:
             return "Rất kém (> 1.5)"
 
+
 # Alias function for backward compatibility
 def calculate_homogeneity_indices(
-    dose_grid: np.ndarray,
-    target_mask: np.ndarray,
-    prescription_dose: float = None
+    dose_grid: np.ndarray, target_mask: np.ndarray, prescription_dose: float = None
 ) -> Dict[str, float]:
     """
     Alias function cho calculate_all_metrics
@@ -458,13 +465,13 @@ def calculate_homogeneity_indices(
     if len(target_doses) == 0:
         # Trả về NaN nếu không có voxel nào trong target
         return {
-            'hi_icru83': np.nan,
-            'hi_icru62': np.nan,
-            'hi_rtog': np.nan,
-            'hi_immordino': np.nan,
-            'hi_gunderson': np.nan,
-            'hi_wu': np.nan,
-            'hi_kataria': np.nan
+            "hi_icru83": np.nan,
+            "hi_icru62": np.nan,
+            "hi_rtog": np.nan,
+            "hi_immordino": np.nan,
+            "hi_gunderson": np.nan,
+            "hi_wu": np.nan,
+            "hi_kataria": np.nan,
         }
 
     # Tính toán các percentile
@@ -489,7 +496,5 @@ def calculate_homogeneity_indices(
         d_max, d_min, d2, d5, d50, d95, d98, d_ref, d_mean
     )
 
-__all__ = [
-    'HomogeneityIndices',
-    'calculate_homogeneity_indices'
-]
+
+__all__ = ["HomogeneityIndices", "calculate_homogeneity_indices"]

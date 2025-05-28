@@ -133,6 +133,20 @@ class ClinicalProtocol:
             prescription_dose=data.get("prescription_dose"),
         )
 
+    @classmethod
+    def from_json(cls, json_string: str) -> "ClinicalProtocol":
+        """Tạo từ JSON string."""
+        try:
+            data = json.loads(json_string)
+            return cls.from_dict(data)
+        except Exception as e:
+            logger.error(f"Error parsing JSON: {e}")
+            raise
+
+    def to_json(self) -> str:
+        """Chuyển đổi thành JSON string."""
+        return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
+
 
 class ClinicalProtocolManager:
     """
@@ -832,12 +846,48 @@ def validate_protocol_data(protocol_data: Dict[str, Any]) -> Tuple[bool, str]:
         return False, f"Lỗi validation: {e}"
 
 
+def load_protocol(
+    protocol_name: str, protocols_dir: Optional[str] = None
+) -> Optional[ClinicalProtocol]:
+    """
+    Load a protocol from file (function-level interface).
+
+    Args:
+        protocol_name: Name of protocol to load
+        protocols_dir: Directory containing protocols (optional)
+
+    Returns:
+        ClinicalProtocol object or None if not found
+    """
+    manager = ClinicalProtocolManager(protocols_dir)
+    return manager.load_protocol(protocol_name)
+
+
+def save_default_protocols(protocols_dir: str):
+    """
+    Save default protocols to specified directory.
+
+    Args:
+        protocols_dir: Directory to save protocols
+    """
+    manager = ClinicalProtocolManager(protocols_dir)
+    # Default protocols are automatically created in __init__
+    logger.info(f"Default protocols saved to {protocols_dir}")
+
+
 # Export
 __all__ = [
     "ClinicalProtocol",
     "ClinicalProtocolManager",
+    "load_protocol",
+    "save_default_protocols",
     "get_protocol",
     "get_available_sites",
     "create_protocol_manager",
     "get_default_protocol_manager",
+    "select_protocol_dialog",
+    "get_protocol_by_site",
+    "export_protocol_to_file",
+    "import_protocol_from_file",
+    "validate_protocol_data",
 ]

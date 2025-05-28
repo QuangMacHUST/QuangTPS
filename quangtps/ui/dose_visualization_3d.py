@@ -349,10 +349,21 @@ class DoseVisualization3D(QWidget):
         control_layout = QVBoxLayout(control_panel)
 
         # Create isodose selector
-        self.isodose_selector = IsodoseSelector()
-        self.isodose_selector.isodose_levels_changed.connect(
-            self.on_isodose_levels_changed
-        )
+        try:
+            self.isodose_selector = IsodoseSelector()
+            if hasattr(self.isodose_selector, "isodose_levels_changed"):
+                self.isodose_selector.isodose_levels_changed.connect(
+                    self.on_isodose_levels_changed
+                )
+            logger.info("IsodoseSelector khởi tạo thành công")
+        except Exception as e:
+            logger.error(f"Lỗi khởi tạo IsodoseSelector: {e}")
+            # Fallback placeholder
+            self.isodose_selector = QLabel("IsodoseSelector (Không khả dụng)")
+            self.isodose_selector.setAlignment(Qt.AlignCenter)
+            self.isodose_selector.setStyleSheet(
+                "background-color: #f0f0f0; color: #888;"
+            )
 
         # Create structure visibility panel
         self.structure_panel = StructureVisibilityPanel()

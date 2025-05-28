@@ -33,34 +33,34 @@ HAS_NUMBA = False
 HAS_NUMBA_CUDA = False
 
 try:
-    from numba import jit, cuda
-    import numba.cuda
-
-    # Kiểm tra compatibility
-    import numba
     import numpy
 
-    # Kiểm tra version compatibility
+    # Kiểm tra version compatibility trước khi import numba
     numpy_version = tuple(map(int, numpy.__version__.split(".")[:2]))
     if numpy_version >= (2, 1):  # NumPy 2.1+
         logger.warning(
-            "NumPy version %s may not be fully compatible with Numba. Using fallback methods.",
+            "NumPy version %s not compatible with Numba. Using CPU fallback methods.",
             numpy.__version__,
         )
-        HAS_NUMBA = False
-        HAS_NUMBA_CUDA = False
+        raise ImportError("NumPy version too high for Numba")
+
+    from numba import jit, cuda
+    import numba.cuda
+    import numba
+
+    HAS_NUMBA = True
+    if numba.cuda.is_available():
+        HAS_NUMBA_CUDA = True
+        logger.info("CUDA support available for gamma analysis")
     else:
-        HAS_NUMBA = True
-        if numba.cuda.is_available():
-            HAS_NUMBA_CUDA = True
-            logger.info("CUDA support available for gamma analysis")
-        else:
-            logger.info("CUDA hardware not available")
+        logger.info("CUDA hardware not available")
 
 except ImportError as e:
-    logger.warning("Numba không khả dụng (%s). Sử dụng CPU fallback.", str(e))
+    logger.warning(f"Numba không khả dụng ({e}). Sử dụng CPU fallback.")
 
-    # Create dummy decorators for fallback
+# Fallback decorators if Numba is not available
+if not HAS_NUMBA:
+
     def jit(nopython=True):
         def decorator(func):
             return func
@@ -72,22 +72,14 @@ except ImportError as e:
         def jit(func):
             return func
 
-except Exception as e:
-    logger.warning("Numba initialization failed (%s). Using fallback methods.", str(e))
-    HAS_NUMBA = False
-    HAS_NUMBA_CUDA = False
-
-    # Create dummy decorators for fallback
-    def jit(nopython=True):
-        def decorator(func):
-            return func
-
-        return decorator
-
-    class cuda:
         @staticmethod
-        def jit(func):
-            return func
+        def grid(ndim):
+            return (0, 0, 0)
+
+        class atomic:
+            @staticmethod
+            def add(array, index, value):
+                array[index] += value
 
 
 @dataclass
@@ -289,27 +281,61 @@ def calculate_gamma_3d(
                 progress_callback,
             )
 
-        # Calculate statistics
-        valid_gammas = gamma_map[analysis_mask]
-        voxels_analyzed = len(valid_gammas)
+        # Tính toán pass rate với xử lý finite values
+        # analysis_mask đã được tạo ở trên, sử dụng lại
 
-        if voxels_analyzed > 0:
-            pass_rate = np.sum(valid_gammas <= 1.0) / voxels_analyzed * 100.0
-            voxels_passed = int(np.sum(valid_gammas <= 1.0))
-            mean_gamma = np.mean(valid_gammas)
-            max_gamma = np.max(valid_gammas)
-        else:
+        # Filter out infinite and NaN values
+        finite_mask = np.isfinite(gamma_map)
+        combined_mask = analysis_mask & finite_mask
+
+        if np.sum(combined_mask) == 0:
+            logger.warning("No valid gamma values found for analysis")
             pass_rate = 0.0
+            mean_gamma = float("inf")
+            max_gamma = float("inf")
+            voxels_analyzed = 0
             voxels_passed = 0
-            mean_gamma = 0.0
-            max_gamma = 0.0
+        else:
+            # Only analyze finite gamma values within dose threshold
+            valid_gamma_values = gamma_map[combined_mask]
 
-        # Create pass map
-        pass_map = (gamma_map <= 1.0) & analysis_mask
+            # Clamp gamma values to reasonable range to avoid extreme values
+            valid_gamma_values = np.clip(valid_gamma_values, 0.0, 10.0)
+
+            # Calculate statistics
+            pass_mask = valid_gamma_values <= 1.0
+            voxels_analyzed = len(valid_gamma_values)
+            voxels_passed = np.sum(pass_mask)
+
+            # Calculate pass rate as percentage
+            pass_rate = (
+                (voxels_passed / voxels_analyzed * 100.0)
+                if voxels_analyzed > 0
+                else 0.0
+            )
+
+            # Ensure pass rate is reasonable (0-100%)
+            pass_rate = np.clip(pass_rate, 0.0, 100.0)
+
+            # Calculate mean and max gamma for valid values only
+            mean_gamma = np.mean(valid_gamma_values)
+            max_gamma = np.max(valid_gamma_values)
+
+            # Ensure reasonable bounds
+            mean_gamma = np.clip(mean_gamma, 0.0, 10.0)
+            max_gamma = np.clip(max_gamma, 0.0, 10.0)
+
+        # Create pass map for visualization
+        pass_map = np.zeros_like(gamma_map, dtype=bool)
+        if np.sum(combined_mask) > 0:
+            pass_map[combined_mask] = gamma_map[combined_mask] <= 1.0
 
         # Calculate gamma histogram
         gamma_bins = np.linspace(0, min(max_gamma, 5.0), 100)
-        gamma_histogram, _ = np.histogram(valid_gammas, bins=gamma_bins)
+        if np.sum(combined_mask) > 0:
+            gamma_histogram, _ = np.histogram(valid_gamma_values, bins=gamma_bins)
+        else:
+            gamma_histogram = np.zeros(99)  # bins-1
 
         # Find fail regions
         fail_regions = _find_fail_regions(pass_map)

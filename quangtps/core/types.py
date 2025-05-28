@@ -195,6 +195,43 @@ class TechniqueType(Enum):
     BRACHYTHERAPY = "BRACHYTHERAPY"
 
 
+class StructureType(Enum):
+    """Loại cấu trúc giải phẫu."""
+
+    # Target structures
+    PTV = "PTV"  # Planning Target Volume
+    CTV = "CTV"  # Clinical Target Volume
+    GTV = "GTV"  # Gross Target Volume
+    ITV = "ITV"  # Internal Target Volume
+
+    # Organs at Risk
+    OAR = "OAR"
+    ORGAN = "ORGAN"
+    CRITICAL_STRUCTURE = "CRITICAL_STRUCTURE"
+
+    # Support structures
+    EXTERNAL = "EXTERNAL"
+    BODY = "BODY"
+    BOLUS = "BOLUS"
+    COUCH = "COUCH"
+    AVOIDANCE = "AVOIDANCE"
+
+    # Planning structures
+    PRV = "PRV"  # Planning Risk Volume
+    OPTIMIZATION = "OPTIMIZATION"
+    DOSE_REGION = "DOSE_REGION"
+
+    # Other
+    MARKER = "MARKER"
+    REGISTRATION = "REGISTRATION"
+    CONTRAST_AGENT = "CONTRAST_AGENT"
+    CAVITY = "CAVITY"
+    BRACHY_CHANNEL = "BRACHY_CHANNEL"
+    BRACHY_ACCESSORY = "BRACHY_ACCESSORY"
+    BRACHY_SRC_APP = "BRACHY_SRC_APP"
+    OTHER = "OTHER"
+
+
 @dataclass
 class ImageProperties:
     """Thuộc tính hình ảnh y tế."""

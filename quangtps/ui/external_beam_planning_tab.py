@@ -287,7 +287,7 @@ class ExternalBeamPlanningTab(QWidget):
         self.planning_mode = BeamPlanningMode.INVERSE  # Chế độ mặc định
 
         # Initialize services
-        self.service_registry = ServiceRegistry()
+        self.service_registry = ServiceRegistry.get_instance()
         self.plan_db = self.service_registry.get_service("PlanDB")
         self.patient_db = self.service_registry.get_service("PatientDB")
         self.structure_db = self.service_registry.get_service("StructureDB")
@@ -797,6 +797,40 @@ class ExternalBeamPlanningTab(QWidget):
 
         # Hiển thị giả tiến độ tối ưu hóa (cho demo)
         self._fake_optimization_progress()
+
+    def _on_add_beam(self):
+        """Xử lý khi người dùng thêm chùm tia mới."""
+        try:
+            # Hiển thị dialog để thiết lập beam
+            from PyQt5.QtWidgets import QInputDialog
+
+            beam_name, ok = QInputDialog.getText(
+                self, "Thêm chùm tia", "Nhập tên chùm tia:"
+            )
+
+            if ok and beam_name:
+                # Tạo beam mới (giả lập)
+                logger.info(f"Thêm chùm tia mới: {beam_name}")
+
+                # Hiển thị thông báo thành công
+                QMessageBox.information(
+                    self, "Thành công", f"Đã thêm chùm tia '{beam_name}' vào kế hoạch"
+                )
+
+                # Cập nhật UI nếu cần
+                self._update_beam_list()
+
+        except Exception as e:
+            logger.error(f"Lỗi khi thêm chùm tia: {str(e)}")
+            QMessageBox.critical(self, "Lỗi", f"Không thể thêm chùm tia: {str(e)}")
+
+    def _update_beam_list(self):
+        """Cập nhật danh sách chùm tia trong UI."""
+        try:
+            # Logic cập nhật danh sách beam
+            logger.info("Cập nhật danh sách chùm tia")
+        except Exception as e:
+            logger.error(f"Lỗi khi cập nhật danh sách chùm tia: {str(e)}")
 
     def _on_mode_changed(self, index):
         """

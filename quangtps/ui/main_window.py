@@ -462,13 +462,19 @@ class MainWindow(QMainWindow):
     Implements an Eclipse-like interface with tabs for different planning stages.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
         # Set window properties
         self.setWindowTitle("QuangTPS - Hệ thống Lập kế hoạch Xạ trị")
         self.setMinimumSize(1024, 768)
-        self.setWindowIcon(QIcon("quangtps/ui/icons/new_icons/quang_tps_logo.png"))
+
+        # Try to set window icon with fallback
+        try:
+            self.setWindowIcon(QIcon("quangtps/ui/icons/new_icons/quang_tps_logo.png"))
+        except Exception:
+            # Use default icon if custom icon not found
+            pass
 
         # Initialize state
         self.current_patient = None
@@ -477,41 +483,82 @@ class MainWindow(QMainWindow):
         self.current_structure_set = None
         self.current_dose = None
 
-        # Setup services
-        self._initialize_services()
+        # Initialize last directory for file dialogs
+        self.last_directory = os.path.expanduser("~")
 
-        # Setup UI
-        self._setup_ui()
-        self._create_menus()
-        self._create_toolbars()
-        self.apply_styling()
+        # Setup UI first
+        try:
+            self._setup_ui()
+        except Exception as e:
+            logger.error(f"Error setting up UI: {e}")
+            # Create minimal UI as fallback
+            self._setup_minimal_ui()
+
+        # Setup services (after UI is created)
+        try:
+            self._initialize_services()
+        except Exception as e:
+            logger.error(f"Error initializing services: {e}")
+
+        # Create menus and toolbars
+        try:
+            self._create_menus()
+            self._create_toolbars()
+        except Exception as e:
+            logger.error(f"Error creating menus/toolbars: {e}")
+
+        # Apply styling
+        try:
+            self.apply_styling()
+        except Exception as e:
+            logger.error(f"Error applying styling: {e}")
 
         # Load settings
-        self._load_settings()
+        try:
+            self._load_settings()
+        except Exception as e:
+            logger.error(f"Error loading settings: {e}")
 
         # Setup status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
-
-        # Progress bar for calculations
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setMaximum(100)
-        self.progress_bar.setMinimumWidth(200)
-        self.status_bar.addPermanentWidget(self.progress_bar)
-
-        # Tích hợp log viewer
         try:
-            self.log_viewer = LogViewerWidget()
-            self.tab_widget.addTab(self.log_viewer, "Log Viewer")
-            logger.info("Tích hợp Log Viewer thành công")
-        except ImportError as e:
-            logger.warning(f"Không thể tích hợp Log Viewer: {e}")
-            self.log_viewer = None
+            self._setup_status_bar()
+        except Exception as e:
+            logger.error(f"Error setting up status bar: {e}")
 
-        # Show the window
-        self.show()
+    def _setup_status_bar(self):
+        """Setup status bar with error handling."""
+        try:
+            self.status_bar = QStatusBar()
+            self.setStatusBar(self.status_bar)
+            self.status_bar.showMessage("Ready")
+
+            # Progress bar for calculations
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setVisible(False)
+            self.progress_bar.setMaximum(100)
+            self.progress_bar.setMinimumWidth(200)
+            self.status_bar.addPermanentWidget(self.progress_bar)
+        except Exception as e:
+            logger.error(f"Error setting up status bar: {e}")
+
+    def _setup_minimal_ui(self):
+        """Setup minimal UI as fallback."""
+        try:
+            # Create central widget
+            self.central_widget = QWidget()
+            self.setCentralWidget(self.central_widget)
+
+            # Create simple layout
+            layout = QVBoxLayout(self.central_widget)
+
+            # Add a simple label
+            label = QLabel("QuangTPS - Loading...")
+            label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(label)
+
+            logger.info("Minimal UI setup completed")
+        except Exception as e:
+            logger.error(f"Error setting up minimal UI: {e}")
 
     def _setup_ui(self):
         """Set up the main user interface components."""
@@ -591,6 +638,7 @@ class MainWindow(QMainWindow):
         # Create the main tab widget (right area)
         self.right_area = QTabWidget()
         self.main_tab_widget = self.right_area  # Alias for compatibility
+        self.tab_widget = self.right_area  # Another alias for compatibility
         self.main_splitter.addWidget(self.right_area)
 
         # Set initial sizes - left panel takes about 25% of the width
@@ -1019,7 +1067,15 @@ class MainWindow(QMainWindow):
 
             # Set in evaluation tab
             if self.evaluation_tab:
-                self.evaluation_tab.set_dose_calculator(self.dose_calculator)
+                try:
+                    if hasattr(self.evaluation_tab, "set_dose_calculator"):
+                        self.evaluation_tab.set_dose_calculator(self.dose_calculator)
+                    else:
+                        logger.warning(
+                            "Evaluation tab không có method set_dose_calculator"
+                        )
+                except Exception as e:
+                    logger.error(f"Lỗi khi set dose calculator cho evaluation tab: {e}")
         except Exception as e:
             logger.error(f"Failed to initialize dose calculator: {e}")
             self.dose_calculator = None
@@ -2376,3 +2432,50 @@ class MainWindow(QMainWindow):
             logger.info("Settings saved successfully")
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
+
+
+def launch_application():
+    """Launch the QuangTPS application."""
+    import sys
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtGui import QPixmap
+    from PyQt5.QtCore import QTimer
+
+    try:
+        # Create application
+        app = QApplication(sys.argv)
+        app.setApplicationName("QuangTPS")
+        app.setApplicationVersion("1.0.0")
+
+        # Set application style
+        app.setStyle("Fusion")
+
+        # Create and show main window
+        main_window = MainWindow()
+        main_window.show()
+
+        # Run application
+        return app.exec_()
+
+    except Exception as e:
+        logger.error(f"Error launching application: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
+
+        # Try to show error dialog if possible
+        try:
+            from PyQt5.QtWidgets import QMessageBox
+
+            app = QApplication(sys.argv) if "app" not in locals() else app
+            QMessageBox.critical(
+                None, "QuangTPS Error", f"Failed to start application:\n{str(e)}"
+            )
+        except:
+            print(f"Failed to start QuangTPS: {e}")
+
+        return 1
+
+
+if __name__ == "__main__":
+    launch_application()

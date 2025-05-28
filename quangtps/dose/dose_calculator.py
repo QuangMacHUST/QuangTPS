@@ -533,12 +533,13 @@ class DoseCalculator:
         )
 
     def set_structure_set(self, structure_set: StructureSet):
-        """Set the structure set for dose calculation."""
+        """Thiết lập bộ cấu trúc."""
         self.structure_set = structure_set
-        self.is_calculated = False
-        logger.info(
-            f"Structure set with {len(structure_set.structures)} structures set for dose calculation"
-        )
+        logger.info("Đã thiết lập structure set cho dose calculator")
+
+    def get_structure_set(self) -> Optional[StructureSet]:
+        """Lấy bộ cấu trúc hiện tại."""
+        return getattr(self, "structure_set", None)
 
     def set_beam_set(self, beam_set: BeamSet):
         """Set the beam set for dose calculation."""
@@ -1078,7 +1079,8 @@ def test_dose_calculator():
     from quangtps.imaging.image import Image
     from quangtps.structures.structure_set import StructureSet
     from quangtps.structures.structure import Structure
-    from quangtps.beams.beam import Beam, BeamSet
+    from quangtps.treatment.beams.beam import Beam
+    from quangtps.planning.beam_set import BeamSet
 
     # Create sample image
     image_data = np.ones((100, 100, 50), dtype=np.float32)
@@ -1090,15 +1092,15 @@ def test_dose_calculator():
     structure_set = StructureSet()
 
     # Create PTV
-    ptv = Structure()
+    ptv = Structure(name="PTV")
     ptv.id = "struct_1"
     ptv.name = "PTV"
     ptv.type = "PTV"
     ptv.mask = np.zeros_like(image_data, dtype=bool)
-    ptv.mask[40:60, 40:60, 20:30] = True
+    ptv.mask[30:70, 30:70, 15:35] = True
 
     # Create OAR
-    oar = Structure()
+    oar = Structure(name="OAR")
     oar.id = "struct_2"
     oar.name = "OAR"
     oar.type = "OAR"

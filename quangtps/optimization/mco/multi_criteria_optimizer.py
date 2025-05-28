@@ -230,6 +230,9 @@ class MultiCriteriaOptimizer:
         self, population: List[ParetoSolution]
     ) -> List[List[ParetoSolution]]:
         """Non-dominated sorting (NSGA-II)"""
+        if not population:
+            return [[]]
+
         fronts = [[]]
 
         for p in population:
@@ -246,7 +249,7 @@ class MultiCriteriaOptimizer:
                 fronts[0].append(p)
 
         i = 0
-        while len(fronts[i]) > 0:
+        while i < len(fronts) and len(fronts[i]) > 0:
             next_front = []
             for p in fronts[i]:
                 for q in population:
@@ -259,7 +262,11 @@ class MultiCriteriaOptimizer:
                 fronts.append(next_front)
             i += 1
 
-        return fronts[:-1] if fronts[-1] == [] else fronts
+        # Loại bỏ fronts rỗng ở cuối
+        while fronts and not fronts[-1]:
+            fronts.pop()
+
+        return fronts if fronts else [[]]
 
     def _dominates(self, solution1: ParetoSolution, solution2: ParetoSolution) -> bool:
         """Kiểm tra solution1 có dominate solution2 không"""

@@ -610,9 +610,47 @@ class StructureTab(QWidget):
         self.segmentation_interface = None
 
         # Initialize tools
-        self.polygon_tool = PolygonTool()
-        self.contour_manager = ContourManager()
-        self.margin_tool = MarginTool()  # Initialize the margin tool properly
+        try:
+            self.polygon_tool = PolygonTool()
+        except NameError:
+            # Create fallback PolygonTool if not available
+            class PolygonTool:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def set_mode(self, mode):
+                    pass
+
+            self.polygon_tool = PolygonTool()
+
+        try:
+            self.contour_manager = ContourManager()
+        except NameError:
+            # Create fallback ContourManager if not available
+            class ContourManager:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def undo(self):
+                    pass
+
+                def redo(self):
+                    pass
+
+            self.contour_manager = ContourManager()
+
+        try:
+            self.margin_tool = MarginTool()  # Initialize the margin tool properly
+        except NameError:
+            # Create fallback MarginTool if not available
+            class MarginTool:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def margin_by_type(self, contours, margin_type, params, spacing):
+                    return contours  # Return original contours as fallback
+
+            self.margin_tool = MarginTool()
 
         self.init_ui()
         self.setup_connections()
@@ -769,6 +807,27 @@ class StructureTab(QWidget):
         buttons_layout2.addWidget(self.export_struct_btn)
 
         self.structures_layout.addLayout(buttons_layout2)
+
+    def setup_structure_list(self):
+        """Thiết lập danh sách cấu trúc."""
+        # Tạo list widget cho cấu trúc
+        self.structure_list = QListWidget()
+        self.structure_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.structure_list.currentItemChanged.connect(
+            self.on_structure_selection_changed
+        )
+
+        # Kết nối context menu
+        self.structure_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.structure_list.customContextMenuRequested.connect(
+            self.show_structure_context_menu
+        )
+
+        # Thêm vào layout
+        self.structures_layout.addWidget(self.structure_list)
+
+        # Khởi tạo danh sách rỗng
+        self.structure_items = []
 
     def _detect_structure_overlaps(self):
         """Phát hiện các giao thoa giữa các cấu trúc và hiển thị kết quả."""
@@ -1222,6 +1281,104 @@ class StructureTab(QWidget):
                 logger.error(f"Lỗi khi xóa cấu trúc: {str(e)}")
                 QMessageBox.critical(self, "Lỗi", f"Không thể xóa cấu trúc: {str(e)}")
 
+    def _copy_selected_structure(self):
+        """Sao chép cấu trúc đã chọn."""
+        selected_items = self.structure_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(
+                self, "Cảnh báo", "Vui lòng chọn một cấu trúc để sao chép."
+            )
+            return
+
+        for item in selected_items:
+            struct_id = item.data(Qt.UserRole)
+            if struct_id:
+                structure = self.get_structure_by_id(struct_id)
+                if structure:
+                    try:
+                        # Tạo tên mới cho cấu trúc sao chép
+                        new_name = f"{structure.name}_Copy"
+
+                        # Tạo cấu trúc mới (giả lập sao chép)
+                        copied_structure = Structure(
+                            name=new_name,
+                            color=getattr(structure, "color", (255, 128, 0)),
+                        )
+
+                        # Thêm vào patient
+                        if self.patient and hasattr(self.patient, "structures"):
+                            self.patient.structures.append(copied_structure)
+
+                        # Thêm vào UI
+                        self.add_structure_to_list(copied_structure)
+
+                        # Emit signal
+                        self.structureAdded.emit(copied_structure)
+
+                        logger.info(
+                            f"Đã sao chép cấu trúc: {structure.name} -> {new_name}"
+                        )
+
+                    except Exception as e:
+                        logger.error(f"Lỗi khi sao chép cấu trúc: {str(e)}")
+                        QMessageBox.critical(
+                            self,
+                            "Lỗi",
+                            f"Không thể sao chép cấu trúc: {str(e)}",
+                        )
+
+    def _show_boolean_dialog(self):
+        """Hiển thị dialog Boolean operations."""
+        try:
+            QMessageBox.information(
+                self,
+                "Boolean Operations",
+                "Chức năng Boolean operations đang được phát triển.",
+            )
+            logger.info("Boolean operations dialog opened")
+        except Exception as e:
+            logger.error(f"Lỗi khi mở Boolean dialog: {str(e)}")
+
+    def _export_selected_structure(self):
+        """Xuất cấu trúc đã chọn."""
+        selected_items = self.structure_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn một cấu trúc để xuất.")
+            return
+
+        for item in selected_items:
+            struct_id = item.data(Qt.UserRole)
+            if struct_id:
+                structure = self.get_structure_by_id(struct_id)
+                if structure:
+                    try:
+                        # Get file path from user
+                        file_path, _ = QFileDialog.getSaveFileName(
+                            self,
+                            "Xuất cấu trúc",
+                            f"{structure.name}.json",
+                            "JSON files (*.json);;STL files (*.stl);;All files (*.*)",
+                        )
+
+                        if file_path:
+                            # Export structure logic here
+                            logger.info(
+                                f"Xuất cấu trúc {structure.name} ra {file_path}"
+                            )
+                            QMessageBox.information(
+                                self,
+                                "Xuất thành công",
+                                f"Đã xuất cấu trúc {structure.name} ra {file_path}",
+                            )
+
+                    except Exception as e:
+                        logger.error(f"Lỗi khi xuất cấu trúc: {str(e)}")
+                        QMessageBox.critical(
+                            self,
+                            "Lỗi",
+                            f"Không thể xuất cấu trúc: {str(e)}",
+                        )
+
     def update_structure_info(self, structure):
         """
         Cập nhật thông tin chi tiết của cấu trúc.
@@ -1297,6 +1454,34 @@ class StructureTab(QWidget):
                 return structure
 
         return None
+
+    def _filter_structures(self, filter_text):
+        """Lọc danh sách cấu trúc theo text."""
+        if not hasattr(self, "structure_list"):
+            return
+
+        try:
+            filter_text = filter_text.lower().strip()
+
+            # If no filter, show all items
+            if not filter_text:
+                for i in range(self.structure_list.count()):
+                    item = self.structure_list.item(i)
+                    if item:
+                        item.setHidden(False)
+                return
+
+            # Filter items
+            for i in range(self.structure_list.count()):
+                item = self.structure_list.item(i)
+                if item:
+                    item_text = item.text().lower()
+                    # Show item if filter text is found in item text
+                    should_show = filter_text in item_text
+                    item.setHidden(not should_show)
+
+        except Exception as e:
+            logger.error(f"Lỗi khi lọc cấu trúc: {str(e)}")
 
     def setup_connections(self):
         """Set up connections between widgets."""

@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QSplitter,
     QMessageBox,
+    QSizePolicy,
 )
 from PyQt5.QtGui import QColor, QBrush, QFont
 
@@ -289,7 +290,7 @@ class DVHView(QWidget):
         self.axes.set_ylabel("Volume (%)")
         self.axes.set_title("Dose-Volume Histogram")
         self.axes.grid(True)
-        self.canvas.setSizePolicy(QSplitter.Expanding, QSplitter.Expanding)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Add navigation toolbar
         self.toolbar = NavigationToolbar(self.canvas, self)

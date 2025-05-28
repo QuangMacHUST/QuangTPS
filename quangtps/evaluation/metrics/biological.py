@@ -1,7 +1,7 @@
 """
 Biological models for treatment plan evaluation.
 
-This module provides Lyman-Kutcher-Burman (LKB) models for calculating 
+This module provides Lyman-Kutcher-Burman (LKB) models for calculating
 TCP (Tumor Control Probability) and NTCP (Normal Tissue Complication
 Probability) for radiotherapy treatment plan evaluation.
 """
@@ -20,17 +20,22 @@ logger = logging.getLogger(__name__)
 class TCP_LKB:
     """
     Tumor Control Probability model using Lyman-Kutcher-Burman approach.
-    
+
     This class implements the LKB model for predicting tumor control based on
     dose distribution, specifically tailored for evaluating treatment plans.
     """
-    
+
     @staticmethod
-    def calculate(dose: np.ndarray, td50: float, m: float, n: float, 
-                  voxel_volume: Union[float, np.ndarray] = 1.0) -> float:
+    def calculate(
+        dose: np.ndarray,
+        td50: float,
+        m: float,
+        n: float,
+        voxel_volume: Union[float, np.ndarray] = 1.0,
+    ) -> float:
         """
         Calculate TCP using the Lyman-Kutcher-Burman model.
-        
+
         Parameters
         ----------
         dose : np.ndarray
@@ -43,7 +48,7 @@ class TCP_LKB:
             Volume effect parameter
         voxel_volume : float or np.ndarray
             Volume of each voxel in cm³
-            
+
         Returns
         -------
         float
@@ -54,7 +59,7 @@ class TCP_LKB:
             dose_flat = dose.flatten()
         else:
             dose_flat = dose
-            
+
         # Handle voxel volume
         if isinstance(voxel_volume, (int, float)):
             vol_flat = np.ones_like(dose_flat) * voxel_volume
@@ -63,32 +68,33 @@ class TCP_LKB:
                 vol_flat = voxel_volume.flatten()
             else:
                 vol_flat = voxel_volume
-                
+
         # Calculate total volume
         total_volume = np.sum(vol_flat)
-        
+
         # Calculate generalized equivalent uniform dose (gEUD)
         if n != 1:
             # For n != 1, use power-law relationship
-            dose_vol_powers = np.power(dose_flat, 1/n) * vol_flat
+            dose_vol_powers = np.power(dose_flat, 1 / n) * vol_flat
             gEUD = np.power(np.sum(dose_vol_powers) / total_volume, n)
         else:
             # For n = 1, geometric mean (volume weighted)
             log_dose = np.log(dose_flat)
             gEUD = np.exp(np.sum(log_dose * vol_flat) / total_volume)
-            
+
         # Calculate TCP using probit function
         t = (gEUD - td50) / (m * td50)
         tcp = 0.5 * (1 + math.erf(t / np.sqrt(2)))
-        
+
         return tcp
-    
+
     @staticmethod
-    def calculate_from_dvh(dose_bins: np.ndarray, volume_bins: np.ndarray, 
-                           td50: float, m: float, n: float) -> float:
+    def calculate_from_dvh(
+        dose_bins: np.ndarray, volume_bins: np.ndarray, td50: float, m: float, n: float
+    ) -> float:
         """
         Calculate TCP from a dose-volume histogram using the LKB model.
-        
+
         Parameters
         ----------
         dose_bins : np.ndarray
@@ -101,7 +107,7 @@ class TCP_LKB:
             Steepness parameter
         n : float
             Volume effect parameter
-            
+
         Returns
         -------
         float
@@ -109,38 +115,43 @@ class TCP_LKB:
         """
         # Ensure volume bins are normalized
         volume_bins_norm = volume_bins / np.sum(volume_bins)
-        
+
         # Calculate generalized equivalent uniform dose (gEUD)
         if n != 1:
             # For n != 1, use power-law relationship
-            dose_vol_powers = np.power(dose_bins, 1/n) * volume_bins_norm
+            dose_vol_powers = np.power(dose_bins, 1 / n) * volume_bins_norm
             gEUD = np.power(np.sum(dose_vol_powers), n)
         else:
             # For n = 1, geometric mean (volume weighted)
             log_dose = np.log(dose_bins)
             gEUD = np.exp(np.sum(log_dose * volume_bins_norm))
-            
+
         # Calculate TCP using probit function
         t = (gEUD - td50) / (m * td50)
         tcp = 0.5 * (1 + math.erf(t / np.sqrt(2)))
-        
+
         return tcp
 
 
 class NTCP_LKB:
     """
     Normal Tissue Complication Probability model using Lyman-Kutcher-Burman approach.
-    
+
     This class implements the LKB model for predicting normal tissue complications
     based on dose distribution, specifically tailored for evaluating treatment plans.
     """
-    
+
     @staticmethod
-    def calculate(dose: np.ndarray, td50: float, m: float, n: float, 
-                  voxel_volume: Union[float, np.ndarray] = 1.0) -> float:
+    def calculate(
+        dose: np.ndarray,
+        td50: float,
+        m: float,
+        n: float,
+        voxel_volume: Union[float, np.ndarray] = 1.0,
+    ) -> float:
         """
         Calculate NTCP using the Lyman-Kutcher-Burman (LKB) model.
-        
+
         Parameters
         ----------
         dose : np.ndarray
@@ -153,7 +164,7 @@ class NTCP_LKB:
             Volume effect parameter
         voxel_volume : float or np.ndarray
             Volume of each voxel in cm³
-            
+
         Returns
         -------
         float
@@ -164,7 +175,7 @@ class NTCP_LKB:
             dose_flat = dose.flatten()
         else:
             dose_flat = dose
-            
+
         # Handle voxel volume
         if isinstance(voxel_volume, (int, float)):
             vol_flat = np.ones_like(dose_flat) * voxel_volume
@@ -173,32 +184,33 @@ class NTCP_LKB:
                 vol_flat = voxel_volume.flatten()
             else:
                 vol_flat = voxel_volume
-                
+
         # Calculate total volume
         total_volume = np.sum(vol_flat)
-        
+
         # Calculate generalized equivalent uniform dose (gEUD)
         if n != 1:
             # For n != 1, use power-law relationship
-            dose_vol_powers = np.power(dose_flat, 1/n) * vol_flat
+            dose_vol_powers = np.power(dose_flat, 1 / n) * vol_flat
             gEUD = np.power(np.sum(dose_vol_powers) / total_volume, n)
         else:
             # For n = 1, geometric mean (volume weighted)
             log_dose = np.log(dose_flat)
             gEUD = np.exp(np.sum(log_dose * vol_flat) / total_volume)
-            
+
         # Calculate NTCP using probit function
         t = (gEUD - td50) / (m * td50)
         ntcp = 0.5 * (1 + math.erf(t / np.sqrt(2)))
-        
+
         return ntcp
-    
+
     @staticmethod
-    def calculate_from_dvh(dose_bins: np.ndarray, volume_bins: np.ndarray, 
-                           td50: float, m: float, n: float) -> float:
+    def calculate_from_dvh(
+        dose_bins: np.ndarray, volume_bins: np.ndarray, td50: float, m: float, n: float
+    ) -> float:
         """
         Calculate NTCP from a dose-volume histogram using the LKB model.
-        
+
         Parameters
         ----------
         dose_bins : np.ndarray
@@ -211,7 +223,7 @@ class NTCP_LKB:
             Steepness parameter
         n : float
             Volume effect parameter
-            
+
         Returns
         -------
         float
@@ -219,19 +231,123 @@ class NTCP_LKB:
         """
         # Ensure volume bins are normalized
         volume_bins_norm = volume_bins / np.sum(volume_bins)
-        
+
         # Calculate generalized equivalent uniform dose (gEUD)
         if n != 1:
             # For n != 1, use power-law relationship
-            dose_vol_powers = np.power(dose_bins, 1/n) * volume_bins_norm
+            dose_vol_powers = np.power(dose_bins, 1 / n) * volume_bins_norm
             gEUD = np.power(np.sum(dose_vol_powers), n)
         else:
             # For n = 1, geometric mean (volume weighted)
             log_dose = np.log(dose_bins)
             gEUD = np.exp(np.sum(log_dose * volume_bins_norm))
-            
+
         # Calculate NTCP using probit function
         t = (gEUD - td50) / (m * td50)
         ntcp = 0.5 * (1 + math.erf(t / np.sqrt(2)))
-        
+
         return ntcp
+
+
+# Convenience function to calculate biological indices
+def calculate_biological_indices(
+    dose_grid: np.ndarray,
+    target_masks: Dict[str, np.ndarray],
+    oar_masks: Dict[str, np.ndarray] = None,
+    tcp_params: Dict[str, Dict[str, float]] = None,
+    ntcp_params: Dict[str, Dict[str, float]] = None,
+    spacing: tuple = (1.0, 1.0, 1.0),
+) -> Dict[str, Dict[str, float]]:
+    """
+    Calculate biological indices (TCP/NTCP) for multiple structures
+
+    Parameters
+    ----------
+    dose_grid : np.ndarray
+        Ma trận liều 3D (Gy)
+    target_masks : Dict[str, np.ndarray]
+        Dictionary chứa masks của các target structures
+    oar_masks : Dict[str, np.ndarray], optional
+        Dictionary chứa masks của các OAR structures
+    tcp_params : Dict[str, Dict[str, float]], optional
+        TCP parameters cho các targets (td50, m, n)
+    ntcp_params : Dict[str, Dict[str, float]], optional
+        NTCP parameters cho các OARs (td50, m, n)
+    spacing : tuple, optional
+        Spacing của voxel (mm)
+
+    Returns
+    -------
+    Dict[str, Dict[str, float]]
+        Dictionary chứa các chỉ số biological cho mỗi structure
+    """
+    # Tính toán voxel volume (mm³ -> cm³)
+    voxel_volume = (spacing[0] * spacing[1] * spacing[2]) / 1000.0
+
+    results = {}
+
+    # Tính TCP cho các targets
+    if tcp_params is None:
+        tcp_params = {}
+
+    for target_name, target_mask in target_masks.items():
+        # Lấy dose trong target
+        target_dose = dose_grid[target_mask]
+
+        # Default TCP parameters
+        params = tcp_params.get(
+            target_name,
+            {
+                "td50": 70.0,  # Gy
+                "m": 0.2,  # steepness
+                "n": 0.15,  # volume effect
+            },
+        )
+
+        # Tính TCP
+        try:
+            tcp = TCP_LKB.calculate(
+                target_dose, params["td50"], params["m"], params["n"], voxel_volume
+            )
+        except Exception as e:
+            logger.warning(f"Không thể tính TCP cho {target_name}: {e}")
+            tcp = 0.0
+
+        results[target_name] = {"TCP": tcp, "type": "target"}
+
+    # Tính NTCP cho các OARs
+    if oar_masks is None:
+        oar_masks = {}
+
+    if ntcp_params is None:
+        ntcp_params = {}
+
+    for oar_name, oar_mask in oar_masks.items():
+        # Lấy dose trong OAR
+        oar_dose = dose_grid[oar_mask]
+
+        # Default NTCP parameters (lung-like tissue)
+        params = ntcp_params.get(
+            oar_name,
+            {
+                "td50": 24.5,  # Gy
+                "m": 0.18,  # steepness
+                "n": 0.99,  # volume effect
+            },
+        )
+
+        # Tính NTCP
+        try:
+            ntcp = NTCP_LKB.calculate(
+                oar_dose, params["td50"], params["m"], params["n"], voxel_volume
+            )
+        except Exception as e:
+            logger.warning(f"Không thể tính NTCP cho {oar_name}: {e}")
+            ntcp = 0.0
+
+        results[oar_name] = {"NTCP": ntcp, "type": "oar"}
+
+    return results
+
+
+__all__ = ["TCP_LKB", "NTCP_LKB", "calculate_biological_indices"]

@@ -12,7 +12,7 @@ import os
 import logging
 from typing import Dict, List, Tuple, Optional
 
-# Import PyQt5 components with try/except để bắt lỗi nếu không có PyQt5
+# Import PyQt5 với fallback
 try:
     from PyQt5.QtWidgets import (
         QWidget,
@@ -34,22 +34,27 @@ try:
         QGroupBox,
         QFrame,
         QApplication,  # Thêm QApplication cho phần test standalone
+        QAbstractItemView,
     )
-    from PyQt5.QtCore import Qt, pyqtSignal
+    from PyQt5.QtCore import Qt, pyqtSignal, QTimer
     from PyQt5.QtGui import QColor, QBrush, QIcon
 
-    # Đánh dấu rằng PyQt5 đã được import thành công
-    PYQT5_AVAILABLE = True
-except ImportError as e:
-    logging.error(f"Không thể import PyQt5: {e}")
-    PYQT5_AVAILABLE = False
+    HAS_PYQT = True
+except ImportError:
+    HAS_PYQT = False
 
-    # Tạo các lớp giả cho type checking
+    # Fallback classes
     class QWidget:
         pass
 
     class pyqtSignal:
         def __init__(self, *args):
+            pass
+
+        def emit(self, *args):
+            pass
+
+        def connect(self, *args):
             pass
 
 
@@ -78,10 +83,8 @@ class IsodoseSelector(QWidget):
         # Lưu trữ dữ liệu isodose (mức, màu, hiển thị)
         self.isodose_levels = {}  # Dict mapping level (float) to (color, visible)
 
-        # Khởi tạo giao diện
-        self.setup_ui()
-
-        # Màu mặc định và mức prescription
+        # Màu mặc định và mức prescription - khởi tạo trước setup_ui
+        self.prescription_dose = 60.0  # Gy
         self.default_colors = [
             (1.0, 0.0, 0.0),  # Đỏ - 100%
             (1.0, 0.5, 0.0),  # Cam - 95%
@@ -94,7 +97,9 @@ class IsodoseSelector(QWidget):
             (0.5, 0.0, 1.0),  # Tím - 10%
         ]
         self.default_percentages = [100, 95, 90, 80, 70, 50, 30, 20, 10]
-        self.prescription_dose = 60.0  # Gy
+
+        # Khởi tạo giao diện
+        self.setup_ui()
 
         # Thiết lập ban đầu
         self._init_default_levels()
@@ -646,7 +651,7 @@ if __name__ == "__main__":
     import sys
 
     # Kiểm tra xem PyQt5 có sẵn không
-    if not PYQT5_AVAILABLE:
+    if not HAS_PYQT:
         print("PyQt5 không khả dụng, không thể chạy test standalone")
         sys.exit(1)
 

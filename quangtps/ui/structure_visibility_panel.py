@@ -104,6 +104,10 @@ class StructureVisibilityPanel(QWidget):
     )  # Phát ra dict {structure_id: (visible, opacity)}
     colorChanged = pyqtSignal(str, tuple)  # Structure ID, new color (r,g,b)
 
+    # Aliases for backward compatibility
+    structure_visibility_changed = visibilityChanged
+    structure_color_changed = colorChanged
+
     def __init__(self, parent=None):
         """Khởi tạo StructureVisibilityPanel widget."""
         super(StructureVisibilityPanel, self).__init__(parent)

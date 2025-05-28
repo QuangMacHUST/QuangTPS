@@ -511,34 +511,6 @@ def get_best_available_algorithm() -> Optional[DoseCalculationAlgorithm]:
     return None
 
 
-# Thử import thuật toán Monte Carlo GPU từ thư mục improvements
-def _import_monte_carlo_gpu():
-    """
-    Thử import thuật toán Monte Carlo GPU từ thư mục improvements.
-    """
-    try:
-        # Import Monte Carlo GPU từ improvements
-        from quangtps.dose.algorithms.improvements.monte_carlo_gpu import (
-            MonteCarloGPUAlgorithm,
-        )
-
-        # Đăng ký thuật toán
-        register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
-        logger.info("Đã đăng ký thuật toán Monte Carlo GPU thành công")
-
-        # Thêm tên hiển thị
-        ALGORITHM_NAME_MAPPING["Monte Carlo (GPU)"] = "monte_carlo_gpu"
-
-    except ImportError as e:
-        logger.warning(f"Thuật toán Monte Carlo GPU không khả dụng: {str(e)}")
-    except Exception as e:
-        logger.error(f"Lỗi khi tải thuật toán Monte Carlo GPU: {str(e)}")
-
-
-# Import Monte Carlo GPU khi khởi tạo module
-_import_monte_carlo_gpu()
-
-
 # Hàm đăng ký và lấy thuật toán
 
 
@@ -606,6 +578,30 @@ def get_registered_algorithms() -> Dict[str, Type[DoseCalculationAlgorithm]]:
         Dictionary chứa ID và lớp thuật toán
     """
     return _registered_algorithms.copy()
+
+
+# Thử import thuật toán Monte Carlo GPU từ thư mục improvements
+def _import_monte_carlo_gpu():
+    """
+    Thử import thuật toán Monte Carlo GPU từ thư mục improvements.
+    """
+    try:
+        # Import Monte Carlo GPU từ improvements
+        from quangtps.dose.algorithms.improvements.monte_carlo_gpu import (
+            MonteCarloGPUAlgorithm,
+        )
+
+        # Đăng ký thuật toán
+        register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+        logger.info("Đã đăng ký thuật toán Monte Carlo GPU thành công")
+
+        # Thêm tên hiển thị
+        ALGORITHM_NAME_MAPPING["Monte Carlo (GPU)"] = "monte_carlo_gpu"
+
+    except ImportError as e:
+        logger.warning(f"Thuật toán Monte Carlo GPU không khả dụng: {str(e)}")
+    except Exception as e:
+        logger.error(f"Lỗi khi tải thuật toán Monte Carlo GPU: {str(e)}")
 
 
 # Import các thuật toán cụ thể với xử lý ngoại lệ
@@ -690,6 +686,12 @@ register_dose_algorithm("pencil_beam", PencilBeamAlgorithm)
 register_dose_algorithm("collapsed_cone", CollapsedConeAlgorithm)
 register_dose_algorithm("monte_carlo", MonteCarloAlgorithm)
 register_dose_algorithm("monte_carlo_gpu", MonteCarloGPUAlgorithm)
+
+# Import Monte Carlo GPU từ improvements nếu có
+try:
+    _import_monte_carlo_gpu()
+except Exception as e:
+    logger.warning(f"Không thể import Monte Carlo GPU từ improvements: {e}")
 
 # Export
 __all__ = [

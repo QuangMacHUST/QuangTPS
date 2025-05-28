@@ -24,8 +24,24 @@ try:
 
     HAS_DVH = True
 except ImportError:
-    logger.warning("Không thể import module DVH. Tính năng TCP bị giới hạn.")
-    HAS_DVH = False
+    # Thử import từ các module khác
+    try:
+        from quangtps.evaluation.dvh.dvh_data import DVHData as DoseVolumeHistogram
+
+        HAS_DVH = True
+    except ImportError:
+        try:
+            from quangtps.evaluation.dvh import DoseVolumeHistogram
+
+            HAS_DVH = True
+        except ImportError:
+            logger.warning("Không thể import module DVH. Tính năng TCP bị giới hạn.")
+            HAS_DVH = False
+
+            # Tạo mock class để tránh lỗi
+            class DoseVolumeHistogram:
+                def __init__(self, *args, **kwargs):
+                    pass
 
 
 @dataclass

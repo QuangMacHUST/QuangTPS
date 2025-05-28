@@ -143,12 +143,16 @@ except ImportError:
 
 
 try:
-    from quangtps.ui import get_icon_path
+    from quangtps.ui.utils import get_icon_path
 except ImportError:
-    logger.warning("Không thể import get_icon_path")
+    try:
+        from quangtps.ui import get_icon_path
+    except ImportError:
+        logger.warning("Không thể import get_icon_path")
 
-    def get_icon_path(icon_name):
-        return ""
+        def get_icon_path(icon_name):
+            """Fallback function when icon utilities not available"""
+            return ""
 
 
 HAS_QUANGTPS_MODULES = True  # Đặt thành True vì đã có fallback

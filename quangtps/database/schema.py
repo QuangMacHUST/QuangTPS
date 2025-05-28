@@ -420,7 +420,11 @@ def get_create_table_statement(table_name: str) -> str:
     col_defs = []
     for col_name, col_props in columns.items():
         constraints = col_props.get("constraints", [])
-        col_def = f"{col_name} {col_props['type']}"
+        # Convert DataType enum to its value
+        data_type = col_props["type"]
+        if isinstance(data_type, DataType):
+            data_type = data_type.value
+        col_def = f"{col_name} {data_type}"
 
         if constraints:
             # Process each constraint separately to handle foreign keys correctly

@@ -130,6 +130,16 @@ def test_adaptive_planning():
                 def __init__(self):
                     pass
 
+                def register_images(self, reference_image, target_image):
+                    """Mock image registration returning a displacement field"""
+                    # Return a mock displacement field
+                    shape = (
+                        reference_image.shape
+                        if hasattr(reference_image, "shape")
+                        else (64, 64, 30)
+                    )
+                    return np.random.normal(0, 1.0, shape + (3,))
+
                 def analyze_deformation(self, *args, **kwargs):
                     return {"deformation_vectors": [], "magnitude": 0.0}
 
@@ -218,11 +228,11 @@ def test_monte_carlo_advanced():
                 if hasattr(gamma_result, "pass_rate"):
                     # GammaAnalysisResult object
                     pass_rate = gamma_result.pass_rate
-                    print(f"✓ Gamma analysis (3mm/3%): {pass_rate:.1%} pass rate")
+                    print(f"✓ Gamma analysis (3mm/3%): {pass_rate:.1f}% pass rate")
                 elif isinstance(gamma_result, np.ndarray):
                     # Raw gamma map
-                    pass_rate = (gamma_result <= 1.0).sum() / gamma_result.size
-                    print(f"✓ Gamma analysis (3mm/3%): {pass_rate:.1%} pass rate")
+                    pass_rate = (gamma_result <= 1.0).sum() / gamma_result.size * 100.0
+                    print(f"✓ Gamma analysis (3mm/3%): {pass_rate:.1f}% pass rate")
                 else:
                     print(f"✓ Gamma analysis: {type(gamma_result).__name__}")
             else:
