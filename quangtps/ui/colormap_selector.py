@@ -26,10 +26,23 @@ try:
 
     # Kiểm tra xem có hàm register_cmap hay không
     if not hasattr(plt.cm, "register_cmap"):
-        # Tạo hàm giả
+        # Tạo hàm giả - sử dụng cách tương thích mới
         def register_cmap(name, cmap):
-            plt.cm._cmap_registry[name] = cmap
-            plt.cm.__dict__[name] = cmap
+            # Try modern approach first
+            try:
+                # For matplotlib >= 3.5
+                import matplotlib
+
+                matplotlib.colormaps.register(cmap, name=name)
+            except (AttributeError, ImportError):
+                try:
+                    # For older matplotlib with get_cmap
+                    plt.cm.register_cmap(name=name, cmap=cmap)
+                except AttributeError:
+                    # Last resort - direct access (deprecated but might work)
+                    if hasattr(plt.cm, "_cmap_registry"):
+                        plt.cm._cmap_registry[name] = cmap
+                        plt.cm.__dict__[name] = cmap
 
         plt.register_cmap = register_cmap
     else:
@@ -192,13 +205,34 @@ class ColorMapSelector(QWidget):
         if not MATPLOTLIB_AVAILABLE:
             return
 
-        # Create Eclipse-like colormap
-        eclipse_cmap = LinearSegmentedColormap.from_list(
-            "eclipse", [color for _, color in self.ECLIPSE_COLORS], N=256
-        )
+        # Create Eclipse-like colormap only if it doesn't exist
+        try:
+            # Check if colormap already exists
+            try:
+                import matplotlib
 
-        # Register custom colormaps
-        plt.register_cmap(name="eclipse", cmap=eclipse_cmap)
+                # Try to get existing colormap
+                if hasattr(matplotlib.cm, "get_cmap"):
+                    matplotlib.cm.get_cmap("eclipse")
+                    logger.info("Colormap 'eclipse' already exists, skipping creation")
+                    return
+            except (ValueError, KeyError):
+                # Colormap doesn't exist, create it
+                pass
+
+            eclipse_cmap = LinearSegmentedColormap.from_list(
+                "eclipse", [color for _, color in self.ECLIPSE_COLORS], N=256
+            )
+
+            # Register custom colormaps with error handling
+            try:
+                plt.register_cmap(name="eclipse", cmap=eclipse_cmap)
+                logger.info("Successfully registered 'eclipse' colormap")
+            except Exception as e:
+                logger.warning(f"Failed to register 'eclipse' colormap: {e}")
+
+        except Exception as e:
+            logger.warning(f"Error creating custom colormaps: {e}")
 
     def setup_ui(self):
         """Thiết lập giao diện người dùng."""

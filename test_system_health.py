@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Test script cho System Health Checker của QuangTPS.
-Phát hiện và báo cáo các lỗi trong hệ thống.
+System Health Test - Kiểm tra sức khỏe tổng thể hệ thống QuangTPS
 """
 
 import sys
@@ -11,264 +10,246 @@ import os
 import traceback
 import time
 
-# Thêm thư mục gốc vào path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Thêm path cho QuangTPS
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 
 def test_core_imports():
-    """Test import các core modules."""
-    print("🔍 TESTING CORE IMPORTS")
-    print("=" * 50)
+    """Test các import cốt lõi"""
+    print("\n=== Test Core Imports ===")
+    success_count = 0
+    total_count = 0
 
-    core_modules = [
-        ("quangtps.core.exceptions", "Core Exceptions"),
-        ("quangtps.core.config", "Core Config"),
-        ("quangtps.core.logging", "Core Logging"),
-        ("quangtps.core.patient.patient", "Patient Management"),
+    modules_to_test = [
+        "quangtps.core.types",
+        "quangtps.core.patient",
+        "quangtps.core.logging",
+        "quangtps.core.config",
     ]
 
-    passed = 0
-    failed = 0
-
-    for module_name, display_name in core_modules:
+    for module in modules_to_test:
+        total_count += 1
         try:
-            exec(f"import {module_name}")
-            print(f"✓ {display_name:<25} OK")
-            passed += 1
+            __import__(module)
+            print(f"✓ {module}")
+            success_count += 1
         except Exception as e:
-            print(f"✗ {display_name:<25} FAILED: {str(e)}")
-            failed += 1
+            print(f"✗ {module}: {e}")
 
-    print(f"\nCore Imports: {passed} passed, {failed} failed")
-    return failed == 0
-
-
-def test_dose_modules():
-    """Test dose calculation modules."""
-    print("\n🧮 TESTING DOSE MODULES")
-    print("=" * 50)
-
-    dose_modules = [
-        ("quangtps.dose.dose_grid", "Dose Grid"),
-        ("quangtps.dose.dose_engine", "Dose Engine"),
-        ("quangtps.dose.algorithms.pencil_beam", "Pencil Beam Algorithm"),
-        ("quangtps.dose.algorithms.monte_carlo", "Monte Carlo Algorithm"),
-    ]
-
-    passed = 0
-    failed = 0
-
-    for module_name, display_name in dose_modules:
-        try:
-            exec(f"import {module_name}")
-            print(f"✓ {display_name:<25} OK")
-            passed += 1
-        except Exception as e:
-            print(f"✗ {display_name:<25} FAILED: {str(e)}")
-            failed += 1
-
-    print(f"\nDose Modules: {passed} passed, {failed} failed")
-    return failed == 0
+    print(f"Core imports: {success_count}/{total_count} passed")
+    return success_count == total_count
 
 
-def test_evaluation_modules():
-    """Test evaluation modules."""
-    print("\n📊 TESTING EVALUATION MODULES")
-    print("=" * 50)
+def test_ui_components():
+    """Test các UI components chính"""
+    print("\n=== Test UI Components ===")
+    success_count = 0
+    total_count = 0
 
-    evaluation_modules = [
-        ("quangtps.evaluation.metrics.gamma_analysis", "Gamma Analysis"),
-        ("quangtps.evaluation.metrics.dose_metrics", "Dose Metrics"),
-        ("quangtps.evaluation.qa.comprehensive_qa_engine", "QA Engine"),
-        ("quangtps.evaluation.qa.statistical_analysis", "Statistical Analysis"),
-        ("quangtps.evaluation.dvh.dvh_calculator", "DVH Calculator"),
-    ]
-
-    passed = 0
-    failed = 0
-
-    for module_name, display_name in evaluation_modules:
-        try:
-            exec(f"import {module_name}")
-            print(f"✓ {display_name:<25} OK")
-            passed += 1
-        except Exception as e:
-            print(f"✗ {display_name:<25} FAILED: {str(e)}")
-            failed += 1
-
-    print(f"\nEvaluation Modules: {passed} passed, {failed} failed")
-    return failed == 0
-
-
-def test_ui_modules():
-    """Test UI modules."""
-    print("\n🖼️ TESTING UI MODULES")
-    print("=" * 50)
-
-    ui_modules = [
-        ("quangtps.ui.main_window", "Main Window"),
-        ("quangtps.ui.evaluation.plan_qa_widget", "Plan QA Widget"),
-        ("quangtps.ui.planning_tab", "Planning Tab"),
-        ("quangtps.ui.structure_tab", "Structure Tab"),
-    ]
-
-    passed = 0
-    failed = 0
-
-    for module_name, display_name in ui_modules:
-        try:
-            exec(f"import {module_name}")
-            print(f"✓ {display_name:<25} OK")
-            passed += 1
-        except Exception as e:
-            print(f"✗ {display_name:<25} FAILED: {str(e)}")
-            failed += 1
-
-    print(f"\nUI Modules: {passed} passed, {failed} failed")
-    return failed == 0
-
-
-def test_system_health_checker():
-    """Test system health checker itself."""
-    print("\n🏥 TESTING SYSTEM HEALTH CHECKER")
-    print("=" * 50)
-
+    # Tạo QApplication trước
     try:
-        from quangtps.core.system_health_checker import (
-            SystemHealthChecker,
-            run_system_health_check,
-            print_health_report,
-        )
+        from PyQt5.QtWidgets import QApplication
 
-        print("✓ System Health Checker import OK")
-
-        # Tạo health checker
-        checker = SystemHealthChecker()
-        print("✓ Health Checker instance created")
-
-        # Chạy check nhanh (không check performance để tiết kiệm thời gian)
-        print("🔄 Running health check...")
-        report = checker.run_comprehensive_check(
-            check_dependencies=True, check_performance=False, check_modules=True
-        )
-
-        print(f"✓ Health check completed")
-        print(f"Overall Status: {report.overall_status}")
-        print(f"Passed: {report.passed_checks}/{report.total_checks}")
-        print(f"Failed: {report.failed_checks}")
-        print(f"Critical: {report.critical_checks}")
-
-        return report.critical_checks == 0
-
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
     except Exception as e:
-        print(f"✗ System Health Checker failed: {e}")
-        traceback.print_exc()
+        print(f"✗ Cannot create QApplication: {e}")
         return False
 
-
-def test_dependencies():
-    """Test critical dependencies."""
-    print("\n📦 TESTING DEPENDENCIES")
-    print("=" * 50)
-
-    dependencies = [
-        ("numpy", "NumPy"),
-        ("scipy", "SciPy"),
-        ("matplotlib", "Matplotlib"),
-        ("pandas", "Pandas"),
-        ("numba", "Numba JIT"),
-        ("psutil", "System Info"),
+    components_to_test = [
+        ("MainWindow", "quangtps.ui.main_window.MainWindow"),
+        ("3D Visualization", "quangtps.ui.visualization_3d.StructureViewer3D"),
+        ("Isodose Selector", "quangtps.ui.isodose_selector.IsodoseSelector"),
+        (
+            "Structure Visibility",
+            "quangtps.ui.structure_visibility_panel.StructureVisibilityPanel",
+        ),
     ]
 
-    passed = 0
-    failed = 0
-
-    for module_name, display_name in dependencies:
+    for name, import_path in components_to_test:
+        total_count += 1
         try:
-            exec(f"import {module_name}")
-            print(f"✓ {display_name:<15} OK")
-            passed += 1
-        except ImportError:
-            print(f"⚠ {display_name:<15} NOT AVAILABLE")
-            failed += 1
+            module_path, class_name = import_path.rsplit(".", 1)
+            module = __import__(module_path, fromlist=[class_name])
+            cls = getattr(module, class_name)
+
+            # Test tạo instance (không show)
+            instance = cls()
+            print(f"✓ {name}: {type(instance).__name__}")
+            success_count += 1
+
         except Exception as e:
-            print(f"✗ {display_name:<15} ERROR: {str(e)}")
-            failed += 1
+            print(f"✗ {name}: {e}")
 
-    print(f"\nDependencies: {passed} available, {failed} missing/error")
-    return True  # Dependencies are optional
+    print(f"UI components: {success_count}/{total_count} passed")
+    return success_count == total_count
 
 
-def test_algorithm_creation():
-    """Test creating algorithm instances."""
-    print("\n⚗️ TESTING ALGORITHM CREATION")
-    print("=" * 50)
+def test_dose_algorithms():
+    """Test các thuật toán tính liều"""
+    print("\n=== Test Dose Algorithms ===")
+    success_count = 0
+    total_count = 0
 
+    algorithms_to_test = [
+        ("Pencil Beam", "quangtps.dose.algorithms.pencil_beam.PencilBeamAlgorithm"),
+        (
+            "Collapsed Cone",
+            "quangtps.dose.algorithms.collapsed_cone.CollapsedConeAlgorithm",
+        ),
+        ("Monte Carlo", "quangtps.dose.algorithms.monte_carlo.MonteCarloAlgorithm"),
+        ("Dose Calculator", "quangtps.dose.dose_calculator.DoseCalculator"),
+    ]
+
+    for name, import_path in algorithms_to_test:
+        total_count += 1
+        try:
+            module_path, class_name = import_path.rsplit(".", 1)
+            module = __import__(module_path, fromlist=[class_name])
+            cls = getattr(module, class_name)
+
+            # Test tạo instance
+            instance = cls()
+            print(f"✓ {name}: {type(instance).__name__}")
+            success_count += 1
+
+        except Exception as e:
+            print(f"✗ {name}: {e}")
+
+    print(f"Dose algorithms: {success_count}/{total_count} passed")
+    return success_count == total_count
+
+
+def test_optimization_components():
+    """Test các thành phần tối ưu hóa"""
+    print("\n=== Test Optimization Components ===")
+    success_count = 0
+    total_count = 0
+
+    components_to_test = [
+        ("Objectives", "quangtps.optimization.objectives"),
+        ("Optimizers", "quangtps.optimization.optimizers"),
+        ("MCO", "quangtps.optimization.mco"),
+    ]
+
+    for name, module_path in components_to_test:
+        total_count += 1
+        try:
+            __import__(module_path)
+            print(f"✓ {name}")
+            success_count += 1
+        except Exception as e:
+            print(f"✗ {name}: {e}")
+
+    print(f"Optimization components: {success_count}/{total_count} passed")
+    return success_count == total_count
+
+
+def test_evaluation_metrics():
+    """Test các metrics đánh giá"""
+    print("\n=== Test Evaluation Metrics ===")
+    success_count = 0
+    total_count = 0
+
+    metrics_to_test = [
+        (
+            "Gamma Analysis",
+            "quangtps.evaluation.metrics.gamma_analysis.GammaAnalysisSettings",
+        ),
+        ("DVH Analysis", "quangtps.evaluation.dvh"),
+        ("Biological Models", "quangtps.evaluation.biological"),
+    ]
+
+    for name, import_path in metrics_to_test:
+        total_count += 1
+        try:
+            if "." in import_path.split(".")[-1]:
+                module_path, class_name = import_path.rsplit(".", 1)
+                module = __import__(module_path, fromlist=[class_name])
+                getattr(module, class_name)
+            else:
+                __import__(import_path)
+            print(f"✓ {name}")
+            success_count += 1
+        except Exception as e:
+            print(f"✗ {name}: {e}")
+
+    print(f"Evaluation metrics: {success_count}/{total_count} passed")
+    return success_count == total_count
+
+
+def test_launch_application():
+    """Test launch application function"""
+    print("\n=== Test Launch Application ===")
     try:
-        from quangtps.dose.algorithms.pencil_beam import PencilBeamAlgorithm
+        from quangtps.ui.main_window import launch_application
 
-        # Test PencilBeam
-        pb = PencilBeamAlgorithm()
-        print(f"✓ PencilBeam created: {pb.name} v{pb.version}")
-
-        # Test parameters
-        pb.set_parameter("grid_size", 0.25)
-        grid_size = pb.get_parameter("grid_size")
-        print(f"✓ Parameter setting works: grid_size = {grid_size}")
-
+        print(
+            f"✓ launch_application function available: {callable(launch_application)}"
+        )
         return True
-
     except Exception as e:
-        print(f"✗ Algorithm creation failed: {e}")
+        print(f"✗ launch_application not available: {e}")
         return False
 
 
-def main():
-    """Main test function."""
-    print("🚀 QUANGTPS SYSTEM HEALTH TEST")
-    print("=" * 60)
-    print(f"Start time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print()
+def run_comprehensive_test():
+    """Chạy test comprehensive cho hệ thống"""
+    print("QuangTPS System Health Check")
+    print("=" * 50)
 
-    test_results = []
+    start_time = time.time()
 
-    # Run all tests
-    test_results.append(("Core Imports", test_core_imports()))
-    test_results.append(("Dependencies", test_dependencies()))
-    test_results.append(("Dose Modules", test_dose_modules()))
-    test_results.append(("Evaluation Modules", test_evaluation_modules()))
-    test_results.append(("UI Modules", test_ui_modules()))
-    test_results.append(("Algorithm Creation", test_algorithm_creation()))
-    test_results.append(("System Health Checker", test_system_health_checker()))
+    # Danh sách các test
+    tests = [
+        ("Core Imports", test_core_imports),
+        ("UI Components", test_ui_components),
+        ("Dose Algorithms", test_dose_algorithms),
+        ("Optimization", test_optimization_components),
+        ("Evaluation Metrics", test_evaluation_metrics),
+        ("Launch Function", test_launch_application),
+    ]
 
-    # Summary
-    print("\n" + "=" * 60)
-    print("📋 FINAL SUMMARY")
-    print("=" * 60)
+    # Chạy tests
+    results = []
+    for test_name, test_func in tests:
+        try:
+            result = test_func()
+            results.append((test_name, result))
+        except Exception as e:
+            print(f"✗ {test_name} failed with exception: {e}")
+            results.append((test_name, False))
 
-    passed_tests = 0
-    total_tests = len(test_results)
+    # Tổng kết
+    print("\n" + "=" * 50)
+    print("SYSTEM HEALTH SUMMARY")
+    print("=" * 50)
 
-    for test_name, result in test_results:
+    passed = sum(1 for _, result in results if result)
+    total = len(results)
+
+    for test_name, result in results:
         status = "✓ PASS" if result else "✗ FAIL"
-        print(f"{test_name:<25} {status}")
-        if result:
-            passed_tests += 1
+        print(f"{status:8} {test_name}")
 
-    print(
-        f"\nOverall: {passed_tests}/{total_tests} tests passed ({passed_tests / total_tests * 100:.1f}%)"
-    )
+    end_time = time.time()
+    test_duration = end_time - start_time
 
-    if passed_tests == total_tests:
-        print("🎉 ALL TESTS PASSED - QuangTPS system is healthy!")
-        exit_code = 0
+    print("=" * 50)
+    print(f"Overall Result: {passed}/{total} tests passed")
+    print(f"Success Rate: {passed / total * 100:.1f}%")
+    print(f"Test Duration: {test_duration:.2f} seconds")
+
+    if passed == total:
+        print("🎉 All systems operational!")
+        return 0
     else:
-        print("⚠️ SOME TESTS FAILED - Issues need attention")
-        exit_code = 1
-
-    print(f"End time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    sys.exit(exit_code)
+        print("⚠️  Some issues detected. Check logs above.")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_comprehensive_test())

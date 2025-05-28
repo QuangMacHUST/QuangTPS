@@ -544,11 +544,18 @@ class DoseCalculator:
     def set_beam_set(self, beam_set: BeamSet):
         """Set the beam set for dose calculation."""
         self.beam_set = beam_set
+        logger.info("Beam set updated for dose calculation")
+
+        # Reset calculation status when beam set changes
         self.is_calculated = False
-        logger.info(
-            f"Beam set with {len(beam_set.beams)} beams set for dose calculation"
-        )
-        return True
+
+    def get_beam_set(self) -> Optional[BeamSet]:
+        """Get the current beam set.
+
+        Returns:
+            Optional[BeamSet]: The current beam set, or None if not set.
+        """
+        return getattr(self, "beam_set", None)
 
     def set_calculation_grid_resolution(self, resolution: Tuple[float, float, float]):
         """Set the calculation grid resolution in mm."""

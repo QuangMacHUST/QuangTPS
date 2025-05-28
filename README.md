@@ -4,7 +4,7 @@
   <img src="quangtps/ui/icons/new_icons/quang_tps_logo.png" alt="QuangTPS Logo" width="200"/>
 </div>
 
-![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.9.5-blue)
+![Phiên bản](https://img.shields.io/badge/Phiên_bản-0.16.4-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%20%7C%203.9%20%7C%203.10-green)
 ![Giấy phép](https://img.shields.io/badge/Giấy_phép-MIT-yellow)
 
@@ -25,7 +25,7 @@ QuangTPS là một hệ thống lập kế hoạch xạ trị mã nguồn mở c
 - **Giao diện người dùng hiện đại**: Thiết kế theo phong cách Eclipse của Varian với các biểu tượng tùy chỉnh
 - **Hiệu năng tính toán VMAT cao**: Thuật toán vector hóa và xử lý đa luồng cho tính toán nhanh chóng
 
-## Cải tiến mới nhất (v0.9.5)
+## Cải tiến mới nhất (v0.16.4)
 
 - **Cải thiện KBP Dialog**: Hoàn thiện KBPDialog với chức năng đầy đủ, bổ sung phương thức _get_available_sites để lấy danh sách các vị trí điều trị.
 - **Tối ưu hoá VMAT**: Thêm phương thức _calculate_dose để tính toán phân phối liều nhanh chóng và chính xác, giúp khắc phục lỗi "VMATOptimizer has no _calculate_dose member".

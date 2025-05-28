@@ -18,47 +18,63 @@ import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
-# Thử nhập các module tăng tốc GPU
+# Safe import for numba with enhanced fallback
+try:
+    from numba import jit, prange
+    from numba import cuda
+
+    HAS_NUMBA = True
+    HAS_NUMBA_CUDA = True
+    logger.info("Numba imported successfully for gamma analysis acceleration")
+
+    # Check NumPy compatibility with Numba
+    numpy_version = np.__version__
+    major, minor = map(int, numpy_version.split(".")[:2])
+
+    if major >= 2 and minor >= 2:  # NumPy 2.2+
+        logger.warning(
+            f"NumPy version {numpy_version} not compatible with Numba. Using CPU fallback methods."
+        )
+        HAS_NUMBA = False
+        HAS_NUMBA_CUDA = False
+
+except ImportError as e:
+    HAS_NUMBA = False
+    HAS_NUMBA_CUDA = False
+    logger.warning(f"Numba không khả dụng ({e}). Sử dụng CPU fallback.")
+except Exception as e:
+    HAS_NUMBA = False
+    HAS_NUMBA_CUDA = False
+    logger.warning(f"Numba không khả dụng ({e}). Sử dụng CPU fallback.")
+
+# Safe import for CuPy
 try:
     import cupy as cp
 
     HAS_CUPY = True
-    logger.info("CuPy đã được nhập thành công cho phân tích gamma GPU")
+    logger.info("CuPy imported successfully for GPU acceleration")
 except ImportError:
     HAS_CUPY = False
     logger.warning("CuPy không khả dụng. Phân tích gamma GPU sẽ không thể sử dụng.")
 
-# Numba imports với fallback cho NumPy 2.2
-HAS_NUMBA = False
-HAS_NUMBA_CUDA = False
-
+# Safe import for scipy
 try:
-    import numpy
+    from scipy import ndimage
 
-    # Kiểm tra version compatibility trước khi import numba
-    numpy_version = tuple(map(int, numpy.__version__.split(".")[:2]))
-    if numpy_version >= (2, 1):  # NumPy 2.1+
-        logger.warning(
-            "NumPy version %s not compatible with Numba. Using CPU fallback methods.",
-            numpy.__version__,
-        )
-        raise ImportError("NumPy version too high for Numba")
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+    logger.warning("SciPy không khả dụng. Một số tính năng sẽ bị giới hạn.")
 
-    from numba import jit, cuda
-    import numba.cuda
-    import numba
+# Import cho parallel processing
+try:
+    from concurrent.futures import ThreadPoolExecutor
 
-    HAS_NUMBA = True
-    if numba.cuda.is_available():
-        HAS_NUMBA_CUDA = True
-        logger.info("CUDA support available for gamma analysis")
-    else:
-        logger.info("CUDA hardware not available")
+    HAS_THREADING = True
+except ImportError:
+    HAS_THREADING = False
 
-except ImportError as e:
-    logger.warning(f"Numba không khả dụng ({e}). Sử dụng CPU fallback.")
-
-# Fallback decorators if Numba is not available
+# Create fallback decorators if numba is not available
 if not HAS_NUMBA:
 
     def jit(nopython=True):
@@ -74,7 +90,7 @@ if not HAS_NUMBA:
 
         @staticmethod
         def grid(ndim):
-            return (0, 0, 0)
+            return (1,) * ndim
 
         class atomic:
             @staticmethod
