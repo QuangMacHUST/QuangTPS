@@ -1706,26 +1706,42 @@ class MainWindow(QMainWindow):
 
     def toggle_patient_browser(self, visible):
         """Toggle the visibility of the patient browser."""
-        # Get the main splitter
-        main_splitter = self.centralWidget().layout().itemAt(0).widget()
+        try:
+            # Get the main splitter
+            main_splitter = self.centralWidget().layout().itemAt(0).widget()
 
-        if visible:
-            # Get the current sizes
-            sizes = main_splitter.sizes()
-            if sizes[0] == 0:
-                # Restore previous size (default 20% of width)
-                total_width = sum(sizes)
-                sizes[0] = int(total_width * 0.2)
-                sizes[1] = int(total_width - sizes[0])
-                main_splitter.setSizes(sizes)
-        else:
-            # Get the current sizes
-            sizes = main_splitter.sizes()
-            if sizes[0] > 0:
-                # Hide patient browser
-                sizes[1] += sizes[0]
-                sizes[0] = 0
-                main_splitter.setSizes([int(s) for s in sizes])
+            if visible:
+                # Get the current sizes
+                sizes = main_splitter.sizes()
+                if sizes[0] == 0:
+                    # Restore previous size (default 20% of width)
+                    total_width = sum(sizes)
+                    sizes[0] = int(total_width * 0.2)  # Convert to int
+                    sizes[1] = int(total_width - sizes[0])  # Convert to int
+                    main_splitter.setSizes(
+                        [int(s) for s in sizes]
+                    )  # Ensure all are ints
+            else:
+                # Get the current sizes
+                sizes = main_splitter.sizes()
+                if sizes[0] > 0:
+                    # Hide patient browser
+                    sizes[1] += sizes[0]
+                    sizes[0] = 0
+                    main_splitter.setSizes(
+                        [int(s) for s in sizes]
+                    )  # Ensure all are ints
+        except Exception as e:
+            logger.error(f"Error toggling patient browser: {e}")
+            # Fallback to default sizes
+            try:
+                main_splitter = self.centralWidget().layout().itemAt(0).widget()
+                if visible:
+                    main_splitter.setSizes([300, 900])
+                else:
+                    main_splitter.setSizes([0, 1200])
+            except Exception as e2:
+                logger.error(f"Error in fallback toggle: {e2}")
 
     def _on_tab_changed(self, index):
         """Handle tab widget tab changes."""
@@ -1769,23 +1785,41 @@ class MainWindow(QMainWindow):
             and self.current_plan.dose is not None
         )
 
-        # Update file menu actions
-        self.import_rt_struct_action.setEnabled(has_image)
-        self.import_rt_plan_action.setEnabled(has_image)
-        self.save_plan_action.setEnabled(has_plan)
+        # Update file menu actions (if they exist)
+        if hasattr(self, "import_rt_struct_action"):
+            self.import_rt_struct_action.setEnabled(has_image)
+        if hasattr(self, "import_rt_plan_action"):
+            self.import_rt_plan_action.setEnabled(has_image)
+        if hasattr(self, "save_plan_action"):
+            self.save_plan_action.setEnabled(has_plan)
 
-        # Update planning menu actions
-        self.new_plan_action.setEnabled(has_image and has_structure_set)
-        self.calculate_dose_action.setEnabled(has_plan)
-        self.optimization_action.setEnabled(has_plan)
+        # Update planning menu actions (if they exist)
+        if hasattr(self, "new_plan_action"):
+            self.new_plan_action.setEnabled(has_image and has_structure_set)
+        if hasattr(self, "calculate_dose_action"):
+            self.calculate_dose_action.setEnabled(has_plan)
+        if hasattr(self, "optimization_action"):
+            self.optimization_action.setEnabled(has_plan)
 
-        # Update toolbar actions
-        self.import_rt_struct_tool.setEnabled(has_image)
-        self.new_plan_tool.setEnabled(has_image and has_structure_set)
-        self.calculate_dose_tool.setEnabled(has_plan)
-        self.optimize_tool.setEnabled(has_plan)
-        self.evaluate_tool.setEnabled(has_dose)
-        self.report_tool.setEnabled(has_dose)
+        # Update toolbar actions using the dictionary
+        if hasattr(self, "toolbar_actions"):
+            toolbar_actions = self.toolbar_actions
+
+            # These actions are always available
+            # toolbar_actions.get("new_patient", None) - always enabled
+            # toolbar_actions.get("open_patient", None) - always enabled
+
+            # Image dependent actions
+            if "open_image" in toolbar_actions:
+                toolbar_actions["open_image"].setEnabled(True)  # Always allow import
+
+            # Plan dependent actions
+            if "new_plan" in toolbar_actions:
+                toolbar_actions["new_plan"].setEnabled(has_image and has_structure_set)
+            if "calculate_dose" in toolbar_actions:
+                toolbar_actions["calculate_dose"].setEnabled(has_plan)
+            if "save_plan" in toolbar_actions:
+                toolbar_actions["save_plan"].setEnabled(has_plan)
 
         # Update robust analysis tab if it exists
         if HAS_ROBUST_ANALYSIS and hasattr(self, "robust_analysis_tab"):
@@ -2350,16 +2384,123 @@ class MainWindow(QMainWindow):
         """Create a new patient."""
         try:
             from quangtps.ui.dialogs.new_patient_dialog import NewPatientDialog
+            from quangtps.core.patient.patient import (
+                Patient,
+                PatientGender,
+                DiagnosisInfo,
+            )
+            from datetime import datetime, date
 
             dialog = NewPatientDialog(self)
             if dialog.exec_() == QDialog.Accepted:
                 patient_data = dialog.get_patient_data()
-                # TODO: Create new patient with data
-                QMessageBox.information(
-                    self,
-                    "New Patient",
-                    f"New patient created: {patient_data.get('name', 'Unknown')}",
-                )
+
+                # Tạo patient object thực sự
+                try:
+                    # Parse gender
+                    gender = PatientGender.UNKNOWN
+                    gender_str = patient_data.get("gender", "").lower()
+                    if gender_str == "male":
+                        gender = PatientGender.MALE
+                    elif gender_str == "female":
+                        gender = PatientGender.FEMALE
+                    elif gender_str == "other":
+                        gender = PatientGender.OTHER
+
+                    # Create full name
+                    first_name = patient_data.get("first_name", "")
+                    last_name = patient_data.get("last_name", "")
+                    full_name = f"{first_name} {last_name}".strip()
+                    if not full_name:
+                        full_name = "Unknown Patient"
+
+                    # Parse birth date
+                    birth_date_obj = patient_data.get("date_of_birth")
+                    if hasattr(birth_date_obj, "toPyDate"):
+                        birth_date = birth_date_obj.toPyDate()
+                    else:
+                        birth_date = date(1980, 1, 1)  # Default date
+
+                    # Create diagnosis info
+                    diagnosis = DiagnosisInfo(
+                        primary_diagnosis=patient_data.get("diagnosis", ""),
+                        diagnosis_code=patient_data.get("icd_code", ""),
+                        stage=patient_data.get("stage", ""),
+                        site=patient_data.get("treatment_site", ""),
+                        laterality=patient_data.get("laterality", "None"),
+                        diagnosis_date=date.today(),
+                    )
+
+                    # Create patient object
+                    patient = Patient(
+                        id=patient_data.get("patient_id", "")
+                        or str(__import__("uuid").uuid4()),
+                        name=full_name,
+                        birth_date=birth_date,
+                        gender=gender,
+                        patient_id=patient_data.get("patient_id", ""),
+                        phone=patient_data.get("phone", ""),
+                        email=patient_data.get("email", ""),
+                        address=patient_data.get("address", ""),
+                        diagnosis=diagnosis,
+                        notes=patient_data.get("notes", ""),
+                        created_date=datetime.now(),
+                    )
+
+                    # Set as current patient
+                    self.current_patient = patient
+
+                    # Add to Object Explorer if available
+                    if hasattr(self.object_explorer_panel, "add_patient"):
+                        try:
+                            self.object_explorer_panel.add_patient(patient)
+                            self.object_explorer_panel.select_patient(patient)
+                            logger.info(
+                                f"Added patient {patient.name} to Object Explorer"
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Error adding patient to Object Explorer: {e}"
+                            )
+
+                    # Add to patient database if available
+                    try:
+                        # Try to get patient database service
+                        registry = ServiceRegistry.get_instance()
+                        patient_db = registry.get("PatientDB")
+                        if patient_db and hasattr(patient_db, "add_patient"):
+                            patient_db.add_patient(patient)
+                            logger.info(f"Added patient {patient.name} to database")
+                    except Exception as e:
+                        logger.warning(f"Could not add patient to database: {e}")
+
+                    # Update status and show success message
+                    self.statusBar().showMessage(f"Created patient: {patient.name}")
+                    QMessageBox.information(
+                        self,
+                        "Patient Created",
+                        f"New patient created successfully:\n"
+                        f"Name: {patient.name}\n"
+                        f"ID: {patient.patient_id or patient.id}\n"
+                        f"Birth Date: {patient.birth_date}\n"
+                        f"Gender: {patient.gender.value}",
+                    )
+
+                    # Switch to Planning tab if available
+                    planning_tab_index = self._get_tab_by_name("Planning")
+                    if planning_tab_index is not None:
+                        self.right_area.setCurrentIndex(planning_tab_index)
+
+                    logger.info(
+                        f"Successfully created patient: {patient.name} (ID: {patient.id})"
+                    )
+
+                except Exception as e:
+                    logger.error(f"Error creating patient object: {e}")
+                    QMessageBox.critical(
+                        self, "Error", f"Failed to create patient:\n{str(e)}"
+                    )
+
         except ImportError:
             QMessageBox.information(
                 self, "New Patient", "New patient dialog not yet implemented."

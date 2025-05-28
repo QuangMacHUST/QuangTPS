@@ -163,6 +163,9 @@ class PlanningTab(QWidget):
         # Hoàn tất khởi tạo
         self._initializing = False
 
+        # Populate patient list sau khi initialization hoàn tất
+        self._populate_patient_list()
+
         logger.info("Khởi tạo tab lập kế hoạch hoàn tất")
 
     def _init_ui(self):
@@ -382,9 +385,6 @@ class PlanningTab(QWidget):
         self.current_patient_id = None
         self.current_plan = None
         self.current_structures = None
-
-        # Populate patient list
-        self._populate_patient_list()
 
         # Add plan comparison action
         self.compare_plans_action = QAction(
@@ -1726,8 +1726,20 @@ class PlanningTab(QWidget):
             patient_name = self.patient_combo.itemText(index)
             logger.info(f"Patient changed to: {patient_name}")
 
-            # Update plan combo for the selected patient
-            self._update_plan_combo_for_patient(patient_name)
+            # Only update plan combo if a real patient is selected
+            if (
+                patient_name != "Select Patient..."
+                and patient_name != "No patients available"
+            ):
+                # Update plan combo for the selected patient
+                self._update_plan_combo_for_patient(patient_name)
+            else:
+                # Clear plan combo for default selections
+                self.plan_combo.currentIndexChanged.disconnect()
+                self.plan_combo.clear()
+                self.plan_combo.addItem("Select Plan...")
+                self.plan_combo.setCurrentIndex(0)
+                self.plan_combo.currentIndexChanged.connect(self._on_plan_changed)
 
     def _on_plan_changed(self, index):
         """Handle plan selection change."""
@@ -1743,12 +1755,28 @@ class PlanningTab(QWidget):
     def _update_plan_combo_for_patient(self, patient_name):
         """Update plan combo box with plans for the selected patient."""
         try:
+            # Tạm thời ngắt kết nối signal để tránh trigger events
+            self.plan_combo.currentIndexChanged.disconnect()
+
             self.plan_combo.clear()
             # TODO: Load plans from database for the patient
+            self.plan_combo.addItem("Select Plan...")  # Thay đổi thành default option
             self.plan_combo.addItem("New Plan...")
             self.plan_combo.addItem("Default Plan")
+
+            # Đặt default selection là "Select Plan..."
+            self.plan_combo.setCurrentIndex(0)
+
+            # Kết nối lại signal
+            self.plan_combo.currentIndexChanged.connect(self._on_plan_changed)
+
         except Exception as e:
             logger.error(f"Error updating plan combo: {e}")
+            # Kết nối lại signal ngay cả khi có lỗi
+            try:
+                self.plan_combo.currentIndexChanged.connect(self._on_plan_changed)
+            except:
+                pass
 
     def _load_plan_by_name(self, plan_name):
         """Load plan by name."""
@@ -1757,6 +1785,10 @@ class PlanningTab(QWidget):
                 # Không hiển thị dialog khi đang khởi tạo
                 if not hasattr(self, "_initializing") or not self._initializing:
                     self._create_plan_dialog()
+            elif plan_name == "Select Plan...":
+                # Không làm gì khi chọn option mặc định
+                logger.info("Default 'Select Plan...' option selected")
+                self._clear_plan_data()
             else:
                 # TODO: Load actual plan from database
                 logger.info(f"Loading plan: {plan_name}")
@@ -2018,6 +2050,9 @@ class PlanningTab(QWidget):
     def _populate_patient_list(self):
         """Populate the patient list combo box."""
         try:
+            # Tạm thời ngắt kết nối signal để tránh trigger events
+            self.patient_combo.currentIndexChanged.disconnect()
+
             self.patient_combo.clear()
             self.patient_combo.addItem("Select Patient...")
 
@@ -2027,9 +2062,20 @@ class PlanningTab(QWidget):
             self.patient_combo.addItem("Jane Smith")
             self.patient_combo.addItem("Patient 001")
 
+            # Đặt default selection là "Select Patient..."
+            self.patient_combo.setCurrentIndex(0)
+
+            # Kết nối lại signal
+            self.patient_combo.currentIndexChanged.connect(self._on_patient_changed)
+
             logger.info("Patient list populated")
 
         except Exception as e:
             logger.error(f"Error populating patient list: {e}")
-            # Add a default option on error
-            self.patient_combo.addItem("No patients available")
+            # Kết nối lại signal ngay cả khi có lỗi
+            try:
+                self.patient_combo.currentIndexChanged.connect(self._on_patient_changed)
+                # Add a default option on error
+                self.patient_combo.addItem("No patients available")
+            except:
+                pass

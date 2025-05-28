@@ -46,7 +46,8 @@ from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QDir, QPoint, QRect
 from PyQt5.QtGui import QIcon, QPixmap, QColor, QPalette, QPainter, QPen, QBrush
 
 from quangtps.ui.image_viewer import ImageViewer
-from quangtps.ui.image_display import ImageSliceWidget, ImageControlWidget
+from quangtps.ui.image_widgets import ImageSliceWidget
+from quangtps.ui.image_control_widget import ImageControlWidget
 from quangtps.ui.dicom_loader import DicomLoader, DicomSeries
 from quangtps.ui.base_contour_tool import ContourToolManager, Contour, ContourCollection
 from quangtps.ui.freehand_contour_tool import FreehandContourTool, BrushContourTool

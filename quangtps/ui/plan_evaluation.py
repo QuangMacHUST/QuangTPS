@@ -133,6 +133,7 @@ from quangtps.evaluation.clinical_protocols import ClinicalProtocol
 from quangtps.evaluation.protocol_manager import ProtocolManager
 from quangtps.ui.widgets.dvh_widget import DVHWidget
 from quangtps.ui.widgets.metrics_table import MetricsTable
+from quangtps.ui.image_widgets import ImageSliceWidget
 from quangtps.core.logging import get_logger
 
 # Try to import PlanMetric if available
@@ -904,7 +905,7 @@ class PlanEvaluationTab(QWidget):
         selected_structures = []
         for i in range(self.structure_list.count()):
             item = self.structure_list.item(i)
-            if item and item.isSelected():
+            if item.isSelected():
                 structure = item.data(Qt.ItemDataRole.UserRole)
                 if structure and hasattr(structure, "id"):
                     selected_structures.append(structure.id)
@@ -1367,10 +1368,8 @@ class DoseDisplayWidget(QWidget):
         layout = QVBoxLayout(self)
 
         # Image display area
-        self.image_widget = QLabel()
+        self.image_widget = ImageSliceWidget()
         self.image_widget.setMinimumSize(300, 300)
-        self.image_widget.setAlignment(Qt.AlignCenter)
-        self.image_widget.setStyleSheet("background-color: black;")
         layout.addWidget(self.image_widget)
 
         # Controls for navigation and display settings
