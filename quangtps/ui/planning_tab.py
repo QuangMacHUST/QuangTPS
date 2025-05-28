@@ -149,6 +149,7 @@ class PlanningTab(QWidget):
         self.current_plan = None
         self.current_technique = None
         self.current_patient_id = None
+        self._initializing = True  # Flag để ngăn dialog tự động hiện ra
 
         # Kết nối cơ sở dữ liệu
         self.plan_db = PlanDB()
@@ -158,6 +159,9 @@ class PlanningTab(QWidget):
 
         # Thiết lập giao diện
         self._init_ui()
+
+        # Hoàn tất khởi tạo
+        self._initializing = False
 
         logger.info("Khởi tạo tab lập kế hoạch hoàn tất")
 
@@ -1568,7 +1572,9 @@ class PlanningTab(QWidget):
         except Exception as e:
             logger.error(f"Error calculating dose: {str(e)}", exc_info=True)
             QMessageBox.critical(
-                self, "Error", f"An error occurred during dose calculation: {str(e)}"
+                self,
+                "Error",
+                f"An error occurred during dose calculation:\n{str(e)}",
             )
         finally:
             progress.close()
@@ -1714,19 +1720,20 @@ class PlanningTab(QWidget):
 
     def _on_patient_changed(self, index):
         """Handle patient selection change."""
-        if index >= 0:
+        if index >= 0 and (
+            not hasattr(self, "_initializing") or not self._initializing
+        ):
             patient_name = self.patient_combo.itemText(index)
             logger.info(f"Patient changed to: {patient_name}")
 
-            # Clear current plan data
-            self._clear_plan_data()
-
-            # Update plan combo for the new patient
+            # Update plan combo for the selected patient
             self._update_plan_combo_for_patient(patient_name)
 
     def _on_plan_changed(self, index):
         """Handle plan selection change."""
-        if index >= 0:
+        if index >= 0 and (
+            not hasattr(self, "_initializing") or not self._initializing
+        ):
             plan_name = self.plan_combo.itemText(index)
             logger.info(f"Plan changed to: {plan_name}")
 
@@ -1747,7 +1754,9 @@ class PlanningTab(QWidget):
         """Load plan by name."""
         try:
             if plan_name == "New Plan...":
-                self._create_plan_dialog()
+                # Không hiển thị dialog khi đang khởi tạo
+                if not hasattr(self, "_initializing") or not self._initializing:
+                    self._create_plan_dialog()
             else:
                 # TODO: Load actual plan from database
                 logger.info(f"Loading plan: {plan_name}")
@@ -1855,30 +1864,9 @@ class PlanningTab(QWidget):
             self.plan_updated.emit(self.current_plan)
 
             progress.setValue(100)
-            progress.close()
-
-            # Show success message
-            from PyQt5.QtWidgets import QMessageBox
-
-            QMessageBox.information(
-                self,
-                "Dose Calculation Complete",
-                f"Dose calculation completed successfully.\n"
-                f"Algorithm: {dose_engine.algorithm.value}\n"
-                f"Grid size: {grid_shape}\n"
-                f"Max dose: {np.max(dose_data):.2f} Gy",
-            )
-
-            logger.info(
-                f"Dose calculation completed. Max dose: {np.max(dose_data):.2f} Gy"
-            )
 
         except Exception as e:
-            if "progress" in locals():
-                progress.close()
             logger.error(f"Error in dose calculation: {e}")
-            from PyQt5.QtWidgets import QMessageBox
-
             QMessageBox.critical(
                 self,
                 "Dose Calculation Error",

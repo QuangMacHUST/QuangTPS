@@ -123,9 +123,19 @@ def run_application(debug=False, config=None):
         app.setApplicationName("QuangTPS")
         app.setOrganizationName("QuangTPS")
 
-        # Create main window
-        main_window = MainWindow(config)
+        # Create main window - MainWindow không nhận tham số config
+        main_window = MainWindow()
         main_window.show()
+
+        # Nếu có config, có thể set nó sau khi MainWindow được tạo
+        if config:
+            # Apply configuration settings if MainWindow has methods to handle them
+            for key, value in config.items():
+                try:
+                    if hasattr(main_window, f"set_{key}"):
+                        getattr(main_window, f"set_{key}")(value)
+                except Exception as e:
+                    logging.warning(f"Could not apply config {key}: {e}")
 
         # Run application
         return app.exec_()

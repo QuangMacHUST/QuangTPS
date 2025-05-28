@@ -826,210 +826,284 @@ class MainWindow(QMainWindow):
         self.help_menu.addAction(self.about_action)
 
     def _create_toolbars(self):
-        """Create application toolbars."""
+        """Create application toolbars with Eclipse-style icons."""
+        from quangtps.ui.eclipse_style_theme import create_eclipse_icon
+
         # Main toolbar
-        self.main_toolbar = self.addToolBar("Main")
-        self.main_toolbar.setIconSize(QSize(24, 24))
-        self.main_toolbar.setMovable(False)
+        main_toolbar = self.addToolBar("Main")
+        main_toolbar.setObjectName("MainToolBar")
+        main_toolbar.setMovable(True)
+        main_toolbar.setFloatable(True)
 
-        # Get icons directory
-        icons_dir = os.path.join(os.path.dirname(__file__), "icons")
+        # File operations
+        new_patient_action = QAction("New Patient", self)
+        new_patient_action.setIcon(QIcon(create_eclipse_icon("patient", 24)))
+        new_patient_action.setShortcut("Ctrl+N")
+        new_patient_action.setToolTip("Create a new patient (Ctrl+N)")
+        new_patient_action.triggered.connect(self._new_patient)
+        main_toolbar.addAction(new_patient_action)
 
-        # Add toolbar actions
-        self.new_patient_tool = QAction(
-            QIcon(os.path.join(icons_dir, "new_patient.png")), "New Patient", self
-        )
-        self.new_patient_tool.triggered.connect(self._new_patient)
-        self.main_toolbar.addAction(self.new_patient_tool)
+        open_patient_action = QAction("Open Patient", self)
+        open_patient_action.setIcon(QIcon(create_eclipse_icon("open", 24)))
+        open_patient_action.setShortcut("Ctrl+O")
+        open_patient_action.setToolTip("Open existing patient (Ctrl+O)")
+        open_patient_action.triggered.connect(self.open_patient_dialog)
+        main_toolbar.addAction(open_patient_action)
 
-        self.open_patient_tool = QAction(
-            QIcon(os.path.join(icons_dir, "open_patient.png")), "Open Patient", self
-        )
-        self.open_patient_tool.triggered.connect(self.open_patient_dialog)
-        self.main_toolbar.addAction(self.open_patient_tool)
+        main_toolbar.addSeparator()
 
-        self.main_toolbar.addSeparator()
+        # Image operations
+        open_image_action = QAction("Import Image", self)
+        open_image_action.setIcon(QIcon(create_eclipse_icon("open", 24)))
+        open_image_action.setToolTip("Import medical image (DICOM)")
+        open_image_action.triggered.connect(self.open_image_dialog)
+        main_toolbar.addAction(open_image_action)
 
-        self.import_dicom_tool = QAction(
-            QIcon(os.path.join(icons_dir, "import_dicom.png")), "Import DICOM", self
-        )
-        self.import_dicom_tool.triggered.connect(self.open_image_dialog)
-        self.main_toolbar.addAction(self.import_dicom_tool)
+        # Planning operations
+        new_plan_action = QAction("New Plan", self)
+        new_plan_action.setIcon(QIcon(create_eclipse_icon("plan", 24)))
+        new_plan_action.setToolTip("Create new treatment plan")
+        new_plan_action.triggered.connect(self.create_test_plan)
+        main_toolbar.addAction(new_plan_action)
+        self.new_plan_action = new_plan_action
 
-        self.import_rt_struct_tool = QAction(
-            QIcon(os.path.join(icons_dir, "roi.png")), "Import RTStruct", self
-        )
-        self.import_rt_struct_tool.triggered.connect(self.import_structure_set_dialog)
-        self.main_toolbar.addAction(self.import_rt_struct_tool)
+        main_toolbar.addSeparator()
 
-        self.main_toolbar.addSeparator()
+        # Dose calculation
+        calculate_dose_action = QAction("Calculate Dose", self)
+        calculate_dose_action.setIcon(QIcon(create_eclipse_icon("calculate", 24)))
+        calculate_dose_action.setToolTip("Calculate dose distribution")
+        calculate_dose_action.triggered.connect(self.calculate_dose)
+        main_toolbar.addAction(calculate_dose_action)
+        self.calculate_dose_action = calculate_dose_action
 
-        self.new_plan_tool = QAction(
-            QIcon(os.path.join(icons_dir, "new_plan.png")), "New Plan", self
-        )
-        self.main_toolbar.addAction(self.new_plan_tool)
+        # Save operations
+        main_toolbar.addSeparator()
 
-        self.calculate_dose_tool = QAction(
-            QIcon(os.path.join(icons_dir, "calculate_dose.png")), "Calculate Dose", self
-        )
-        self.calculate_dose_tool.triggered.connect(self.calculate_dose)
-        self.main_toolbar.addAction(self.calculate_dose_tool)
+        save_plan_action = QAction("Save Plan", self)
+        save_plan_action.setIcon(QIcon(create_eclipse_icon("save", 24)))
+        save_plan_action.setShortcut("Ctrl+S")
+        save_plan_action.setToolTip("Save current plan (Ctrl+S)")
+        save_plan_action.triggered.connect(self.save_plan_dialog)
+        main_toolbar.addAction(save_plan_action)
+        self.save_plan_action = save_plan_action
 
-        self.optimize_tool = QAction(
-            QIcon(os.path.join(icons_dir, "optimize.png")), "Optimize", self
-        )
-        self.main_toolbar.addAction(self.optimize_tool)
+        # View toolbar
+        view_toolbar = self.addToolBar("View")
+        view_toolbar.setObjectName("ViewToolBar")
 
-        self.main_toolbar.addSeparator()
+        # Toggle patient browser
+        toggle_browser_action = QAction("Patient Browser", self)
+        toggle_browser_action.setCheckable(True)
+        toggle_browser_action.setChecked(True)
+        toggle_browser_action.setToolTip("Toggle patient browser panel")
+        toggle_browser_action.toggled.connect(self.toggle_patient_browser)
+        view_toolbar.addAction(toggle_browser_action)
 
-        self.evaluate_tool = QAction(
-            QIcon(os.path.join(icons_dir, "evaluate.png")), "Evaluate", self
-        )
-        self.main_toolbar.addAction(self.evaluate_tool)
+        # Window/level presets
+        view_toolbar.addSeparator()
 
-        self.report_tool = QAction(
-            QIcon(os.path.join(icons_dir, "report.png")), "Report", self
-        )
-        self.main_toolbar.addAction(self.report_tool)
+        # Preset buttons for medical imaging
+        bone_preset_action = QAction("Bone", self)
+        bone_preset_action.setToolTip("Bone window preset")
+        bone_preset_action.triggered.connect(lambda: self.set_window_level(1500, 300))
+        view_toolbar.addAction(bone_preset_action)
 
-        # Add a stretch spacer to the right
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.main_toolbar.addWidget(spacer)
+        soft_tissue_action = QAction("Soft Tissue", self)
+        soft_tissue_action.setToolTip("Soft tissue window preset")
+        soft_tissue_action.triggered.connect(lambda: self.set_window_level(400, 40))
+        view_toolbar.addAction(soft_tissue_action)
 
-        # Add help action to the right
-        self.help_tool = QAction(
-            QIcon(os.path.join(icons_dir, "help.png")), "Help", self
-        )
-        self.main_toolbar.addAction(self.help_tool)
+        lung_preset_action = QAction("Lung", self)
+        lung_preset_action.setToolTip("Lung window preset")
+        lung_preset_action.triggered.connect(lambda: self.set_window_level(1600, -600))
+        view_toolbar.addAction(lung_preset_action)
+
+        # Store references to actions for state updates
+        self.toolbar_actions = {
+            "new_patient": new_patient_action,
+            "open_patient": open_patient_action,
+            "open_image": open_image_action,
+            "new_plan": new_plan_action,
+            "calculate_dose": calculate_dose_action,
+            "save_plan": save_plan_action,
+            "toggle_browser": toggle_browser_action,
+        }
 
     def apply_styling(self):
-        """Apply styling to the application."""
-        # Set application style based on availability
-        if QStyleFactory.keys().count("Fusion") > 0:
-            self.setStyle(QStyleFactory.create("Fusion"))
+        """Apply enhanced Eclipse-style theming to the main window."""
+        try:
+            from quangtps.ui.eclipse_style_theme import apply_eclipse_theme
 
-        # Create color palette (Eclipse-like blue theme)
-        palette = QPalette()
+            # Apply the enhanced Eclipse theme
+            apply_eclipse_theme(self)
 
-        # Set window and button colors
-        palette.setColor(QPalette.Window, QColor(240, 240, 240))
-        palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
-        palette.setColor(QPalette.Base, QColor(255, 255, 255))
-        palette.setColor(QPalette.AlternateBase, QColor(245, 245, 245))
-        palette.setColor(QPalette.Button, QColor(240, 240, 240))
-        palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
-
-        # Set highlight colors
-        palette.setColor(QPalette.Highlight, QColor(32, 112, 192))
-        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
-
-        # Set link colors
-        palette.setColor(QPalette.Link, QColor(32, 112, 192))
-        palette.setColor(QPalette.LinkVisited, QColor(102, 0, 153))
-
-        # Apply palette
-        self.setPalette(palette)
-
-        # Set stylesheet for custom styling
-        self.setStyleSheet("""
+            # Additional main window specific styling
+            additional_style = """
+            /* Main Window specific styling */
             QMainWindow {
-                background-color: #f0f0f0;
+                background-color: #2B2B2B;
+                color: #CCCCCC;
             }
 
-            QMenuBar {
-                background-color: #f0f0f0;
-                border-bottom: 1px solid #d0d0d0;
+            /* Central widget styling */
+            QWidget#centralWidget {
+                background-color: #2B2B2B;
+                border: none;
             }
 
-            QMenuBar::item {
-                background-color: transparent;
-                padding: 5px 8px;
+            /* Patient browser styling */
+            QWidget#patientBrowser {
+                background-color: #3C3C3C;
+                border-right: 1px solid #555555;
             }
 
-            QMenuBar::item:selected {
-                background-color: #2070c0;
-                color: white;
+            /* Tab specific styling for better appearance */
+            QTabWidget QWidget {
+                background-color: #2B2B2B;
+                border: none;
             }
 
-            QMenu {
-                background-color: #f8f8f8;
-                border: 1px solid #d0d0d0;
+            /* Improved splitter appearance */
+            QSplitter {
+                background-color: #2B2B2B;
             }
 
-            QMenu::item:selected {
-                background-color: #2070c0;
-                color: white;
+            QSplitter::handle {
+                background-color: #555555;
+                border: 1px solid #666666;
+                border-radius: 2px;
             }
 
+            QSplitter::handle:hover {
+                background-color: #4A90E2;
+                border-color: #4A90E2;
+            }
+
+            /* Toolbar specific improvements */
             QToolBar {
-                background-color: #f0f0f0;
-                border-bottom: 1px solid #d0d0d0;
-                spacing: 3px;
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                          stop: 0 #4C4C4C, stop: 1 #3C3C3C);
+                border: 1px solid #555555;
+                border-radius: 4px;
+                spacing: 2px;
+                padding: 4px;
             }
 
             QToolButton {
                 background-color: transparent;
-                border-radius: 3px;
-                padding: 3px;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 6px;
+                margin: 1px;
+                min-width: 32px;
+                min-height: 32px;
+                font-weight: bold;
             }
 
             QToolButton:hover {
-                background-color: #e0e0e0;
+                background-color: #4A90E2;
+                border-color: #4A90E2;
+                color: white;
             }
 
             QToolButton:pressed {
-                background-color: #c0c0c0;
+                background-color: #357ABD;
+                border-color: #357ABD;
             }
 
-            QTabWidget::pane {
-                border: 1px solid #d0d0d0;
-                background-color: #f8f8f8;
-            }
-
-            QTabBar::tab {
-                background-color: #e0e0e0;
-                border: 1px solid #d0d0d0;
-                border-bottom: none;
-                padding: 5px 10px;
-                margin-right: 2px;
-                border-top-left-radius: 3px;
-                border-top-right-radius: 3px;
-            }
-
-            QTabBar::tab:selected {
-                background-color: #2070c0;
-                color: white;
-            }
-
-            QTabBar::tab:!selected {
-                margin-top: 2px;
-            }
-
-            QTabBar::tab:hover:!selected {
-                background-color: #d0d0d0;
-            }
-
+            /* Status bar improvements */
             QStatusBar {
-                background-color: #f0f0f0;
-                border-top: 1px solid #d0d0d0;
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                          stop: 0 #4C4C4C, stop: 1 #3C3C3C);
+                color: #CCCCCC;
+                border-top: 1px solid #555555;
+                padding: 4px 8px;
+                font-size: 12px;
             }
 
-            QTreeWidget {
-                background-color: white;
-                border: 1px solid #d0d0d0;
-                alternate-background-color: #f8f8f8;
+            /* Progress bar in status bar */
+            QProgressBar {
+                background-color: #2B2B2B;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                text-align: center;
+                color: #CCCCCC;
+                font-weight: bold;
+                max-height: 16px;
             }
 
-            QTreeWidget::item:hover {
-                background-color: #e8e8e8;
+            QProgressBar::chunk {
+                background-color: #4A90E2;
+                border-radius: 3px;
+                margin: 1px;
             }
+            """
 
-            QTreeWidget::item:selected {
-                background-color: #2070c0;
-                color: white;
-            }
-        """)
+            current_style = self.styleSheet()
+            self.setStyleSheet(current_style + additional_style)
+
+            logger.info("Enhanced Eclipse styling applied successfully")
+
+        except ImportError as e:
+            logger.warning(f"Eclipse theme module not available: {e}")
+            # Fallback to basic dark theme
+            self._apply_basic_dark_theme()
+        except Exception as e:
+            logger.error(f"Error applying Eclipse styling: {e}")
+            self._apply_basic_dark_theme()
+
+    def _apply_basic_dark_theme(self):
+        """Apply basic dark theme as fallback."""
+        basic_style = """
+        QMainWindow {
+            background-color: #2B2B2B;
+            color: #CCCCCC;
+        }
+
+        QMenuBar {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            border: none;
+        }
+
+        QMenuBar::item:selected {
+            background-color: #4A90E2;
+        }
+
+        QTabWidget::pane {
+            border: 1px solid #555555;
+            background-color: #2B2B2B;
+        }
+
+        QTabBar::tab {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            padding: 8px 16px;
+            margin-right: 2px;
+        }
+
+        QTabBar::tab:selected {
+            background-color: #4A90E2;
+            color: white;
+        }
+
+        QPushButton {
+            background-color: #3C3C3C;
+            color: #CCCCCC;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            padding: 6px 12px;
+        }
+
+        QPushButton:hover {
+            background-color: #4A90E2;
+            border-color: #4A90E2;
+        }
+        """
+
+        self.setStyleSheet(basic_style)
+        logger.info("Basic dark theme applied as fallback")
 
     def _load_settings(self):
         """Load application settings."""
@@ -1619,7 +1693,16 @@ class MainWindow(QMainWindow):
 
     def set_window_level(self, window, level):
         """Set window and level presets in the MPR viewer."""
-        self.mpr_viewer.set_window_level(window, level)
+        if hasattr(self, "mpr_viewer") and self.mpr_viewer:
+            self.mpr_viewer.set_window_level(window, level)
+        else:
+            # Nếu không có MPR viewer, có thể hiển thị thông báo hoặc log
+            logger.warning(
+                f"MPR viewer not available, cannot set window level: {window}/{level}"
+            )
+            self.statusBar().showMessage(
+                f"Window/Level: {window}/{level} (viewer not available)"
+            )
 
     def toggle_patient_browser(self, visible):
         """Toggle the visibility of the patient browser."""
@@ -1632,8 +1715,8 @@ class MainWindow(QMainWindow):
             if sizes[0] == 0:
                 # Restore previous size (default 20% of width)
                 total_width = sum(sizes)
-                sizes[0] = total_width * 0.2
-                sizes[1] = total_width - sizes[0]
+                sizes[0] = int(total_width * 0.2)
+                sizes[1] = int(total_width - sizes[0])
                 main_splitter.setSizes(sizes)
         else:
             # Get the current sizes
@@ -1642,7 +1725,7 @@ class MainWindow(QMainWindow):
                 # Hide patient browser
                 sizes[1] += sizes[0]
                 sizes[0] = 0
-                main_splitter.setSizes(sizes)
+                main_splitter.setSizes([int(s) for s in sizes])
 
     def _on_tab_changed(self, index):
         """Handle tab widget tab changes."""

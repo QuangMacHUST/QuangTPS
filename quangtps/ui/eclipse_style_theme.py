@@ -30,7 +30,7 @@ try:
         QToolBar,
         QMenu,
     )
-    from PyQt5.QtCore import Qt, QSize
+    from PyQt5.QtCore import Qt, QSize, QPointF
     from PyQt5.QtGui import (
         QPalette,
         QColor,
@@ -41,6 +41,7 @@ try:
         QPainter,
         QPen,
         QIcon,
+        QPolygonF,
     )
 
     HAS_PYQT = True
@@ -723,3 +724,784 @@ def get_structure_color(structure_type: str) -> Tuple[int, int, int]:
 
 # Thông tin phiên bản
 __version__ = "0.7.8"
+
+
+# Apply enhanced Eclipse theme with better icons and visual hierarchy
+def apply_eclipse_theme(widget):
+    """Áp dụng theme Eclipse nâng cao với icons và visual hierarchy tốt hơn."""
+    if not widget:
+        return
+
+    enhanced_style = """
+    /* Main Window */
+    QMainWindow {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        border: none;
+    }
+
+    /* Menu Bar */
+    QMenuBar {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: none;
+        padding: 2px;
+    }
+
+    QMenuBar::item {
+        background-color: transparent;
+        padding: 6px 12px;
+        border-radius: 4px;
+    }
+
+    QMenuBar::item:selected {
+        background-color: #4A90E2;
+        color: white;
+    }
+
+    QMenuBar::item:pressed {
+        background-color: #357ABD;
+    }
+
+    /* Menu */
+    QMenu {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 4px;
+    }
+
+    QMenu::item {
+        padding: 8px 25px 8px 20px;
+        border-radius: 4px;
+        margin: 1px;
+    }
+
+    QMenu::item:selected {
+        background-color: #4A90E2;
+        color: white;
+    }
+
+    QMenu::separator {
+        height: 1px;
+        background-color: #555555;
+        margin: 4px 0px;
+    }
+
+    QMenu::indicator {
+        width: 16px;
+        height: 16px;
+        margin-left: 5px;
+    }
+
+    /* Tool Bar */
+    QToolBar {
+        background-color: #3C3C3C;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 2px;
+        spacing: 3px;
+    }
+
+    QToolBar::handle {
+        background-color: #555555;
+        width: 10px;
+        margin: 4px 2px;
+        border-radius: 2px;
+    }
+
+    QToolButton {
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 6px;
+        margin: 1px;
+        min-width: 24px;
+        min-height: 24px;
+    }
+
+    QToolButton:hover {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+        color: white;
+    }
+
+    QToolButton:pressed {
+        background-color: #357ABD;
+        border-color: #357ABD;
+    }
+
+    QToolButton:checked {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+        color: white;
+    }
+
+    /* Status Bar */
+    QStatusBar {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border-top: 1px solid #555555;
+        padding: 4px;
+    }
+
+    QStatusBar::item {
+        border: none;
+        padding: 2px 8px;
+    }
+
+    /* Tab Widget */
+    QTabWidget::pane {
+        border: 1px solid #555555;
+        background-color: #2B2B2B;
+        border-radius: 4px;
+    }
+
+    QTabBar::tab {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        padding: 10px 20px;
+        margin-right: 2px;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+        border: 1px solid #555555;
+        border-bottom: none;
+        min-width: 100px;
+    }
+
+    QTabBar::tab:selected {
+        background-color: #4A90E2;
+        color: white;
+        border-color: #4A90E2;
+    }
+
+    QTabBar::tab:hover:!selected {
+        background-color: #4C4C4C;
+    }
+
+    QTabBar::close-button {
+        image: url(icons/close.png);
+        subcontrol-position: right;
+    }
+
+    QTabBar::close-button:hover {
+        background-color: #FF6B6B;
+        border-radius: 2px;
+    }
+
+    /* Splitter */
+    QSplitter::handle {
+        background-color: #555555;
+        border: 1px solid #666666;
+    }
+
+    QSplitter::handle:horizontal {
+        width: 6px;
+        border-radius: 3px;
+    }
+
+    QSplitter::handle:vertical {
+        height: 6px;
+        border-radius: 3px;
+    }
+
+    QSplitter::handle:hover {
+        background-color: #4A90E2;
+    }
+
+    /* Dock Widget */
+    QDockWidget {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+    }
+
+    QDockWidget::title {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        padding: 8px;
+        border-bottom: 1px solid #555555;
+        font-weight: bold;
+    }
+
+    QDockWidget::close-button, QDockWidget::float-button {
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        padding: 2px;
+    }
+
+    QDockWidget::close-button:hover, QDockWidget::float-button:hover {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+    }
+
+    /* Tree Widget */
+    QTreeWidget, QTreeView {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        selection-background-color: #4A90E2;
+        selection-color: white;
+        outline: none;
+    }
+
+    QTreeWidget::item, QTreeView::item {
+        padding: 4px;
+        border: none;
+        border-radius: 2px;
+    }
+
+    QTreeWidget::item:selected, QTreeView::item:selected {
+        background-color: #4A90E2;
+        color: white;
+    }
+
+    QTreeWidget::item:hover, QTreeView::item:hover {
+        background-color: #4C4C4C;
+    }
+
+    QTreeWidget::branch:has-siblings:!adjoins-item {
+        border-image: url(icons/vline.png) 0;
+    }
+
+    QTreeWidget::branch:has-siblings:adjoins-item {
+        border-image: url(icons/branch-more.png) 0;
+    }
+
+    QTreeWidget::branch:!has-children:!has-siblings:adjoins-item {
+        border-image: url(icons/branch-end.png) 0;
+    }
+
+    QTreeWidget::branch:has-children:!has-siblings:closed,
+    QTreeWidget::branch:closed:has-children:has-siblings {
+        border-image: none;
+        image: url(icons/branch-closed.png);
+    }
+
+    QTreeWidget::branch:open:has-children:!has-siblings,
+    QTreeWidget::branch:open:has-children:has-siblings {
+        border-image: none;
+        image: url(icons/branch-open.png);
+    }
+
+    /* List Widget */
+    QListWidget {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        selection-background-color: #4A90E2;
+        selection-color: white;
+        outline: none;
+    }
+
+    QListWidget::item {
+        padding: 6px;
+        border: none;
+        border-radius: 2px;
+    }
+
+    QListWidget::item:selected {
+        background-color: #4A90E2;
+        color: white;
+    }
+
+    QListWidget::item:hover {
+        background-color: #4C4C4C;
+    }
+
+    /* Table Widget */
+    QTableWidget, QTableView {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        selection-background-color: #4A90E2;
+        selection-color: white;
+        gridline-color: #555555;
+        outline: none;
+    }
+
+    QHeaderView::section {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        padding: 8px;
+        border: 1px solid #555555;
+        border-radius: 0px;
+        font-weight: bold;
+    }
+
+    QHeaderView::section:hover {
+        background-color: #4A90E2;
+        color: white;
+    }
+
+    /* Scroll Bar */
+    QScrollBar:vertical {
+        background-color: #3C3C3C;
+        width: 14px;
+        border-radius: 7px;
+        margin: 0px;
+    }
+
+    QScrollBar::handle:vertical {
+        background-color: #555555;
+        border-radius: 7px;
+        min-height: 20px;
+        margin: 1px;
+    }
+
+    QScrollBar::handle:vertical:hover {
+        background-color: #4A90E2;
+    }
+
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        border: none;
+        background: none;
+    }
+
+    QScrollBar:horizontal {
+        background-color: #3C3C3C;
+        height: 14px;
+        border-radius: 7px;
+        margin: 0px;
+    }
+
+    QScrollBar::handle:horizontal {
+        background-color: #555555;
+        border-radius: 7px;
+        min-width: 20px;
+        margin: 1px;
+    }
+
+    QScrollBar::handle:horizontal:hover {
+        background-color: #4A90E2;
+    }
+
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+        border: none;
+        background: none;
+    }
+
+    /* Progress Bar */
+    QProgressBar {
+        background-color: #3C3C3C;
+        border: 1px solid #555555;
+        border-radius: 6px;
+        text-align: center;
+        color: #CCCCCC;
+        font-weight: bold;
+    }
+
+    QProgressBar::chunk {
+        background-color: #4A90E2;
+        border-radius: 5px;
+        margin: 1px;
+    }
+
+    /* Group Box */
+    QGroupBox {
+        color: #CCCCCC;
+        border: 2px solid #555555;
+        border-radius: 6px;
+        margin-top: 1ex;
+        padding-top: 15px;
+        font-weight: bold;
+    }
+
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 0 8px 0 8px;
+        color: #4A90E2;
+        font-weight: bold;
+    }
+
+    /* Input Widgets */
+    QLineEdit, QTextEdit, QPlainTextEdit {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 6px;
+        selection-background-color: #4A90E2;
+        selection-color: white;
+    }
+
+    QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+        border: 2px solid #4A90E2;
+        background-color: #2B2B2B;
+    }
+
+    QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {
+        border-color: #4A90E2;
+    }
+
+    /* Combo Box */
+    QComboBox {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 6px 10px;
+        min-width: 6em;
+    }
+
+    QComboBox:focus {
+        border: 2px solid #4A90E2;
+    }
+
+    QComboBox:hover {
+        border-color: #4A90E2;
+    }
+
+    QComboBox::drop-down {
+        border: none;
+        width: 20px;
+    }
+
+    QComboBox::down-arrow {
+        image: url(icons/down-arrow.png);
+        width: 12px;
+        height: 12px;
+    }
+
+    QComboBox QAbstractItemView {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        selection-background-color: #4A90E2;
+        selection-color: white;
+        outline: none;
+    }
+
+    /* Spin Box */
+    QSpinBox, QDoubleSpinBox {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 6px;
+    }
+
+    QSpinBox:focus, QDoubleSpinBox:focus {
+        border: 2px solid #4A90E2;
+    }
+
+    QSpinBox::up-button, QDoubleSpinBox::up-button {
+        background-color: #555555;
+        border: none;
+        border-radius: 2px;
+        margin: 1px;
+    }
+
+    QSpinBox::down-button, QDoubleSpinBox::down-button {
+        background-color: #555555;
+        border: none;
+        border-radius: 2px;
+        margin: 1px;
+    }
+
+    QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+    QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+        background-color: #4A90E2;
+    }
+
+    /* Buttons */
+    QPushButton {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: bold;
+        min-width: 80px;
+    }
+
+    QPushButton:hover {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+        color: white;
+    }
+
+    QPushButton:pressed {
+        background-color: #357ABD;
+        border-color: #357ABD;
+    }
+
+    QPushButton:default {
+        border: 2px solid #4A90E2;
+        background-color: #4A90E2;
+        color: white;
+    }
+
+    QPushButton:disabled {
+        background-color: #2B2B2B;
+        color: #666666;
+        border-color: #444444;
+    }
+
+    /* Check Box */
+    QCheckBox {
+        color: #CCCCCC;
+        spacing: 8px;
+    }
+
+    QCheckBox::indicator {
+        width: 16px;
+        height: 16px;
+        border: 1px solid #555555;
+        border-radius: 3px;
+        background-color: #3C3C3C;
+    }
+
+    QCheckBox::indicator:hover {
+        border-color: #4A90E2;
+    }
+
+    QCheckBox::indicator:checked {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+        image: url(icons/check.png);
+    }
+
+    /* Radio Button */
+    QRadioButton {
+        color: #CCCCCC;
+        spacing: 8px;
+    }
+
+    QRadioButton::indicator {
+        width: 16px;
+        height: 16px;
+        border: 1px solid #555555;
+        border-radius: 8px;
+        background-color: #3C3C3C;
+    }
+
+    QRadioButton::indicator:hover {
+        border-color: #4A90E2;
+    }
+
+    QRadioButton::indicator:checked {
+        background-color: #4A90E2;
+        border-color: #4A90E2;
+        border-width: 4px;
+        border-style: solid;
+    }
+
+    /* Slider */
+    QSlider::groove:horizontal {
+        background-color: #3C3C3C;
+        height: 6px;
+        border-radius: 3px;
+    }
+
+    QSlider::handle:horizontal {
+        background-color: #4A90E2;
+        border: 1px solid #357ABD;
+        width: 16px;
+        margin: -6px 0;
+        border-radius: 8px;
+    }
+
+    QSlider::handle:horizontal:hover {
+        background-color: #5BA0F2;
+    }
+
+    QSlider::sub-page:horizontal {
+        background-color: #4A90E2;
+        border-radius: 3px;
+    }
+
+    /* Date Edit */
+    QDateEdit, QTimeEdit, QDateTimeEdit {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 6px;
+    }
+
+    QDateEdit:focus, QTimeEdit:focus, QDateTimeEdit:focus {
+        border: 2px solid #4A90E2;
+    }
+
+    QDateEdit::drop-down, QTimeEdit::drop-down, QDateTimeEdit::drop-down {
+        background-color: #555555;
+        border: none;
+        border-radius: 2px;
+        margin: 1px;
+    }
+
+    QDateEdit::drop-down:hover, QTimeEdit::drop-down:hover, QDateTimeEdit::drop-down:hover {
+        background-color: #4A90E2;
+    }
+
+    /* Calendar Widget */
+    QCalendarWidget {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+    }
+
+    QCalendarWidget QAbstractItemView {
+        background-color: #2B2B2B;
+        color: #CCCCCC;
+        selection-background-color: #4A90E2;
+        selection-color: white;
+    }
+
+    /* Tool Tip */
+    QToolTip {
+        background-color: #3C3C3C;
+        color: #CCCCCC;
+        border: 1px solid #555555;
+        border-radius: 4px;
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    /* Frame */
+    QFrame {
+        border: 1px solid #555555;
+        border-radius: 4px;
+        background-color: #2B2B2B;
+    }
+
+    /* Label */
+    QLabel {
+        color: #CCCCCC;
+        background-color: transparent;
+    }
+
+    QLabel[accessibleName="title"] {
+        color: #4A90E2;
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    QLabel[accessibleName="subtitle"] {
+        color: #AAAAAA;
+        font-size: 12px;
+    }
+    """
+
+    try:
+        widget.setStyleSheet(enhanced_style)
+        logger.info("Eclipse-style theme đã được áp dụng thành công.")
+    except Exception as e:
+        logger.error(f"Lỗi khi áp dụng Eclipse theme: {e}")
+
+
+def create_eclipse_icon(icon_type: str, size: int = 16):
+    """Tạo icons theo phong cách Eclipse."""
+    from PyQt5.QtGui import QPixmap, QPainter, QPen, QBrush, QColor
+    from PyQt5.QtCore import Qt
+
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    # Eclipse blue color
+    eclipse_blue = QColor("#4A90E2")
+
+    if icon_type == "patient":
+        # Draw patient icon (person)
+        painter.setPen(QPen(eclipse_blue, 2))
+        painter.setBrush(QBrush(eclipse_blue))
+        # Head
+        painter.drawEllipse(size // 4, 2, size // 2, size // 3)
+        # Body
+        painter.drawRect(size // 3, size // 2, size // 3, size // 2)
+
+    elif icon_type == "plan":
+        # Draw plan icon (document with lines)
+        painter.setPen(QPen(eclipse_blue, 1))
+        painter.setBrush(QBrush(eclipse_blue.lighter(150)))
+        painter.drawRect(2, 2, size - 4, size - 4)
+        painter.setPen(QPen(eclipse_blue, 1))
+        for i in range(3):
+            y = 4 + i * 3
+            painter.drawLine(4, y, size - 4, y)
+
+    elif icon_type == "structure":
+        # Draw structure icon (polygon)
+        painter.setPen(QPen(eclipse_blue, 2))
+        painter.setBrush(QBrush(eclipse_blue.lighter(180)))
+
+        # Tạo QPolygonF từ list các QPointF
+        points = QPolygonF(
+            [
+                QPointF(size // 4, size // 4),
+                QPointF(3 * size // 4, size // 4),
+                QPointF(size - 2, 3 * size // 4),
+                QPointF(size // 2, size - 2),
+                QPointF(2, 3 * size // 4),
+            ]
+        )
+        painter.drawPolygon(points)
+
+    elif icon_type == "dose":
+        # Draw dose icon (gradient circles)
+        center = size // 2
+        for i in range(3):
+            radius = (i + 1) * size // 8
+            alpha = 255 - i * 60
+            color = QColor(eclipse_blue)
+            color.setAlpha(alpha)
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(
+                center - radius, center - radius, 2 * radius, 2 * radius
+            )
+
+    elif icon_type == "new":
+        # Draw new/add icon (plus)
+        painter.setPen(QPen(eclipse_blue, 3, Qt.SolidLine, Qt.RoundCap))
+        # Horizontal line
+        painter.drawLine(4, size // 2, size - 4, size // 2)
+        # Vertical line
+        painter.drawLine(size // 2, 4, size // 2, size - 4)
+
+    elif icon_type == "open":
+        # Draw open icon (folder)
+        painter.setPen(QPen(eclipse_blue, 1))
+        painter.setBrush(QBrush(eclipse_blue.lighter(150)))
+        # Folder body
+        painter.drawRect(2, size // 3, size - 4, 2 * size // 3 - 2)
+        # Folder tab
+        painter.drawRect(2, size // 4, size // 2, size // 6)
+
+    elif icon_type == "save":
+        # Draw save icon (disk)
+        painter.setPen(QPen(eclipse_blue, 1))
+        painter.setBrush(QBrush(eclipse_blue.lighter(150)))
+        painter.drawRect(2, 2, size - 4, size - 4)
+        # Disk slot
+        painter.setBrush(QBrush(eclipse_blue))
+        painter.drawRect(4, 3, size - 8, 2)
+
+    elif icon_type == "calculate":
+        # Draw calculate icon (calculator)
+        painter.setPen(QPen(eclipse_blue, 1))
+        painter.setBrush(QBrush(eclipse_blue.lighter(150)))
+        painter.drawRect(3, 2, size - 6, size - 4)
+        # Buttons
+        painter.setBrush(QBrush(eclipse_blue))
+        for i in range(2):
+            for j in range(2):
+                x = 5 + j * 3
+                y = 6 + i * 3
+                painter.drawRect(x, y, 2, 2)
+
+    painter.end()
+    return pixmap
