@@ -24,12 +24,12 @@ Phiên bản 0.9.3 cải thiện các chức năng phân tích sinh học và đ
 
 __title__ = "QuangTPS"
 __description__ = "Hệ thống lập kế hoạch xạ trị mã nguồn mở"
-__version__ = "0.9.3"
-__author__ = "Quang Team"
+__version__ = "0.16.7"
+__author__ = "Mac Dang Quang"
 __author_email__ = "quangmacdang@gmail.com"
 
-# Cập nhật phiên bản lên 0.9.2
-__version__ = "0.9.2"
+# Cập nhật phiên bản lên 0.16.7
+__version__ = "0.16.7"
 
 # Import các module chính
 from quangtps import core
@@ -54,7 +54,7 @@ logger.info(f"QuangTPS version {__version__} starting up")
 
 __author__ = "QuangTPS Team"
 __license__ = "MIT"
-__copyright__ = "Copyright 2023, QuangTPS Team"
+__copyright__ = "Copyright 2025, Mac Dang Quang"
 
 # Version details
 VERSION_MAJOR = 0

@@ -10,7 +10,7 @@ bao gồm cửa sổ chính, các tab và dialog.
 
 import logging
 
-__version__ = "0.10.2"
+__version__ = "0.16.7"
 
 logger = logging.getLogger(__name__)
 
