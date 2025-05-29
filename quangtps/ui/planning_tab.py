@@ -265,6 +265,28 @@ class PlanningTab(QWidget):
         prescription_group.setLayout(prescription_layout)
         left_layout.addWidget(prescription_group)
 
+        # Optimization Settings group
+        optimization_group = QGroupBox("Optimization Settings")
+        optimization_layout = QFormLayout()
+
+        self.opt_algorithm_field = QComboBox()
+        self.opt_algorithm_field.addItems(
+            ["CCC", "AAA", "Pencil Beam", "Monte Carlo", "ACUROS"]
+        )
+        self.opt_algorithm_field.setCurrentText("CCC")
+        optimization_layout.addRow("Algorithm:", self.opt_algorithm_field)
+
+        self.opt_iterations_field = QLineEdit()
+        self.opt_iterations_field.setText("100")
+        optimization_layout.addRow("Max Iterations:", self.opt_iterations_field)
+
+        self.opt_convergence_field = QLineEdit()
+        self.opt_convergence_field.setText("0.001")
+        optimization_layout.addRow("Convergence:", self.opt_convergence_field)
+
+        optimization_group.setLayout(optimization_layout)
+        left_layout.addWidget(optimization_group)
+
         # Advanced Planning Options group
         advanced_group = QGroupBox("Advanced Planning")
         advanced_layout = QVBoxLayout()
@@ -763,6 +785,11 @@ class PlanningTab(QWidget):
         # Xóa thông tin liều lượng
         self.rx_dose_edit.setValue(0)
         self.rx_fractions_edit.setValue(0)
+
+        # Reset optimization settings
+        self.opt_algorithm_field.setCurrentText("CCC")
+        self.opt_iterations_field.setText("100")
+        self.opt_convergence_field.setText("0.001")
 
         # Xóa bảng ràng buộc nếu tồn tại
         if hasattr(self, "constraints_table"):

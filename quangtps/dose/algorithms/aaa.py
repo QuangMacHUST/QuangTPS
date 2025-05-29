@@ -28,7 +28,7 @@ from quangtps.core.exceptions import ValidationError, AlgorithmError
 logger = logging.getLogger(__name__)
 
 
-class AAADoseCalculation(DoseCalculationImplementer):
+class AAADoseCalculation:
     """
     Lớp AAA (Anisotropic Analytical Algorithm)
 
@@ -38,7 +38,6 @@ class AAADoseCalculation(DoseCalculationImplementer):
 
     def __init__(self):
         """Khởi tạo thuật toán AAA."""
-        super().__init__(algorithm_type=DoseCalculationAlgorithm.AAA)
         self.parameters = {
             "resolution": 2.5,  # Độ phân giải tính toán (mm)
             "scatter_kernel_size": 15,  # Kích thước nhân tích chập (voxel)
@@ -813,3 +812,130 @@ class AAADoseCalculation(DoseCalculationImplementer):
         self._update_status(1.0, "Đã hoàn thành tính toán AAA")
 
         return reference_grid
+
+
+class AAAImplementer(DoseCalculationImplementer):
+    """
+    Implementer cho thuật toán AAA (Anisotropic Analytical Algorithm).
+
+    Class này cung cấp interface tương thích với hệ thống
+    dose calculation implementer system.
+    """
+
+    def __init__(self):
+        """Khởi tạo AAAImplementer."""
+        self.algorithm = AAADoseCalculation()
+        logger.info("Khởi tạo AAAImplementer")
+
+    def supported_algorithms(self) -> List[DoseCalculationAlgorithm]:
+        """Trả về danh sách các thuật toán được hỗ trợ."""
+        return [DoseCalculationAlgorithm.AAA]
+
+    def calculate(
+        self,
+        beam_data: Dict[str, Any],
+        patient_data: Dict[str, Any],
+        dose_grid: DoseGrid,
+        calculation_options: Dict[str, Any] = None,
+    ) -> np.ndarray:
+        """
+        Tính toán liều sử dụng thuật toán AAA.
+
+        Parameters
+        ----------
+        beam_data : Dict[str, Any]
+            Dữ liệu chùm tia
+        patient_data : Dict[str, Any]
+            Dữ liệu bệnh nhân
+        dose_grid : DoseGrid
+            Lưới liều
+        calculation_options : Dict[str, Any], optional
+            Các tùy chọn tính toán
+
+        Returns
+        -------
+        np.ndarray
+            Mảng phân bố liều
+        """
+        if calculation_options is None:
+            calculation_options = {}
+
+        try:
+            # Cài đặt các tham số từ calculation_options
+            if calculation_options:
+                self.algorithm.set_parameters(calculation_options)
+
+            # Lấy dữ liệu CT từ patient_data
+            ct_data = patient_data.get("ct_data", np.zeros((64, 64, 32)))
+            spacing = patient_data.get("spacing", (1.0, 1.0, 1.0))
+            origin = patient_data.get("origin", (0.0, 0.0, 0.0))
+            structures = patient_data.get("structures", {})
+
+            # Chuẩn bị dữ liệu beam - đảm bảo là list
+            if isinstance(beam_data, dict):
+                beams = [beam_data]
+            else:
+                beams = beam_data if isinstance(beam_data, list) else [beam_data]
+
+            # Tính toán liều using AAA algorithm
+            result_grid = self.algorithm.calculate(
+                patient_ct=ct_data,
+                structures=structures,
+                beams=beams,
+                spacing=spacing,
+                origin=origin,
+            )
+
+            return result_grid.data
+
+        except Exception as e:
+            logger.error(f"Lỗi trong AAAImplementer.calculate: {e}")
+            # Trả về dose grid trống nếu có lỗi
+            return np.zeros(dose_grid.shape)
+
+    def get_description(self) -> str:
+        """Trả về mô tả thuật toán."""
+        return (
+            "AAA (Anisotropic Analytical Algorithm) - thuật toán tính toán liều "
+            "tiên tiến với khả năng hiệu chỉnh không đồng nhất, tương tự như "
+            "trong Eclipse TPS của Varian."
+        )
+
+    def get_parameters_info(self) -> Dict[str, Any]:
+        """Trả về thông tin về các tham số."""
+        return {
+            "resolution": {
+                "type": "float",
+                "default": 2.5,
+                "description": "Độ phân giải tính toán (mm)",
+                "range": (1.0, 5.0),
+            },
+            "scatter_kernel_size": {
+                "type": "int",
+                "default": 15,
+                "description": "Kích thước nhân tích chập (voxel)",
+                "range": (5, 25),
+            },
+            "heterogeneity_correction": {
+                "type": "bool",
+                "default": True,
+                "description": "Bật/tắt hiệu chỉnh không đồng nhất",
+            },
+            "use_parallel": {
+                "type": "bool",
+                "default": True,
+                "description": "Bật/tắt tính toán song song",
+            },
+            "num_threads": {
+                "type": "int",
+                "default": 4,
+                "description": "Số luồng tính toán",
+                "range": (1, 16),
+            },
+            "accuracy_level": {
+                "type": "int",
+                "default": 2,
+                "description": "Mức độ chính xác (1-3)",
+                "range": (1, 3),
+            },
+        }

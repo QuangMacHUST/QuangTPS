@@ -23,6 +23,11 @@ from quangtps.dose.algorithms.base import (
     DoseCalculationResult,
 )
 from quangtps.dose.physics.terma import calculate_terma_from_beam
+from quangtps.dose.dose_engine import (
+    DoseCalculationImplementer,
+    DoseCalculationAlgorithm,
+)
+from quangtps.dose.dose_grid import DoseGrid
 
 logger = logging.getLogger(__name__)
 
@@ -1322,3 +1327,111 @@ class PencilBeamAlgorithm(DoseAlgorithm):
         """
         # Placeholder implementation - sẽ được thay thế bởi calculate method
         return np.zeros((64, 64, 32), dtype=np.float32)
+
+
+class PencilBeamImplementer(DoseCalculationImplementer):
+    """
+    Implementer cho thuật toán Pencil Beam.
+
+    Class này cung cấp interface tương thích với hệ thống
+    dose calculation implementer system.
+    """
+
+    def __init__(self):
+        """Khởi tạo PencilBeamImplementer."""
+        self.algorithm = PencilBeamAlgorithm()
+        logger.info("Khởi tạo PencilBeamImplementer")
+
+    def supported_algorithms(self) -> List[DoseCalculationAlgorithm]:
+        """Trả về danh sách các thuật toán được hỗ trợ."""
+        return [DoseCalculationAlgorithm.PENCIL_BEAM]
+
+    def calculate(
+        self,
+        beam_data: Dict[str, Any],
+        patient_data: Dict[str, Any],
+        dose_grid: DoseGrid,
+        calculation_options: Dict[str, Any] = None,
+    ) -> np.ndarray:
+        """
+        Tính toán liều sử dụng thuật toán Pencil Beam.
+
+        Parameters
+        ----------
+        beam_data : Dict[str, Any]
+            Dữ liệu chùm tia
+        patient_data : Dict[str, Any]
+            Dữ liệu bệnh nhân
+        dose_grid : DoseGrid
+            Lưới liều
+        calculation_options : Dict[str, Any], optional
+            Các tùy chọn tính toán
+
+        Returns
+        -------
+        np.ndarray
+            Mảng phân bố liều
+        """
+        if calculation_options is None:
+            calculation_options = {}
+
+        try:
+            # Sử dụng PencilBeamAlgorithm để tính toán
+            # Tạo beam object từ beam_data
+            from quangtps.treatment.beams.beam import Beam
+
+            beam = Beam(beam_name=beam_data.get("name", "PencilBeam"))
+            beam.energy = beam_data.get("energy", "6MV")
+            beam.gantry_angle = beam_data.get("gantry_angle", 0.0)
+            beam.collimator_angle = beam_data.get("collimator_angle", 0.0)
+            beam.field_size = beam_data.get("field_size", (10.0, 10.0))
+
+            # Tạo CT image từ patient_data
+            from quangtps.imaging.image import Image
+
+            ct_image = Image()
+            ct_image.data = patient_data.get("ct_data", np.zeros((64, 64, 32)))
+            ct_image.spacing = patient_data.get("spacing", (1.0, 1.0, 1.0))
+            ct_image.origin = patient_data.get("origin", (0.0, 0.0, 0.0))
+
+            # Tính toán liều
+            result = self.algorithm.calculate(ct_image, beam)
+
+            return result.dose_grid
+
+        except Exception as e:
+            logger.error(f"Lỗi trong PencilBeamImplementer.calculate: {e}")
+            # Trả về dose grid trống nếu có lỗi
+            return np.zeros(dose_grid.shape)
+
+    def get_description(self) -> str:
+        """Trả về mô tả thuật toán."""
+        return self.algorithm.get_description()
+
+    def get_parameters_info(self) -> Dict[str, Any]:
+        """Trả về thông tin về các tham số."""
+        return {
+            "grid_size": {
+                "type": "float",
+                "default": 0.2,
+                "description": "Kích thước lưới tính toán (cm)",
+                "range": (0.1, 1.0),
+            },
+            "threads": {
+                "type": "int",
+                "default": 4,
+                "description": "Số thread để tính toán song song",
+                "range": (1, 16),
+            },
+            "tissue_air_ratio_correction": {
+                "type": "bool",
+                "default": True,
+                "description": "Áp dụng hiệu chỉnh tissue-air ratio",
+            },
+            "pencil_spacing": {
+                "type": "float",
+                "default": 0.1,
+                "description": "Khoảng cách giữa các pencil beam (cm)",
+                "range": (0.05, 0.5),
+            },
+        }
