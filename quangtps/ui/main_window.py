@@ -1085,8 +1085,8 @@ class MainWindow(QMainWindow):
 
         QTabBar::tab:selected {
             background-color: #4A90E2;
-            color: white;
-        }
+                color: white;
+            }
 
         QPushButton {
             background-color: #3C3C3C;
